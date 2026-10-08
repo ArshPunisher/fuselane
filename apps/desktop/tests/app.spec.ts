@@ -445,3 +445,22 @@ test('per-network limits save together and survive moving between pages', async 
   await expect(page.getByLabel('iPhone USB speed limit unit')).toHaveValue('KB')
   await expect(page.getByLabel('Wi-Fi speed limit', { exact: true })).toHaveValue('')
 })
+
+test('Copy diagnostics shows exactly what is copied, with nothing personal', async ({
+  page,
+  context,
+  browserName,
+}) => {
+  if (browserName === 'chromium')
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await page.getByRole('button', { name: 'Copy diagnostics' }).click()
+  const report = page.getByLabel('Diagnostics report')
+  await expect(report).toContainText('Recent downloads')
+  await expect(page.getByRole('status').filter({ hasText: /Copied|Select the text/ })).toBeVisible()
+  const text = await report.inputValue()
+  expect(text).not.toMatch(/https?:\/\//)
+  expect(text).not.toMatch(/\d+\.\d+\.\d+\.\d+/)
+  expect(text).not.toContain('ubuntu-26.04')
+})

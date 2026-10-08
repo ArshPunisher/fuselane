@@ -17,6 +17,8 @@ export interface Backend {
   /** A folder the user picked, or null if they cancelled. */
   pickFolder(): Promise<string | null>
   getLimits(): Promise<LimitsView>
+  /** A privacy-safe report for bug reports. */
+  diagnostics(): Promise<string>
   /** Saves limits (validated by the backend); returns what was saved. */
   setLimits(limits: LimitsView): Promise<LimitsView>
   /** Continues a stopped download from a new link to the same file. */
@@ -69,6 +71,7 @@ async function tauriBackend(): Promise<Backend> {
     openFile: (id) => call('open_file', { id }),
     pickFolder: () => call('pick_folder'),
     getLimits: () => call('get_limits'),
+    diagnostics: () => call('diagnostics'),
     setLimits: (limits) => call('set_limits', { limits }),
     fixLink: (id, url) => call('fix_link', { id, url }),
     startOver: (id) => call('start_over', { id }),

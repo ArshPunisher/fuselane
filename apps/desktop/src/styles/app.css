@@ -1394,3 +1394,33 @@ h2 {
     flex-wrap: wrap;
   }
 }
+
+.setting-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.report {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--body);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.report:focus-visible {
+  outline: 2px solid var(--fuse);
+  outline-offset: 1px;
+}

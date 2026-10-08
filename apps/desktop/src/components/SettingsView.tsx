@@ -89,6 +89,61 @@ function SpeedLimitSetting() {
   )
 }
 
+function DiagnosticsSetting() {
+  const backend = useApp((s) => s.backend)
+  const [report, setReport] = useState('')
+  const [status, setStatus] = useState('')
+  const [busy, setBusy] = useState(false)
+  async function copy() {
+    if (!backend || busy) return
+    setBusy(true)
+    setStatus('')
+    try {
+      const text = await backend.diagnostics()
+      setReport(text)
+      try {
+        await navigator.clipboard.writeText(text)
+        setStatus('Copied. Paste it into your bug report.')
+      } catch {
+        setStatus('Select the text below and copy it.')
+      }
+    } catch {
+      setStatus("Couldn't build the report. Try again.")
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="setting setting-stack">
+      <div className="setting-row">
+        <div>
+          <p className="setting-name">Diagnostics</p>
+          <p className="muted">
+            For bug reports. It never includes IP addresses, links or file names, and Fuselane sends
+            nothing by itself.
+          </p>
+          <p className="muted" role="status">
+            {status}
+          </p>
+        </div>
+        <button type="button" className="btn" onClick={copy} disabled={busy}>
+          {busy ? 'Collecting…' : 'Copy diagnostics'}
+        </button>
+      </div>
+      {report && (
+        <textarea
+          className="report"
+          readOnly
+          value={report}
+          aria-label="Diagnostics report"
+          spellCheck={false}
+          rows={10}
+        />
+      )}
+    </div>
+  )
+}
+
 export function SettingsView() {
   const info = useApp((s) => s.info)
   const demo = useApp((s) => s.backend?.demo)
@@ -111,6 +166,7 @@ export function SettingsView() {
           <p className="muted num">{info?.defaultDir ?? ''}</p>
         </div>
       </div>
+      <DiagnosticsSetting />
       <div className="setting">
         <div>
           <p className="setting-name">Version</p>

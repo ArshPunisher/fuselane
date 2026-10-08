@@ -377,6 +377,25 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     },
     pickFolder: async () => (params.get('pick') === 'cancel' ? null : '/Users/demo/Movies'),
     getLimits: async () => structuredClone(limits),
+    diagnostics: async () =>
+      [
+        'Fuselane 0.0.0 on demo browser',
+        '',
+        'Checks:',
+        '  ok pinning: interface pinning works',
+        '',
+        'Networks:',
+        ...NETWORKS.map(
+          (n) => `  ${n.name} (${n.kind})${n.usable ? ', used' : ''}: 1 IPv4, 0 IPv6`,
+        ),
+        '',
+        `Speed limits: overall ${limits.global} B/s, ${limits.networks.length} per-network`,
+        '',
+        'Recent downloads (newest first):',
+        ...jobs
+          .slice(0, 20)
+          .map((j) => `  #${j.id} https ${j.status}${j.errorAction ? ` (${j.errorAction})` : ''}`),
+      ].join('\n'),
     setLimits: async (next) => {
       // The same rules as the service.
       const max = 100 * 1024 ** 3
