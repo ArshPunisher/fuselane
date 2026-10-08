@@ -8,11 +8,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use librqbit::{
-    AddTorrent, AddTorrentOptions, ConnectionOptions, ListenerMode, ListenerOptions,
-    ManagedTorrent, Session, SessionOptions, TorrentStatsState,
+    AddTorrent, AddTorrentOptions, AddTorrentResponse, ConnectionOptions, ListenerMode,
+    ListenerOptions, ManagedTorrent, Session, SessionOptions, TorrentStatsState,
 };
 
 use crate::balancer::{Balancer, NetStat};
+use crate::paths::{self, Planned, Rules};
 use crate::socks::{self, SocksServer};
 use fuselane_netif::Interface;
 
@@ -31,6 +32,10 @@ pub enum TorrentError {
     NoNetworks,
     #[error("{0} already exists in the download folder. Move it or pick another folder.")]
     FileExists(String),
+    #[error("This torrent isn't safe to save: {0}")]
+    UnsafePath(String),
+    #[error("This torrent is already in your list.")]
+    AlreadyAdded,
     #[error("Couldn't read the torrent: {0}")]
     Invalid(String),
     #[error("The torrent engine failed: {0}")]
@@ -90,6 +95,7 @@ pub struct EngineOptions {
 
 pub struct TorrentEngine {
     session: Arc<Session>,
+    download_dir: PathBuf,
     balancer: Arc<Balancer>,
     socks: SocksServer,
 }
@@ -174,8 +180,9 @@ impl TorrentEngine {
         }
         let balancer = Arc::new(Balancer::new(opts.networks));
         let socks = socks::start(balancer.clone()).await.map_err(engine)?;
+        let download_dir = opts.download_dir;
         let session = Session::new_with_opts(
-            opts.download_dir,
+            download_dir.clone(),
             SessionOptions {
                 dht: if opts.dht {
                     Some(Default::default())
@@ -202,6 +209,7 @@ impl TorrentEngine {
         .map_err(engine)?;
         Ok(Self {
             session,
+            download_dir,
             balancer,
             socks,
         })
@@ -220,6 +228,8 @@ impl TorrentEngine {
         self.balancer.snapshot()
     }
 
+    /// Adds a torrent. The file list is read first (`list_only`) and every path is
+    /// checked (L-68) before librqbit may create anything on disk.
     pub async fn add(
         &self,
         source: Source,
@@ -227,22 +237,86 @@ impl TorrentEngine {
         initial_peers: Vec<SocketAddr>,
     ) -> Result<Torrent, TorrentError> {
         let add = source.checked()?;
+        let base = output_folder.unwrap_or_else(|| self.download_dir.clone());
+        let peers = (!initial_peers.is_empty()).then_some(initial_peers.clone());
+        let listed = self
+            .session
+            .add_torrent(
+                add,
+                Some(AddTorrentOptions {
+                    list_only: true,
+                    output_folder: Some(base.to_string_lossy().into_owned()),
+                    initial_peers: peers,
+                    ..Default::default()
+                }),
+            )
+            .await
+            .map_err(add_error)?;
+        let listed = match listed {
+            AddTorrentResponse::ListOnly(l) => l,
+            AddTorrentResponse::AlreadyManaged(..) => return Err(TorrentError::AlreadyAdded),
+            AddTorrentResponse::Added(..) => {
+                return Err(engine("list-only add started a download"));
+            }
+        };
+        // librqbit writes straight into `output_folder`, so a multi-file torrent gets
+        // its own folder, named after the torrent (checked like any other name).
+        let folder_parts: Vec<String> = match listed.info.info().files {
+            Some(_) => vec![
+                listed
+                    .info
+                    .name()
+                    .map_or_else(|| listed.info_hash.as_string(), |n| n.into_owned()),
+            ],
+            None => Vec::new(),
+        };
+        let planned: Vec<Planned> = listed
+            .info
+            .iter_file_details()
+            .map(|fd| Planned {
+                parts: fd
+                    .filename
+                    .iter_components()
+                    .map(|c| c.into_owned())
+                    .collect(),
+                padding: fd.attrs().padding,
+            })
+            .collect();
+        paths::check(&base, &folder_parts, &planned, Rules::native())
+            .map_err(TorrentError::UnsafePath)?;
+
+        let mut peers = initial_peers;
+        for p in listed.seen_peers.iter().copied() {
+            if !peers.contains(&p) {
+                peers.push(p);
+            }
+        }
         let opts = AddTorrentOptions {
-            output_folder: output_folder.map(|p| p.to_string_lossy().into_owned()),
-            initial_peers: (!initial_peers.is_empty()).then_some(initial_peers),
+            output_folder: Some(
+                folder_parts
+                    .iter()
+                    .fold(base, |p, c| p.join(c))
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            initial_peers: (!peers.is_empty()).then_some(peers),
             // Never write into a file the user already has (librqbit would reuse it).
             overwrite: false,
             ..Default::default()
         };
         let resp = self
             .session
-            .add_torrent(add, Some(opts))
+            .add_torrent(
+                AddTorrent::TorrentFileBytes(listed.torrent_bytes),
+                Some(opts),
+            )
             .await
             .map_err(add_error)?;
-        let handle = resp
-            .into_handle()
-            .ok_or_else(|| TorrentError::Invalid("no torrent was added".into()))?;
-        Ok(Torrent { handle })
+        match resp {
+            AddTorrentResponse::Added(_, handle) => Ok(Torrent { handle }),
+            AddTorrentResponse::AlreadyManaged(..) => Err(TorrentError::AlreadyAdded),
+            AddTorrentResponse::ListOnly(_) => Err(engine("download did not start")),
+        }
     }
 
     pub async fn pause(&self, t: &Torrent) -> Result<(), TorrentError> {

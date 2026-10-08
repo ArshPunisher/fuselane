@@ -4,6 +4,7 @@
 
 pub mod balancer;
 pub mod engine;
+pub mod paths;
 pub mod socks;
 
 pub use engine::{EngineOptions, Phase, Progress, Source, Torrent, TorrentEngine, TorrentError};
