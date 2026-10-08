@@ -79,7 +79,35 @@ enum Command {
     },
 }
 
+/// Started by a browser as the extension's native-messaging host: relay its
+/// messages to the app until the browser closes the pipe.
+fn native_host() -> ExitCode {
+    let Ok(home) = fuselane_core::home::home() else {
+        return ExitCode::FAILURE;
+    };
+    let endpoint = fuselane_api::client::endpoint(&home);
+    let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    else {
+        return ExitCode::FAILURE;
+    };
+    // Nothing but framed messages may reach stdout here: the browser reads it.
+    match runtime.block_on(fuselane_api::native::relay(
+        &endpoint,
+        tokio::io::stdin(),
+        tokio::io::stdout(),
+    )) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(_) => ExitCode::FAILURE,
+    }
+}
+
 fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().collect();
+    if fuselane_api::native::is_host_invocation(&args) {
+        return native_host();
+    }
     let cli = Cli::parse();
     let Some(command) = cli.command else {
         eprintln!("Usage: fuselane get <url>   (try `fuselane --help`)");
@@ -175,13 +203,28 @@ fn ls(json: bool) -> ExitCode {
         let rows: Vec<serde_json::Value> = jobs
             .iter()
             .map(|j| {
+                // A finished download keeps no progress map: it saved everything,
+                // and its name is the saved file's.
+                let done = j.status == Status::Completed;
+                let name = j.filename.clone().or_else(|| {
+                    j.final_path
+                        .as_ref()
+                        .and_then(|p| p.file_name())
+                        .map(|n| n.to_string_lossy().into_owned())
+                });
+                let saved = if done {
+                    j.total.unwrap_or_else(|| j.secured_bytes())
+                } else {
+                    j.secured_bytes()
+                };
                 serde_json::json!({
                     "id": j.id,
                     "status": status_key(j.status),
                     "url": j.url,
-                    "name": j.filename,
-                    "saved": j.secured_bytes(),
+                    "name": name,
+                    "saved": saved,
                     "total": j.total,
+                    "path": j.final_path,
                     "error": j.error,
                 })
             })

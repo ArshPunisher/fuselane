@@ -29,6 +29,38 @@ fn fuselane_in(home: &std::path::Path, args: &[&str]) -> std::process::Output {
 }
 
 #[test]
+fn started_by_a_browser_it_relays_and_hands_offers_back_when_the_app_is_closed() {
+    use std::io::{Read, Write};
+    let home = tempfile::tempdir().unwrap();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_fuselane"))
+        .env("FUSELANE_HOME", home.path())
+        .arg("chrome-extension://abcdefghijklmnop/")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let msg = br#"{"v":1,"type":"download.offer","url":"https://example.org/big.iso"}"#;
+    let mut stdin = child.stdin.take().unwrap();
+    stdin
+        .write_all(&u32::try_from(msg.len()).unwrap().to_ne_bytes())
+        .unwrap();
+    stdin.write_all(msg).unwrap();
+    drop(stdin); // the browser closing the pipe ends the host
+    let mut out = Vec::new();
+    child.stdout.take().unwrap().read_to_end(&mut out).unwrap();
+    assert!(child.wait().unwrap().success());
+    let n = u32::from_ne_bytes(out[..4].try_into().unwrap()) as usize;
+    assert_eq!(
+        out.len(),
+        4 + n,
+        "exactly one framed reply, nothing else on stdout"
+    );
+    let reply: serde_json::Value = serde_json::from_slice(&out[4..]).unwrap();
+    assert_eq!(reply["type"], "download.declined");
+    assert_eq!(reply["fallback"], "browser");
+}
+
+#[test]
 fn ls_and_nets_speak_json_for_scripts() {
     let home = tempfile::tempdir().unwrap();
     let out = fuselane_in(home.path(), &["ls", "--json"]);
@@ -242,6 +274,19 @@ async fn kill_9_mid_download_then_resume_is_byte_exact() {
         String::from_utf8_lossy(&ls.stdout).contains("done"),
         "{}",
         String::from_utf8_lossy(&ls.stdout)
+    );
+    // Scripts see a finished download as fully saved, with its name and path.
+    let json: serde_json::Value =
+        serde_json::from_slice(&fuselane_in(home.path(), &["ls", "--json"]).stdout).unwrap();
+    let job = &json[0];
+    assert_eq!(job["status"], "completed");
+    assert_eq!(job["saved"], job["total"], "{job}");
+    assert_eq!(job["name"], "file.bin", "{job}");
+    assert!(
+        job["path"]
+            .as_str()
+            .is_some_and(|p| p.ends_with("file.bin")),
+        "{job}"
     );
 }
 
