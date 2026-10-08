@@ -10,12 +10,13 @@ publish.workspace = true
 
 [dependencies]
 socket2 = { version = "0.6", features = ["all"] }
-tokio = { version = "1", features = ["net", "time", "rt"] }
+tokio = { version = "1", features = ["net", "time", "rt", "macros"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-platform-verifier = "0.6"
 libc = "0.2"
 thiserror = "2"
+hickory-proto = { version = "0.26", default-features = false, features = ["std"] }
 fuselane-netif.workspace = true
 
 [lints]

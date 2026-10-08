@@ -5,6 +5,8 @@
 //! Design: `docs/03-architecture/NETWORKING.md` §2–6. Rules: L-09, L-56–L-59.
 //! Per-network DNS and Happy Eyeballs come next (STEPS 2.13, 2.14).
 
+pub mod dns;
+
 use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
