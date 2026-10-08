@@ -225,3 +225,34 @@ test('a finished torrent shares, then stops when asked', async ({ page }) => {
   await expect(article.getByText('Done', { exact: true })).toBeVisible()
   await expect(article.getByRole('button', { name: 'Stop sharing' })).toBeHidden()
 })
+
+test('the OS opening a magnet replaces whatever the dialog was showing', async ({ page }) => {
+  await page.goto('/?torrents=0')
+  const dialog = await openDialog(page)
+  await dialog.getByRole('button', { name: 'Open .torrent…' }).click()
+  await expect(page.getByRole('dialog', { name: 'Choose files' })).toBeVisible()
+  const magnet = 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&dn=debian'
+  await page.evaluate((m) => {
+    ;(window as unknown as { __demoOpen: (t: string) => void }).__demoOpen(m)
+  }, magnet)
+  const nd = page.getByRole('dialog', { name: 'New download' })
+  await expect(nd.getByLabel('Link')).toHaveValue(magnet)
+  await nd.getByRole('button', { name: 'Next' }).click()
+  await expect(
+    page
+      .getByRole('dialog', { name: 'Choose files' })
+      .getByText('debian-13.1.0-amd64-DVD-1.iso')
+      .first(),
+  ).toBeVisible()
+})
+
+test('the OS opening a .torrent file goes straight to choosing files', async ({ page }) => {
+  await page.goto('/?torrents=0')
+  await expect(page.getByText('Demo data')).toBeVisible()
+  await page.evaluate(() => {
+    ;(window as unknown as { __demoOpen: (t: string) => void }).__demoOpen(
+      '/Users/someone/Downloads/sprite-fright.torrent',
+    )
+  })
+  await expect(page.getByRole('dialog', { name: 'Choose files' })).toBeVisible()
+})

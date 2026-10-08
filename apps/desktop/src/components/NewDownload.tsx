@@ -41,6 +41,7 @@ export function NewDownload() {
   const [busy, setBusy] = useState(false)
   const draft = useApp((s) => s.draft)
   const draftTorrent = useApp((s) => s.draftTorrent)
+  const draftSeq = useApp((s) => s.draftSeq)
   const [preview, setPreview] = useState<
     | { state: 'idle' }
     | { state: 'loading' }
@@ -77,25 +78,15 @@ export function NewDownload() {
       d.showModal()
       // showModal focuses the first control (Close); the link is what people came for.
       linkInput.current?.focus()
-      if (draftTorrent) {
-        void inspect((b) => b.inspectTorrentBytes(draftTorrent, dir.trim() || null))
-        return
+      if (!draft && !draftTorrent) {
+        // Offer a link already on the clipboard (only when the user opened the dialog).
+        navigator.clipboard
+          ?.readText?.()
+          .then((t) => {
+            if (looksLikeLink(t) || isMagnet(t)) setUrl((u) => u || t.trim())
+          })
+          .catch(() => {})
       }
-      if (draft && isTorrentPath(draft)) {
-        void inspect((b) => b.inspectTorrentFile(draft, dir.trim() || null))
-        return
-      }
-      if (draft) {
-        setUrl(draft)
-        return
-      }
-      // Offer a link already on the clipboard (only when the user opened the dialog).
-      navigator.clipboard
-        ?.readText?.()
-        .then((t) => {
-          if (looksLikeLink(t) || isMagnet(t)) setUrl((u) => u || t.trim())
-        })
-        .catch(() => {})
     }
     if (!open && d.open) d.close()
     if (!open) {
@@ -104,6 +95,24 @@ export function NewDownload() {
       setFinding(false)
     }
   }, [open, draft, draftTorrent])
+
+  // Every hand-off (paste, drop, the OS opening a file or magnet) applies, even
+  // when the dialog is already open with something else.
+  useEffect(() => {
+    if (!open) return
+    if (draftTorrent) {
+      setListing(null)
+      void inspect((b) => b.inspectTorrentBytes(draftTorrent, dir.trim() || null))
+    } else if (draft && isTorrentPath(draft)) {
+      setListing(null)
+      void inspect((b) => b.inspectTorrentFile(draft, dir.trim() || null))
+    } else if (draft) {
+      setListing(null)
+      setError(null)
+      setUrl(draft)
+    }
+    // dir is read, not watched: changing the folder must not re-run a hand-off.
+  }, [open, draftSeq])
 
   /** Reads a torrent's files, then shows the picker. */
   async function inspect(f: (b: NonNullable<typeof backend>) => Promise<ListingView>) {

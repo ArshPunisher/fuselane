@@ -53,6 +53,7 @@ export type UiEvent =
   | { type: 'jobs'; jobs: JobView[] }
   | ({ type: 'live' } & Live)
   | { type: 'torrents'; torrents: TorrentView[] }
+  | { type: 'open'; target: string }
 
 export interface UiError {
   code: string

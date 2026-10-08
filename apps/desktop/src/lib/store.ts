@@ -45,6 +45,8 @@ interface State {
   draft: string
   /** A dropped .torrent's contents, handed to the dialog. */
   draftTorrent: Uint8Array | null
+  /** Bumped on every hand-off, so one arriving while the dialog is open still applies. */
+  draftSeq: number
   toast: (UiError & { at: number }) | null
   theme: Theme
   start(): Promise<void>
@@ -102,6 +104,7 @@ export const useApp = create<State>((set, get) => ({
   adding: false,
   draft: '',
   draftTorrent: null,
+  draftSeq: 0,
   toast: null,
   theme: savedTheme(),
 
@@ -130,6 +133,17 @@ export const useApp = create<State>((set, get) => ({
         })
         .catch(() => {})
       await backend.subscribe((e) => {
+        if (e.type === 'open') {
+          // The OS handed over a magnet link or a .torrent file: start the dialog with it.
+          set((s) => ({
+            view: 'transfers',
+            adding: true,
+            draft: e.target,
+            draftTorrent: null,
+            draftSeq: s.draftSeq + 1,
+          }))
+          return
+        }
         if (e.type === 'torrents') {
           heard = true
           const ids = new Set(e.torrents.map((t) => t.id))
@@ -170,7 +184,12 @@ export const useApp = create<State>((set, get) => ({
   selectTorrent: (id) => set({ selectedTorrent: id, selected: null }),
   setView: (view) => set({ view }),
   setAdding: (adding, draft) =>
-    set((s) => ({ adding, draft: draft ?? '', draftTorrent: adding ? s.draftTorrent : null })),
+    set((s) => ({
+      adding,
+      draft: draft ?? '',
+      draftTorrent: adding ? s.draftTorrent : null,
+      draftSeq: s.draftSeq + 1,
+    })),
   async dropTorrent(file) {
     const MAX = 8 * 1024 * 1024
     if (file.size > MAX) {
@@ -186,7 +205,7 @@ export const useApp = create<State>((set, get) => ({
     }
     try {
       const bytes = new Uint8Array(await file.arrayBuffer())
-      set({ draftTorrent: bytes, draft: '', adding: true })
+      set((s) => ({ draftTorrent: bytes, draft: '', adding: true, draftSeq: s.draftSeq + 1 }))
     } catch (e) {
       set({ toast: { ...toUiError(e), at: Date.now() } })
     }

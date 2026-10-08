@@ -557,6 +557,9 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     ...torrents.methods,
     subscribe: async (onEvent) => {
       listener = onEvent
+      // Tests stand in for the OS handing over a magnet or .torrent (demo only).
+      ;(window as unknown as { __demoOpen?: (t: string) => void }).__demoOpen = (target) =>
+        onEvent({ type: 'open', target })
       emitJobs()
       torrents.send()
       if (freeze !== null) {
