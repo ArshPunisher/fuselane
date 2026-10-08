@@ -1,0 +1,141 @@
+/*
+ * Fuselane design tokens ("Lanes → Fuse").
+ * Source of truth: docs/07-design/DESIGN-SYSTEM.md §3–5 and MOTION.md §2.
+ * Contrast ratios were verified when the palette was chosen; keep them if you edit.
+ *
+ * Theme: follows the OS by default. Set data-theme="light" | "dark" on <html> to override.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* Light theme (default when the OS prefers light) */
+  --canvas: oklch(0.985 0.003 260);
+  --surface-1: oklch(0.995 0.002 260);
+  --surface-2: oklch(0.965 0.004 260);
+  --surface-3: oklch(0.935 0.006 260);
+  --hairline: oklch(0.21 0.015 260 / 0.1);
+  --hairline-strong: oklch(0.21 0.015 260 / 0.18);
+  --ink: oklch(0.21 0.015 260);
+  --body: oklch(0.36 0.015 260);
+  --mute: oklch(0.5 0.015 260);
+
+  --fuse: oklch(0.56 0.165 42);
+  --fuse-ink: oklch(0.99 0 0);
+  --fuse-soft: oklch(0.56 0.165 42 / 0.1);
+
+  --lane-tide: oklch(0.52 0.095 222);
+  --lane-volt: oklch(0.52 0.13 130);
+  --lane-iris: oklch(0.52 0.16 280);
+  --lane-rose: oklch(0.56 0.17 355);
+  --lane-mint: oklch(0.52 0.095 172);
+  --lane-sky: oklch(0.52 0.14 250);
+  --lane-lilac: oklch(0.54 0.14 312);
+  --lane-steel: oklch(0.5 0.04 250);
+
+  --success: oklch(0.52 0.13 152);
+  --warning: oklch(0.54 0.115 72);
+  --danger: oklch(0.56 0.2 22);
+
+  --shadow-float: 0 12px 40px oklch(0.21 0.015 260 / 0.14);
+  --highlight-top: inset 0 1px 0 oklch(1 0 0 / 0.7);
+
+  /* Shape (one documented rule) */
+  --radius-control: 8px;
+  --radius-panel: 14px;
+  --radius-pill: 999px;
+
+  /* Typography */
+  --font-sans: 'Geist', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', monospace;
+
+  /* Z-index scale (only these) */
+  --z-sticky: 10;
+  --z-popover: 20;
+  --z-dialog: 30;
+  --z-toast: 40;
+  --z-titlebar: 50;
+
+  /* Motion */
+  --dur-instant: 90ms;
+  --dur-quick: 160ms;
+  --dur-base: 240ms;
+  --dur-slow: 380ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* Dark theme: the hero theme. Shared by the OS preference and the explicit override. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --canvas: oklch(0.155 0.01 260);
+    --surface-1: oklch(0.185 0.011 260);
+    --surface-2: oklch(0.215 0.012 260);
+    --surface-3: oklch(0.255 0.013 260);
+    --hairline: oklch(1 0 0 / 0.08);
+    --hairline-strong: oklch(1 0 0 / 0.16);
+    --ink: oklch(0.965 0.004 260);
+    --body: oklch(0.82 0.008 260);
+    --mute: oklch(0.66 0.012 260);
+
+    --fuse: oklch(0.74 0.17 50);
+    --fuse-ink: oklch(0.155 0.01 260);
+    --fuse-soft: oklch(0.74 0.17 50 / 0.14);
+
+    --lane-tide: oklch(0.78 0.12 215);
+    --lane-volt: oklch(0.85 0.17 128);
+    --lane-iris: oklch(0.72 0.13 280);
+    --lane-rose: oklch(0.74 0.14 350);
+    --lane-mint: oklch(0.81 0.12 172);
+    --lane-sky: oklch(0.74 0.12 245);
+    --lane-lilac: oklch(0.76 0.11 312);
+    --lane-steel: oklch(0.72 0.04 250);
+
+    --success: oklch(0.79 0.15 152);
+    --warning: oklch(0.86 0.15 92);
+    --danger: oklch(0.7 0.19 18);
+
+    --shadow-float: 0 12px 40px oklch(0.155 0.01 260 / 0.45);
+    --highlight-top: inset 0 1px 0 oklch(1 0 0 / 0.06);
+  }
+}
+
+:root[data-theme='dark'] {
+  --canvas: oklch(0.155 0.01 260);
+  --surface-1: oklch(0.185 0.011 260);
+  --surface-2: oklch(0.215 0.012 260);
+  --surface-3: oklch(0.255 0.013 260);
+  --hairline: oklch(1 0 0 / 0.08);
+  --hairline-strong: oklch(1 0 0 / 0.16);
+  --ink: oklch(0.965 0.004 260);
+  --body: oklch(0.82 0.008 260);
+  --mute: oklch(0.66 0.012 260);
+
+  --fuse: oklch(0.74 0.17 50);
+  --fuse-ink: oklch(0.155 0.01 260);
+  --fuse-soft: oklch(0.74 0.17 50 / 0.14);
+
+  --lane-tide: oklch(0.78 0.12 215);
+  --lane-volt: oklch(0.85 0.17 128);
+  --lane-iris: oklch(0.72 0.13 280);
+  --lane-rose: oklch(0.74 0.14 350);
+  --lane-mint: oklch(0.81 0.12 172);
+  --lane-sky: oklch(0.74 0.12 245);
+  --lane-lilac: oklch(0.76 0.11 312);
+  --lane-steel: oklch(0.72 0.04 250);
+
+  --success: oklch(0.79 0.15 152);
+  --warning: oklch(0.86 0.15 92);
+  --danger: oklch(0.7 0.19 18);
+
+  --shadow-float: 0 12px 40px oklch(0.155 0.01 260 / 0.45);
+  --highlight-top: inset 0 1px 0 oklch(1 0 0 / 0.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-quick: 0ms;
+    --dur-base: 120ms;
+    --dur-slow: 120ms;
+  }
+}
