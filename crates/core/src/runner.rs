@@ -256,6 +256,8 @@ pub struct RunOptions {
     pub cancel: Option<Cancel>,
     /// `None` keeps the engine's default.
     pub checkpoint_every: Option<Duration>,
+    /// Shrinks retry waits (tests); `None` keeps real-world delays.
+    pub retry_delay_scale: Option<f64>,
 }
 
 /// Why a job couldn't start at all (nothing in the store changed state).
@@ -282,6 +284,21 @@ pub enum Outcome {
         error: JobError,
         resumable: bool,
     },
+}
+
+/// The fix the UI offers for a failure (stored with the job; ERRORS.md §2).
+pub fn action_for(e: &JobError) -> &'static str {
+    match e {
+        JobError::LinkExpired(_) | JobError::ProbeStatus(401 | 403 | 404 | 410) => "fix-link",
+        JobError::VersionChanged
+        | JobError::NotResumable(_)
+        | JobError::ChecksumMismatch { .. } => "start-over",
+        JobError::Disk(_) | JobError::Staging(_) => "free-space",
+        JobError::Unreachable(_)
+        | JobError::ProbeStatus(_)
+        | JobError::AllNetworksFailed(_)
+        | JobError::Paused => "retry",
+    }
 }
 
 /// Whether a failure leaves something worth resuming.
@@ -450,6 +467,7 @@ pub async fn run(
         checkpoint_every: opts.checkpoint_every.unwrap_or(defaults.checkpoint_every),
         cancel: opts.cancel,
         expected_sha256: opts.sha256,
+        retry_delay_scale: opts.retry_delay_scale.unwrap_or(defaults.retry_delay_scale),
         ..defaults
     };
     let _ = store.apply(id, Event::Start, None);
@@ -471,6 +489,7 @@ pub async fn run(
                 let resumable = is_resumable(&error);
                 // The plain-language message, so every front end shows the same words.
                 let _ = store.apply(id, Event::Fail { resumable }, Some(&describe(&error)));
+                let _ = store.set_error_code(id, action_for(&error));
                 Outcome::Failed { error, resumable }
             }
         },
@@ -696,6 +715,17 @@ mod tests {
                 .unwrap_err()
                 .contains("ftp")
         );
+    }
+
+    #[test]
+    fn every_failure_offers_a_fitting_fix() {
+        assert_eq!(action_for(&JobError::LinkExpired(403)), "fix-link");
+        assert_eq!(action_for(&JobError::ProbeStatus(404)), "fix-link");
+        assert_eq!(action_for(&JobError::ProbeStatus(503)), "retry");
+        assert_eq!(action_for(&JobError::VersionChanged), "start-over");
+        assert_eq!(action_for(&JobError::Unreachable("x".into())), "retry");
+        // A start-over failure is never offered as a resume.
+        assert!(!is_resumable(&JobError::VersionChanged));
     }
 
     #[test]
