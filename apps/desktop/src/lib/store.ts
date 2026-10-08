@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { connect, toUiError, type Backend } from './backend'
-import type { AppInfo, JobView, Live, NetView, UiError } from './types'
+import type { AppInfo, JobView, LimitsView, Live, NetView, UiError } from './types'
 
 /** Rate history for the Stream graph: newest last, about five samples a second. */
 export interface History {
@@ -20,6 +20,7 @@ interface State {
   live: Record<number, Live>
   history: Record<number, History>
   networks: NetView[]
+  limits: LimitsView
   selected: number | null
   view: View
   adding: boolean
@@ -34,6 +35,8 @@ interface State {
   setTheme(t: Theme): void
   dismissToast(): void
   refreshNetworks(): Promise<void>
+  /** Saves limits; true when the backend accepted them. */
+  saveLimits(next: LimitsView): Promise<boolean>
   /** Runs an action; failures become a toast. Returns false on failure. */
   act(f: (b: Backend) => Promise<unknown>): Promise<boolean>
 }
@@ -60,6 +63,7 @@ export const useApp = create<State>((set, get) => ({
   live: {},
   history: {},
   networks: [],
+  limits: { global: 0, networks: [] },
   selected: null,
   view: 'transfers',
   adding: false,
@@ -73,11 +77,12 @@ export const useApp = create<State>((set, get) => ({
     try {
       const backend = await connect()
       set({ backend })
-      const [info, networks] = await Promise.all([
+      const [info, networks, limits] = await Promise.all([
         backend.appInfo(),
         backend.listNetworks().catch(() => []),
+        backend.getLimits().catch(() => ({ global: 0, networks: [] })),
       ])
-      set({ info, networks })
+      set({ info, networks, limits })
       await backend.subscribe((e) => {
         if (e.type === 'jobs') {
           const ids = new Set(e.jobs.map((j) => j.id))
@@ -118,6 +123,17 @@ export const useApp = create<State>((set, get) => ({
     set({ theme })
   },
   dismissToast: () => set({ toast: null }),
+  async saveLimits(next) {
+    const b = get().backend
+    if (!b) return false
+    try {
+      set({ limits: await b.setLimits(next) })
+      return true
+    } catch (e) {
+      set({ toast: { ...toUiError(e), at: Date.now() } })
+      return false
+    }
+  },
   async refreshNetworks() {
     const b = get().backend
     if (!b) return

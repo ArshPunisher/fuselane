@@ -7,6 +7,7 @@
 // drop=0 (the phone never drops out).
 import type { Backend } from './backend'
 import type {
+  LimitsView,
   JobStatus,
   JobView,
   Live,
@@ -67,6 +68,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
   let nextId = 1
   let clock = 0
   let listener: ((e: UiEvent) => void) | null = null
+  let limits: LimitsView = { global: 0, networks: [] }
 
   const now = () => Math.floor(Date.now() / 1000)
 
@@ -374,6 +376,29 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       }
     },
     pickFolder: async () => (params.get('pick') === 'cancel' ? null : '/Users/demo/Movies'),
+    getLimits: async () => structuredClone(limits),
+    setLimits: async (next) => {
+      // The same rules as the service.
+      const max = 100 * 1024 ** 3
+      const bad = (m: string) =>
+        err('bad-limit', m, 'Use a speed in KB/s or MB/s, or leave it empty for no limit.')
+      if (!Number.isFinite(next.global) || next.global < 0 || next.global > max)
+        throw bad('That overall limit is too high to be a real speed.')
+      const names = new Set<string>()
+      for (const n of next.networks) {
+        if (!n.name || n.name !== n.name.trim())
+          throw bad('A network limit has no valid network name.')
+        if (!Number.isFinite(n.rate) || n.rate < 0 || n.rate > max)
+          throw bad('That network limit is too high to be a real speed.')
+        if (names.has(n.name)) throw bad('A network is listed twice.')
+        names.add(n.name)
+      }
+      limits = {
+        global: Math.round(next.global),
+        networks: next.networks.filter((n) => n.rate > 0),
+      }
+      return structuredClone(limits)
+    },
     fixLink: async (id, raw) => {
       let url: URL
       try {

@@ -1,7 +1,7 @@
 // The one door to the backend. In the Tauri window it calls Rust commands; in a
 // plain browser (pnpm dev, Playwright) it uses the demo engine in ./demo.ts,
 // and the UI says so.
-import type { AppInfo, JobView, NetView, PreviewView, UiError, UiEvent } from './types'
+import type { AppInfo, JobView, LimitsView, NetView, PreviewView, UiError, UiEvent } from './types'
 
 export interface Backend {
   readonly demo: boolean
@@ -16,6 +16,9 @@ export interface Backend {
   openFile(id: number): Promise<void>
   /** A folder the user picked, or null if they cancelled. */
   pickFolder(): Promise<string | null>
+  getLimits(): Promise<LimitsView>
+  /** Saves limits (validated by the backend); returns what was saved. */
+  setLimits(limits: LimitsView): Promise<LimitsView>
   /** Continues a stopped download from a new link to the same file. */
   fixLink(id: number, url: string): Promise<void>
   /** Discards a download that can't continue and starts it fresh; the new id. */
@@ -65,6 +68,8 @@ async function tauriBackend(): Promise<Backend> {
     reveal: (id) => call('reveal', { id }),
     openFile: (id) => call('open_file', { id }),
     pickFolder: () => call('pick_folder'),
+    getLimits: () => call('get_limits'),
+    setLimits: (limits) => call('set_limits', { limits }),
     fixLink: (id, url) => call('fix_link', { id, url }),
     startOver: (id) => call('start_over', { id }),
     preview: (url) => call('preview', { url }),

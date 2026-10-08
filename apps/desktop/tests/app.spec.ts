@@ -401,3 +401,47 @@ test('a file that changed on the server can be started over', async ({ page }) =
   await expect(detail.locator('.speed')).toContainText('MB/s', { timeout: 5000 })
   await expect(page.locator('.row-name', { hasText: 'mirror-snapshot' })).toHaveCount(1)
 })
+
+test('an overall speed limit is validated, saved and can be removed', async ({ page }) => {
+  await page.goto('/?empty=1')
+  await page.getByRole('button', { name: 'Settings' }).click()
+  const field = page.getByLabel('Speed limit for all networks', { exact: true })
+  const save = page.locator('form.setting').getByRole('button', { name: 'Save' })
+  await expect(save).toBeDisabled() // nothing changed yet
+  for (const bad of ['abc', '-5', '1e9', '5 MB']) {
+    await field.fill(bad)
+    await expect(page.getByText('Enter a number, like 5 or 2.5.')).toBeVisible()
+    await expect(save).toBeDisabled()
+  }
+  // A number too big to be a speed is refused by the backend with a clear reason.
+  await field.fill('999999999')
+  await save.click()
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'too high to be a real speed' }),
+  ).toBeVisible()
+  await field.fill('2.5')
+  await page.getByLabel('Speed limit for all networks unit').selectOption('MB')
+  await save.click()
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Running downloads follow it now' }),
+  ).toBeVisible()
+  await expect(save).toBeDisabled()
+  await field.fill('')
+  await save.click()
+  await expect(page.getByRole('status').filter({ hasText: 'Limit removed' })).toBeVisible()
+})
+
+test('per-network limits save together and survive moving between pages', async ({ page }) => {
+  await page.goto('/?empty=1')
+  await page.getByRole('button', { name: 'Networks' }).click()
+  const phone = page.getByLabel('iPhone USB speed limit', { exact: true })
+  await phone.fill('512')
+  await page.getByLabel('iPhone USB speed limit unit').selectOption('KB')
+  await page.getByRole('button', { name: 'Save limits' }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'follow these now' })).toBeVisible()
+  await page.getByRole('button', { name: 'Downloads' }).click()
+  await page.getByRole('button', { name: 'Networks' }).click()
+  await expect(page.getByLabel('iPhone USB speed limit', { exact: true })).toHaveValue('512')
+  await expect(page.getByLabel('iPhone USB speed limit unit')).toHaveValue('KB')
+  await expect(page.getByLabel('Wi-Fi speed limit', { exact: true })).toHaveValue('')
+})
