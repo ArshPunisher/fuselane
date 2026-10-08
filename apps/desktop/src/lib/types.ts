@@ -14,7 +14,7 @@ export interface JobView {
   total: number | null
   error: string | null
   /** The fix to offer for `error`. */
-  errorAction: 'fix-link' | 'retry' | 'start-over' | 'free-space' | null
+  errorAction: 'fix-link' | 'retry' | 'start-over' | 'free-space' | 'allowance' | null
   finalPath: string | null
   createdAt: number
 }
@@ -95,4 +95,22 @@ export interface NetPref {
   name: string
   label: string | null
   lane: string | null
+}
+
+/** A network's monthly data allowance and its usage this period. */
+export interface AllowanceView {
+  name: string
+  allowance: number | null
+  resetDay: number
+  used: number
+  /** Next reset, YYYY-MM-DD. */
+  resetsOn: string
+  reached: boolean
+}
+
+/** Sets (bytes > 0) or removes (bytes = 0) an allowance. */
+export interface AllowanceRequest {
+  name: string
+  bytes: number
+  resetDay: number
 }

@@ -161,6 +161,11 @@ function ErrorPanel({ job }: { job: JobView }) {
             <ArrowClockwise size={16} aria-hidden /> Start over
           </button>
         )}
+        {action === 'allowance' && (
+          <button className="btn" onClick={() => useApp.getState().setView('networks')}>
+            Open Networks
+          </button>
+        )}
         {action === 'free-space' && (
           <p className="field-help">
             Free up space on that disk, or choose another folder, then try again.

@@ -2,6 +2,8 @@
 // plain browser (pnpm dev, Playwright) it uses the demo engine in ./demo.ts,
 // and the UI says so.
 import type {
+  AllowanceRequest,
+  AllowanceView,
   AppInfo,
   JobView,
   LimitsView,
@@ -27,6 +29,8 @@ export interface Backend {
   /** A folder the user picked, or null if they cancelled. */
   pickFolder(): Promise<string | null>
   getLimits(): Promise<LimitsView>
+  allowances(): Promise<AllowanceView[]>
+  setAllowance(req: AllowanceRequest): Promise<AllowanceView[]>
   setSlow(on: boolean): Promise<LimitsView>
   networkPrefs(): Promise<NetPref[]>
   setNetworkPref(pref: NetPref): Promise<NetPref[]>
@@ -90,6 +94,8 @@ async function tauriBackend(): Promise<Backend> {
     openFile: (id) => call('open_file', { id }),
     pickFolder: () => call('pick_folder'),
     getLimits: () => call('get_limits'),
+    allowances: () => call('allowances'),
+    setAllowance: (req) => call('set_allowance', { req }),
     setSlow: (on) => call('set_slow', { on }),
     networkPrefs: () => call('network_prefs'),
     setNetworkPref: (pref) => call('set_network_pref', { pref }),

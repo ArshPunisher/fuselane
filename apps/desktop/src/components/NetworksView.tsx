@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { ArrowClockwise, PencilSimple } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { assignLanes, kindLabel, LANES, netTitle, type Lane } from '../lib/lanes'
-import type { NetView } from '../lib/types'
-import { rateText } from '../lib/format'
+import type { AllowanceView, NetView } from '../lib/types'
+import { bytes as bytesText, rateText } from '../lib/format'
 import { NetIcon } from './NetIcon'
 import { Orb } from './Orb'
 import { LimitField } from './LimitField'
@@ -212,6 +212,159 @@ function NetworkLimits() {
   )
 }
 
+const GB = 1024 ** 3
+const MB = 1024 ** 2
+
+function shortDate(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  if (!y || !m || !d) return iso
+  return new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' }).format(
+    new Date(y, m - 1, d),
+  )
+}
+
+/** One network's monthly allowance: amount, reset day, and how much is used. */
+function AllowanceRow({
+  view,
+  onSaved,
+}: {
+  view: AllowanceView
+  onSaved: (v: AllowanceView[]) => void
+}) {
+  const backend = useApp((s) => s.backend)
+  const act = useApp((s) => s.act)
+  const networks = useApp((s) => s.networks)
+  const net = networks.find((x) => x.name === view.name)
+  const startUnit = view.allowance && view.allowance < GB ? 'MB' : 'GB'
+  const [unit, setUnit] = useState<'MB' | 'GB'>(startUnit)
+  const [text, setText] = useState(
+    view.allowance ? String(+(view.allowance / (startUnit === 'GB' ? GB : MB)).toFixed(2)) : '',
+  )
+  const [day, setDay] = useState(view.resetDay)
+  const trimmed = text.trim().replace(',', '.')
+  const valid = trimmed === '' || /^\d+(\.\d+)?$/.test(trimmed)
+  const bytes = trimmed === '' ? 0 : Math.round(Number(trimmed) * (unit === 'GB' ? GB : MB))
+  const changed = valid && (bytes !== (view.allowance ?? 0) || day !== view.resetDay)
+  const title = net ? netTitle(net) : view.name
+  const pct = view.allowance ? Math.min(100, (view.used / view.allowance) * 100) : 0
+  const id = `allow-${view.name}`
+  return (
+    <li className="allowance" data-reached={view.reached || undefined}>
+      <div className="allowance-head">
+        <span className="net-name">{title}</span>
+        <span className="muted num">
+          {view.allowance
+            ? `${bytesText(view.used)} of ${bytesText(view.allowance)}`
+            : `${bytesText(view.used)} used`}
+          , resets {shortDate(view.resetsOn)}
+        </span>
+      </div>
+      {view.allowance ? (
+        <div className="bar allowance-bar" aria-hidden="true">
+          <div className="bar-fill" style={{ width: `${pct}%` }} />
+        </div>
+      ) : null}
+      {view.reached && (
+        <p className="allowance-note">
+          Allowance reached: Fuselane won&apos;t use this network until {shortDate(view.resetsOn)}.
+        </p>
+      )}
+      <form
+        className="allowance-form"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (!valid || !backend) return
+          void act(async (b) =>
+            onSaved(await b.setAllowance({ name: view.name, bytes, resetDay: day })),
+          )
+        }}
+      >
+        <label htmlFor={id} className="sr-only">
+          {title} monthly allowance
+        </label>
+        <div className="limit-inputs">
+          <input
+            id={id}
+            inputMode="decimal"
+            autoComplete="off"
+            placeholder="No limit"
+            value={text}
+            aria-invalid={valid ? undefined : true}
+            onChange={(e) => setText(e.target.value)}
+          />
+          <select
+            aria-label={`${title} allowance unit`}
+            value={unit}
+            onChange={(e) => setUnit(e.target.value as 'MB' | 'GB')}
+          >
+            <option value="MB">MB</option>
+            <option value="GB">GB</option>
+          </select>
+        </div>
+        <label className="reset-day">
+          <span className="muted">Resets on day</span>
+          <select
+            aria-label={`${title} reset day`}
+            value={day}
+            onChange={(e) => setDay(Number(e.target.value))}
+          >
+            {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="submit" className="btn" disabled={!changed}>
+          Save
+        </button>
+      </form>
+      {!valid && <p className="field-error">Enter a number, like 5 or 2.5.</p>}
+    </li>
+  )
+}
+
+function Allowances() {
+  const backend = useApp((s) => s.backend)
+  const [views, setViews] = useState<AllowanceView[]>([])
+  useEffect(() => {
+    if (!backend) return
+    let live = true
+    const load = () =>
+      backend
+        .allowances()
+        .then((v) => live && setViews(v))
+        .catch(() => {})
+    void load()
+    const t = setInterval(load, 5000)
+    return () => {
+      live = false
+      clearInterval(t)
+    }
+  }, [backend])
+  if (!views.length) return null
+  return (
+    <section className="net-limits" aria-labelledby="allow-title">
+      <h2 id="allow-title" className="section-title">
+        Monthly data allowance
+      </h2>
+      <p className="muted">
+        For a phone on a data plan: when a network reaches its allowance, Fuselane stops using it
+        until the reset day.
+      </p>
+      <ul className="allowance-list">
+        {views.map((v) => (
+          <AllowanceRow
+            key={`${v.name}-${v.allowance}-${v.resetDay}`}
+            view={v}
+            onSaved={setViews}
+          />
+        ))}
+      </ul>
+    </section>
+  )
+}
+
 export function NetworksView() {
   const networks = useApp((s) => s.networks)
   const refresh = useApp((s) => s.refreshNetworks)
@@ -235,6 +388,7 @@ export function NetworksView() {
       </p>
       <NetworkList />
       <NetworkLimits />
+      <Allowances />
       {other.length > 0 && (
         <details className="other-nets">
           <summary>Not used ({other.length})</summary>

@@ -7,6 +7,7 @@
 // drop=0 (the phone never drops out).
 import type { Backend } from './backend'
 import type {
+  AllowanceView,
   JobStatus,
   JobView,
   LimitsView,
@@ -71,6 +72,14 @@ export function createDemoBackend(params: URLSearchParams): Backend {
   let listener: ((e: UiEvent) => void) | null = null
   let limits: LimitsView = { global: 0, networks: [], slow: false, slowRate: 1024 * 1024 }
   let prefs: NetPref[] = []
+  let allowances: AllowanceView[] = NETWORKS.filter((n) => n.usable).map((n) => ({
+    name: n.name,
+    allowance: n.name === 'en7' && params.get('allowance') === 'reached' ? 5 * 1024 ** 3 : null,
+    resetDay: 1,
+    used: n.name === 'en7' ? 5.2 * 1024 ** 3 : 0,
+    resetsOn: '2026-11-01',
+    reached: n.name === 'en7' && params.get('allowance') === 'reached',
+  }))
 
   const now = () => Math.floor(Date.now() / 1000)
 
@@ -150,6 +159,16 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       'start-over',
     )
     make('dataset-shard-0042.tar.zst', 2.4 * 1024 * MB, 'paused', 0.38)
+    if (params.get('allowance') === 'reached') {
+      make(
+        'conference-talk-4k.mp4',
+        1.8 * 1024 * MB,
+        'paused',
+        0.62,
+        'Paused: every network reached its data allowance. It continues after the allowance resets, or raise it in Networks.',
+        'allowance',
+      )
+    }
     make('ubuntu-26.04-desktop-amd64.iso', 1.1 * 1024 * MB, 'running', 0)
   }
 
@@ -399,6 +418,27 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         )
     },
     getLimits: async () => structuredClone(limits),
+    allowances: async () => structuredClone(allowances),
+    setAllowance: async (req) => {
+      const bad = (m: string) =>
+        err('bad-allowance', m, 'Use an amount like 5 GB and a reset day from 1 to 28.')
+      if (!Number.isInteger(req.resetDay) || req.resetDay < 1 || req.resetDay > 28)
+        throw bad('The reset day must be from 1 to 28.')
+      if (!Number.isFinite(req.bytes) || req.bytes < 0 || req.bytes > 100 * 1024 ** 4)
+        throw bad('That allowance is too big to be real.')
+      allowances = allowances.map((a) =>
+        a.name === req.name
+          ? {
+              ...a,
+              allowance: req.bytes > 0 ? req.bytes : null,
+              resetDay: req.resetDay,
+              resetsOn: `2026-11-${String(req.resetDay).padStart(2, '0')}`,
+              reached: req.bytes > 0 && a.used >= req.bytes,
+            }
+          : a,
+      )
+      return structuredClone(allowances)
+    },
     setSlow: async (on) => {
       limits = { ...limits, slow: on }
       return structuredClone(limits)

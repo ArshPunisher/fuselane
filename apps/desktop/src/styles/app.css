@@ -1570,6 +1570,11 @@ h2 {
   transform: translateX(16px);
 }
 
+.switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .switch:focus-visible {
   outline: 2px solid var(--fuse);
   outline-offset: 2px;
@@ -1631,4 +1636,65 @@ kbd {
 .update-banner.updated {
   border-color: color-mix(in oklch, var(--success) 40%, transparent);
   background: color-mix(in oklch, var(--success) 10%, transparent);
+}
+
+/* ---------- Data allowance ---------- */
+
+.allowance-list {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.allowance {
+  display: grid;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+}
+
+.allowance-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  font-size: 13px;
+}
+
+.allowance-bar .bar-fill {
+  background: var(--fuse);
+}
+
+.allowance[data-reached] .allowance-bar .bar-fill {
+  background: var(--warning);
+}
+
+.allowance-note {
+  color: var(--warning);
+  font-size: 13px;
+}
+
+.allowance-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.reset-day {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.reset-day select {
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--ink);
 }

@@ -525,6 +525,7 @@ test('a network can be renamed and recoloured, and the name shows everywhere', a
 test('slow mode switches on and off and its speed can be changed', async ({ page }) => {
   await page.goto('/?empty=1')
   const toggle = page.locator('.sidebar').getByRole('switch', { name: 'Slow mode' })
+  await expect(toggle).toBeEnabled() // ready: the backend is connected
   await expect(toggle).toHaveAttribute('aria-checked', 'false')
   await toggle.click()
   await expect(toggle).toHaveAttribute('aria-checked', 'true')
@@ -588,4 +589,34 @@ test('after an update, a one-time message says it worked', async ({ page }) => {
   // A normal launch shows nothing.
   await page.goto('/?empty=1')
   await expect(page.locator('.update-banner.updated')).toHaveCount(0)
+})
+
+test('a monthly allowance can be set, is validated, and shows its usage', async ({ page }) => {
+  await page.goto('/?empty=1')
+  await page.getByRole('button', { name: 'Networks' }).click()
+  const amount = page.getByLabel('iPhone USB monthly allowance')
+  const row = page.locator('.allowance', { has: amount })
+  await amount.fill('lots')
+  await expect(row.getByText('Enter a number, like 5 or 2.5.')).toBeVisible()
+  await expect(row.getByRole('button', { name: 'Save' })).toBeDisabled()
+  await amount.fill('8')
+  await page.getByLabel('iPhone USB allowance unit').selectOption('GB')
+  await page.getByLabel('iPhone USB reset day').selectOption('15')
+  await row.getByRole('button', { name: 'Save' }).click()
+  const saved = page.locator('.allowance', { has: page.getByLabel('iPhone USB monthly allowance') })
+  await expect(saved).toContainText('of 8.0 GB')
+  await expect(page.getByLabel('iPhone USB reset day')).toHaveValue('15')
+})
+
+test('a reached allowance is explained, and a paused download points to the fix', async ({
+  page,
+}) => {
+  await page.goto('/?allowance=reached&drop=0')
+  await page.getByText('conference-talk-4k.mp4').click()
+  await expect(page.getByRole('alert')).toContainText('every network reached its data allowance')
+  await page.locator('article.detail').getByRole('button', { name: 'Open Networks' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Networks' })).toBeVisible()
+  await expect(
+    page.getByText(/Allowance reached: Fuselane won.t use this network until/),
+  ).toBeVisible()
 })

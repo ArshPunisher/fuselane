@@ -5,6 +5,8 @@ import { rateText } from '../lib/format'
 export function SlowToggle({ labelled = true }: { labelled?: boolean }) {
   const limits = useApp((s) => s.limits)
   const setSlow = useApp((s) => s.setSlow)
+  // Clicking before the backend is connected would silently do nothing.
+  const ready = useApp((s) => s.backend !== null)
   return (
     <div className="slow-toggle">
       <p>
@@ -22,6 +24,7 @@ export function SlowToggle({ labelled = true }: { labelled?: boolean }) {
         className="switch"
         aria-checked={limits.slow}
         aria-label="Slow mode"
+        disabled={!ready}
         onClick={() => void setSlow(!limits.slow)}
       />
     </div>
