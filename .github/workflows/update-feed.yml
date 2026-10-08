@@ -1,7 +1,8 @@
 name: Update feed
 
-# When a release is published (never while it is a draft), writes the signed
-# updater feed and deploys it with the site to GitHub Pages. Fuselane reads
+# When a release is published (never while it is a draft), builds the download
+# page (apps/site), writes the signed updater feed next to it, and deploys both to
+# GitHub Pages. Fuselane reads
 # https://arshpunisher.github.io/fuselane/updates/latest.json (L-77: our own
 # feed, because GitHub's /releases/latest skips pre-releases).
 
@@ -42,13 +43,22 @@ jobs:
           gh release download "$TAG" --pattern '*.sig' --dir sigs
           gh release view "$TAG" --json body --jq .body > notes.md
           ls sigs
-      - name: Write the feed
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build the download page
+        run: pnpm --filter @fuselane/site build
+      - name: Write the feed next to the page
         run: |
           version="${TAG#v}"
+          mkdir -p site
+          cp -R apps/site/dist/. site/
           mkdir -p site/updates
           python3 tools/update_feed.py "$version" \
             "https://github.com/${{ github.repository }}/releases/download/$TAG" sigs notes.md > site/updates/latest.json
-          cp packaging/site/index.html site/index.html
           cat site/updates/latest.json
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0

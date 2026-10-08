@@ -56,6 +56,8 @@ jobs:
         run: |
           pnpm --filter @fuselane/desktop exec playwright install --with-deps webkit chromium
           pnpm --filter @fuselane/desktop exec playwright test
+      - name: Download page tests
+        run: pnpm --filter @fuselane/site exec playwright test
 
   commits:
     name: Commit messages
