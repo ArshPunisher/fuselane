@@ -6,6 +6,7 @@
 //! Per-network DNS and Happy Eyeballs come next (STEPS 2.13, 2.14).
 
 pub mod dns;
+pub mod probe;
 
 use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, OnceLock};
