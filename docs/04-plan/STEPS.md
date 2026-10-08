@@ -92,7 +92,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [x] 2.42 Single-owner lock: one owner per download (OS file lock per job), so the app and the CLI never run the same download
 
 **2H api + CLI**
-- [ ] 2.43 Local JSON-RPC server (UDS / named pipe) + per-user access + schema validation — EC-215 — L-97, L-98
+- [x] 2.43 Local API (one JSON per line over a Unix socket / named pipe), owner-only socket + peer uid check, offers validated (shared vectors) — L-97
 - [ ] 2.44 `fuselane get <url> [--networks] [--streams] [--sha256]`, `ls`, `pause`, `resume`, `rm`, `nets`, `--json` (**get, nets, ls, resume, rm, --sha256 done** and tested; pause = Ctrl-C; `--json` and the daemon remain)
 - [ ] 2.45 `fuselaned` headless daemon mode
 - [ ] 2.46 Chaos suite (L6) with 50 seeds nightly; benchmarks (L7) nightly
@@ -160,13 +160,13 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 
 ## P7 Browser extension (0.4)
 
-- [ ] 7.1 WXT project: Chrome MV3 + Firefox MV3 builds; popup + options with `packages/ui`
-- [ ] 7.2 Capture rules engine (size, type, domain, Alt bypass) — unit tests
+- [x] 7.1 WXT project: Chrome MV3 + Firefox MV3 builds; popup (status, on/off). Options page later
+- [x] 7.2 Capture rules engine (size, type, MIME, domain) — unit tests (`packages/capture`). Alt bypass needs a content script and host permission: later
 - [ ] 7.3 Auth forwarding: cookies (incl. partitioned), headers, referrer, UA — never logged
-- [ ] 7.4 Native-messaging host mode in the CLI + manifest/registry install per OS from the app installer
+- [ ] 7.4 Native-messaging host mode in the CLI (**done**) + manifest/registry install per OS from the app installer (needs fixed extension ids: store listings, 7.9)
 - [ ] 7.5 Localhost WebSocket fallback with pairing code + token + Origin/Host checks — T3, T4
-- [ ] 7.6 Message schema v1 validated on both sides; fall back to the browser on decline or timeout
-- [ ] 7.7 Context menu "Download with Fuselane"
+- [x] 7.6 Message schema v1 validated on both sides (shared vectors); the browser resumes on decline or timeout
+- [x] 7.7 Context menu "Download with Fuselane"
 - [ ] 7.8 Playwright extension e2e; `web-ext lint`
 - [ ] 7.9 Store listings on the free stores (Edge Add-ons, AMO) with a privacy policy; Chrome Web Store ($5 one-time) only with the owner's OK
 

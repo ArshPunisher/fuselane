@@ -37,7 +37,9 @@ Built with WXT 0.21 (MV3) for Chrome, Edge, Brave and Opera, and Firefox. Safari
 { "v": 1, "type": "download.declined", "reason": "ip_locked|unsupported|user_cancelled", "fallback": "browser" }
 ```
 
-When the app declines, or doesn't answer within 3 s, the extension **re-starts the download in the browser**, so the user never loses one.
+The extension **pauses** the browser's download while it asks. When the app accepts, the browser's copy is cancelled and erased; when it declines, or doesn't answer within 3 s, the browser's download is **resumed**, so the user never loses one and keeps the browser's own session.
+
+**v1 limits (2026-10-08):** cookies and auth headers are not forwarded yet (no host permissions), because the engine can't send them. To avoid saving a login page in place of the file, the app previews the link itself and accepts only when the size matches what the browser saw (`apps/desktop/src-tauri/src/api_bridge.rs`). Offers that do carry a session are declined. The host manifests (§2) are written once the extension has fixed store ids (STEPS 7.4, 7.9).
 
 ## 4. Security (see SECURITY.md)
 
