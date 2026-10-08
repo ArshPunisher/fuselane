@@ -24,7 +24,7 @@ says what is waiting and on whom. Last updated 2026-10-09.
 
 1. **Extension:** Alt-click to skip (needs a content script); forward cookies once the engine can send them. Rebuild the store zip so the listing ships the settings page.
 2. **Engine:** send request headers and cookies (lets the extension hand over logged-in downloads).
-3. **Native-messaging host install** for Chrome, Firefox and Edge, per OS, once the store ids exist (7.4).
+3. **Edge Add-ons id:** add it to `fuselane_api::hosts` if an Edge listing is made (Chrome and Firefox ids are done; Edge users can install from the Chrome Web Store meanwhile).
 4. **Fuse Send (P6):** direct sharing with no cloud ([FUSE-SEND.md](../03-architecture/FUSE-SEND.md)). Spike S7 (can two home or phone connections reach each other over DHT?) first, then link format, encryption, encrypting storage, sender, receiver, link page and UI.
 5. **Torrents:** a fixed connector in librqbit (5.9 part 2) so DHT and UDP trackers also go through Fuselane; incoming peers (L-71).
 6. **P2/P3 leftovers:** sleep and wake, network change watcher per OS (torrents already follow changes), a stable network id, macOS friendly names, event deltas, guided setup and speed test.

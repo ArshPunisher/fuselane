@@ -16,9 +16,12 @@ Built with WXT 0.21 (MV3) for Chrome, Edge, Brave and Opera, and Firefox. Safari
 ## 2. Talking to the app
 
 **Primary: native messaging.** `runtime.connectNative("app.fuselane.host")`.
-- The host is the `fuselane` CLI in `--native-messaging` mode, relaying length-prefixed JSON to the local API.
-- The app's installer writes the host manifests for Chrome, Chromium, Edge, Brave and Firefox, per user (paths in [`../01-research/tech-research.md`](../01-research/tech-research.md) §5.3; Windows uses HKCU registry keys).
-- `allowed_origins` / `allowed_extensions` list only our store IDs.
+- The host is **the desktop app's own binary** (or the `fuselane` CLI): started with the extension's origin as its argument, it relays length-prefixed JSON to the local API and never opens a window (`fuselane_api::native::run_host`). No second program to install.
+- **The app writes the host manifests itself on every launch** (`fuselane_api::hosts`), because macOS (drag the DMG) and AppImage have no installer, and a moved or updated app must fix its own paths. Per user, only for browsers that are installed: Chrome (stable, Beta, Dev, Canary), Chromium, Edge, Brave, Vivaldi and Firefox on macOS and Linux; HKCU registry keys for Chrome, Chromium, Edge, Brave and Firefox on Windows (the NSIS uninstaller removes them). `fuselane browsers` does the same for CLI-only setups.
+- An AppImage registers the `.AppImage` file (`$APPIMAGE`), not its temporary mount. An app running from the disk image or an App Translocation path registers nothing and says "move it to Applications" instead.
+- `allowed_origins` / `allowed_extensions` list only our store IDs (Chrome `nggljghjikdkigiekdciocigdnnhponl`, Firefox `fuselane@fuselane.app`). `FUSELANE_EXTRA_EXTENSION_IDS` adds unpacked development ids (validated as Chrome ids).
+- Flatpak and Snap browsers can't start hosts outside their sandbox; they need the localhost fallback below.
+- Tested end to end on Linux CI: a real Chromium loads the built extension and pings the host (`apps/extension/e2e`).
 
 **Fallback: localhost WebSocket with pairing** (for Flatpak/Snap browsers, Safari, or a missing host manifest).
 - Listen on `127.0.0.1` only, on a fixed port range.
@@ -39,7 +42,7 @@ Built with WXT 0.21 (MV3) for Chrome, Edge, Brave and Opera, and Firefox. Safari
 
 The extension **pauses** the browser's download while it asks. When the app accepts, the browser's copy is cancelled and erased; when it declines, or doesn't answer within 3 s, the browser's download is **resumed**, so the user never loses one and keeps the browser's own session.
 
-**v1 limits (2026-10-08):** cookies and auth headers are not forwarded yet (no host permissions), because the engine can't send them. To avoid saving a login page in place of the file, the app previews the link itself and accepts only when the size matches what the browser saw (`apps/desktop/src-tauri/src/api_bridge.rs`). Offers that do carry a session are declined. The host manifests (§2) are written once the extension has fixed store ids (STEPS 7.4, 7.9).
+**v1 limits (2026-10-08):** cookies and auth headers are not forwarded yet (no host permissions), because the engine can't send them. To avoid saving a login page in place of the file, the app previews the link itself and accepts only when the size matches what the browser saw (`apps/desktop/src-tauri/src/api_bridge.rs`). Offers that do carry a session are declined. The host manifests (§2) are written by the app on launch (STEPS 7.4).
 
 ## 4. Security (see SECURITY.md)
 
