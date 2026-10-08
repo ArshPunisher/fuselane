@@ -234,6 +234,8 @@ pub struct Tuning {
     pub resume_samples: u32,
     pub snapshot: Option<SnapshotFn>,
     pub snapshot_every: Duration,
+    /// Live speed limits shared with other downloads (by network name).
+    pub limiter: Option<Arc<fuselane_limits::Limiter>>,
 }
 
 impl Default for Tuning {
@@ -258,6 +260,7 @@ impl Default for Tuning {
             resume_samples: 4,
             snapshot: None,
             snapshot_every: Duration::from_millis(200),
+            limiter: None,
         }
     }
 }
@@ -1197,6 +1200,13 @@ async fn fetch_block(
             work.from + received,
             data.len() as u64,
         );
+        // Speed limits: wait off the debt before reading more (TCP slows the server).
+        if let Some(limiter) = &ctx.tuning.limiter {
+            let wait = limiter.take(&net.name, data.len() as u64);
+            if !wait.is_zero() {
+                tokio::time::sleep(wait).await;
+            }
+        }
     }
     if let Some(exp) = expected
         && received < exp

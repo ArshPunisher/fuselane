@@ -717,3 +717,57 @@ async fn a_server_that_never_stops_rate_limiting_reports_429() {
         start.elapsed()
     );
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_speed_limit_holds_the_whole_download_near_the_limit() {
+    use fuselane_limits::{LimitSettings, Limiter};
+    let content = Content::new(1536 * KB, 74);
+    let server = RangeServer::start(content).await.unwrap();
+    let limiter = Arc::new(Limiter::default());
+    // 1 MiB/s overall, across two networks: about 1.5 s for 1.5 MiB.
+    limiter.apply(&LimitSettings {
+        global: 1024 * KB,
+        networks: vec![],
+    });
+    let mut t = tuning();
+    t.limiter = Some(limiter);
+    let dir = tempfile::tempdir().unwrap();
+    let start = std::time::Instant::now();
+    let report = download(source(&server), vec![plain(1), plain(2)], dir.path(), t)
+        .await
+        .unwrap();
+    assert_exact(&report, content);
+    let secs = start.elapsed().as_secs_f64();
+    assert!(secs > 1.1, "limit ignored: {secs:.2} s");
+    assert!(secs < 3.5, "far too slow: {secs:.2} s");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_capped_network_carries_less_while_the_other_takes_up_the_slack() {
+    use fuselane_limits::{LimitSettings, Limiter};
+    let content = Content::new(2 * 1024 * KB, 75);
+    let server = RangeServer::start(content).await.unwrap();
+    server.add_rule(Rule {
+        skip: 1,
+        times: u32::MAX,
+        fault: Fault::Throttle(1024 * KB),
+    });
+    let limiter = Arc::new(Limiter::default());
+    limiter.apply(&LimitSettings {
+        global: 0,
+        networks: vec![("net1".into(), 96 * KB)],
+    });
+    let mut t = tuning();
+    t.limiter = Some(limiter);
+    let dir = tempfile::tempdir().unwrap();
+    let report = download(source(&server), vec![plain(1), plain(2)], dir.path(), t)
+        .await
+        .unwrap();
+    assert_exact(&report, content);
+    let capped = report.bytes_by_network.get(&1).copied().unwrap_or(0);
+    let free = report.bytes_by_network.get(&2).copied().unwrap_or(0);
+    assert!(
+        capped * 3 < free,
+        "capped net carried {capped}, free net {free}"
+    );
+}

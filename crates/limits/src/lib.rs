@@ -72,6 +72,99 @@ pub fn take_all(buckets: &mut [&mut Bucket], bytes: u64, now_ms: u64) -> u64 {
         .unwrap_or(0)
 }
 
+/// Live speed limits shared by every download: one overall limit plus one per
+/// network (by device name, so it applies across downloads). Rates can change
+/// while downloads run; 0 means unlimited. Thread-safe.
+#[derive(Debug)]
+pub struct Limiter {
+    epoch: std::time::Instant,
+    state: std::sync::Mutex<LimiterState>,
+}
+
+#[derive(Debug, Default)]
+struct LimiterState {
+    global: Option<Bucket>,
+    nets: std::collections::HashMap<String, Bucket>,
+}
+
+/// The limits currently set, for showing and saving.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LimitSettings {
+    /// Bytes per second over all networks; 0 = unlimited.
+    pub global: u64,
+    /// Bytes per second per network device name (only limited networks listed).
+    pub networks: Vec<(String, u64)>,
+}
+
+impl Default for Limiter {
+    fn default() -> Self {
+        Limiter {
+            epoch: std::time::Instant::now(),
+            state: std::sync::Mutex::default(),
+        }
+    }
+}
+
+impl Limiter {
+    fn now_ms(&self) -> u64 {
+        self.epoch.elapsed().as_millis() as u64
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, LimiterState> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Replaces every limit at once.
+    pub fn apply(&self, s: &LimitSettings) {
+        self.apply_at(s, self.now_ms());
+    }
+
+    pub fn apply_at(&self, s: &LimitSettings, now_ms: u64) {
+        let mut st = self.lock();
+        match (&mut st.global, s.global) {
+            (_, 0) => st.global = None,
+            (Some(b), r) => b.set_rate(r, now_ms),
+            (None, r) => st.global = Some(Bucket::new(r, now_ms)),
+        }
+        st.nets
+            .retain(|name, _| s.networks.iter().any(|(n, r)| n == name && *r > 0));
+        for (name, rate) in s.networks.iter().filter(|(_, r)| *r > 0) {
+            match st.nets.get_mut(name) {
+                Some(b) => b.set_rate(*rate, now_ms),
+                None => {
+                    st.nets.insert(name.clone(), Bucket::new(*rate, now_ms));
+                }
+            }
+        }
+    }
+
+    pub fn settings(&self) -> LimitSettings {
+        let st = self.lock();
+        let mut networks: Vec<(String, u64)> =
+            st.nets.iter().map(|(n, b)| (n.clone(), b.rate())).collect();
+        networks.sort();
+        LimitSettings {
+            global: st.global.as_ref().map_or(0, Bucket::rate),
+            networks,
+        }
+    }
+
+    /// Records `bytes` received on network `net`; returns how long to wait.
+    pub fn take(&self, net: &str, bytes: u64) -> std::time::Duration {
+        std::time::Duration::from_millis(self.take_at(net, bytes, self.now_ms()))
+    }
+
+    pub fn take_at(&self, net: &str, bytes: u64, now_ms: u64) -> u64 {
+        let mut st = self.lock();
+        let st = &mut *st;
+        let g = st.global.as_mut().map_or(0, |b| b.take(bytes, now_ms));
+        let n = st.nets.get_mut(net).map_or(0, |b| b.take(bytes, now_ms));
+        g.max(n)
+    }
+}
+
 /// Calendar period a data allowance applies to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Period {
@@ -206,6 +299,54 @@ mod tests {
 
     const fn d(year: i32, month: u8, day: u8) -> Date {
         Date { year, month, day }
+    }
+
+    #[test]
+    fn limiter_applies_global_and_per_network_limits_and_changes_live() {
+        let l = Limiter::default();
+        assert_eq!(l.take_at("en0", 10_000_000, 0), 0, "unlimited by default");
+        l.apply_at(
+            &LimitSettings {
+                global: 1000,
+                networks: vec![("en5".into(), 100)],
+            },
+            0,
+        );
+        // 500 bytes against a 1000 B/s overall limit: half a second of debt.
+        assert_eq!(l.take_at("en0", 500, 0), 500);
+        // en5 has its own, tighter limit; the larger wait wins.
+        assert_eq!(l.take_at("en5", 100, 0), 1000);
+        assert_eq!(
+            l.settings(),
+            LimitSettings {
+                global: 1000,
+                networks: vec![("en5".into(), 100)]
+            }
+        );
+        // Removing limits takes effect at once.
+        l.apply_at(&LimitSettings::default(), 10);
+        assert_eq!(l.take_at("en5", 1_000_000, 10), 0);
+        assert_eq!(l.settings(), LimitSettings::default());
+    }
+
+    #[test]
+    fn limited_throughput_converges_to_the_limit() {
+        // Simulate a reader taking 16 KiB chunks and sleeping as told for 10 s.
+        let l = Limiter::default();
+        l.apply_at(
+            &LimitSettings {
+                global: 200_000,
+                networks: vec![],
+            },
+            0,
+        );
+        let (mut now, mut got) = (0u64, 0u64);
+        while now < 10_000 {
+            got += 16_384;
+            now += l.take_at("en0", 16_384, now).max(1);
+        }
+        let rate = got as f64 / (now as f64 / 1000.0);
+        assert!((rate - 200_000.0).abs() / 200_000.0 < 0.05, "rate {rate}");
     }
 
     #[test]
