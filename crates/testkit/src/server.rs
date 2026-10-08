@@ -246,6 +246,11 @@ async fn handle(
             .unwrap_or_else(|_| Response::new(empty())));
     }
 
+    // RFC 9110 §13.1.5: a Range is honoured only if If-Range matches the current
+    // representation exactly (strong comparison); otherwise the whole file is sent.
+    let if_range_ok =
+        header(hyper::header::IF_RANGE).is_none_or(|v| v == etag && !v.starts_with("W/"));
+    let requested = if if_range_ok { requested } else { None };
     let (status, mut first, mut last) = match (requested, &fault) {
         (_, Some(Fault::IgnoreRange)) | (None, _) => (200, 0, size.saturating_sub(1)),
         (Some((a, b)), _) => (206, a, b),
