@@ -102,6 +102,18 @@ fn main() {
         }
     };
     let on_exit = svc.clone();
+    // Debug builds only (L-100): start a download at launch for smoke tests and
+    // screenshots of the real window. Compiled out of release builds.
+    #[cfg(debug_assertions)]
+    if let Some(url) = std::env::var_os("FUSELANE_DEV_ADD") {
+        let svc = svc.clone();
+        let url = url.to_string_lossy().into_owned();
+        tauri::async_runtime::spawn(async move {
+            if let Err(e) = svc.add(&url, None) {
+                eprintln!("fuselane: FUSELANE_DEV_ADD refused: {e}");
+            }
+        });
+    }
     let result = tauri::Builder::default()
         // Must be registered first: a second launch focuses the existing window.
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
