@@ -91,6 +91,10 @@ pub struct Tuning {
     /// Multiplies every retry wait (tests compress time; production uses 1.0).
     pub retry_delay_scale: f64,
     pub progress: Option<ProgressFn>,
+    /// Auto (grow 8 → 32 while every stream is served) or keep `streams_per_network` fixed.
+    pub auto_streams: bool,
+    /// How often the stream-count controller runs.
+    pub controller_tick: Duration,
 }
 
 impl Default for Tuning {
@@ -106,6 +110,8 @@ impl Default for Tuning {
             user_agent: format!("Fuselane/{}", env!("CARGO_PKG_VERSION")),
             retry_delay_scale: 1.0,
             progress: None,
+            auto_streams: true,
+            controller_tick: Duration::from_millis(500),
         }
     }
 }
@@ -137,6 +143,8 @@ pub struct Report {
     pub bytes_by_network: HashMap<NetId, u64>,
     pub retries: u64,
     pub hedges: u64,
+    /// Most requests in flight at once on each network (what the controller allowed).
+    pub peak_streams: HashMap<NetId, u32>,
 }
 
 /// What the probe learned.
@@ -308,6 +316,19 @@ struct Shared {
     hedges: u64,
     /// For an unknown size: bytes received when the single attempt finished.
     unknown_total: Option<u64>,
+    /// Per-network stream bookkeeping for the concurrency controller.
+    nets: HashMap<NetId, NetStats>,
+    peak_streams: HashMap<NetId, u32>,
+}
+
+#[derive(Debug, Default)]
+struct NetStats {
+    live: u32,
+    /// Streams to retire at their next pick (graceful: their current attempt finishes).
+    retire: u32,
+    answered: HashSet<StreamId>,
+    served_tick: HashSet<StreamId>,
+    refused_tick: HashSet<StreamId>,
 }
 
 impl Shared {
@@ -358,7 +379,27 @@ impl Ctx {
 
 // ---------- one stream ----------
 
+/// Keeps a network's live-stream count right however the stream ends.
+struct LiveGuard {
+    ctx: Arc<Ctx>,
+    net: NetId,
+}
+
+impl Drop for LiveGuard {
+    fn drop(&mut self) {
+        let mut s = self.ctx.lock();
+        if let Some(n) = s.nets.get_mut(&self.net) {
+            n.live = n.live.saturating_sub(1);
+        }
+    }
+}
+
 async fn run_stream(ctx: Arc<Ctx>, net: Network, stream: StreamId) {
+    ctx.lock().nets.entry(net.id).or_default().live += 1;
+    let _live = LiveGuard {
+        ctx: ctx.clone(),
+        net: net.id,
+    };
     let mut conn: Option<Conn> = None;
     let mut retry = StreamRetry::default();
     let mut last_rate: Option<f64> = None;
@@ -370,6 +411,12 @@ async fn run_stream(ctx: Arc<Ctx>, net: Network, stream: StreamId) {
         // Pick work (synchronously, under the lock: nothing can yield between choosing and registering).
         let work = {
             let mut s = ctx.lock();
+            if let Some(n) = s.nets.get_mut(&net.id)
+                && n.retire > 0
+            {
+                n.retire -= 1; // the controller asked for fewer streams on this network
+                return;
+            }
             if s.fatal.is_some() || s.all_complete() || s.dead_networks.contains(&net.id) {
                 return;
             }
@@ -411,6 +458,14 @@ async fn run_stream(ctx: Arc<Ctx>, net: Network, stream: StreamId) {
                 if let Some(c) = s.idle.get_mut(&net.id) {
                     *c = c.saturating_sub(1);
                 }
+                let in_flight = s
+                    .blocks
+                    .iter()
+                    .flat_map(|b| &b.attempts)
+                    .filter(|a| a.network == net.id)
+                    .count() as u32;
+                let peak = s.peak_streams.entry(net.id).or_default();
+                *peak = (*peak).max(in_flight);
             }
             w
         };
@@ -488,6 +543,13 @@ async fn run_stream(ctx: Arc<Ctx>, net: Network, stream: StreamId) {
                     let mut s = ctx.lock();
                     s.retries += 1;
                     s.last_error = format!("{}: {failure:?}", net.name);
+                    if signals.refused {
+                        s.nets
+                            .entry(net.id)
+                            .or_default()
+                            .refused_tick
+                            .insert(stream);
+                    }
                     if let Some(code) = signals.link_refused {
                         let entry = s.link_refused.entry(net.id).or_insert((code, 0));
                         *entry = (code, entry.1 + 1);
@@ -746,6 +808,9 @@ async fn fetch_block(
 
 fn advance(ctx: &Ctx, block: usize, stream: StreamId, net: NetId, position: u64, new_bytes: u64) {
     let mut s = ctx.lock();
+    let stats = s.nets.entry(net).or_default();
+    stats.served_tick.insert(stream);
+    stats.answered.insert(stream);
     if let Some(a) = s.blocks[block]
         .attempts
         .iter_mut()
@@ -902,6 +967,7 @@ pub async fn download(
             bytes_by_network: HashMap::new(),
             retries: 0,
             hedges: 0,
+            peak_streams: HashMap::new(),
         });
     }
 
@@ -943,6 +1009,8 @@ pub async fn download(
             retries: 0,
             hedges: 0,
             unknown_total: None,
+            nets: HashMap::new(),
+            peak_streams: HashMap::new(),
         }),
         file,
         wake: tokio::sync::Notify::new(),
@@ -953,30 +1021,93 @@ pub async fn download(
     });
 
     // Interleave stream starts across networks (L-23).
-    let per_net = if splittable {
-        tuning.streams_per_network.clamp(1, crate::concurrency::MAX)
-    } else {
-        1
+    let mut controller =
+        crate::concurrency::Controller::new(if tuning.auto_streams && splittable {
+            None
+        } else {
+            Some(if splittable {
+                tuning.streams_per_network
+            } else {
+                1
+            })
+        });
+    let mut next_id: HashMap<NetId, u32> = HashMap::new();
+    let mut new_id = |net: NetId, index: usize| {
+        let k = next_id.entry(net).or_insert(0);
+        *k += 1;
+        (index as u32) * 10_000 + *k
     };
     let groups: Vec<Vec<(Network, StreamId)>> = networks
         .iter()
         .enumerate()
         .map(|(ni, n)| {
-            (0..per_net)
-                .map(|k| (n.clone(), (ni as u32) * 1000 + k))
-                .collect()
+            let start = if tuning.auto_streams && splittable {
+                controller.starting(n.id)
+            } else {
+                controller.limit(n.id)
+            };
+            (0..start).map(|_| (n.clone(), new_id(n.id, ni))).collect()
         })
         .collect();
-    let mut tasks = Vec::new();
+    let mut tasks = tokio::task::JoinSet::new();
     for (net, id) in crate::plan::interleave(&groups) {
-        tasks.push(tokio::spawn(run_stream(ctx.clone(), net, id)));
+        tasks.spawn(run_stream(ctx.clone(), net, id));
     }
-    for t in tasks {
-        let _ = t.await;
+
+    // The supervisor: tick the controller until every stream has finished.
+    let mut ticker = tokio::time::interval(tuning.controller_tick);
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        tokio::select! {
+            joined = tasks.join_next() => {
+                if joined.is_none() { break; }
+            }
+            _ = ticker.tick() => {
+                let (ticks, spare) = {
+                    let mut s = ctx.lock();
+                    let spare = s.blocks.iter().filter(|b| !b.complete() && b.attempts.is_empty()).count() as u32;
+                    let dead = s.dead_networks.clone();
+                    let ticks: Vec<crate::concurrency::NetTick> = networks
+                        .iter()
+                        .filter(|n| !dead.contains(&n.id))
+                        .map(|n| {
+                            let st = s.nets.entry(n.id).or_default();
+                            let streams = st.live.saturating_sub(st.retire);
+                            let tick = crate::concurrency::NetTick {
+                                id: n.id,
+                                streams,
+                                answered: (st.answered.len() as u32).min(streams),
+                                refused: st.refused_tick.len() as u32,
+                                served: st.served_tick.len() as u32,
+                            };
+                            st.served_tick.clear();
+                            st.refused_tick.clear();
+                            tick
+                        })
+                        .collect();
+                    (ticks, spare)
+                };
+                if ticks.is_empty() { continue; }
+                let now = ctx.now_ms();
+                for action in controller.tick(now, &ticks, spare, crate::concurrency::Disk::Unknown) {
+                    match action {
+                        crate::concurrency::Action::Add { net, count } => {
+                            let Some((index, network)) = networks.iter().enumerate().find(|(_, n)| n.id == net) else { continue };
+                            for _ in 0..count {
+                                tasks.spawn(run_stream(ctx.clone(), network.clone(), new_id(net, index)));
+                            }
+                        }
+                        crate::concurrency::Action::Retire { net, count } => {
+                            ctx.lock().nets.entry(net).or_default().retire += count;
+                        }
+                    }
+                }
+            }
+        }
     }
     ctx.stop.store(true, Ordering::Release);
 
-    let (fatal, complete, report_bytes, retries, hedges, last_error, unknown_total) = {
+    let (fatal, complete, report_bytes, retries, hedges, last_error, unknown_total, peak_streams) = {
         let mut s = ctx.lock();
         (
             s.fatal.take(),
@@ -986,6 +1117,7 @@ pub async fn download(
             s.hedges,
             s.last_error.clone(),
             s.unknown_total,
+            s.peak_streams.clone(),
         )
     };
     if let Some(e) = fatal {
@@ -1005,5 +1137,6 @@ pub async fn download(
         bytes_by_network: report_bytes,
         retries,
         hedges,
+        peak_streams,
     })
 }

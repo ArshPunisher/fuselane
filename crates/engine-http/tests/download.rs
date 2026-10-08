@@ -345,23 +345,19 @@ async fn a_file_that_changes_size_mid_download_is_refused_and_discarded() {
         times: u32::MAX,
         fault: Fault::Throttle(400 * KB),
     });
+    server.swap_at_request(3, Content::new(3 * 1024 * KB, 99), "\"v2\"");
     let dir = tempfile::tempdir().unwrap();
-    let src = source(&server);
-    let server = Arc::new(server);
-    let s2 = server.clone();
-    let swapper = tokio::spawn(async move {
-        while s2.requests().len() < 4 {
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
-        s2.set_content(Content::new(3 * 1024 * KB, 99), "\"v2\"");
-    });
     let res = tokio::time::timeout(
         Duration::from_secs(60),
-        download(src, vec![plain(1), plain(2)], dir.path(), tuning()),
+        download(
+            source(&server),
+            vec![plain(1), plain(2)],
+            dir.path(),
+            tuning(),
+        ),
     )
     .await
     .unwrap();
-    swapper.await.unwrap();
     assert!(matches!(res, Err(JobError::VersionChanged)), "{res:?}");
     assert!(
         !dir.path().join("file.bin").exists(),
@@ -376,32 +372,24 @@ async fn a_file_that_changes_size_mid_download_is_refused_and_discarded() {
 #[tokio::test]
 async fn same_size_new_bytes_with_a_new_etag_is_detected_by_sampling() {
     let content = Content::new(2 * 1024 * KB, 11);
-    let server = Arc::new(RangeServer::start(content).await.unwrap());
+    let server = RangeServer::start(content).await.unwrap();
     server.add_rule(Rule {
         skip: 1,
         times: u32::MAX,
         fault: Fault::Throttle(400 * KB),
     });
+    let mut t = tuning();
+    t.auto_streams = false;
+    t.streams_per_network = 2;
+    // Swap once some segments are already on disk: same size, different bytes, new label.
+    server.swap_at_request(8, Content::new(2 * 1024 * KB, 12), "\"v2\"");
     let dir = tempfile::tempdir().unwrap();
-    let s2 = server.clone();
-    let swapper = tokio::spawn(async move {
-        while s2.requests().len() < 6 {
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
-        s2.set_content(Content::new(2 * 1024 * KB, 12), "\"v2\"");
-    });
     let res = tokio::time::timeout(
         Duration::from_secs(60),
-        download(
-            source(&server),
-            vec![plain(1), plain(2)],
-            dir.path(),
-            tuning(),
-        ),
+        download(source(&server), vec![plain(1), plain(2)], dir.path(), t),
     )
     .await
     .unwrap();
-    swapper.await.unwrap();
     assert!(matches!(res, Err(JobError::VersionChanged)), "{res:?}");
     assert!(!dir.path().join("file.bin").exists());
 }
@@ -409,32 +397,24 @@ async fn same_size_new_bytes_with_a_new_etag_is_detected_by_sampling() {
 #[tokio::test]
 async fn a_relabelled_etag_with_the_same_bytes_is_accepted() {
     let content = Content::new(2 * 1024 * KB, 13);
-    let server = Arc::new(RangeServer::start(content).await.unwrap());
+    let server = RangeServer::start(content).await.unwrap();
     server.add_rule(Rule {
         skip: 1,
         times: u32::MAX,
         fault: Fault::Throttle(600 * KB),
     });
+    let mut t = tuning();
+    t.auto_streams = false;
+    t.streams_per_network = 2;
+    // A load balancer's different label for the same file.
+    server.swap_at_request(8, content, "\"v1-other-node\"");
     let dir = tempfile::tempdir().unwrap();
-    let s2 = server.clone();
-    let relabel = tokio::spawn(async move {
-        while s2.requests().len() < 6 {
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
-        s2.set_etag("W/\"v1-gzip\"-but-new"); // a load balancer's different label, same file
-    });
     let res = tokio::time::timeout(
         Duration::from_secs(60),
-        download(
-            source(&server),
-            vec![plain(1), plain(2)],
-            dir.path(),
-            tuning(),
-        ),
+        download(source(&server), vec![plain(1), plain(2)], dir.path(), t),
     )
     .await
     .unwrap();
-    relabel.await.unwrap();
     assert_exact(&res.unwrap(), content);
 }
 
@@ -557,5 +537,69 @@ async fn chaos_never_publishes_wrong_bytes_or_hangs() {
     assert!(
         ok * 10 >= seeds * 8,
         "too many failures: only {ok}/{seeds} completed"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn auto_streams_grow_while_everyone_is_served() {
+    // Each connection is throttled, so more streams genuinely help (like per-connection caps on CDNs).
+    let content = Content::new(4 * 1024 * KB, 31);
+    let server = RangeServer::start(content).await.unwrap();
+    server.add_rule(Rule {
+        skip: 1,
+        times: u32::MAX,
+        fault: Fault::Throttle(150 * KB),
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let mut t = tuning();
+    t.block_size = Some(32 * KB);
+    t.auto_streams = true;
+    t.controller_tick = Duration::from_millis(100);
+    let res = tokio::time::timeout(
+        Duration::from_secs(60),
+        download(source(&server), vec![plain(1)], dir.path(), t),
+    )
+    .await
+    .unwrap();
+    let report = res.unwrap();
+    assert_exact(&report, content);
+    let peak = report.peak_streams.get(&1).copied().unwrap_or(0);
+    assert!(peak > 8, "Auto should grow past 8 streams; peak was {peak}");
+    assert!(peak <= 32, "never beyond 32 per network; peak was {peak}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_server_that_caps_connections_is_respected_not_hammered() {
+    let content = Content::new(3 * 1024 * KB, 32);
+    let server = RangeServer::start(content).await.unwrap();
+    server.add_rule(Rule {
+        skip: 1,
+        times: u32::MAX,
+        fault: Fault::Throttle(300 * KB),
+    });
+    server.set_max_concurrent(Some(6));
+    let dir = tempfile::tempdir().unwrap();
+    let mut t = tuning();
+    t.block_size = Some(48 * KB);
+    t.auto_streams = true;
+    t.controller_tick = Duration::from_millis(100);
+    let res = tokio::time::timeout(
+        Duration::from_secs(90),
+        download(source(&server), vec![plain(1)], dir.path(), t),
+    )
+    .await
+    .unwrap();
+    assert_exact(&res.unwrap(), content);
+    // Judge only the second half: by then the controller has reacted to the refusals.
+    let log = server.requests();
+    let late = &log[log.len() / 2..];
+    let refused_late = late
+        .iter()
+        .filter(|r| r.fault == Some(Fault::Status(503, None)))
+        .count();
+    assert!(
+        refused_late * 10 < late.len(),
+        "the controller should settle at the server's cap: {refused_late} of the last {} requests refused",
+        late.len()
     );
 }
