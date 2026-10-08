@@ -69,7 +69,7 @@ For each network, take the resolved addresses filtered to families that network 
 | Probe | When | What it tells us |
 |---|---|---|
 | **Reachability** | On a network appearing or changing; every 60 s while in use | HTTPS HEAD to `https://<our-backend>/ping` (fallbacks: 1.1.1.1, Google 204). Detects a captive portal (a redirect or wrong body). |
-| **Public IP** | With reachability | Two networks with the same public IP share an upstream, so bonding won't help → warning (L-62) |
+| **Public IP** | With reachability, **over HTTPS only** (plain HTTP may be relayed by iCloud Private Relay, spike S2) | Two networks with the same public IP share an upstream, so bonding won't help → warning (L-62) |
 | **Latency** | Same | Shown in the network row |
 | **Speed test** | User-triggered, or first-run onboarding | Download (and upload) a test object for N seconds per network, then all together → "you'd get X× with both" |
 | **Target probe** | At job start, per network | Range GET `bytes=0-0` to the actual URL. Drop networks that get 403, a redirect elsewhere, or a different version (IP-locked links, L-20) |
@@ -83,6 +83,7 @@ For each network, take the resolved addresses filtered to families that network 
 | Android USB tether on macOS | No adapter appears | Guide to install TetherKit (or an equivalent), with a link |
 | Linux kernel < 5.7 | `Pinner::self_test` fails | "Only your default network can be used on this system." |
 | VPN capturing all traffic | Default route via utun/tun/TAP | "Your VPN routes everything through one connection." |
+| iCloud Private Relay on (macOS) | Plain-HTTP probe exits from relay ranges while HTTPS doesn't | Pending S2 part 2: if relayed `http://` traffic ignores the pin, explain it and suggest https or turning Private Relay off |
 | IP-locked link | Target probe gets 403 on some networks | "This link only works from one network; using X only." |
 
 ## 8. Things to verify in Phase 1 spikes

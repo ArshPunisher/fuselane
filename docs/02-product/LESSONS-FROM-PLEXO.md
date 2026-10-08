@@ -172,3 +172,10 @@ The full list of 120 engine edge cases, with citations, is in plexo-forensics **
 | L-98 | The UI can't choose arbitrary write paths: only user-chosen folders plus a sanitized file name. | Part 7.2 | Test |
 | L-99 | Keep quarantine / Mark of the Web on downloaded files. | Tech research §5.4 | Per-OS test |
 | L-100 | Test-only knobs are compiled out of release builds, not just ignored at runtime. | testKnobs.ts | Release build check |
+
+## 14. Learned in our own spikes
+
+| ID | Rule | Evidence | Guard |
+|---|---|---|---|
+| L-101 | macOS iCloud Private Relay relays plain-HTTP traffic even from pinned raw sockets. Network probes (public IP, shared upstream) use HTTPS only; detect Private Relay and explain its effect on `http://` downloads. | Spike S2 | Probe tests use https; S2 part 2 result |
+| L-102 | Tunnel and peer-to-peer interfaces (`utun*`, `awdl*`, `llw*`, `anpi*`, bridges) can make pinned connects *hang* instead of failing; exclude them unless they have a gateway and pass the reachability probe, and always use a connect deadline. | Spike S2 (`utun0` IPv6 hung 4 s) | netif filter fixtures |

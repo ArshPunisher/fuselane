@@ -24,7 +24,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 
 - [ ] 1.1 S3 Linux pinning + `tools/netlab` scripts (two shaped links) running in GitHub Actions — L-56, L-93
 - [ ] 1.2 S1 Windows `IP_UNICAST_IF` pinning on real hardware (x64; ARM64 if available)
-- [ ] 1.3 S2 macOS `IP_BOUND_IF` pinning with iPhone + Android tether, VPN behaviour
+- [ ] 1.3 S2 macOS `IP_BOUND_IF` pinning with iPhone + Android tether, VPN behaviour (**part 1 done** on one uplink: [result](spikes/S2-macos-pinning.md); part 2 needs a tether)
 - [ ] 1.4 S4 per-network DNS on each OS
 - [ ] 1.5 S7 Tauri window + Channel IPC throughput + tray + single instance on 3 OSes
 - [ ] 1.6 S5 librqbit + SOCKS5 balancer
