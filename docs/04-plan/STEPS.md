@@ -133,14 +133,14 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 
 ## P5 Torrents (0.2)
 
-- [ ] 5.1 `engine-torrent` crate with librqbit; uTP/UPnP/LSD/web seeds off
-- [ ] 5.2 SOCKS5 balancer (loopback, auth) + weighted network choice — L-67, L-71
+- [x] 5.1 `engine-torrent` crate with librqbit; uTP/UPnP/LSD/web seeds off (librqbit 9 has no web seeds)
+- [x] 5.2 SOCKS5 balancer (loopback, auth) + least-busy network choice — L-67 (L-71 waits for incoming peers, off by default)
 - [ ] 5.3 Torrent inputs: magnet, URL, file, drag-drop, OS "Open with" (Alternate handler only)
-- [ ] 5.4 Torrent path safety + hostile fixtures — L-68
-- [ ] 5.5 File selection before and during; edge-piece cleanup — L-69
+- [x] 5.4 Torrent path safety + hostile fixtures — L-68, L-121
+- [x] 5.5 File selection before and during; edge-piece cleanup — L-69 (engine; UI with 5.3)
 - [ ] 5.6 Per-network credit after verification; peers UI
 - [ ] 5.7 Optional seeding with ratio/time limits; metered-network guard
-- [ ] 5.8 Local swarm tests (isolated temp dirs) + a public swarm benchmark — L-70
+- [ ] 5.8 Local swarm tests (isolated temp dirs) + a public swarm benchmark — L-70 (local swarm done)
 - [ ] 5.9 Upstream PR: librqbit connector hook + Windows binding
 
 ## P6 Bonded uploads (0.3)
