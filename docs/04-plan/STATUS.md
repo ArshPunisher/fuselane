@@ -4,12 +4,17 @@
 
 ## Now
 
-- **Phase:** P0 Foundations
-- **Done in P0:** steps 0.1–0.5 (repo, research, product docs, architecture, ADRs, testing, plan, workflow, CLAUDE.md)
-- **Next step:** 0.6, decide the blocking open questions ([OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) Q1–Q4), then 0.7 create the GitHub remote, then 0.8 workspace skeleton
-- **Blocked on:** the user's decisions on Q1 (licence), Q2 (GitHub org/repo name), Q3 (signing budget), Q4 (domain)
+- **Phase:** P0 Foundations (finishing), then P1 spikes
+- **Done:** 0.1–0.6 (planning set; owner decisions recorded: Apache-2.0, personal GitHub, **zero-cost policy ADR 0009**, design direction in `docs/07-design/`)
+- **Next step:** 0.8 workspace skeleton → 0.9 pnpm workspace → 0.10 CI workflows → 0.11 commit lint + PR template → 0.12 Renovate; then spikes that run on this Mac (S2 macOS pinning, S7 Tauri shell, S9 Lane Weave)
+- **Blocked on:** Q13 (owner: OK to create the **public** GitHub repo `fuselane` on the personal account?). CI can't run until the remote exists.
+- **Environment:** Rust installed with rustup (`~/.cargo/bin`; not on the zsh PATH, so source `~/.cargo/env`), Node 24, pnpm 11, gh logged in as ArshPunisher.
 
 ## Log
+
+### 2026-10-08 (session 2)
+- Owner decisions: open source (Apache-2.0), personal GitHub, SignPath, **no paid services** → ADR 0009; domain later.
+- Added LICENSE/NOTICE, the design system + motion language (`docs/07-design/`), spike S9, and the SessionStart hook (`tools/session-context.sh`) so new sessions open with this status.
 
 ### 2026-10-08
 - Studied Plexo (rc.14) in depth: stack, 263 commits, 93 issues/PRs, tests, weaknesses.
