@@ -29,6 +29,11 @@
 
 ## Log
 
+### 2026-10-08 (session 3, evening)
+- P5 torrents end to end: engine (SOCKS5 relay per network, path safety, file choice, credit, resume, sharing) and the desktop app (magnet, .torrent, paste, drop, OS Open with as an alternate handler, limits and allowances, sign-in page checks). Real Debian 13.7 download over Ethernet + Wi-Fi verified by SHA-256.
+- CI had been red on Linux and Windows for about a dozen pushes (L-124). Causes fixed: the relay split the BitTorrent handshake (L-123), Windows runners' Hyper-V card read as virtual, a list-only add opening peer connections, librqbit's retry backoff after an allowance block, and two backends starting under React StrictMode. All three platforms green again; the release dry run builds all four targets.
+- Also: one owner per download (app vs CLI), `--json` for `ls` and `nets`, axe-core accessibility checks in light and dark, torrents following network changes.
+
 ### 2026-10-08 (session 3, later)
 - Owner granted screen recording and plugged in Ethernet. Native screenshots found L-114 (black ring) and L-115 (Retina pane overflow); both fixed with tests. Real bonded Ethernet + Wi-Fi download verified in the app.
 

@@ -54,7 +54,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [ ] 2.12 Pinned connector for hyper-util + rustls, keep-alive pool per (network, origin), stale-socket retry — L-66
 - [x] 2.13 Per-network DNS resolver per OS with a fallback — EC-208 — L-65 (opt-in: public resolvers pinned per network; OS per-interface resolvers later)
 - [x] 2.14 Happy Eyeballs (250 ms, last-good first) and layered deadlines — EC-0xx (dead AAAA) — L-09, L-11
-- [ ] 2.15 Link probes: reachability, captive portal, public IP, latency — L-62
+- [x] 2.15 Link probes: reachability and captive portal (Fuselane's own site, every minute and on network changes; sign-in networks left out of downloads). Public IP and latency not needed yet — L-62
 
 **2D storage**
 - [x] 2.16 Name sanitizer for all OSes + 255-byte truncation + collision suffixes — table tests — L-39, L-40
