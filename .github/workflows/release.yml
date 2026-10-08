@@ -9,11 +9,8 @@ name: Release
 on:
   push:
     tags: ['v*']
+  # Dry run: build, check and self-test every target from a branch; publishes nothing.
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Existing tag to build (for a dry run)'
-        required: true
 
 permissions:
   contents: read
@@ -30,15 +27,17 @@ jobs:
       tag: ${{ steps.v.outputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.tag || github.ref }}
       - id: v
         env:
-          TAG: ${{ inputs.tag || github.ref_name }}
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          version=$(tools/release-version.sh "$TAG")
+          case "$REF" in
+            refs/tags/*) version=$(tools/release-version.sh "$REF_NAME") ;;
+            *) version="$(tools/release-version.sh)-dryrun" ;;
+          esac
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "tag=$REF_NAME" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build ${{ matrix.name }}
@@ -181,7 +180,7 @@ jobs:
         shell: bash
         run: |
           tar -xzf dist-release/fuselane-cli_*.tar.gz -C "$RUNNER_TEMP"
-          "$RUNNER_TEMP/fuselane" --version | grep -F "$VERSION"
+          "$RUNNER_TEMP/fuselane" --version | grep -F "${VERSION%-dryrun}"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -192,6 +191,7 @@ jobs:
   publish:
     name: Draft the GitHub release
     needs: [version, build]
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-24.04
     permissions:
       contents: write
