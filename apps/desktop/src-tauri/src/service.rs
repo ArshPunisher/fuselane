@@ -925,6 +925,105 @@ mod tests {
         assert_eq!(h.svc.finished_file(bad).unwrap_err().code, "not-finished");
     }
 
+    /// The field names `apps/desktop/src/lib/types.ts` declares for an interface.
+    fn ts_fields(src: &str, name: &str) -> Vec<String> {
+        let start = src
+            .find(&format!("export interface {name} {{"))
+            .unwrap_or_else(|| panic!("types.ts has no interface {name}"));
+        let body = &src[start..];
+        let body = &body[body.find('{').unwrap() + 1..body.find("\n}").unwrap()];
+        let mut out: Vec<String> = body
+            .lines()
+            .map(str::trim)
+            .filter(|l| {
+                !l.is_empty() && !l.starts_with("//") && !l.starts_with("/*") && !l.starts_with('*')
+            })
+            .filter_map(|l| l.split(':').next())
+            .map(|f| f.trim_end_matches('?').to_string())
+            .collect();
+        out.sort();
+        out
+    }
+
+    fn json_fields(v: &impl Serialize) -> Vec<String> {
+        let mut keys: Vec<String> = serde_json::to_value(v)
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect();
+        keys.sort();
+        keys
+    }
+
+    #[test]
+    fn the_window_types_match_what_the_backend_sends() {
+        let src =
+            std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../src/lib/types.ts"))
+                .unwrap();
+        let job = JobView {
+            id: 1,
+            url: "u".into(),
+            name: "n".into(),
+            dir: "d".into(),
+            status: "queued",
+            resumable: false,
+            written: 0,
+            total: None,
+            error: None,
+            final_path: None,
+            created_at: 0,
+        };
+        let net = NetView {
+            name: "en0".into(),
+            label: "Wi-Fi".into(),
+            kind: "wifi".into(),
+            usable: true,
+            addrs: vec![],
+        };
+        let lnet = LiveNet {
+            name: "en0".into(),
+            label: "Wi-Fi".into(),
+            kind: "wifi".into(),
+            bytes: 0,
+            rate: 0.0,
+            streams: 0,
+            dead: false,
+        };
+        let live = Live {
+            id: 1,
+            written: 0,
+            total: None,
+            rate: 0.0,
+            networks: vec![],
+            ticks: vec![],
+            retries: 0,
+            hedges: 0,
+        };
+        let err = UiError::new("c", "m", None);
+        for (name, got) in [
+            ("JobView", json_fields(&job)),
+            ("NetView", json_fields(&net)),
+            ("LiveNet", json_fields(&lnet)),
+            ("Live", json_fields(&live)),
+            ("UiError", json_fields(&err)),
+        ] {
+            assert_eq!(
+                got,
+                ts_fields(&src, name),
+                "{name}: types.ts and service.rs disagree"
+            );
+        }
+        // Events are tagged exactly as the window switches on them.
+        let jobs = serde_json::to_value(UiEvent::Jobs { jobs: vec![] }).unwrap();
+        assert_eq!(jobs["type"], "jobs");
+        assert!(
+            src.contains("{ type: 'jobs'; jobs: JobView[] }")
+                && src.contains("{ type: 'live' } & Live")
+        );
+    }
+
     #[test]
     fn crashed_jobs_come_back_paused() {
         let dir = tempfile::tempdir().unwrap();
