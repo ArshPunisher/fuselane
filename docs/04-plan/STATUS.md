@@ -17,9 +17,8 @@
 - **Run it:**
   - UI in a browser (demo data): `pnpm --filter @fuselane/desktop dev`, then open http://localhost:5190.
   - Real app: `pnpm --filter @fuselane/desktop build`, then `cargo run -p fuselane-desktop --features tauri/custom-protocol` (or `pnpm --filter @fuselane/desktop tauri dev`).
-- **P4 beta:** `v0.1.0-beta.1` tagged 2026-10-08. Release workflow builds macOS universal (ad-hoc signed), Windows x64, Linux x64/arm64 natively, checks contents, self-tests the packaged app, and drafts a pre-release with SHA256SUMS. Publishing a release deploys the signed update feed to https://arshpunisher.github.io/fuselane/updates/latest.json. Updater key: `~/.tauri/fuselane.key` (password in Keychain "Fuselane updater key password"; both are GitHub secrets). Homebrew tap: `ArshPunisher/homebrew-fuselane` (cask from `packaging/homebrew/update-cask.sh <tag>`).
+- **P4 beta:** **`v0.1.0-beta.1` published 2026-10-08** (pre-release, 16 files). Verified after publishing: macOS app checksum + self-test, live update feed (4 platforms), the Homebrew cask, and the live install script. Release workflow builds macOS universal (ad-hoc signed), Windows x64, Linux x64/arm64 natively, checks contents, self-tests the packaged app, and drafts a pre-release with SHA256SUMS. Publishing a release deploys the signed update feed to https://arshpunisher.github.io/fuselane/updates/latest.json. Updater key: `~/.tauri/fuselane.key` (password in Keychain "Fuselane updater key password"; both are GitHub secrets). Homebrew tap: `ArshPunisher/homebrew-fuselane` (cask from `packaging/homebrew/update-cask.sh <tag>`).
 - **Next steps, in order:**
-  1. Publish beta.1 after checking the draft; then write the cask into the tap.
   2. 4.7 updater end-to-end (install beta.1, publish beta.2, update, data intact).
   3. 4.3 SignPath for Windows: the owner applies at signpath.org (free for open source); then wire the signing step.
   4. 4.8 landing page on Pages (replaces the redirect), with OS detection and checksums.
