@@ -5,6 +5,7 @@
 //! message, hint), never as raw strings (ERRORS.md).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod api_bridge;
 mod native;
 mod opens;
 mod selftest;
@@ -631,6 +632,20 @@ fn main() {
             })
             .build(app)?;
             watch_for_shell(app.handle().clone(), &for_shell);
+            // The local API (2.43) for the CLI and the browser extension's host.
+            {
+                let svc = for_shell.clone();
+                tauri::async_runtime::spawn(async move {
+                    let Ok(home) = fuselane_core::home::home() else {
+                        return;
+                    };
+                    let endpoint = fuselane_api::client::endpoint(&home);
+                    let bridge = Arc::new(api_bridge::ApiBridge { svc });
+                    if let Err(e) = fuselane_api::server::start(&endpoint, bridge).await {
+                        eprintln!("fuselane: the local API isn't available: {e}");
+                    }
+                });
+            }
             // Sign-in page checks (2.15): at launch, every minute, and on network changes.
             tauri::async_runtime::spawn(for_shell.clone().watch_reach());
             // Saved torrents come back (rechecked from disk), then a tick every second.

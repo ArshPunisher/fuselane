@@ -32,6 +32,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 fuselane-core.workspace = true
 fuselane-engine-http.workspace = true
 fuselane-engine-torrent.workspace = true
+fuselane-api.workspace = true
 fuselane-netif.workspace = true
 fuselane-limits.workspace = true
 fuselane-transport.workspace = true
