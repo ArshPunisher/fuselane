@@ -113,6 +113,24 @@ pub struct AddOptions {
     /// Continue into files Fuselane saved earlier (after a restart): librqbit
     /// rechecks every piece. Without it, an existing file is refused.
     pub resume: bool,
+    /// Where the torrent's bytes live, when not plain files in the output folder
+    /// (Fuse Send keeps shares encrypted on the wire, plain on disk).
+    pub storage: Option<Storage>,
+}
+
+/// A librqbit storage backend for one torrent.
+pub struct Storage(pub librqbit::storage::BoxStorageFactory);
+
+impl Clone for Storage {
+    fn clone(&self) -> Self {
+        Storage(self.0.clone_box())
+    }
+}
+
+impl std::fmt::Debug for Storage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Storage(custom)")
+    }
 }
 
 pub struct TorrentEngine {
@@ -397,6 +415,7 @@ impl TorrentEngine {
             // unless it is Fuselane's own from before a restart.
             overwrite: add.resume,
             paused: add.paused,
+            storage_factory: add.storage.map(|s| s.0),
             ..Default::default()
         };
         let resp = self

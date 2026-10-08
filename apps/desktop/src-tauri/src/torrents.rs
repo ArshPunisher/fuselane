@@ -919,6 +919,7 @@ impl Torrents {
                 only: (!s.selected.is_empty()).then(|| s.selected.iter().copied().collect()),
                 paused: s.paused,
                 resume: true,
+                storage: None,
             };
             match engine
                 .add(Source::File(bytes), Some(s.base.clone()), vec![], opts)
