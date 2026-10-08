@@ -36,9 +36,9 @@ enum Command {
         /// Networks to use, by device name (default: every usable one). Example: en0,en5
         #[arg(short, long, value_delimiter = ',')]
         networks: Vec<String>,
-        /// Streams per network, 1 to 32.
-        #[arg(short, long, default_value_t = 8, value_parser = clap::value_parser!(u32).range(1..=32))]
-        streams: u32,
+        /// Fixed streams per network, 1 to 32 (default: Auto, 8 growing to 32).
+        #[arg(short, long, value_parser = clap::value_parser!(u32).range(1..=32))]
+        streams: Option<u32>,
         /// No progress line (for scripts).
         #[arg(short, long)]
         quiet: bool,
@@ -218,6 +218,10 @@ fn human(bytes: f64) -> String {
     }
 }
 
+fn crate_default_streams() -> u32 {
+    Tuning::default().streams_per_network
+}
+
 /// The plain-language message for each failure (ERRORS.md §2).
 fn describe(e: &JobError) -> String {
     match e {
@@ -233,7 +237,13 @@ fn describe(e: &JobError) -> String {
     }
 }
 
-async fn get(link: &str, out: PathBuf, names: &[String], streams: u32, quiet: bool) -> ExitCode {
+async fn get(
+    link: &str,
+    out: PathBuf,
+    names: &[String],
+    streams: Option<u32>,
+    quiet: bool,
+) -> ExitCode {
     let (https, host, port, path) = match parse_link(link) {
         Ok(p) => p,
         Err(msg) => {
@@ -315,7 +325,8 @@ async fn get(link: &str, out: PathBuf, names: &[String], streams: u32, quiet: bo
         }))
     });
     let tuning = Tuning {
-        streams_per_network: streams,
+        auto_streams: streams.is_none(),
+        streams_per_network: streams.unwrap_or(crate_default_streams()),
         progress,
         ..Tuning::default()
     };
