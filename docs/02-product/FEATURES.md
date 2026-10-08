@@ -40,8 +40,8 @@ Design in [`../03-architecture/BROWSER-EXTENSION.md`](../03-architecture/BROWSER
 
 | Feature | P |
 |---|---|
-| macOS Developer ID signing and notarization | P0 |
-| Windows Authenticode signing (Microsoft Artifact Signing or SignPath for open source) | P0 |
+| macOS: ad-hoc signing, one-line install script, own Homebrew tap, illustrated "Open Anyway" guide (no paid notarization, ADR 0009) | P0 |
+| Windows Authenticode signing through SignPath Foundation (free for open source) | P0 |
 | Signed auto-update with real semver (pre-release to release ordering tested) | P0 |
 | Packaged app smoke-tested in CI on all three OSes | P0 |
 | SHA-256 checksums and build provenance attestations on every release | P0 |
@@ -76,7 +76,7 @@ Design in [`../03-architecture/BROWSER-EXTENSION.md`](../03-architecture/BROWSER
 | Remote control: local web UI plus an aria2-compatible JSON-RPC (so AriaNg and similar tools work) | P1 |
 | CLI: `fuselane get <url>`, `fuselane send <file>`, `fuselane ls`, scripting-friendly JSON output | P0 (Ph 2) |
 | Headless daemon `fuselaned` for servers, NAS and home labs | P1 |
-| Diagnostics: rotating logs, a "Copy diagnostics" button, an opt-in crash reporter | P0 (Ph 3) |
+| Diagnostics: rotating logs, a "Copy diagnostics" button, no crash-reporting service (ADR 0009) | P0 (Ph 3) |
 | Internationalization (English first; Hindi next) | P1 |
 
 ## F. Platforms beyond desktop

@@ -79,7 +79,7 @@ Every error returns JSON `{ "error": { "code": "…", "message": "…", "hint": 
 - **Quotas per device and per IP:** size per link, active storage, links per day.
 - **Abuse:** a report-link button on every share page, a takedown process, rate limits (Workers rate-limiting binding), terms of service, no anonymous public listing. Firefox Send was shut down over abuse, so this has to be in place before launch.
 
-## 8. Cost sketch (R2, 2026 prices)
+## 8. Cost sketch (R2, 2026 prices). Policy: stay inside free tiers (ADR 0009)
 
 - 10 GB file, 16 MiB parts → 640 Class A ops ≈ **$0.003**. Storage 10 GB × 7 days ≈ **$0.035**. Egress **$0**.
 - The free tier covers roughly the first 10 GB stored and 1 M Class A ops a month.

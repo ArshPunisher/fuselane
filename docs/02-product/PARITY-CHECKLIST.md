@@ -152,7 +152,7 @@ Legend: `[ ]` todo · `[x]` done and tested · **=** match · **+** better · Ph
 
 | ✓ | Feature | = / + | Fuselane | Ph |
 |---|---|---|---|---|
-| [ ] | macOS x64 + arm64 | + | Universal, **signed and notarized** | 4 |
-| [ ] | Windows x64 + ARM64 installer that lets you choose the folder | + | **Signed**, plus winget | 4 |
+| [ ] | macOS x64 + arm64 | + | Universal, ad-hoc signed, install script + Homebrew tap (ADR 0009) | 4 |
+| [ ] | Windows x64 + ARM64 installer that lets you choose the folder | + | **Signed via SignPath**, plus winget | 4 |
 | [ ] | Linux AppImage, deb, rpm (x64 + arm64) | + | Plus Flatpak, plus a signed apt/rpm repo later | 4 |
 | [ ] | Landing site with OS/arch detection | + | Plus a signed download page and checksums | 4 |

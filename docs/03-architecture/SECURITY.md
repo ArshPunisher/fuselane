@@ -2,13 +2,13 @@
 
 ## Assets
 
-User files and destinations · cookies and auth headers forwarded by the extension · share-link keys · device tokens · signing keys (Apple, Windows, updater minisign) · the update channel · the backend (R2, D1).
+User files and destinations · cookies and auth headers forwarded by the extension · share-link keys · device tokens · signing credentials (SignPath token, updater minisign key) · the update channel · the backend (R2, D1).
 
 ## Threats and controls
 
 | # | Threat | Control |
 |---|---|---|
-| T1 | **A malicious update or installer** (FDM in 2020–22 and JDownloader in 2026 had their sites compromised) | Signed and notarized builds. The updater checks minisign signatures. Build provenance attestations. Releases only from CI with protected environments. The download page lists SHA-256 checksums. |
+| T1 | **A malicious update or installer** (FDM in 2020–22 and JDownloader in 2026 had their sites compromised) | Builds signed wherever free (SignPath on Windows, ad-hoc on macOS, ADR 0009). The updater checks minisign signatures. Build provenance attestations. Releases only from CI with protected environments. The download page lists SHA-256 checksums. |
 | T2 | **A compromised UI** (XSS from a file name or torrent metadata) drives the core | Strict CSP (no inline scripts). Tauri v2 capabilities: only our commands, `fs` scope empty (all file I/O in Rust). **Every command payload validated at runtime** in Rust (L-97). Paths only inside user-chosen folders (L-98). Only http, https and magnet schemes. |
 | T3 | **A local process abuses the local API** | Unix socket at 0600 in a per-user directory; Windows named pipe with a per-user ACL. The localhost WebSocket requires a pairing token and checks Origin and Host (prevents DNS rebinding). |
 | T4 | **A malicious website reaches the localhost fallback** | Reject web origins; token required; rate-limited pairing; codes expire after 2 min. |
@@ -34,4 +34,4 @@ User files and destinations · cookies and auth headers forwarded by the extensi
 
 ## Secrets in CI
 
-Apple certificate and API key, the Windows signing credentials, the updater key and the Cloudflare API token live only in a GitHub **environment** (`release`) with required reviewers. PR workflows never see them.
+The SignPath API token, the updater key and the Cloudflare API token live only in a GitHub **environment** (`release`) with required reviewers. PR workflows never see them.

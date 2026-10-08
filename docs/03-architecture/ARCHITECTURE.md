@@ -126,7 +126,7 @@ storage, limits, crypto are leaves used by the engines/core.
 - `tracing` with a rotating file appender (7 files × 10 MB), at `info` by default and `debug` per module through settings.
 - Secrets (cookies, tokens, presigned URLs' query strings) are **redacted** when logged.
 - "Copy diagnostics" bundles the version, OS, the list of networks (addresses masked) and the last 1,000 log lines.
-- Opt-in crash reporting (decided in [`../04-plan/OPEN-QUESTIONS.md`](../04-plan/OPEN-QUESTIONS.md)).
+- No crash-reporting service (zero-cost policy, [ADR 0009](../adr/0009-zero-cost-policy.md)); diagnostics stay local until the user copies them.
 
 ## 9. Where the details live
 

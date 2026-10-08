@@ -18,7 +18,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [ ] 0.10 CI: static job (fmt, clippy, cargo-deny, eslint, tsc) + test matrix (macOS, Windows, Linux) — gate: green on an empty workspace
 - [ ] 0.11 Commit-message lint (conventional commits) and a PR template that lists the `L-xx` rules a PR relies on
 - [ ] 0.12 Renovate config (grouped weekly updates, lockfile maintenance)
-- [ ] 0.13 Start the Apple Developer Program enrolment, the Windows signing application (Artifact Signing or SignPath Foundation), the Cloudflare account, and buy the domain (`fuselane.app`): these have lead times
+- [ ] 0.13 Free accounts only (ADR 0009): apply to SignPath Foundation once the repo is public; Cloudflare free tier (P6); domain later (owner)
 
 ## P1 Risk spikes (throwaway code on `spike/*` branches; results in `docs/04-plan/spikes/`)
 
@@ -118,14 +118,14 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 ## P4 Signed beta 0.1
 
 - [ ] 4.1 Release workflow: tag → native per-OS builds → package content check — L-73, L-74
-- [ ] 4.2 macOS signing + notarization + stapling in CI (`release` environment) — L-72
-- [ ] 4.3 Windows signing of binaries and installer — L-72
+- [ ] 4.2 macOS ad-hoc signing + install script (`install.sh`) + Homebrew tap + illustrated Open Anyway guide — L-72, ADR 0009
+- [ ] 4.3 Windows signing of binaries and installer via SignPath (unsigned fallback + SmartScreen guide until approved) — L-72
 - [ ] 4.4 Linux AppImage/deb/rpm + checksums; Flatpak manifest (submission can wait until 1.0)
 - [ ] 4.5 Tauri updater: minisign key (backed up offline), our own `latest.json` feed, real semver tests — L-76, L-77, L-78
 - [ ] 4.6 Packaged smoke (`--self-test`) on signed artifacts per OS — L-75
 - [ ] 4.7 Updater e2e: install N-1, update to N, data intact
 - [ ] 4.8 Landing page (`apps/site`): OS/arch detection, signed downloads, checksums (use the design skills)
-- [ ] 4.9 Opt-in crash reporting + privacy policy
+- [ ] 4.9 Local diagnostics bundle + privacy policy (no crash-reporting service, ADR 0009)
 - [ ] 4.10 Real-hardware matrix pass → tag `v0.1.0-beta.1`
 
 ## P5 Torrents (0.2)
@@ -165,7 +165,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [ ] 7.6 Message schema v1 validated on both sides; fall back to the browser on decline or timeout
 - [ ] 7.7 Context menu "Download with Fuselane"
 - [ ] 7.8 Playwright extension e2e; `web-ext lint`
-- [ ] 7.9 Store listings (Chrome Web Store, Edge Add-ons, AMO) with a privacy policy
+- [ ] 7.9 Store listings on the free stores (Edge Add-ons, AMO) with a privacy policy; Chrome Web Store ($5 one-time) only with the owner's OK
 
 ## P8 Power features (0.5 → 0.9)
 
@@ -192,4 +192,4 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [ ] 10.1 `crates/ffi` with uniffi; build with cargo-ndk
 - [ ] 10.2 Network handles from ConnectivityManager → `android_setsocknetwork` pinning
 - [ ] 10.3 Kotlin/Compose UI; foreground service; data-saver respect
-- [ ] 10.4 Play Store release
+- [ ] 10.4 F-Droid release (Google Play's $25 fee only with the owner's OK)

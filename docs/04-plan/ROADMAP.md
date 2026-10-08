@@ -10,11 +10,11 @@ P0 Foundations ─► P1 Risk spikes ─► P2 Core + CLI ─► P3 Desktop app 
 
 | Phase | Goal | Delivers | Exit gate |
 |---|---|---|---|
-| **P0 Foundations** | Everything needed to start building | Repo, docs, toolchains, empty workspace that builds on 3 OSes, CI skeleton (L0/L1 on all 3 OSes), accounts started (Apple Developer, Windows signing, Cloudflare, domain, GitHub org) | CI green on macOS, Windows and Linux with an empty workspace |
+| **P0 Foundations** | Everything needed to start building | Repo, docs, toolchains, empty workspace that builds on 3 OSes, CI skeleton (L0/L1 on all 3 OSes), free accounts (public GitHub repo, SignPath application, Cloudflare free tier) | CI green on macOS, Windows and Linux with an empty workspace |
 | **P1 Risk spikes** | Remove the unknowns that could change the architecture | 8 throwaway spikes (below), each with a written result | Every spike answered; ADRs 0002/0006/0007 accepted or replaced |
 | **P2 Core + CLI** | A correct, bonded HTTP download engine you can use from the terminal | `netif`, `transport`, `storage`, `limits`, `engine-http`, `core`, `api`, `testkit`, `netlab`; `fuselane get/ls/pause/resume` | L0–L3 green; edge cases ≥ 90%; chaos clean; ≥ 85% of the summed link speed in netlab |
 | **P3 Desktop app** | Plexo parity for HTTP downloads, in a great UI | Tauri app: list, new download, detail, complete and error screens, networks, limits, tray, notifications, settings | Parity checklist §1, 3–9 ticked for HTTP; L4 smoke and axe clean |
-| **P4 Signed beta 0.1** | Ship to real users with no security workarounds | Signed and notarized builds, auto-update, landing page, release workflow | L5 on signed builds; updater e2e; real-hardware matrix |
+| **P4 Beta 0.1** | Ship to real users with no terminal commands | Free signing (SignPath, ad-hoc), install script, Homebrew tap, auto-update, landing page, release workflow | L5 on release builds; updater e2e; real-hardware matrix |
 | **P5 Torrents (0.2)** | Torrents with per-network peers | `engine-torrent`, magnet/file input, file picker, peers view, optional seeding | Torrent gates |
 | **P6 Bonded uploads (0.3)** | Upload any file fast and get a share link | `engine-upload`, `crypto`, backend Worker, share page, upload UI | Upload gates; abuse controls live |
 | **P7 Browser extension (0.4)** | Downloads captured from the browser | WXT extension, native-messaging host + installer registration, pairing fallback | Extension gates; store submissions |

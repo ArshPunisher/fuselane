@@ -39,7 +39,7 @@ PR / push to main
 nightly
  ├─ full L3, full L4, L6 chaos (50 seeds), L7 benchmarks
 release tag
- └─ build-sign-notarize per OS → L5 on signed artifacts → publish + updater feed + attestations
+ └─ build + sign (SignPath / ad-hoc) per OS → L5 on release artifacts → publish + updater feed + attestations
 ```
 
 Branch protection: all required jobs green, no force-push to `main` (L-79).
@@ -51,7 +51,7 @@ Branch protection: all required jobs green, no force-push to `main` (L-79).
 | 1 Spikes | Each spike has a written result in `docs/04-plan/spikes/` with numbers; L8 checks on all 3 OSes |
 | 2 Core + CLI | L0–L3 green on all OSes; edge-case catalogue (§6) ≥ 90% covered; chaos 50 seeds clean |
 | 3 Desktop | L4 smoke + axe clean; UI reviewed with the design-taste and web-design-guidelines skills; 375px…min-window checks |
-| 4 Release | L5 on **signed** builds; updater e2e (old → new); first-launch with no security workaround on all 3 OSes |
+| 4 Release | L5 on release builds; updater e2e (old → new); first-launch test for each install path (script, Homebrew, DMG, NSIS, AppImage/deb) with no terminal commands needed |
 | 5 Torrents | Local swarm tests; hostile `.torrent` fixtures; public swarm benchmark |
 | 6 Uploads | Fake-S3 L2; real R2 staging e2e with 2 links in netlab; crypto vectors shared Rust ↔ web; backend error-status tests (413/415/410/429) |
 | 7 Extension | Playwright extension e2e; native-messaging install test per OS; fallback-to-browser test |

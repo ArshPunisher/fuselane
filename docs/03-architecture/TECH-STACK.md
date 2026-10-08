@@ -30,6 +30,7 @@ Versions are current as of 2026-10-08 (from [`../01-research/tech-research.md`](
 | Logging | tracing + tracing-appender | – | Structured, rotating |
 | Errors | thiserror (libraries), anyhow only in apps | – | Typed error kinds (see ERRORS.md) |
 | Android (later) | uniffi 0.32 + cargo-ndk + Kotlin/Compose | – | Native ConnectivityManager integration |
+| Signing | SignPath Foundation (Windows), ad-hoc codesign (macOS), minisign (updater) | – | Free only ([ADR 0009](../adr/0009-zero-cost-policy.md)) |
 
 ## Testing and quality tools
 

@@ -2,7 +2,7 @@
 
 ## One line
 
-**IDM plus WeTransfer, on every network you have.** A free, signed, cross-platform download and upload manager that stripes one file across Wi-Fi, a tethered phone and Ethernet, in both directions, without a paid VPN.
+**IDM plus WeTransfer, on every network you have.** A free, open-source, cross-platform download and upload manager that stripes one file across Wi-Fi, a tethered phone and Ethernet, in both directions, without a paid VPN.
 
 ## The problem
 
@@ -30,7 +30,7 @@
 1. **Bond everything.** Downloads (HTTP range, torrents) and uploads (S3-compatible multipart) over every usable network. Each network's sockets are pinned to it properly on every OS.
 2. **Never corrupt, never lose.** Check every server answer, check against the disk before resuming, persist crash-safe, and never mark a short file complete.
 3. **Capture from the browser.** Extensions hand downloads over with their cookies and headers, so authenticated links work.
-4. **Trustworthy distribution.** Signed and notarized installers, signed auto-updates, reproducible CI builds, and no "run this xattr command" ever.
+4. **Trustworthy distribution at zero cost** ([ADR 0009](../adr/0009-zero-cost-policy.md)). Windows signed through SignPath (free for open source); macOS ad-hoc signed with a one-line install script and a Homebrew tap; signed auto-updates (minisign); reproducible CI builds with provenance. Users never have to type security commands.
 5. **Light and fast.** A native Rust core (a few MB, low RAM), with a web UI only for the window.
 6. **Honest UX.** Say when bonding *can't* help (same router, same subnet, an IP-locked link) and show each network's real contribution.
 
@@ -56,7 +56,7 @@
 |---|---|
 | Combined speed with 2 independent links | ≥ 85% of the sum of each link alone (measured in the network lab and on real hardware) |
 | Corrupt or short files marked complete | **0**, checked by SHA-256 in every e2e test |
-| First-launch friction | No security workaround on macOS or Windows |
+| First-launch friction | No terminal commands; at most one "Open Anyway" click for macOS DMG installs; none with the install script or Homebrew |
 | Resume after crash, sleep, network loss or link expiry | 100% of chaos-suite scenarios |
 | Idle RAM of the desktop app | < 120 MB including the webview |
 | Installer size | < 20 MB |
@@ -70,5 +70,5 @@
 | Bonded uploads + share links | ✅ | ❌ | ❌ | ✅ (VPN, no links) | ❌ (one link) |
 | Browser capture | ✅ | ❌ | ✅ | – | – |
 | macOS / Windows / Linux | ✅ | ✅ | Windows only | ✅ | Web |
-| Signed + auto-update | ✅ | ❌ | ✅ | ✅ | – |
-| Price | Free core (see open questions on paid upload tiers) | Free | ₹2,390 lifetime | $90/yr | Free 3 GB/mo |
+| Signed + auto-update | ✅ (free signing, ADR 0009) | ❌ | ✅ | ✅ | – |
+| Price | Free and open source (Apache-2.0) | Free | ₹2,390 lifetime | $90/yr | Free 3 GB/mo |

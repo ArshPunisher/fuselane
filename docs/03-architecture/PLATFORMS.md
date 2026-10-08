@@ -26,7 +26,7 @@
 | Disk | APFS sparse by default; `F_PREALLOCATE`; `F_FULLFSYNC` only on the final publish |
 | Tethering | iPhone USB works natively. Android needs a third-party RNDIS driver (TetherKit); the app has a guide. |
 | Integration | Deep links via Apple Events; `LSHandlerRank = Alternate` for magnet/torrent; dock progress and badge; menu-bar mode; quarantine xattr on published files |
-| Packaging | Universal `.app` in a DMG, Developer ID signed, notarized with `notarytool`, stapled; Homebrew cask |
+| Packaging | Universal `.app`, **ad-hoc signed** (no paid notarization, ADR 0009). Install via a one-line script (curl downloads aren't quarantined), our own Homebrew tap, or a DMG with an illustrated "Open Anyway" guide |
 | CI | macOS arm64 runner for build + tests; Intel built as part of the universal binary |
 | Gotcha | WKWebView has no WebDriver, so real-app UI e2e isn't possible; use the packaged smoke test + Vitest/Playwright against a mocked IPC + manual runs |
 
@@ -41,7 +41,7 @@
 | Disk | `FSCTL_SET_SPARSE`; `SetFileInformationByHandle(FileAllocationInfo)`; retry renames on EPERM/EBUSY (antivirus); wait for the handle to close |
 | Policy gotcha | Windows may disconnect Wi-Fi when Ethernet is plugged in, so the app has a guided fix |
 | Integration | No default handler registration (respect existing torrent clients); "Open with" works; taskbar progress; tray; Zone.Identifier on published files |
-| Packaging | NSIS per-user installer (folder can be changed), x64 + ARM64, signed (Microsoft Artifact Signing or SignPath); winget |
+| Packaging | NSIS per-user installer (folder can be changed), x64 + ARM64, signed through SignPath Foundation (free for OSS; unsigned until approved); winget |
 | CI | `windows-latest` for build + tests + tauri-driver e2e; `windows-11-arm` optional |
 | Gotchas | NSIS declaration order matters and warnings are errors; kill whole process trees in tests (L-96); `aws-lc-rs` needs CMake/NASM, so use the `ring` provider if that's painful |
 

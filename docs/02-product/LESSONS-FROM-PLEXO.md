@@ -128,7 +128,7 @@ The full list of 120 engine edge cases, with citations, is in plexo-forensics **
 
 | ID | Rule | Evidence | Guard |
 |---|---|---|---|
-| L-72 | **Sign and notarize from the first public build.** Unsigned builds were the top support burden. | Issues #15, #27, #35, #46 | Release job fails if unsigned |
+| L-72 | **Sign everything we can for free from the first public build, and never make users type security commands** (SignPath on Windows; ad-hoc + install script + Homebrew tap on macOS, ADR 0009). Unsigned builds plus `xattr` instructions were Plexo's top support burden. | Issues #15, #27, #35, #46 | Release job checks signatures; first-launch test per install path |
 | L-73 | Build every target on its native runner; never ship one OS's native modules in another OS's package. Assert package contents after packaging. | 8cc15e4 (rc.12 Windows torrent crash) | Package-content check in CI |
 | L-74 | Set the architecture explicitly for every target and put it in the artifact name. | f892510 | CI matrix |
 | L-75 | Smoke-launch the **packaged** app in CI on every OS (Plexo only tested the unpackaged build). | Part 6 §5.4 | `fuselane --version` and the app's headless self-test in CI |
