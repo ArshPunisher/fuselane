@@ -77,15 +77,15 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [x] 2.29 Retry policy (pure) + its wiring: busy/strike/link-expired/blocked/unreachable — EC-051…060, EC-201, EC-219 — L-14…L-20
 - [ ] 2.30 Slow-stream refresh (< 10% of the network's median for 10 s, max 2 per block) — L-12
 - [x] 2.31 Meters, AVG/PEAK/ETA — property tests — L-30…L-33
-- [ ] 2.32 Checksum verification at publish (pasted hash, `.sha256`, Digest header)
+- [x] 2.32 Checksum verification at publish (pasted hash, `.sha256`, Digest header)
 
 **2G core**
-- [ ] 2.33 SQLite schema v1 + migrations framework + corrupt-DB handling — EC-217 — L-49, L-50, L-51
-- [ ] 2.34 Job state machine (pure transition table) — exhaustive tests — L-29
+- [x] 2.33 SQLite schema v1 + migrations framework + corrupt-DB handling — EC-217 — L-49, L-50, L-51
+- [x] 2.34 Job state machine (pure transition table) — exhaustive tests — L-29
 - [ ] 2.35 Queue (1–8 at once, FIFO, resume to front, reorder) 
 - [ ] 2.36 Network reconcile per job (on/off/offline/unreachable/failed/limit/blocked) — netlab link down/up — L-16, L-64
-- [ ] 2.37 Persistence: checkpoint every 15 s + on state changes, fsync before durable — L-55
-- [ ] 2.38 Resume: validate, reconcile, re-probe — crash-at-any-byte chaos — L-42, L-53
+- [x] 2.37 Persistence: checkpoint every 15 s + on state changes, fsync before durable — L-55
+- [x] 2.38 Resume: validate, reconcile, re-probe — crash-at-any-byte chaos — L-42, L-53
 - [ ] 2.39 Sleep/wake and quit (pause all, 3 s deadline, frozen writes) — L-21, L-52
 - [ ] 2.40 Event bus with deltas + sequence numbers — benchmark at 10k blocks — L-34
 - [ ] 2.41 Error catalogue `describe()` + snapshot test — L-85
@@ -93,7 +93,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 
 **2H api + CLI**
 - [ ] 2.43 Local JSON-RPC server (UDS / named pipe) + per-user access + schema validation — EC-215 — L-97, L-98
-- [ ] 2.44 `fuselane get <url> [--networks] [--streams] [--sha256]`, `ls`, `pause`, `resume`, `rm`, `nets`, `--json` (**get + nets done** and tested; the rest needs `core`)
+- [ ] 2.44 `fuselane get <url> [--networks] [--streams] [--sha256]`, `ls`, `pause`, `resume`, `rm`, `nets`, `--json` (**get, nets, ls, resume, rm, --sha256 done** and tested; pause = Ctrl-C; `--json` and the daemon remain)
 - [ ] 2.45 `fuselaned` headless daemon mode
 - [ ] 2.46 Chaos suite (L6) with 50 seeds nightly; benchmarks (L7) nightly
 - [ ] 2.47 **Gate review:** edge-case coverage table ≥ 90%, netlab ≥ 85% summed speed, real hardware on 3 OSes (CLI)

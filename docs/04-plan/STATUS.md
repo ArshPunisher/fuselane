@@ -17,14 +17,19 @@
   - CLI `fuselane get` / `fuselane nets` (part of 2.44).
   - **A real HTTPS download over a pinned socket is byte-identical to curl.**
   - Workspace: **109 tests pass**.
+- **Also done since:**
+  - controller wired (Auto grows to 32, settles at server caps);
+  - **pause/checkpoint/resume** with byte sampling and a lying-checkpoint defence;
+  - SHA-256 verification;
+  - `core` SQLite store + state machine;
+  - CLI `ls`/`resume`/`rm`/Ctrl-C;
+  - **kill -9 mid-download, then resume, is byte-exact**.
+  - Workspace about 135 tests, all green.
 - **Next steps, in order:**
-  1. Wire the concurrency controller into the downloader (Auto 8 → 32, refusals, disk).
-  2. `core` with SQLite: job state machine, persistence, **resume after quit/crash** (2.33–2.39).
-  3. CLI `ls/pause/resume`.
-  4. Per-network DNS (2.13) + Happy Eyeballs (2.14).
-  5. macOS friendly names (2.6: en1 shows as "Ethernet" but is Wi-Fi).
-  6. Edge-case table.
-  7. Then the P3 desktop app, with the Fuse Core.
+  1. macOS friendly names/kinds via SystemConfiguration (2.6), plus Windows/Linux equivalents.
+  2. Per-network DNS (2.13) and Happy Eyeballs (2.14).
+  3. Edge-case coverage table.
+  4. **P3 desktop app** (Tauri + Fuse Core, real engine).
 - **Waiting on the owner:**
   - Approve the S9b Fuse Core contact sheets (`docs/04-plan/spikes/S9b-fuse-core.md`).
   - Q13: OK to create the **public** GitHub repo? (CI can't run until then.)
@@ -33,6 +38,10 @@
 - **Environment:** Rust via rustup (`source ~/.cargo/env`), cargo-nextest, cargo-deny, actionlint (Homebrew), Node 24, pnpm 11, Playwright WebKit + Chromium, gh logged in as ArshPunisher.
 
 ## Log
+
+### 2026-10-08 (session 2, latest)
+- Controller wiring, core store, resume and checksums.
+- Bugs found by our own tests: checkpoints lost in-flight bytes (L-107); a validator loop that hung on resume (L-108); a test-server throttle that didn't throttle; a piped check that let a broken build be committed, so `tools/check.sh` now gates every commit.
 
 ### 2026-10-08 (session 2, later)
 - Built netif, transport (pinning + TLS) and the CLI.
