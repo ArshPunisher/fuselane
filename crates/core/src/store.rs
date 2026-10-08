@@ -300,6 +300,15 @@ impl Store {
         Ok(())
     }
 
+    /// Explains why a stopped job stopped (for example, an allowance pause).
+    pub fn set_error(&self, id: i64, message: &str, code: &str) -> Result<(), StoreError> {
+        self.lock().execute(
+            "UPDATE jobs SET error = ?2, error_code = ?3 WHERE id = ?1",
+            params![id, message, code],
+        )?;
+        Ok(())
+    }
+
     /// Records which fix the UI should offer for the current failure.
     pub fn set_error_code(&self, id: i64, code: &str) -> Result<(), StoreError> {
         self.lock().execute(
