@@ -144,6 +144,19 @@ fn now() -> i64 {
         .map_or(0, |d| d.as_secs() as i64)
 }
 
+/// Only damage moves a database aside. Busy or locked (another process
+/// mid-write), a full disk or a permission problem is reported as is: the file is
+/// fine, and moving it would orphan every job in it.
+fn is_corrupt(e: &StoreError) -> bool {
+    use rusqlite::ErrorCode::{DatabaseCorrupt, NotADatabase};
+    match e {
+        // open_inner's marker for a failed quick_check.
+        StoreError::Sql(rusqlite::Error::InvalidQuery) => true,
+        StoreError::Sql(e) => matches!(e.sqlite_error_code(), Some(DatabaseCorrupt | NotADatabase)),
+        _ => false,
+    }
+}
+
 fn encode(secured: &[u64]) -> Vec<u8> {
     secured.iter().flat_map(|v| v.to_le_bytes()).collect()
 }
@@ -194,8 +207,7 @@ impl Store {
                 dir: path.parent().map(Path::to_path_buf),
                 recovered_from: None,
             }),
-            Err(StoreError::TooNew { found, known }) => Err(StoreError::TooNew { found, known }),
-            Err(_) if path.exists() => {
+            Err(e) if path.exists() && is_corrupt(&e) => {
                 // Unreadable: move it aside, never delete or overwrite it (L-50).
                 let aside = path.with_extension(format!("corrupt-{}", now()));
                 std::fs::rename(path, &aside)?;
@@ -587,6 +599,39 @@ mod tests {
             "original kept"
         );
         assert!(s.list().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_busy_database_is_an_error_never_moved_aside() {
+        // Another process mid-write (the CLI while the app opens the store) is not
+        // corruption: moving the file aside would orphan every job in it.
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path().join("jobs.db");
+        Store::open(&p)
+            .unwrap()
+            .create("http://x/f", Path::new("/tmp"))
+            .unwrap();
+        let other = Connection::open(&p).unwrap();
+        other
+            .execute_batch("PRAGMA journal_mode=DELETE; BEGIN EXCLUSIVE;")
+            .unwrap();
+        let Err(err) = Store::open(&p) else {
+            panic!("busy must fail")
+        };
+        assert!(
+            matches!(&err, StoreError::Sql(e) if e.sqlite_error_code() == Some(rusqlite::ErrorCode::DatabaseBusy)),
+            "{err}"
+        );
+        other.execute_batch("COMMIT").unwrap();
+        drop(other);
+        let names: Vec<_> = std::fs::read_dir(d.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .collect();
+        assert!(!names.iter().any(|n| n.contains("corrupt")), "{names:?}");
+        let s = Store::open(&p).unwrap();
+        assert!(s.recovered_from.is_none());
+        assert_eq!(s.list().unwrap().len(), 1, "the job is still there");
     }
 
     #[test]
