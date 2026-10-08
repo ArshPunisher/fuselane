@@ -153,7 +153,12 @@ mod unix {
             std::fs::remove_file(path)?;
         }
         if let Some(dir) = path.parent() {
-            if dir.starts_with("/tmp") {
+            // Fuselane's own short folder in the shared /tmp (see client::endpoint).
+            let ours = dir.parent() == Some(Path::new("/tmp"))
+                && dir
+                    .file_name()
+                    .is_some_and(|n| n.to_string_lossy().starts_with("fuselane-"));
+            if ours {
                 private_dir(dir)?;
             } else {
                 std::fs::create_dir_all(dir)?;
