@@ -1578,6 +1578,7 @@ dependencies = [
  "fuselane-netif",
  "fuselane-testkit",
  "libc",
+ "serde_json",
  "tempfile",
  "tokio",
 ]

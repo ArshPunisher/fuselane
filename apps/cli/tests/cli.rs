@@ -28,6 +28,32 @@ fn fuselane_in(home: &std::path::Path, args: &[&str]) -> std::process::Output {
         .expect("binary runs")
 }
 
+#[test]
+fn ls_and_nets_speak_json_for_scripts() {
+    let home = tempfile::tempdir().unwrap();
+    let out = fuselane_in(home.path(), &["ls", "--json"]);
+    assert!(out.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout).trim(),
+        "[]",
+        "an empty list is [], not a sentence"
+    );
+
+    let out = fuselane(&["nets", "--all", "--json"]);
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("valid JSON");
+    let rows = v.as_array().expect("an array");
+    assert!(!rows.is_empty(), "every machine has at least loopback");
+    for r in rows {
+        for key in ["name", "label", "kind", "usable", "addresses"] {
+            assert!(r.get(key).is_some(), "{key} missing in {r}");
+        }
+    }
+    assert!(
+        rows.iter()
+            .any(|r| r["kind"] == "loopback" && r["usable"] == false)
+    );
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn get_downloads_a_byte_exact_file() {
     let content = Content::new(1_500_000, 21);

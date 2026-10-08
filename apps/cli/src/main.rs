@@ -58,7 +58,11 @@ enum Command {
         quiet: bool,
     },
     /// List downloads, newest first.
-    Ls,
+    Ls {
+        /// Print JSON (for scripts) instead of a table.
+        #[arg(long)]
+        json: bool,
+    },
     /// Remove a download from the list (and its partial file, if unfinished).
     Rm {
         /// Download number from `fuselane ls`.
@@ -69,6 +73,9 @@ enum Command {
         /// Include loopback, tunnels and virtual adapters.
         #[arg(short, long)]
         all: bool,
+        /// Print JSON (for scripts) instead of a table.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -90,8 +97,8 @@ fn main() -> ExitCode {
     };
     runtime.block_on(async {
         match command {
-            Command::Nets { all } => nets(all),
-            Command::Ls => ls(),
+            Command::Nets { all, json } => nets(all, json),
+            Command::Ls { json } => ls(json),
             Command::Rm { id } => rm(id),
             Command::Resume {
                 id,
@@ -136,7 +143,20 @@ fn status_word(s: Status) -> &'static str {
     }
 }
 
-fn ls() -> ExitCode {
+/// The status word scripts see; the same words the desktop app uses.
+fn status_key(s: Status) -> &'static str {
+    match s {
+        Status::Queued => "queued",
+        Status::Running => "running",
+        Status::Paused => "paused",
+        Status::Failed { resumable: true } => "failed",
+        Status::Failed { resumable: false } => "failed-final",
+        Status::Completed => "completed",
+        Status::Cancelled => "cancelled",
+    }
+}
+
+fn ls(json: bool) -> ExitCode {
     let store = match open_store() {
         Ok(s) => s,
         Err(e) => {
@@ -151,6 +171,24 @@ fn ls() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    if json {
+        let rows: Vec<serde_json::Value> = jobs
+            .iter()
+            .map(|j| {
+                serde_json::json!({
+                    "id": j.id,
+                    "status": status_key(j.status),
+                    "url": j.url,
+                    "name": j.filename,
+                    "saved": j.secured_bytes(),
+                    "total": j.total,
+                    "error": j.error,
+                })
+            })
+            .collect();
+        println!("{}", serde_json::Value::Array(rows));
+        return ExitCode::SUCCESS;
+    }
     if jobs.is_empty() {
         println!("No downloads yet. Try: fuselane get <url>");
         return ExitCode::SUCCESS;
@@ -234,12 +272,33 @@ fn start_failed(e: &StartError) -> ExitCode {
     }
 }
 
-fn nets(all: bool) -> ExitCode {
+fn nets(all: bool, json: bool) -> ExitCode {
     match if all {
         fuselane_netif::list()
     } else {
         fuselane_netif::usable()
     } {
+        Ok(list) if json => {
+            let rows: Vec<serde_json::Value> = list
+                .iter()
+                .map(|i| {
+                    serde_json::json!({
+                        "name": i.name,
+                        "label": i.display_name,
+                        "kind": format!("{:?}", i.kind).to_lowercase(),
+                        "usable": i.usable(),
+                        "addresses": i.addrs.iter().map(ToString::to_string).collect::<Vec<_>>(),
+                    })
+                })
+                .collect();
+            let empty = rows.is_empty();
+            println!("{}", serde_json::Value::Array(rows));
+            if empty {
+                ExitCode::FAILURE
+            } else {
+                ExitCode::SUCCESS
+            }
+        }
         Ok(list) if list.is_empty() => {
             eprintln!(
                 "No usable networks. Join a Wi-Fi network, plug in Ethernet, or tether a phone over USB."
