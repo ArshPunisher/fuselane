@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f9fafc" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a0c11" media="(prefers-color-scheme: dark)" />
+    <title>Fuselane: one download, every network</title>
+    <meta
+      name="description"
+      content="Free, open-source download manager that splits each download across your Wi-Fi, Ethernet and phone at once. macOS, Windows and Linux."
+    />
+    <meta property="og:title" content="Fuselane: one download, every network" />
+    <meta
+      property="og:description"
+      content="Splits each download across every network you have, then joins the parts into one verified file."
+    />
+    <meta property="og:image" content="app.png" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="nav">
+      <a class="wordmark" href="./" translate="no">Fuselane</a>
+      <nav aria-label="Site">
+        <a href="#download">Download</a>
+        <a href="#privacy">Privacy</a>
+        <a href="https://github.com/ArshPunisher/fuselane">GitHub</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-text">
+          <h1 id="hero-title">One download.<br />Every network.</h1>
+          <p class="lead">
+            Fuselane splits each download across your Wi-Fi, Ethernet and phone at once, then joins
+            the parts into one verified file.
+          </p>
+          <div class="cta">
+            <a class="btn btn-primary" id="primary-download" href="#download">Download</a>
+            <a class="btn btn-quiet" href="#download">All downloads</a>
+          </div>
+          <p class="meta" id="version-line">Free and open source. macOS, Windows and Linux.</p>
+        </div>
+        <figure class="hero-core">
+          <div class="core" aria-hidden="true">
+            <canvas id="core"></canvas>
+            <div class="core-center">
+              <p class="speed"><span id="speed">0.0</span><span class="unit">MB/s</span></p>
+              <p class="speed-sub" id="speed-sub">3 networks</p>
+            </div>
+          </div>
+          <figcaption>Live view of a download over three networks (sample data).</figcaption>
+        </figure>
+      </section>
+
+      <section class="how" aria-labelledby="how-title">
+        <div class="how-text">
+          <h2 id="how-title">Faster, without a VPN or a server in the middle</h2>
+          <p>
+            <strong>Every network works at once.</strong> Each part of the file is fetched over
+            whichever network is free, so their speeds add up.
+          </p>
+          <p>
+            <strong>Nothing breaks when one drops.</strong> Unplug the cable or lose the phone
+            signal and the others carry on. Quit or crash, and it resumes where it stopped.
+          </p>
+          <p>
+            <strong>The file is checked.</strong> Parts are only kept if they come from the same
+            file, and you can verify a SHA-256.
+          </p>
+        </div>
+        <figure class="shot">
+          <img
+            src="app.png"
+            width="1440"
+            height="900"
+            alt="The Fuselane app showing a download over Wi-Fi, iPhone USB and Ethernet, with the speed of each network."
+            loading="lazy"
+          />
+          <figcaption>The desktop app (sample data).</figcaption>
+        </figure>
+      </section>
+
+      <section class="download" id="download" aria-labelledby="download-title">
+        <h2 id="download-title">Download <span class="num" id="version-tag"></span></h2>
+        <p class="muted" id="download-note">
+          Every file is listed in
+          <a id="sums" href="https://github.com/ArshPunisher/fuselane/releases">SHA256SUMS</a>.
+        </p>
+        <div class="platforms">
+          <article class="platform" data-os="mac">
+            <h3>macOS</h3>
+            <p class="muted">macOS 13.3 or later, Apple silicon and Intel.</p>
+            <p class="label">Install with one command</p>
+            <div class="cmd">
+              <code id="cmd-script"
+                >curl -fsSL
+                https://raw.githubusercontent.com/ArshPunisher/fuselane/main/packaging/macos/install.sh
+                | sh</code
+              ><button class="copy" data-copy="cmd-script" type="button">Copy</button>
+            </div>
+            <p class="label">or Homebrew</p>
+            <div class="cmd">
+              <code id="cmd-brew">brew install --cask arshpunisher/fuselane/fuselane</code
+              ><button class="copy" data-copy="cmd-brew" type="button">Copy</button>
+            </div>
+            <p class="files"><a data-file="macos-universal.dmg">Disk image (.dmg)</a></p>
+          </article>
+          <article class="platform" data-os="windows">
+            <h3>Windows</h3>
+            <p class="muted">Windows 10 or 11, x64.</p>
+            <p class="files">
+              <a class="btn" data-file="windows-x64-setup.exe">Installer (.exe)</a>
+            </p>
+            <p class="muted small">
+              Code signing through the SignPath Foundation is being set up. Until then, SmartScreen
+              may warn: choose More info, then Run anyway.
+            </p>
+          </article>
+          <article class="platform" data-os="linux">
+            <h3>Linux</h3>
+            <p class="muted">x64 and arm64 (Ubuntu 22.04 or newer).</p>
+            <p class="files">
+              <a data-file="linux-x64.AppImage">AppImage (x64)</a>
+              <a data-file="linux-x64.deb">.deb (x64)</a>
+              <a data-file="linux-x64.rpm">.rpm (x64)</a>
+              <a data-file="linux-arm64.deb">.deb (arm64)</a>
+              <a data-file="linux-arm64.rpm">.rpm (arm64)</a>
+            </p>
+          </article>
+        </div>
+        <p class="muted">
+          Command line tool: <a data-cli="macos-universal.tar.gz">macOS</a>,
+          <a data-cli="windows-x64.exe">Windows</a>, <a data-cli="linux-x64.tar.gz">Linux x64</a>,
+          <a data-cli="linux-arm64.tar.gz">Linux arm64</a>.
+        </p>
+      </section>
+
+      <section class="privacy" id="privacy" aria-labelledby="privacy-title">
+        <h2 id="privacy-title">Private by design</h2>
+        <p>
+          No account, no analytics, no crash reporting. Fuselane talks to the servers in your links
+          and to a signed update feed, nothing else. Read the
+          <a href="https://github.com/ArshPunisher/fuselane/blob/main/docs/PRIVACY.md"
+            >privacy policy</a
+          >.
+        </p>
+        <p class="muted">
+          Open source under Apache-2.0. Every release is built in public by GitHub Actions; app
+          updates are signed and checked before they install.
+        </p>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <p>
+        Fuselane is free software.
+        <a href="https://github.com/ArshPunisher/fuselane">Source code</a> ·
+        <a href="https://github.com/ArshPunisher/fuselane/issues">Report a problem</a>
+      </p>
+    </footer>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

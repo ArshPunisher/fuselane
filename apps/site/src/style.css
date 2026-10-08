@@ -1,0 +1,483 @@
+/* Download page. Tokens and rules: packages/ui/src/tokens.css, docs/07-design/DESIGN-SYSTEM.md.
+   Radius rule: controls 8px, panels 14px, chips pill. */
+@import '../../../packages/ui/src/tokens.css';
+
+@font-face {
+  font-family: 'Geist';
+  src: url('../node_modules/geist/dist/fonts/geist-sans/Geist-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('../node_modules/geist/dist/fonts/geist-mono/GeistMono-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--canvas);
+  color: var(--body);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--ink);
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  color: var(--fuse);
+}
+
+:focus-visible {
+  outline: 2px solid var(--fuse);
+  outline-offset: 2px;
+}
+
+.muted {
+  color: var(--mute);
+}
+
+.small {
+  font-size: 13px;
+}
+
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.skip {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: var(--z-titlebar);
+  padding: 6px 12px;
+  border-radius: var(--radius-control);
+  background: var(--fuse);
+  color: var(--fuse-ink);
+  transform: translateY(-200%);
+}
+
+.skip:focus-visible {
+  transform: none;
+}
+
+/* ---------- Nav ---------- */
+
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 1200px;
+  height: 64px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.wordmark {
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+
+.nav nav {
+  display: flex;
+  gap: 20px;
+}
+
+.nav nav a {
+  color: var(--body);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.nav nav a:hover {
+  color: var(--ink);
+}
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 20px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  touch-action: manipulation;
+  transition:
+    background var(--dur-quick) var(--ease-out),
+    transform var(--dur-instant) var(--ease-out);
+}
+
+.btn:hover {
+  background: var(--surface-3);
+  color: var(--ink);
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn-primary {
+  background: var(--fuse);
+  border-color: transparent;
+  color: var(--fuse-ink);
+}
+
+.btn-primary:hover {
+  background: color-mix(in oklch, var(--fuse), var(--ink) 12%);
+  color: var(--fuse-ink);
+}
+
+.btn-quiet {
+  background: transparent;
+}
+
+/* ---------- Hero ---------- */
+
+main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 48px;
+  min-height: calc(100dvh - 64px);
+  padding: 24px 0 64px;
+}
+
+.hero h1 {
+  font-size: clamp(44px, 6vw, 76px);
+  font-weight: 650;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+}
+
+.lead {
+  max-width: 34ch;
+  margin-top: 20px;
+  color: var(--body);
+  font-size: clamp(17px, 1.6vw, 20px);
+  line-height: 1.5;
+}
+
+.cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 32px;
+}
+
+.meta {
+  margin-top: 16px;
+  color: var(--mute);
+  font-size: 14px;
+}
+
+.hero-core {
+  margin: 0;
+  justify-self: center;
+  width: min(100%, 520px);
+}
+
+.core {
+  position: relative;
+  aspect-ratio: 1;
+  width: 100%;
+}
+
+.core canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+}
+
+.core-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+
+.speed {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(30px, 4vw, 46px);
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.unit {
+  color: var(--mute);
+  font-size: 0.38em;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.speed-sub {
+  margin-top: 6px;
+  color: var(--fuse);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+figcaption {
+  margin-top: 8px;
+  color: var(--mute);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ---------- How ---------- */
+
+.how {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  align-items: center;
+  gap: 56px;
+  padding: 80px 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.how h2,
+.download h2,
+.privacy h2 {
+  font-size: clamp(28px, 3.2vw, 40px);
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.how-text {
+  display: grid;
+  gap: 18px;
+}
+
+.how-text p {
+  max-width: 46ch;
+}
+
+.how-text strong {
+  color: var(--ink);
+}
+
+.shot {
+  margin: 0;
+}
+
+.shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-float);
+}
+
+/* ---------- Download ---------- */
+
+.download {
+  display: grid;
+  gap: 20px;
+  padding: 80px 0;
+  border-top: 1px solid var(--hairline);
+  scroll-margin-top: 16px;
+}
+
+.platforms {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.platform {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 24px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  background: var(--surface-1);
+}
+
+.platform[data-current] {
+  border-color: color-mix(in oklch, var(--fuse) 55%, transparent);
+  box-shadow: 0 0 0 3px var(--fuse-soft);
+}
+
+.platform h3 {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.label {
+  margin-top: 6px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.cmd {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 12px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+}
+
+.cmd code {
+  overflow-x: auto;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.copy {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.copy:hover {
+  background: var(--surface-3);
+}
+
+.files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 4px;
+}
+
+/* ---------- Privacy + footer ---------- */
+
+.privacy {
+  display: grid;
+  gap: 14px;
+  max-width: 70ch;
+  padding: 80px 0;
+  border-top: 1px solid var(--hairline);
+  scroll-margin-top: 16px;
+}
+
+.foot {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px 24px 48px;
+  border-top: 1px solid var(--hairline);
+  color: var(--mute);
+  font-size: 14px;
+}
+
+.foot a {
+  color: var(--body);
+}
+
+/* ---------- Narrow screens ---------- */
+
+@media (max-width: 960px) {
+  .platforms {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 767px) {
+  .nav,
+  main,
+  .foot {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .nav nav {
+    gap: 14px;
+  }
+  .hero,
+  .how {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 32px;
+  }
+  .hero {
+    min-height: 0;
+    padding: 24px 0 48px;
+  }
+  .hero-core {
+    width: min(100%, 360px);
+  }
+  .how,
+  .download,
+  .privacy {
+    padding: 56px 0;
+  }
+  .platform {
+    padding: 18px;
+  }
+}
