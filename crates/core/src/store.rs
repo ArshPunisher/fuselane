@@ -62,6 +62,8 @@ const MIGRATIONS: &[&str] = &[
         raw_etag, last_modified, status, error, final_path, created_at, updated_at, error_code FROM jobs;
     DROP TABLE jobs;
     ALTER TABLE jobs_v3 RENAME TO jobs;",
+    // v4: app settings (speed limits and later preferences), as small JSON values.
+    "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);",
 ];
 
 #[derive(Debug, thiserror::Error)]
@@ -277,6 +279,27 @@ impl Store {
 
     /// Records where the finished file is and its size (a fast download may finish
     /// before its first checkpoint, so the size isn't known any other way).
+    /// A stored setting, if set.
+    pub fn setting(&self, key: &str) -> Result<Option<String>, StoreError> {
+        Ok(self
+            .lock()
+            .query_row(
+                "SELECT value FROM settings WHERE key = ?1",
+                params![key],
+                |r| r.get(0),
+            )
+            .optional()?)
+    }
+
+    pub fn set_setting(&self, key: &str, value: &str) -> Result<(), StoreError> {
+        self.lock().execute(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![key, value],
+        )?;
+        Ok(())
+    }
+
     /// Records which fix the UI should offer for the current failure.
     pub fn set_error_code(&self, id: i64, code: &str) -> Result<(), StoreError> {
         self.lock().execute(
@@ -377,6 +400,19 @@ mod tests {
             raw_etag: Some("\"v1\"".into()),
             last_modified: None,
         }
+    }
+
+    #[test]
+    fn settings_round_trip_and_overwrite() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = Store::open(&dir.path().join("db")).unwrap();
+        assert_eq!(s.setting("limits").unwrap(), None);
+        s.set_setting("limits", "{\"global\":1}").unwrap();
+        s.set_setting("limits", "{\"global\":2}").unwrap();
+        assert_eq!(
+            s.setting("limits").unwrap().as_deref(),
+            Some("{\"global\":2}")
+        );
     }
 
     #[test]

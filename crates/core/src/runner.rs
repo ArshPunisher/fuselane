@@ -258,6 +258,8 @@ pub struct RunOptions {
     pub checkpoint_every: Option<Duration>,
     /// Shrinks retry waits (tests); `None` keeps real-world delays.
     pub retry_delay_scale: Option<f64>,
+    /// Live speed limits shared with other downloads.
+    pub limiter: Option<Arc<fuselane_limits::Limiter>>,
 }
 
 /// Why a job couldn't start at all (nothing in the store changed state).
@@ -468,6 +470,7 @@ pub async fn run(
         cancel: opts.cancel,
         expected_sha256: opts.sha256,
         retry_delay_scale: opts.retry_delay_scale.unwrap_or(defaults.retry_delay_scale),
+        limiter: opts.limiter,
         ..defaults
     };
     let _ = store.apply(id, Event::Start, None);
