@@ -68,6 +68,13 @@ enum Command {
         /// Download number from `fuselane ls`.
         id: i64,
     },
+    /// Let browsers start this fuselane as the extension's helper (native messaging).
+    /// The desktop app does this by itself on every launch.
+    Browsers {
+        /// Print JSON (for scripts) instead of a table.
+        #[arg(long)]
+        json: bool,
+    },
     /// List the networks Fuselane can use.
     Nets {
         /// Include loopback, tunnels and virtual adapters.
@@ -85,22 +92,7 @@ fn native_host() -> ExitCode {
     let Ok(home) = fuselane_core::home::home() else {
         return ExitCode::FAILURE;
     };
-    let endpoint = fuselane_api::client::endpoint(&home);
-    let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-    else {
-        return ExitCode::FAILURE;
-    };
-    // Nothing but framed messages may reach stdout here: the browser reads it.
-    match runtime.block_on(fuselane_api::native::relay(
-        &endpoint,
-        tokio::io::stdin(),
-        tokio::io::stdout(),
-    )) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(_) => ExitCode::FAILURE,
-    }
+    ExitCode::from(u8::try_from(fuselane_api::native::run_host(&home)).unwrap_or(1))
 }
 
 fn main() -> ExitCode {
@@ -126,6 +118,7 @@ fn main() -> ExitCode {
     runtime.block_on(async {
         match command {
             Command::Nets { all, json } => nets(all, json),
+            Command::Browsers { json } => browsers(json),
             Command::Ls { json } => ls(json),
             Command::Rm { id } => rm(id),
             Command::Resume {
@@ -249,6 +242,53 @@ fn ls(json: bool) -> ExitCode {
             status_word(j.status),
             pct
         );
+    }
+    ExitCode::SUCCESS
+}
+
+fn browsers(json: bool) -> ExitCode {
+    use fuselane_api::hosts::{self, Outcome};
+    let (Ok(exe), Ok(home)) = (std::env::current_exe(), fuselane_core::home::home()) else {
+        eprintln!("fuselane: couldn't tell where fuselane or its data folder is.");
+        return ExitCode::FAILURE;
+    };
+    let outcomes = match hosts::register(&exe, &home) {
+        Ok(o) => o,
+        Err(problem) => {
+            eprintln!("fuselane: {problem}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let failed = outcomes
+        .iter()
+        .any(|(_, o)| matches!(o, Outcome::Failed(_)));
+    if json {
+        let rows: Vec<serde_json::Value> = outcomes
+            .iter()
+            .map(|(browser, o)| {
+                let (state, detail) = match o {
+                    Outcome::Written(p) => ("registered", p.display().to_string()),
+                    Outcome::Unchanged => ("registered", String::new()),
+                    Outcome::NotInstalled => ("not-installed", String::new()),
+                    Outcome::Failed(e) => ("failed", e.clone()),
+                };
+                serde_json::json!({"browser": browser, "state": state, "detail": detail})
+            })
+            .collect();
+        println!("{}", serde_json::Value::Array(rows));
+    } else {
+        for (browser, o) in &outcomes {
+            let line = match o {
+                Outcome::Written(_) | Outcome::Unchanged => "ready".to_string(),
+                Outcome::NotInstalled => "not installed".to_string(),
+                Outcome::Failed(e) => format!("failed: {e}"),
+            };
+            println!("{browser:<14} {line}");
+        }
+    }
+    if failed {
+        eprintln!("fuselane: some browsers couldn't be set up; see above.");
+        return ExitCode::FAILURE;
     }
     ExitCode::SUCCESS
 }
