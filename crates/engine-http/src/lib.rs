@@ -5,6 +5,7 @@
 //! Rules: L-01–L-35.
 
 pub mod concurrency;
+pub mod download;
 pub mod headers;
 pub mod measure;
 pub mod plan;
