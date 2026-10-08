@@ -189,15 +189,200 @@ mod macos {
     }
 }
 
+/// What Linux publishes about an interface under /sys/class/net/<name>.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SysFacts {
+    /// `wireless/` or `phy80211` exists.
+    pub wireless: bool,
+    /// The driver behind `device/driver` (for example `rndis_host`, `ipheth`).
+    pub driver: Option<String>,
+    /// The device lives under /sys/devices/virtual (bridges, veth, docker).
+    pub virtual_device: bool,
+    /// `tun_flags` exists (TUN/TAP: VPNs).
+    pub tun: bool,
+    /// ARPHRD type from `type` (1 = Ethernet, 772 = loopback, 65534 = none).
+    pub arp_type: Option<u32>,
+}
+
+/// Linux: kind and friendly name from sysfs facts; `None` keeps the name guess.
+pub fn linux_kind(f: &SysFacts) -> Option<(Kind, &'static str)> {
+    if f.arp_type == Some(772) {
+        return Some((Kind::Loopback, "Loopback"));
+    }
+    if f.tun || f.arp_type == Some(65534) {
+        return Some((Kind::Vpn, "VPN"));
+    }
+    match f.driver.as_deref() {
+        Some("ipheth") => return Some((Kind::Tether, "iPhone USB")),
+        Some("rndis_host" | "cdc_ether" | "cdc_ncm" | "cdc_eem") => {
+            return Some((Kind::Tether, "Phone USB"));
+        }
+        Some("qmi_wwan" | "cdc_mbim" | "option" | "huawei_cdc_ncm" | "sierra_net") => {
+            return Some((Kind::Cellular, "Mobile broadband"));
+        }
+        _ => {}
+    }
+    if f.wireless {
+        return Some((Kind::Wifi, "Wi-Fi"));
+    }
+    if f.virtual_device {
+        return Some((Kind::Virtual, "Virtual"));
+    }
+    if f.arp_type == Some(1) && f.driver.is_some() {
+        return Some((Kind::Ethernet, "Ethernet"));
+    }
+    None
+}
+
+#[cfg(target_os = "linux")]
+fn sys_facts(name: &str) -> SysFacts {
+    let base = std::path::Path::new("/sys/class/net").join(name);
+    let driver = std::fs::read_link(base.join("device/driver"))
+        .ok()
+        .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()));
+    let real = std::fs::canonicalize(&base).unwrap_or_default();
+    SysFacts {
+        wireless: base.join("wireless").exists() || base.join("phy80211").exists(),
+        driver,
+        virtual_device: real.starts_with("/sys/devices/virtual"),
+        tun: base.join("tun_flags").exists(),
+        arp_type: std::fs::read_to_string(base.join("type"))
+            .ok()
+            .and_then(|s| s.trim().parse().ok()),
+    }
+}
+
+/// Windows: kind from the adapter's IANA ifType and description; the friendly
+/// name ("Wi-Fi", "Ethernet 2") is already what people see in Settings.
+pub fn windows_kind(if_type: u32, description: &str) -> Option<Kind> {
+    let d = description.to_ascii_lowercase();
+    if d.contains("apple mobile device")
+        || d.contains("remote ndis")
+        || d.contains("rndis")
+        || d.contains("android")
+    {
+        return Some(Kind::Tether);
+    }
+    if d.contains("hyper-v")
+        || d.contains("virtualbox")
+        || d.contains("vmware")
+        || d.contains("wsl")
+        || d.contains("loopback")
+    {
+        return Some(if d.contains("loopback") {
+            Kind::Loopback
+        } else {
+            Kind::Virtual
+        });
+    }
+    if d.contains("wireguard")
+        || d.contains("tap-windows")
+        || d.contains("wintun")
+        || d.contains("vpn")
+        || d.contains("tailscale")
+    {
+        return Some(Kind::Vpn);
+    }
+    Some(match if_type {
+        71 => Kind::Wifi,            // IF_TYPE_IEEE80211
+        6 => Kind::Ethernet,         // IF_TYPE_ETHERNET_CSMACD
+        243 | 244 => Kind::Cellular, // WWANPP, WWANPP2
+        24 => Kind::Loopback,        // SOFTWARE_LOOPBACK
+        53 | 131 => Kind::Vpn,       // PROP_VIRTUAL, TUNNEL
+        _ => return None,
+    })
+}
+
+/// Windows: ifIndex → (friendly name, kind) from GetAdaptersAddresses.
+#[cfg(windows)]
+mod windows_names {
+    use super::{Kind, windows_kind};
+    use std::collections::HashMap;
+    use windows_sys::Win32::NetworkManagement::IpHelper::{
+        GAA_FLAG_SKIP_ANYCAST, GAA_FLAG_SKIP_MULTICAST, GetAdaptersAddresses,
+        IP_ADAPTER_ADDRESSES_LH,
+    };
+
+    fn wide(p: *const u16) -> String {
+        if p.is_null() {
+            return String::new();
+        }
+        // SAFETY: Windows returns NUL-terminated UTF-16 strings that live as long as the buffer.
+        unsafe {
+            let mut n = 0;
+            while *p.add(n) != 0 {
+                n += 1;
+            }
+            String::from_utf16_lossy(std::slice::from_raw_parts(p, n))
+        }
+    }
+
+    pub fn names() -> HashMap<u32, (String, Option<Kind>)> {
+        let mut out = HashMap::new();
+        let mut size: u32 = 16 * 1024;
+        for _ in 0..3 {
+            let mut buf = vec![0u8; size as usize];
+            let first = buf.as_mut_ptr().cast::<IP_ADAPTER_ADDRESSES_LH>();
+            // SAFETY: the buffer is `size` bytes; Windows fills a linked list inside it.
+            let rc = unsafe {
+                GetAdaptersAddresses(
+                    0,
+                    GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST,
+                    std::ptr::null(),
+                    first,
+                    &mut size,
+                )
+            };
+            if rc == 111 {
+                continue; // ERROR_BUFFER_OVERFLOW: `size` now holds what's needed
+            }
+            if rc != 0 {
+                return out;
+            }
+            let mut cur = first.cast_const();
+            while !cur.is_null() {
+                // SAFETY: walking the list Windows just wrote into `buf`.
+                let a = unsafe { &*cur };
+                // SAFETY: IfIndex is the first field of the Anonymous1 union's struct.
+                let index = unsafe { a.Anonymous1.Anonymous.IfIndex };
+                let friendly = wide(a.FriendlyName);
+                let desc = wide(a.Description);
+                out.insert(index, (friendly, windows_kind(a.IfType, &desc)));
+                cur = a.Next;
+            }
+            return out;
+        }
+        out
+    }
+}
+
 /// All interfaces with at least one address, usable addresses only.
 pub fn list() -> std::io::Result<Vec<Interface>> {
     #[cfg(target_os = "macos")]
     let native = macos::names();
+    #[cfg(windows)]
+    let win = windows_names::names();
     let mut by_name: BTreeMap<String, Interface> = BTreeMap::new();
     for a in if_addrs::get_if_addrs()? {
         let entry = by_name.entry(a.name.clone()).or_insert_with(|| {
             #[allow(unused_mut)]
             let (mut display, mut kind) = (a.name.clone(), classify(&a.name));
+            #[cfg(target_os = "linux")]
+            if !matches!(kind, Kind::Vpn | Kind::Virtual | Kind::Loopback)
+                && let Some((k, d)) = linux_kind(&sys_facts(&a.name))
+            {
+                kind = k;
+                display = d.to_string();
+            }
+            #[cfg(windows)]
+            if let Some((d, k)) = a.index.and_then(|i| win.get(&i)) {
+                if !d.is_empty() {
+                    display = d.clone();
+                }
+                if let Some(k) = k {
+                    kind = *k;
+                }
+            }
             #[cfg(target_os = "macos")]
             if let Some((d, k)) = native.get(&a.name) {
                 display = d.clone();
@@ -231,6 +416,90 @@ pub fn usable() -> std::io::Result<Vec<Interface>> {
 mod tests {
     use super::*;
     use std::net::{Ipv4Addr, Ipv6Addr};
+
+    #[test]
+    fn linux_sysfs_facts_name_and_classify_devices() {
+        let f = |wireless, driver: Option<&str>, virtual_device, tun, arp| SysFacts {
+            wireless,
+            driver: driver.map(Into::into),
+            virtual_device,
+            tun,
+            arp_type: arp,
+        };
+        assert_eq!(
+            linux_kind(&f(true, Some("iwlwifi"), false, false, Some(1))),
+            Some((Kind::Wifi, "Wi-Fi"))
+        );
+        assert_eq!(
+            linux_kind(&f(false, Some("e1000e"), false, false, Some(1))),
+            Some((Kind::Ethernet, "Ethernet"))
+        );
+        assert_eq!(
+            linux_kind(&f(false, Some("ipheth"), false, false, Some(1))),
+            Some((Kind::Tether, "iPhone USB"))
+        );
+        assert_eq!(
+            linux_kind(&f(false, Some("rndis_host"), false, false, Some(1))),
+            Some((Kind::Tether, "Phone USB"))
+        );
+        assert_eq!(
+            linux_kind(&f(false, Some("qmi_wwan"), false, false, Some(1))),
+            Some((Kind::Cellular, "Mobile broadband"))
+        );
+        assert_eq!(
+            linux_kind(&f(false, None, true, false, Some(1))),
+            Some((Kind::Virtual, "Virtual")),
+            "docker0, veth"
+        );
+        assert_eq!(
+            linux_kind(&f(false, None, true, true, Some(65534))),
+            Some((Kind::Vpn, "VPN")),
+            "tun0"
+        );
+        assert_eq!(
+            linux_kind(&f(false, None, true, false, Some(772))),
+            Some((Kind::Loopback, "Loopback"))
+        );
+        assert_eq!(
+            linux_kind(&f(false, None, false, false, None)),
+            None,
+            "unknown keeps the name guess"
+        );
+    }
+
+    #[test]
+    fn windows_adapters_are_classified_by_type_and_description() {
+        assert_eq!(
+            windows_kind(71, "Intel(R) Wi-Fi 6 AX201 160MHz"),
+            Some(Kind::Wifi)
+        );
+        assert_eq!(
+            windows_kind(6, "Realtek PCIe GbE Family Controller"),
+            Some(Kind::Ethernet)
+        );
+        assert_eq!(
+            windows_kind(6, "Apple Mobile Device Ethernet"),
+            Some(Kind::Tether)
+        );
+        assert_eq!(
+            windows_kind(6, "Remote NDIS based Internet Sharing Device"),
+            Some(Kind::Tether)
+        );
+        assert_eq!(
+            windows_kind(6, "Hyper-V Virtual Ethernet Adapter"),
+            Some(Kind::Virtual)
+        );
+        assert_eq!(windows_kind(53, "WireGuard Tunnel"), Some(Kind::Vpn));
+        assert_eq!(
+            windows_kind(243, "Generic Mobile Broadband Adapter"),
+            Some(Kind::Cellular)
+        );
+        assert_eq!(
+            windows_kind(24, "Software Loopback Interface 1"),
+            Some(Kind::Loopback)
+        );
+        assert_eq!(windows_kind(9999, "Something new"), None);
+    }
 
     #[test]
     fn classification_filters_what_must_never_be_offered() {

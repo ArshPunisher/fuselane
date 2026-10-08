@@ -44,8 +44,8 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 **2B netif**
 - [x] 2.5 Interface model + filter (link-local, no gateway, virtual adapters) — fixtures per OS — L-60
 - [ ] 2.6 macOS friendly names + kind via SystemConfiguration — L-61
-- [ ] 2.7 Windows friendly names + IfType via GetAdaptersAddresses
-- [ ] 2.8 Linux sysfs + NetworkManager names and kind
+- [x] 2.7 Windows friendly names + IfType via GetAdaptersAddresses
+- [x] 2.8 Linux sysfs + NetworkManager names and kind
 - [ ] 2.9 Stable network id from MAC/GUID
 - [ ] 2.10 Change watcher per OS (rtnetlink / SCDynamicStore / NotifyIpInterfaceChange) with debounce + polling fallback — netlab: address change detected < 2 s — L-63
 
