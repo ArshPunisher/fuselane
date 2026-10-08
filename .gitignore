@@ -40,3 +40,6 @@ test-results/
 apps/desktop/dist/
 apps/desktop/test-results/
 apps/desktop/playwright-report/
+
+# Brand renders (regenerate with packaging/brand/render.mjs)
+packaging/brand/out/

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="t">
+  <title id="t">Fuselane</title>
+  <!-- Three network lanes (Wi-Fi, phone, Ethernet) fuse into one fast lane. -->
+  <g fill="none" stroke-linecap="round" stroke-width="34">
+    <path d="M70 150 C 180 150, 220 256, 300 256" stroke="#43cae7" />
+    <path d="M70 256 L 300 256" stroke="#ade25f" />
+    <path d="M70 362 C 180 362, 220 256, 300 256" stroke="#959af4" />
+    <path d="M300 256 L 442 256" stroke="#fd8537" stroke-width="46" />
+  </g>
+</svg>

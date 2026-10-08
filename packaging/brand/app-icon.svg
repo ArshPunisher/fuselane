@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- macOS icon grid: 824 px tile inside 1024, continuous-corner radius. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a1e25" />
+      <stop offset="1" stop-color="#0a0c11" />
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.18" />
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0.04" />
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#tile)" />
+  <rect x="101.5" y="101.5" width="821" height="821" rx="184.5" fill="none" stroke="url(#rim)" stroke-width="3" />
+  <g transform="translate(212 212) scale(1.171875)" fill="none" stroke-linecap="round" stroke-width="34">
+    <path d="M70 150 C 180 150, 220 256, 300 256" stroke="#43cae7" />
+    <path d="M70 256 L 300 256" stroke="#ade25f" />
+    <path d="M70 362 C 180 362, 220 256, 300 256" stroke="#959af4" />
+    <path d="M300 256 L 442 256" stroke="#fd8537" stroke-width="46" />
+  </g>
+</svg>
