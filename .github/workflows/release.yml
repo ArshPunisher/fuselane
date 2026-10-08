@@ -1,0 +1,222 @@
+name: Release
+
+# A version tag (vX.Y.Z or vX.Y.Z-beta.N) builds every target on its own runner
+# (L-73), names each artifact with its OS and architecture (L-74), checks package
+# contents, runs the packaged app's headless self-test (L-75), and publishes a
+# draft GitHub release with SHA-256 checksums. Never build releases on a laptop.
+# Actions are pinned to commit SHAs (SECURITY.md T12).
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build (for a dry run)'
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  version:
+    name: Check the tag
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      tag: ${{ steps.v.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - id: v
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          version=$(tools/release-version.sh "$TAG")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-universal
+            os: macos-15
+            target: universal-apple-darwin
+            bundles: app,dmg
+          - name: windows-x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+          - name: linux-x64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            bundles: appimage,deb,rpm
+          - name: linux-arm64
+            os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+            bundles: deb,rpm
+    runs-on: ${{ matrix.os }}
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      NAME: ${{ matrix.name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.tag }}
+      - name: Rust targets
+        shell: bash
+        run: |
+          if [ "${{ matrix.target }}" = universal-apple-darwin ]; then
+            rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          else
+            rustup target add "${{ matrix.target }}"
+          fi
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: release-${{ matrix.name }}
+      - name: Linux webview libraries (Tauri)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev rpm file
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build the desktop app
+        run: pnpm --filter @fuselane/desktop tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+
+      - name: Build the CLI
+        shell: bash
+        run: |
+          if [ "${{ matrix.target }}" = universal-apple-darwin ]; then
+            cargo build --locked --release -p fuselane-cli --target aarch64-apple-darwin
+            cargo build --locked --release -p fuselane-cli --target x86_64-apple-darwin
+            mkdir -p target/universal-apple-darwin/release
+            lipo -create -output target/universal-apple-darwin/release/fuselane \
+              target/aarch64-apple-darwin/release/fuselane target/x86_64-apple-darwin/release/fuselane
+          else
+            cargo build --locked --release -p fuselane-cli --target "${{ matrix.target }}"
+          fi
+
+      - name: Collect and name artifacts
+        shell: bash
+        run: |
+          set -eu
+          bundle="target/${{ matrix.target }}/release/bundle"
+          out=dist-release
+          mkdir -p "$out"
+          base="Fuselane_${VERSION}_${NAME}"
+          case "$NAME" in
+            macos-*)
+              cp "$bundle"/dmg/*.dmg "$out/$base.dmg"
+              tar -C "$bundle/macos" -czf "$out/$base.app.tar.gz" Fuselane.app
+              tar -C "target/${{ matrix.target }}/release" -czf "$out/fuselane-cli_${VERSION}_${NAME}.tar.gz" fuselane
+              ;;
+            windows-*)
+              cp "$bundle"/nsis/*-setup.exe "$out/$base-setup.exe"
+              cp "target/${{ matrix.target }}/release/fuselane.exe" "$out/fuselane-cli_${VERSION}_${NAME}.exe"
+              ;;
+            linux-*)
+              for f in "$bundle"/deb/*.deb; do cp "$f" "$out/$base.deb"; done
+              for f in "$bundle"/rpm/*.rpm; do cp "$f" "$out/$base.rpm"; done
+              if [ -d "$bundle/appimage" ]; then cp "$bundle"/appimage/*.AppImage "$out/$base.AppImage"; fi
+              tar -C "target/${{ matrix.target }}/release" -czf "$out/fuselane-cli_${VERSION}_${NAME}.tar.gz" fuselane
+              ;;
+          esac
+          ls -la "$out"
+
+      # Package contents: the right architecture inside every package (L-73, L-74).
+      - name: Check package contents (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          set -eu
+          app="target/universal-apple-darwin/release/bundle/macos/Fuselane.app"
+          lipo -archs "$app/Contents/MacOS/fuselane-desktop" | tee archs.txt
+          grep -q arm64 archs.txt && grep -q x86_64 archs.txt
+          lipo -archs target/universal-apple-darwin/release/fuselane | grep -q x86_64
+          codesign --verify --verbose=2 "$app"
+      - name: Check package contents (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -eu
+          want=$([ "$NAME" = linux-arm64 ] && echo aarch64 || echo x86-64)
+          dpkg-deb -x dist-release/*.deb pkg
+          file pkg/usr/bin/fuselane-desktop | tee file.txt
+          grep -q "$want" file.txt
+
+      # The packaged app's own self-test, never the dev build (L-75).
+      - name: Self-test the packaged app (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          tar -xzf dist-release/*.app.tar.gz -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/Fuselane.app/Contents/MacOS/fuselane-desktop" --self-test
+      - name: Self-test the packaged app (Linux)
+        if: runner.os == 'Linux'
+        run: pkg/usr/bin/fuselane-desktop --self-test
+      - name: Self-test the packaged app (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem dist-release -Filter *-setup.exe | Select-Object -First 1
+          Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait
+          $exe = Get-ChildItem $env:LOCALAPPDATA -Recurse -Filter fuselane-desktop.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) { throw 'installed fuselane-desktop.exe not found' }
+          $report = Join-Path $env:RUNNER_TEMP 'selftest.txt'
+          $env:FUSELANE_SELFTEST_OUT = $report
+          $p = Start-Process -FilePath $exe.FullName -ArgumentList '--self-test' -Wait -PassThru
+          Get-Content $report
+          if ($p.ExitCode -ne 0) { throw "self-test failed ($($p.ExitCode))" }
+      - name: CLI smoke
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          tar -xzf dist-release/fuselane-cli_*.tar.gz -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/fuselane" --version | grep -F "$VERSION"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ matrix.name }}
+          path: dist-release/*
+          if-no-files-found: error
+
+  publish:
+    name: Draft the GitHub release
+    needs: [version, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      TAG: ${{ needs.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.tag }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: release-*
+          path: artifacts
+          merge-multiple: true
+      - name: Checksums
+        run: |
+          cd artifacts
+          sha256sum -- * > SHA256SUMS
+          cat SHA256SUMS
+      - name: Draft the release (pre-release for -beta/-rc tags)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pre=""
+          case "$VERSION" in *-*) pre="--prerelease" ;; esac
+          gh release create "$TAG" artifacts/* --draft $pre --verify-tag \
+            --title "Fuselane $VERSION" --notes-file docs/release-notes/RELEASE-TEMPLATE.md
