@@ -667,3 +667,123 @@ for (const [w, h] of [
     expect(clipped).toEqual({ overflow: 0, clipped: [] })
   })
 }
+
+test('several links or a pattern become a batch, and repeats are skipped with a reason', async ({
+  page,
+}) => {
+  await page.goto('/?empty=1')
+  const dialog = await openDialog(page)
+  const link = dialog.getByLabel('Link')
+  await link.fill('https://example.com/a.iso\nhttps://example.com/b.iso\nhttps://example.com/c.iso')
+  await expect(dialog.getByLabel('Links')).toBeVisible()
+  await expect(dialog.locator('#nd-url-help')).toContainText('3 links')
+  await expect(dialog.getByText('More options')).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Download 3' }).click()
+  await expect(dialog).toBeHidden()
+  for (const n of ['a.iso', 'b.iso', 'c.iso']) await expect(page.getByText(n).first()).toBeVisible()
+
+  // A pattern, overlapping what is already there.
+  const again = await openDialog(page)
+  await again.getByLabel('Link').fill('https://example.com/[a-d].iso')
+  await expect(again.locator('#nd-url-help')).toContainText('pattern')
+  await again.getByRole('button', { name: 'Download all' }).click()
+  await expect(again.getByRole('alert')).toContainText('3 links were not added')
+  await expect(again.getByRole('alert')).toContainText('already added')
+  await expect(page.getByText('d.iso').first()).toBeVisible()
+})
+
+test('a chosen name and SHA-256 are offered under More options and checked', async ({ page }) => {
+  await page.goto('/?empty=1')
+  const dialog = await openDialog(page)
+  await dialog.getByLabel('Link').fill('https://example.com/file.bin')
+  await dialog.getByText('More options').click()
+  await dialog.getByLabel('SHA-256 to check').fill('abc')
+  await dialog.getByRole('button', { name: 'Download' }).click()
+  await expect(dialog.locator('#nd-sha-help')).toContainText('64 hex digits')
+  await expect(dialog.getByLabel('SHA-256 to check')).toHaveAttribute('aria-invalid', 'true')
+  await dialog.getByLabel('SHA-256 to check').fill('a'.repeat(64))
+  await dialog.getByLabel('Save as').fill('renamed.bin')
+  await dialog.getByRole('button', { name: 'Download' }).click()
+  await expect(dialog).toBeHidden()
+  await expect(page.getByRole('heading', { level: 1, name: 'renamed.bin' })).toBeVisible()
+})
+
+test('adding a link twice asks first, and Download again adds it anyway', async ({ page }) => {
+  await page.goto('/?empty=1')
+  let dialog = await openDialog(page)
+  await dialog.getByLabel('Link').fill('https://example.com/twice.iso')
+  await dialog.getByRole('button', { name: 'Download' }).click()
+  await expect(dialog).toBeHidden()
+  await expect(page.getByText('twice.iso').first()).toBeVisible()
+  const before = await page.getByText('twice.iso').count()
+  dialog = await openDialog(page)
+  await dialog.getByLabel('Link').fill('https://example.com/twice.iso')
+  await dialog.getByLabel('Link').press('Enter')
+  await expect(dialog.getByRole('alert')).toContainText('You already added this link')
+  await dialog.getByRole('button', { name: 'Download again' }).click()
+  await expect(dialog).toBeHidden()
+  await expect.poll(() => page.getByText('twice.iso').count()).toBeGreaterThan(before)
+})
+
+test('settings: downloads at once, schedule, when done, keep awake and sorting', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Settings' }).click()
+  const group = page.getByRole('group', { name: 'Downloads at once' })
+  await expect(group.locator('output')).toHaveText('3')
+  await group.getByRole('button', { name: 'One more' }).click()
+  await expect(group.locator('output')).toHaveText('4')
+  await expect(page.getByText('Up to 4 at once.')).toBeVisible()
+
+  const schedule = page.getByRole('switch', { name: 'Download only on a schedule' })
+  await expect(schedule).toHaveAttribute('aria-checked', 'false')
+  await schedule.click()
+  await expect(schedule).toHaveAttribute('aria-checked', 'true')
+  await expect(page.getByLabel('From')).toHaveValue('01:00')
+  await expect(page.getByText('Runs overnight')).toHaveCount(0)
+  await page.getByLabel('From').fill('23:00')
+  await expect(page.getByText('Runs overnight: from 23:00 until 07:00')).toBeVisible()
+  // No days chosen is refused with a reason.
+  for (const d of ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
+    await page.getByRole('button', { name: d }).click()
+  await page
+    .getByRole('form', { name: 'Download schedule' })
+    .getByRole('button', { name: 'Save' })
+    .click()
+  await expect(page.getByText('Pick at least one day')).toBeVisible()
+
+  const whenDone = page.getByRole('radiogroup', { name: 'When everything finishes' })
+  await whenDone.getByRole('radio', { name: 'Sleep' }).click()
+  // Changing another setting keeps the schedule edits that aren't saved yet.
+  await expect(page.getByLabel('From')).toHaveValue('23:00')
+  await expect(whenDone.getByRole('radio', { name: 'Sleep' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  )
+  await expect(page.getByText('60 seconds and a notification')).toBeVisible()
+
+  const awake = page.getByRole('switch', { name: 'Keep the computer awake' })
+  await expect(awake).toHaveAttribute('aria-checked', 'true')
+  await awake.click()
+  await expect(awake).toHaveAttribute('aria-checked', 'false')
+  const sort = page.getByRole('switch', { name: 'Sort into folders by type' })
+  await sort.click()
+  await expect(sort).toHaveAttribute('aria-checked', 'true')
+})
+
+test('the when-done countdown can be cancelled', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByText('Demo data')).toBeVisible()
+  await page.evaluate(() =>
+    (window as unknown as { __demoEvent: (e: unknown) => void }).__demoEvent({
+      type: 'whenDone',
+      action: 'shut-down',
+      seconds: 60,
+    }),
+  )
+  const banner = page.getByRole('alert').filter({ hasText: 'All downloads finished' })
+  await expect(banner).toContainText('Your computer shuts down in')
+  await banner.getByRole('button', { name: 'Cancel' }).click()
+  await expect(banner).toBeHidden()
+})

@@ -15,6 +15,15 @@ function isMagnet(s: string): boolean {
   return /^magnet:\?/i.test(s.trim())
 }
 
+/** Every http(s) link in pasted text, and whether any is a pattern like part[01-10].zip. */
+function batchInfo(s: string): { count: number; pattern: boolean } {
+  const links = s.match(/https?:\/\/[^\s"<>]+/gi) ?? []
+  return {
+    count: new Set(links).size,
+    pattern: links.some((l) => /\[(\d+-\d+|[a-z]-[a-z]|[A-Z]-[A-Z])\]/.test(l)),
+  }
+}
+
 /** A dropped or opened file path (not a link). */
 function isTorrentPath(s: string): boolean {
   return /\.torrent$/i.test(s.trim()) && !looksLikeLink(s) && !isMagnet(s)
@@ -33,10 +42,15 @@ export function NewDownload() {
   // Bumped on cancel or close, so a late answer for an abandoned lookup is ignored.
   const lookup = useRef(0)
   const dialog = useRef<HTMLDialogElement>(null)
-  const linkInput = useRef<HTMLInputElement>(null)
+  const linkInput = useRef<HTMLTextAreaElement>(null)
   const dirInput = useRef<HTMLInputElement>(null)
   const [url, setUrl] = useState('')
   const [dir, setDir] = useState('')
+  const [more, setMore] = useState(false)
+  const [name, setName] = useState('')
+  const [sha256, setSha256] = useState('')
+  /** What a batch add skipped, shown until the dialog closes. */
+  const [skipped, setSkipped] = useState<{ url: string; reason: string }[]>([])
   const [error, setError] = useState<UiError | null>(null)
   const [busy, setBusy] = useState(false)
   const draft = useApp((s) => s.draft)
@@ -51,7 +65,7 @@ export function NewDownload() {
 
   // Look the link up shortly after typing stops; stale answers are dropped.
   useEffect(() => {
-    if (!open || !backend || !looksLikeLink(url) || listing) {
+    if (!open || !backend || !looksLikeLink(url) || listing || batchInfo(url).count > 1) {
       setPreview({ state: 'idle' })
       return
     }
@@ -93,6 +107,7 @@ export function NewDownload() {
       lookup.current++
       setListing(null)
       setFinding(false)
+      setSkipped([])
     }
   }, [open, draft, draftTorrent])
 
@@ -156,8 +171,17 @@ export function NewDownload() {
     }
   }
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault()
+  function reset() {
+    setUrl('')
+    setDir('')
+    setName('')
+    setSha256('')
+    setMore(false)
+    setSkipped([])
+  }
+
+  async function submit(e: React.FormEvent | null, allowDuplicate = false) {
+    e?.preventDefault()
     if (!backend || busy || finding) return
     if (isMagnet(url)) {
       await inspect((b) => b.inspectMagnet(url.trim(), dir.trim() || null))
@@ -165,10 +189,27 @@ export function NewDownload() {
     }
     setBusy(true)
     setError(null)
+    setSkipped([])
     try {
-      const id = await backend.add(url, dir.trim() || null)
-      setUrl('')
-      setDir('')
+      if (batch) {
+        const r = await backend.addBatch(url, dir.trim() || null)
+        if (r.skipped.length === 0) {
+          reset()
+          setAdding(false)
+          if (r.added[0] !== undefined) select(r.added[0])
+        } else {
+          // Keep the dialog open with what was skipped and why.
+          setUrl(r.skipped.map((s) => s.url).join('\n'))
+          setSkipped(r.skipped)
+        }
+        return
+      }
+      const id = await backend.add(url, dir.trim() || null, {
+        name: more ? name.trim() || null : null,
+        sha256: more ? sha256.trim() || null : null,
+        allowDuplicate,
+      })
+      reset()
       setAdding(false)
       select(id)
     } catch (err) {
@@ -181,10 +222,19 @@ export function NewDownload() {
     }
   }
 
+  const { count, pattern } = batchInfo(url)
+  const batch = !isMagnet(url) && (count > 1 || pattern)
   const urlError =
-    error && (error.code === 'bad-link' || error.code === 'not-a-magnet') ? error : null
+    error &&
+    (error.code === 'bad-link' || error.code === 'not-a-magnet' || error.code === 'too-many')
+      ? error
+      : null
   const dirError = error && error.code === 'folder-missing' ? error : null
-  const otherError = error && !urlError && !dirError ? error : null
+  const nameError = error && error.code === 'bad-name' ? error : null
+  const shaError = error && error.code === 'bad-checksum' ? error : null
+  const duplicate = error && error.code === 'duplicate' ? error : null
+  const otherError =
+    error && !urlError && !dirError && !nameError && !shaError && !duplicate ? error : null
 
   return (
     <dialog
@@ -258,22 +308,30 @@ export function NewDownload() {
             </button>
           </header>
           <div className="field">
-            <label htmlFor="nd-url">Link</label>
-            <input
+            <label htmlFor="nd-url">{batch ? 'Links' : 'Link'}</label>
+            <textarea
               id="nd-url"
               name="url"
-              type="url"
               inputMode="url"
               autoComplete="off"
               spellCheck={false}
               ref={linkInput}
               value={url}
+              rows={batch ? Math.min(8, Math.max(3, url.split('\n').length)) : 1}
+              className="link-input"
               placeholder="https://example.com/file.iso or magnet:?…"
               aria-invalid={urlError ? true : undefined}
               aria-describedby={urlError ? 'nd-url-err' : 'nd-url-help'}
               onChange={(e) => {
                 setUrl(e.target.value)
-                if (urlError) setError(null)
+                if (urlError || duplicate) setError(null)
+              }}
+              onKeyDown={(e) => {
+                // Enter starts the download; Shift+Enter adds another line for more links.
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault()
+                  e.currentTarget.form?.requestSubmit()
+                }
               }}
             />
             {urlError ? (
@@ -303,7 +361,12 @@ export function NewDownload() {
                   </>
                 )}
                 {preview.state === 'error' && preview.message}
-                {preview.state === 'idle' &&
+                {batch &&
+                  (pattern
+                    ? `${count} ${count === 1 ? 'link' : 'links'} with a pattern. Each [01-20] becomes one download per number.`
+                    : `${count} links. Each becomes its own download; ones already in your list are skipped.`)}
+                {!batch &&
+                  preview.state === 'idle' &&
                   (finding
                     ? "Finding the torrent's files. This can take a minute when few people share it."
                     : isMagnet(url)
@@ -354,6 +417,94 @@ export function NewDownload() {
               </p>
             )}
           </div>
+          {!batch && !isMagnet(url) && (
+            <details
+              className="more-options"
+              open={more}
+              onToggle={(e) => setMore(e.currentTarget.open)}
+            >
+              <summary>More options</summary>
+              <div className="field">
+                <label htmlFor="nd-name">Save as</label>
+                <input
+                  id="nd-name"
+                  name="filename"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={name}
+                  placeholder={
+                    preview.state === 'ok' ? `${preview.data.filename}…` : "The server's name…"
+                  }
+                  aria-invalid={nameError ? true : undefined}
+                  aria-describedby="nd-name-help"
+                  onChange={(e) => {
+                    setName(e.target.value)
+                    if (nameError) setError(null)
+                  }}
+                />
+                <p id="nd-name-help" className={nameError ? 'field-error' : 'field-help'}>
+                  {nameError
+                    ? `${nameError.message} ${nameError.hint ?? ''}`
+                    : 'Leave empty to keep the name the server gives it.'}
+                </p>
+              </div>
+              <div className="field">
+                <label htmlFor="nd-sha">SHA-256 to check</label>
+                <input
+                  id="nd-sha"
+                  name="sha256"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="num"
+                  value={sha256}
+                  placeholder="64 letters and digits from the download page…"
+                  aria-invalid={shaError ? true : undefined}
+                  aria-describedby="nd-sha-help"
+                  onChange={(e) => {
+                    setSha256(e.target.value)
+                    if (shaError) setError(null)
+                  }}
+                />
+                <p id="nd-sha-help" className={shaError ? 'field-error' : 'field-help'}>
+                  {shaError
+                    ? `${shaError.message} ${shaError.hint ?? ''}`
+                    : "Fuselane checks the finished file and won't save it under its name if it differs."}
+                </p>
+              </div>
+            </details>
+          )}
+          {duplicate && (
+            <div className="inline-note" role="alert">
+              <p>{duplicate.message}</p>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => void submit(null, true)}
+                disabled={busy}
+              >
+                Download again
+              </button>
+            </div>
+          )}
+          {skipped.length > 0 && (
+            <div className="field-error" role="alert">
+              <p>
+                {skipped.length === 1 ? 'One link was' : `${skipped.length} links were`} not added.
+                The rest started. They're left in the box above:
+              </p>
+              <ul className="skipped">
+                {skipped.slice(0, 5).map((s) => (
+                  <li key={s.url}>
+                    <span className="num" translate="no">
+                      {s.url}
+                    </span>
+                    : {s.reason}
+                  </li>
+                ))}
+                {skipped.length > 5 && <li>and {skipped.length - 5} more.</li>}
+              </ul>
+            </div>
+          )}
           {otherError && (
             <p className="field-error" role="alert">
               {otherError.message} {otherError.hint}
@@ -387,7 +538,9 @@ export function NewDownload() {
                   ? 'Starting…'
                   : isMagnet(url)
                     ? 'Next'
-                    : 'Download'}
+                    : batch
+                      ? `Download ${count > 1 && !pattern ? count : 'all'}`
+                      : 'Download'}
             </button>
           </footer>
         </form>

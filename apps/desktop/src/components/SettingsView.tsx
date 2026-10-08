@@ -4,6 +4,13 @@ import { toUiError } from '../lib/backend'
 import type { SeedSettings, UiError } from '../lib/types'
 import { LimitField } from './LimitField'
 import { SlowToggle } from './SlowMode'
+import {
+  DownloadsAtOnceSetting,
+  KeepAwakeSetting,
+  ScheduleSetting,
+  SortSetting,
+  WhenDoneSetting,
+} from './AutomationSettings'
 
 const THEMES: { id: Theme; label: string }[] = [
   { id: 'system', label: 'System' },
@@ -433,13 +440,18 @@ export function SettingsView() {
         <ThemePicker />
       </div>
       <SpeedLimitSetting />
+      <DownloadsAtOnceSetting />
       <div className="setting">
         <div>
           <p className="setting-name">Downloads folder</p>
           <p className="muted num">{info?.defaultDir ?? ''}</p>
         </div>
       </div>
+      <SortSetting />
       <SlowModeSetting />
+      <ScheduleSetting />
+      <WhenDoneSetting />
+      <KeepAwakeSetting />
       <SharingSetting />
       <LookupSetting />
       <UpdateSetting />

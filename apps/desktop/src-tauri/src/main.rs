@@ -515,9 +515,9 @@ fn watch_for_shell(app: tauri::AppHandle, svc: &Arc<Service>) {
             UiEvent::WhenDone { action, seconds } => {
                 // The window may be hidden: say what is about to happen and how to stop it.
                 let what = match action {
-                    automation::WhenDone::Sleep => "go to sleep",
-                    automation::WhenDone::ShutDown => "shut down",
-                    automation::WhenDone::Quit => "quit Fuselane",
+                    automation::WhenDone::Sleep => "Your computer goes to sleep",
+                    automation::WhenDone::ShutDown => "Your computer shuts down",
+                    automation::WhenDone::Quit => "Fuselane quits",
                     automation::WhenDone::Nothing => return,
                 };
                 let _ = app
@@ -525,7 +525,7 @@ fn watch_for_shell(app: tauri::AppHandle, svc: &Arc<Service>) {
                     .builder()
                     .title("Downloads finished")
                     .body(format!(
-                        "Your computer will {what} in {seconds} seconds. Open Fuselane to cancel."
+                        "{what} in {seconds} seconds. Open Fuselane to cancel."
                     ))
                     .show();
             }

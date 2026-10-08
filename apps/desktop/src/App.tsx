@@ -9,6 +9,7 @@ import { NetworkList, NetworksView } from './components/NetworksView'
 import { SettingsView } from './components/SettingsView'
 import { Toast } from './components/Toast'
 import { UpdateBanner, UpdatedBanner } from './components/UpdateBanner'
+import { WhenDoneBanner } from './components/WhenDoneBanner'
 import { SlowToggle } from './components/SlowMode'
 
 type Layout = 'compact' | 'regular' | 'wide'
@@ -294,6 +295,7 @@ export function App() {
         )}
         <main className="main" id="main" tabIndex={-1}>
           <UpdatedBanner />
+          <WhenDoneBanner />
           <UpdateBanner />
           {page}
         </main>

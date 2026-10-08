@@ -433,6 +433,13 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       )
       const links: string[] = []
       for (const l of found) {
+        const letters = /\[([a-z])-([a-z])\]/i.exec(l)
+        if (letters) {
+          const [x, y] = [letters[1]!.charCodeAt(0), letters[2]!.charCodeAt(0)]
+          for (let c = Math.min(x, y); c <= Math.max(x, y); c++)
+            links.push(l.replace(letters[0], String.fromCharCode(c)))
+          continue
+        }
         const m = /\[(\d+)-(\d+)\]/.exec(l)
         if (!m) {
           links.push(l)
@@ -707,6 +714,8 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       // Tests stand in for the OS handing over a magnet or .torrent (demo only).
       ;(window as unknown as { __demoOpen?: (t: string) => void }).__demoOpen = (target) =>
         onEvent({ type: 'open', target })
+      // And for backend events the demo engine never produces by itself.
+      ;(window as unknown as { __demoEvent?: (e: UiEvent) => void }).__demoEvent = onEvent
       emitJobs()
       torrents.send()
       if (freeze !== null) {
