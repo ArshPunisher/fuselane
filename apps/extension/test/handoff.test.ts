@@ -88,3 +88,42 @@ test('the offer carries the file name only, never the local folder', () => {
     'no redirect, no finalUrl',
   )
 })
+
+test('with permission, the site session goes with the offer; without it, nothing does', async () => {
+  const offers: Record<string, unknown>[] = []
+  const accept = async (o: unknown) => {
+    offers.push(o as Record<string, unknown>)
+    return { v: 1, type: 'download.accepted', jobId: '1' }
+  }
+  const asked: string[] = []
+  const session = async (url: string) => {
+    asked.push(url)
+    return { cookies: 'sid=1; theme=dark', userAgent: 'Mozilla/5.0 (Test)' }
+  }
+  await handOff(big, DEFAULT_RULES, fakeDownloads().d, accept, 1000, session)
+  assert.equal(offers[0]?.cookies, 'sid=1; theme=dark')
+  assert.equal(offers[0]?.userAgent, 'Mozilla/5.0 (Test)')
+  assert.deepEqual(asked, [big.url])
+
+  // The final URL (after redirects) is the one whose cookies matter.
+  await handOff(
+    { ...big, finalUrl: 'https://mirror.example.org/big.iso' },
+    DEFAULT_RULES,
+    fakeDownloads().d,
+    accept,
+    1000,
+    session,
+  )
+  assert.equal(asked[1], 'https://mirror.example.org/big.iso')
+
+  // No permission, or reading cookies fails: the offer still goes, just without them.
+  await handOff(big, DEFAULT_RULES, fakeDownloads().d, accept, 1000, async () => null)
+  await handOff(big, DEFAULT_RULES, fakeDownloads().d, accept, 1000, async () => {
+    throw new Error('no permission')
+  })
+  for (const o of offers.slice(2)) {
+    assert.equal(o.cookies, null)
+    assert.equal(o.userAgent, null)
+  }
+  assert.equal(offers.length, 4)
+})

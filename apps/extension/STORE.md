@@ -40,7 +40,10 @@ Hand downloads from the browser to the Fuselane desktop app on the same computer
 | `storage` | To remember whether hand-off is switched on. |
 | `contextMenus` | To add "Download with Fuselane" to the right-click menu on links. |
 
-No host permissions are requested. The extension doesn't read pages, cookies or browsing history.
+No host permissions are requested at install. "Signed-in downloads" is off by default: when the person turns it on in settings, the extension asks for the optional `cookies` permission and access to sites (`<all_urls>`), so it can read the cookies for a download's own site and pass them to the Fuselane app on the same computer. Turning it off removes both. The extension never reads pages or browsing history.
+
+- **cookies (optional):** with the person's opt-in, reads the cookies for the site a download comes from, so the Fuselane app on this computer can download files that need a sign-in. Never sent anywhere else.
+- **Host access `<all_urls>` (optional):** needed by `cookies` to read a download's site cookies. Asked for only when signed-in downloads are switched on.
 
 ## Data use (Chrome privacy practices form)
 

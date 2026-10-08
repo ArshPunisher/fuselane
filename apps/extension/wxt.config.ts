@@ -6,8 +6,10 @@ export default defineConfig({
   manifest: ({ browser }) => ({
     name: 'Fuselane',
     description: 'Hands big downloads to Fuselane, which splits them across all your networks.',
-    // No host permissions: cookies aren't forwarded yet, so none are read.
     permissions: ['downloads', 'nativeMessaging', 'storage', 'contextMenus'],
+    // Signed-in downloads: asked for only when the person turns them on in settings.
+    optional_permissions: ['cookies'],
+    optional_host_permissions: ['<all_urls>'],
     // Firefox needs a fixed id for native messaging's allowed_extensions.
     ...(browser === 'firefox'
       ? {

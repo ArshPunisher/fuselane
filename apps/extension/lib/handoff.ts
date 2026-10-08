@@ -18,6 +18,13 @@ export interface Item extends DownloadLike {
 /** Sends a message to the app's native host; rejects when it isn't installed. */
 export type AskApp = (message: unknown) => Promise<unknown>
 
+/** The browser session for a link (cookies, User-Agent), when the person allowed it. */
+export interface Session {
+  cookies: string | null
+  userAgent: string | null
+}
+export type GetSession = (url: string) => Promise<Session | null>
+
 export type Outcome = 'kept' | 'handed-over' | 'returned'
 
 /** The app gets 3 s to answer; after that the browser carries on. */
@@ -27,7 +34,11 @@ function timeout(ms: number): Promise<never> {
   return new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))
 }
 
-export function offerFor(item: Item, source: Offer['source']): Offer {
+export function offerFor(
+  item: Item,
+  source: Offer['source'],
+  session: Session | null = null,
+): Offer {
   const base = (item.filename ?? '').split(/[\\/]/).pop() || null
   return {
     v: 1,
@@ -38,9 +49,9 @@ export function offerFor(item: Item, source: Offer['source']): Offer {
     filename: base,
     mime: item.mime || null,
     size: item.size && item.size > 0 ? item.size : null,
-    cookies: null,
+    cookies: session?.cookies || null,
     headers: {},
-    userAgent: null,
+    userAgent: session?.userAgent || null,
     source,
   }
 }
@@ -55,6 +66,7 @@ export async function handOff(
   downloads: BrowserDownloads,
   ask: AskApp,
   waitMs = ANSWER_WITHIN_MS,
+  getSession: GetSession = async () => null,
 ): Promise<Outcome> {
   if (item.state !== 'in_progress' || !decide(item, rules).capture) return 'kept'
   try {
@@ -62,9 +74,11 @@ export async function handOff(
   } catch {
     return 'kept' // already finished or not pausable: leave it alone
   }
+  // Without the session the app can still take public files; never fail over it.
+  const session = await getSession(item.finalUrl || item.url).catch(() => null)
   let reply: unknown
   try {
-    reply = await Promise.race([ask(offerFor(item, 'auto')), timeout(waitMs)])
+    reply = await Promise.race([ask(offerFor(item, 'auto', session)), timeout(waitMs)])
   } catch {
     reply = null
   }

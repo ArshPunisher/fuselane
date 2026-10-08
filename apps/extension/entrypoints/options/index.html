@@ -73,10 +73,25 @@
               aria-describedby="excludeDomains-help excludeDomains-error"
             ></textarea>
             <p id="excludeDomains-help" class="help">
-              Useful for sites that need you to be signed in, until Fuselane can carry your login.
+              For sites whose downloads should always stay in the browser.
             </p>
             <p id="excludeDomains-error" class="error" hidden></p>
           </div>
+        </section>
+
+        <section aria-labelledby="h-session">
+          <h2 id="h-session">Signed-in downloads</h2>
+          <label class="switch">
+            <input type="checkbox" id="session" role="switch" aria-describedby="session-status" />
+            <span>
+              <strong>Send the site's sign-in with downloads</strong>
+              <small>
+                For files you can only get while signed in. Your browser asks to let Fuselane read
+                cookies; they go only to the Fuselane app on this computer.
+              </small>
+            </span>
+          </label>
+          <p id="session-status" class="help" role="status"></p>
         </section>
 
         <section aria-labelledby="h-types">

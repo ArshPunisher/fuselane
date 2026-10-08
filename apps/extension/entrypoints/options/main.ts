@@ -1,6 +1,7 @@
 import { DEFAULT_RULES, normalizeRules } from '@fuselane/capture'
 import { readForm, toForm, type Field, type FormValues } from '../../lib/settings-form.ts'
 import { appStatus } from '../../lib/status.ts'
+import { SESSION_PERMISSIONS, sessionAllowed } from '../../lib/session.ts'
 import './style.css'
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!
@@ -97,6 +98,30 @@ for (const f of FIELDS) {
 
 window.addEventListener('beforeunload', (e) => {
   if (dirty()) e.preventDefault()
+})
+
+// Signed-in downloads apply at once: the browser's own permission prompt is the save.
+const session = $<HTMLInputElement>('#session')
+const sessionStatus = $<HTMLParagraphElement>('#session-status')
+void sessionAllowed().then((on) => {
+  session.checked = on
+})
+session.addEventListener('change', async () => {
+  try {
+    if (session.checked) {
+      const granted = await browser.permissions.request(SESSION_PERMISSIONS)
+      session.checked = granted
+      sessionStatus.textContent = granted
+        ? 'On. Downloads that need a sign-in can go to Fuselane now.'
+        : 'Not allowed, so downloads that need a sign-in stay in the browser.'
+    } else {
+      await browser.permissions.remove(SESSION_PERMISSIONS)
+      sessionStatus.textContent = 'Off. Fuselane no longer gets cookies.'
+    }
+  } catch (err) {
+    session.checked = await sessionAllowed()
+    sessionStatus.textContent = `The browser didn't change the permission (${String(err)}). Try again.`
+  }
 })
 
 void load()
