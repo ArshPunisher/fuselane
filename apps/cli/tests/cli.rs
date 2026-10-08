@@ -14,8 +14,15 @@ const LOOPBACK: &str = if cfg!(target_os = "linux") {
     "lo0"
 };
 
+/// Every run gets its own state folder: tests must never touch the real download list.
 fn fuselane(args: &[&str]) -> std::process::Output {
+    let home = tempfile::tempdir().unwrap();
+    fuselane_in(home.path(), args)
+}
+
+fn fuselane_in(home: &std::path::Path, args: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_fuselane"))
+        .env("FUSELANE_HOME", home)
         .args(args)
         .output()
         .expect("binary runs")
@@ -126,4 +133,181 @@ fn bad_input_exits_2_with_a_reason() {
     }
     assert_eq!(fuselane(&[]).status.code(), Some(2));
     assert!(fuselane(&["--version"]).status.success());
+}
+
+/// The hardest case: the process is killed outright mid-download. Resume must finish
+/// byte-exact from the last checkpoint, without refetching what was secured.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn kill_9_mid_download_then_resume_is_byte_exact() {
+    let content = Content::new(3_000_000, 51);
+    let server = RangeServer::start(content).await.unwrap();
+    server.add_rule(Rule {
+        skip: 1,
+        times: u32::MAX,
+        fault: Fault::Throttle(700_000),
+    });
+    let home = tempfile::tempdir().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let url = format!("http://{}{}", server.addr(), server.path());
+    let mut child = Command::new(env!("CARGO_BIN_EXE_fuselane"))
+        .env("FUSELANE_HOME", home.path())
+        .env("FUSELANE_CHECKPOINT_MS", "100")
+        .args([
+            "get",
+            &url,
+            "-o",
+            dir.path().to_str().unwrap(),
+            "-n",
+            LOOPBACK,
+            "-q",
+            "-s",
+            "4",
+        ])
+        .spawn()
+        .unwrap();
+    // Wait until a third is durably checkpointed, then kill without warning.
+    let db = home.path().join("jobs.db");
+    let mut secured = 0;
+    for _ in 0..200 {
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        if let Ok(store) = fuselane_core::Store::open(&db)
+            && let Ok(jobs) = store.list()
+            && let Some(j) = jobs.first()
+        {
+            secured = j.secured_bytes();
+            if secured > content.size / 3 {
+                break;
+            }
+        }
+    }
+    assert!(
+        secured > content.size / 3,
+        "no checkpoint reached a third (secured {secured})"
+    );
+    child.kill().unwrap(); // SIGKILL
+    let _ = child.wait();
+    assert!(
+        !dir.path().join("file.bin").exists(),
+        "a killed download must not publish"
+    );
+
+    let before = server.requests().len();
+    let (h, d) = (home.path().to_path_buf(), dir.path().to_path_buf());
+    let out = tokio::task::spawn_blocking(move || {
+        fuselane_in(&h, &["resume", "last", "-n", LOOPBACK, "-q"])
+    })
+    .await
+    .unwrap();
+    assert!(
+        out.status.success(),
+        "resume failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        sha256_file(&d.join("file.bin")).unwrap(),
+        content.sha256(),
+        "resumed file differs"
+    );
+    let refetched: u64 = server.requests()[before..].len() as u64;
+    assert!(refetched > 0);
+    let ls = fuselane_in(home.path(), &["ls"]);
+    assert!(
+        String::from_utf8_lossy(&ls.stdout).contains("done"),
+        "{}",
+        String::from_utf8_lossy(&ls.stdout)
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn ctrl_c_pauses_with_exit_130_and_resume_finishes() {
+    let content = Content::new(2_000_000, 52);
+    let server = RangeServer::start(content).await.unwrap();
+    server.add_rule(Rule {
+        skip: 1,
+        times: u32::MAX,
+        fault: Fault::Throttle(500_000),
+    });
+    let home = tempfile::tempdir().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let url = format!("http://{}{}", server.addr(), server.path());
+    let child = Command::new(env!("CARGO_BIN_EXE_fuselane"))
+        .env("FUSELANE_HOME", home.path())
+        .args([
+            "get",
+            &url,
+            "-o",
+            dir.path().to_str().unwrap(),
+            "-n",
+            LOOPBACK,
+            "-q",
+            "-s",
+            "2",
+        ])
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+    // SAFETY: sending SIGINT to our own child process.
+    unsafe { libc::kill(child.id() as i32, libc::SIGINT) };
+    let out = tokio::task::spawn_blocking(move || child.wait_with_output())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(130),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(String::from_utf8_lossy(&out.stderr).contains("fuselane resume"));
+    let ls = fuselane_in(home.path(), &["ls"]);
+    assert!(String::from_utf8_lossy(&ls.stdout).contains("paused"));
+
+    let (h, d) = (home.path().to_path_buf(), dir.path().to_path_buf());
+    let out = tokio::task::spawn_blocking(move || {
+        fuselane_in(&h, &["resume", "1", "-n", LOOPBACK, "-q"])
+    })
+    .await
+    .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(sha256_file(&d.join("file.bin")).unwrap(), content.sha256());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn rm_removes_the_partial_file_and_resume_refuses_finished_jobs() {
+    let server = RangeServer::start(Content::new(10, 53)).await.unwrap();
+    server.add_rule(Rule::always(Fault::Status(404, None)));
+    let home = tempfile::tempdir().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let url = format!("http://{}{}", server.addr(), server.path());
+    let (h, d) = (home.path().to_path_buf(), dir.path().to_path_buf());
+    let out = tokio::task::spawn_blocking(move || {
+        fuselane_in(
+            &h,
+            &["get", &url, "-o", d.to_str().unwrap(), "-n", LOOPBACK, "-q"],
+        )
+    })
+    .await
+    .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(
+        fuselane_in(home.path(), &["resume", "99"]).status.code(),
+        Some(2),
+        "unknown id"
+    );
+    assert_eq!(
+        fuselane_in(home.path(), &["rm", "99"]).status.code(),
+        Some(2)
+    );
+    assert!(fuselane_in(home.path(), &["rm", "1"]).status.success());
+    assert!(
+        String::from_utf8_lossy(&fuselane_in(home.path(), &["ls"]).stdout)
+            .contains("No downloads yet")
+    );
 }

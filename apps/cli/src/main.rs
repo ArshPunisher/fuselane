@@ -1,6 +1,8 @@
 //! `fuselane`: the command-line interface.
 //!
 //! `fuselane get <url>` downloads one file over every usable network at once.
+//! Ctrl-C pauses (progress is saved); `fuselane resume <id>` continues, even after
+//! a crash. `fuselane ls` lists downloads, `fuselane rm <id>` removes one.
 //! `fuselane nets` shows the networks Fuselane can see.
 
 use std::io::Write;
@@ -11,8 +13,10 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use clap::{Parser, Subcommand};
+use fuselane_core::{Event, Job, Status, Store};
 use fuselane_engine_http::download::{
-    BoxIo, Connect, JobError, Network, ProgressFn, Source, Tuning, download,
+    BoxIo, Cancel, CheckpointFn, Connect, JobError, Network, ProgressFn, Resume, Source, Tuning,
+    download_with,
 };
 use fuselane_netif::Interface;
 
@@ -43,6 +47,24 @@ enum Command {
         #[arg(short, long)]
         quiet: bool,
     },
+    /// Continue a paused or interrupted download.
+    Resume {
+        /// Download number from `fuselane ls`, or `last`.
+        id: String,
+        #[arg(short, long, value_delimiter = ',')]
+        networks: Vec<String>,
+        #[arg(short, long, value_parser = clap::value_parser!(u32).range(1..=32))]
+        streams: Option<u32>,
+        #[arg(short, long)]
+        quiet: bool,
+    },
+    /// List downloads, newest first.
+    Ls,
+    /// Remove a download from the list (and its partial file, if unfinished).
+    Rm {
+        /// Download number from `fuselane ls`.
+        id: i64,
+    },
     /// List the networks Fuselane can use.
     Nets {
         /// Include loopback, tunnels and virtual adapters.
@@ -70,6 +92,14 @@ fn main() -> ExitCode {
     runtime.block_on(async {
         match command {
             Command::Nets { all } => nets(all),
+            Command::Ls => ls(),
+            Command::Rm { id } => rm(id),
+            Command::Resume {
+                id,
+                networks,
+                streams,
+                quiet,
+            } => resume(&id, &networks, streams, quiet).await,
             Command::Get {
                 url,
                 out,
@@ -79,6 +109,168 @@ fn main() -> ExitCode {
             } => get(&url, out, &networks, streams, quiet).await,
         }
     })
+}
+
+/// Where downloads are remembered: `FUSELANE_HOME`, else the OS app-data folder
+/// (ARCHITECTURE.md §7).
+fn open_store() -> Result<Store, String> {
+    let dir = match std::env::var_os("FUSELANE_HOME") {
+        Some(h) => PathBuf::from(h),
+        None => {
+            let base = dirs::data_dir().ok_or("couldn't find the app-data folder")?;
+            base.join(if cfg!(target_os = "macos") {
+                "app.fuselane"
+            } else if cfg!(windows) {
+                "Fuselane"
+            } else {
+                "fuselane"
+            })
+        }
+    };
+    let store = Store::open(&dir.join("jobs.db"))
+        .map_err(|e| format!("couldn't open the download list: {e}"))?;
+    if let Some(aside) = &store.recovered_from {
+        eprintln!(
+            "fuselane: the download list was damaged, so a fresh one was started. The old file is kept at {}.",
+            aside.display()
+        );
+    }
+    Ok(store)
+}
+
+fn status_word(s: Status) -> &'static str {
+    match s {
+        Status::Queued => "queued",
+        Status::Running => "running",
+        Status::Paused => "paused",
+        Status::Failed { resumable: true } => "failed (can resume)",
+        Status::Failed { resumable: false } => "failed",
+        Status::Completed => "done",
+        Status::Cancelled => "cancelled",
+    }
+}
+
+fn ls() -> ExitCode {
+    let store = match open_store() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("fuselane: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let jobs = match store.list() {
+        Ok(j) => j,
+        Err(e) => {
+            eprintln!("fuselane: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if jobs.is_empty() {
+        println!("No downloads yet. Try: fuselane get <url>");
+        return ExitCode::SUCCESS;
+    }
+    for j in jobs {
+        let name = j.filename.clone().unwrap_or_else(|| j.url.clone());
+        let pct = match (j.status, j.total) {
+            (Status::Completed, _) => "100%".to_string(),
+            (_, Some(t)) if t > 0 => format!("{:.0}%", j.secured_bytes() as f64 * 100.0 / t as f64),
+            _ => "".into(),
+        };
+        println!(
+            "{:>4}  {:<20} {:>5}  {name}",
+            j.id,
+            status_word(j.status),
+            pct
+        );
+    }
+    ExitCode::SUCCESS
+}
+
+fn rm(id: i64) -> ExitCode {
+    let store = match open_store() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("fuselane: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let job = match store.get(id) {
+        Ok(j) => j,
+        Err(_) => {
+            eprintln!("fuselane: there's no download {id}. Run `fuselane ls` to see them.");
+            return ExitCode::from(2);
+        }
+    };
+    if job.status != Status::Completed
+        && let Some(p) = &job.staging_path
+    {
+        // Only ever delete our own staging file (L-69).
+        if p.extension().is_some_and(|e| e == "fuselane") {
+            let _ = std::fs::remove_file(p);
+        }
+    }
+    match store.delete(id) {
+        Ok(()) => {
+            println!("Removed download {id}.");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("fuselane: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+async fn resume(id: &str, names: &[String], streams: Option<u32>, quiet: bool) -> ExitCode {
+    let store = match open_store() {
+        Ok(s) => Arc::new(s),
+        Err(e) => {
+            eprintln!("fuselane: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let job: Option<Job> = if id == "last" {
+        store
+            .list()
+            .ok()
+            .and_then(|j| j.into_iter().find(|j| !j.status.finished()))
+    } else {
+        id.parse::<i64>().ok().and_then(|n| store.get(n).ok())
+    };
+    let Some(job) = job else {
+        eprintln!(
+            "fuselane: there's no download \"{id}\" to resume. Run `fuselane ls` to see them."
+        );
+        return ExitCode::from(2);
+    };
+    if job.status == Status::Running {
+        // Left "running" by a process that crashed or was killed: it's interrupted.
+        let _ = store.apply(job.id, Event::Pause, None);
+    }
+    let job = store.get(job.id).unwrap_or(job);
+    if matches!(
+        job.status,
+        Status::Completed | Status::Cancelled | Status::Failed { resumable: false }
+    ) {
+        eprintln!(
+            "fuselane: download {} is {} and can't be resumed. Start it again with `fuselane get`.",
+            job.id,
+            status_word(job.status)
+        );
+        return ExitCode::from(2);
+    }
+    let r = job.resume();
+    run(
+        store,
+        job.id,
+        &job.url,
+        job.dir.clone(),
+        names,
+        streams,
+        quiet,
+        r,
+    )
+    .await
 }
 
 fn nets(all: bool) -> ExitCode {
@@ -246,6 +438,44 @@ async fn get(
     streams: Option<u32>,
     quiet: bool,
 ) -> ExitCode {
+    if let Err(msg) = parse_link(link) {
+        eprintln!("fuselane: {msg}");
+        return ExitCode::from(2);
+    }
+    if let Err(msg) = pick_networks(names) {
+        eprintln!("fuselane: {msg}");
+        return ExitCode::from(2);
+    }
+    let store = match open_store() {
+        Ok(s) => Arc::new(s),
+        Err(e) => {
+            eprintln!("fuselane: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let out = std::fs::canonicalize(&out).unwrap_or(out);
+    let id = match store.create(link, &out) {
+        Ok(id) => id,
+        Err(e) => {
+            eprintln!("fuselane: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    run(store, id, link, out, names, streams, quiet, None).await
+}
+
+/// Runs (or continues) download `id`, keeping the store in step with the engine.
+#[allow(clippy::too_many_arguments)]
+async fn run(
+    store: Arc<Store>,
+    id: i64,
+    link: &str,
+    out: PathBuf,
+    names: &[String],
+    streams: Option<u32>,
+    quiet: bool,
+    resume: Option<Resume>,
+) -> ExitCode {
     let (https, host, port, path) = match parse_link(link) {
         Ok(p) => p,
         Err(msg) => {
@@ -326,12 +556,36 @@ async fn get(
             let _ = std::io::stderr().flush();
         }))
     });
+    // Checkpoints go to the store; Ctrl-C pauses cleanly.
+    let cancel = Cancel::new();
+    tokio::spawn({
+        let cancel = cancel.clone();
+        async move {
+            if tokio::signal::ctrl_c().await.is_ok() {
+                cancel.cancel();
+            }
+        }
+    });
+    let sink = {
+        let store = store.clone();
+        CheckpointFn(Arc::new(move |cp| {
+            let _ = store.save_checkpoint(id, cp);
+        }))
+    };
+    let checkpoint_every = std::env::var("FUSELANE_CHECKPOINT_MS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .map_or(Tuning::default().checkpoint_every, Duration::from_millis);
     let tuning = Tuning {
         auto_streams: streams.is_none(),
         streams_per_network: streams.unwrap_or(crate_default_streams()),
         progress,
+        checkpoint: Some(sink),
+        checkpoint_every,
+        cancel: Some(cancel),
         ..Tuning::default()
     };
+    let _ = store.apply(id, Event::Start, None);
     let host_header = if (https && port == 443) || (!https && port == 80) {
         host.clone()
     } else {
@@ -343,7 +597,7 @@ async fn get(
         path,
     };
 
-    let result = download(source, networks, &out, tuning).await;
+    let result = download_with(source, networks, &out, tuning, resume).await;
     if !quiet {
         eprintln!();
     }
@@ -357,6 +611,8 @@ async fn get(
                 secs,
                 human(report.total as f64 / secs)
             );
+            let _ = store.set_final_path(id, &report.path);
+            let _ = store.apply(id, Event::Complete, None);
             let sum: u64 = report.bytes_by_network.values().sum::<u64>().max(1);
             for (id, name) in &names_for_report {
                 let b = report.bytes_by_network.get(id).copied().unwrap_or(0);
@@ -364,8 +620,18 @@ async fn get(
             }
             ExitCode::SUCCESS
         }
+        Err(JobError::Paused) => {
+            let _ = store.apply(id, Event::Pause, None);
+            eprintln!("fuselane: paused. Progress is saved; continue with `fuselane resume {id}`.");
+            ExitCode::from(130)
+        }
         Err(e) => {
+            let resumable = !matches!(e, JobError::VersionChanged | JobError::NotResumable(_));
+            let _ = store.apply(id, Event::Fail { resumable }, Some(&e.to_string()));
             eprintln!("fuselane: {}", describe(&e));
+            if resumable {
+                eprintln!("          Progress is saved; try again with `fuselane resume {id}`.");
+            }
             ExitCode::FAILURE
         }
     }

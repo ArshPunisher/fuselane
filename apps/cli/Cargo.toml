@@ -19,8 +19,11 @@ url = "2"
 fuselane-netif.workspace = true
 fuselane-transport.workspace = true
 fuselane-engine-http.workspace = true
+fuselane-core.workspace = true
+dirs = "6"
 
 [dev-dependencies]
+libc = "0.2"
 fuselane-testkit.workspace = true
 tempfile = "3"
 tokio = { version = "1", features = ["full"] }
