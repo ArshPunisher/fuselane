@@ -17,7 +17,11 @@ pub struct ShareStorageFactory(pub Arc<View>);
 impl StorageFactory for ShareStorageFactory {
     type Storage = ShareStorage;
 
-    fn create(&self, _: &ManagedTorrentShared, _: &TorrentMetadata) -> anyhow::Result<ShareStorage> {
+    fn create(
+        &self,
+        _: &ManagedTorrentShared,
+        _: &TorrentMetadata,
+    ) -> anyhow::Result<ShareStorage> {
         Ok(ShareStorage(self.0.clone()))
     }
 

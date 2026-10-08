@@ -1805,6 +1805,7 @@ dependencies = [
 name = "fuselane-send"
 version = "0.1.0-beta.4"
 dependencies = [
+ "anyhow",
  "base64 0.22.1",
  "blake3",
  "chacha20",
@@ -1814,6 +1815,7 @@ dependencies = [
  "sha1",
  "tempfile",
  "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]

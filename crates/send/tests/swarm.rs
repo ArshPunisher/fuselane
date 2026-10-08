@@ -162,7 +162,9 @@ async fn a_file_that_changed_after_sharing_fails_the_senders_check() {
     let make_view = || {
         Arc::new(View::new(
             Keys::derive(&LINK_KEY),
-            Box::new(ReadOnly(std::fs::File::open(dir.path().join("head.bin")).unwrap())),
+            Box::new(ReadOnly(
+                std::fs::File::open(dir.path().join("head.bin")).unwrap(),
+            )),
             Box::new(ReadOnly(std::fs::File::open(&file).unwrap())),
             data.len() as u64,
         ))
@@ -190,12 +192,31 @@ async fn a_file_that_changed_after_sharing_fails_the_senders_check() {
         .unwrap()
         .into_handle()
         .unwrap();
-    // The check finds the changed piece missing, so the share is incomplete.
-    tokio::time::sleep(Duration::from_secs(3)).await;
-    let stats = h.stats();
+    // Wait for librqbit's own check to finish, then the changed piece must be
+    // missing: exactly one piece short, and never "finished".
+    let stats = tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            let st = h.stats();
+            if !matches!(st.state, librqbit::TorrentStatsState::Initializing { .. }) {
+                return st;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("check never finished");
     assert!(
-        stats.progress_bytes < stats.total_bytes,
+        !stats.finished,
         "a changed file must not look complete: {stats:?}"
     );
-    assert!(std::fs::read(&file).unwrap() == changed, "and is never rewritten");
+    let missing = stats.total_bytes - stats.progress_bytes;
+    assert_eq!(
+        missing,
+        u64::from(built.piece_length),
+        "only the edited piece: {stats:?}"
+    );
+    assert!(
+        std::fs::read(&file).unwrap() == changed,
+        "and is never rewritten"
+    );
 }
