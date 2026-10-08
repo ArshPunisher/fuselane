@@ -1,0 +1,6 @@
+//! Torrent engine (ADR 0006, TORRENT.md): librqbit for BitTorrent itself, with
+//! every outgoing peer connection sent through an in-process SOCKS5 server that
+//! pins it to a network chosen by the balancer.
+
+pub mod balancer;
+pub mod socks;

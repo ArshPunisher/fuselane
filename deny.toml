@@ -9,6 +9,10 @@ ignore = [
   # Build-time macro crate pulled in by gtk-rs 0.18 (Tauri's Linux webview stack); not
   # a vulnerability, no maintained replacement upstream yet. Revisit when Tauri moves to gtk4.
   { id = "RUSTSEC-2024-0370", reason = "unmaintained, transitive via gtk 0.18 in Tauri on Linux" },
+  # ringbuf 0.4 double free needs an element whose Drop panics. librqbit-utp only stores
+  # u8 (SharedRb<Heap<u8>>, stream_tx.rs), and Fuselane turns uTP off (ADR 0006).
+  # Remove once librqbit moves to ringbuf >= 0.5.2.
+  { id = "RUSTSEC-2026-0293", reason = "unreachable: ringbuf holds u8 in librqbit-utp; uTP disabled" },
 ]
 
 [licenses]

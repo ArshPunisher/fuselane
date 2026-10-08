@@ -1,0 +1,22 @@
+[package]
+name = "fuselane-engine-torrent"
+description = "BitTorrent downloads with each peer pinned to a network (librqbit + a per-network SOCKS5 balancer)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+librqbit = { version = "9", default-features = false, features = ["rust-tls"] }
+tokio = { version = "1", features = ["full"] }
+fuselane-netif.workspace = true
+fuselane-transport.workspace = true
+
+[dev-dependencies]
+tokio-socks = "0.5"
+tempfile = "3"
+
+[lints]
+workspace = true
