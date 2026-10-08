@@ -10,9 +10,9 @@ Versions are current as of 2026-10-08 (from [`../01-research/tech-research.md`](
 | Async runtime | tokio | 1.53 | Standard; required by hyper, librqbit, quinn |
 | Desktop shell | **Tauri 2** | 2.12.1 | ~3–10 MB installers and ~30–80 MB RAM vs Electron's 100 MB+ and 150–300 MB; a Rust backend in the same process ([ADR 0002](../adr/0002-tauri-over-electron.md)) |
 | Tauri plugins | updater 2.13, single-instance 2.5, deep-link 2.6, notification 2.5, autostart 2.7, dialog 2.8, opener 2.7, process 2.4, log 2.10 | – | Official, maintained |
-| UI | React 19.3 + Vite 8.3 + Tailwind CSS 4.3 + TypeScript | – | Shared with the extension popup and the share page |
-| UI components | Base UI / shadcn-style primitives in `packages/ui` | – | Accessible, unstyled; styled by us |
-| UI state and data | Zustand + TanStack Query + TanStack Virtual | – | Small stores; virtualized lists for WebKitGTK performance |
+| UI | React 19.3 + Vite 8.3 + TypeScript; plain CSS on the shared tokens (Tailwind optional, not used in the desktop app so far) | – | Shared with the extension popup and the share page. 2026-10-08: hand CSS kept the token file the single source of truth |
+| UI components | Native `<dialog>`, real radio groups and tables first; Base UI primitives when a control needs them (menus, popovers) | – | Accessible, styled by us |
+| UI state and data | Zustand (in use); TanStack Virtual when lists need it (rows use `content-visibility` today) | – | Small stores; virtualized lists for WebKitGTK performance |
 | Typed IPC | specta + tauri-specta (Rust → TypeScript) | – | One source of truth; type drift is a compile error |
 | HTTP | hyper 1.x + hyper-util with **our own pinned connector**; one client per network | hyper 1.12 | reqwest's `interface()` doesn't exist on Windows, so we own socket creation |
 | TLS | rustls + rustls-platform-verifier | 0.23 | OS trust store (corporate CAs work); no OpenSSL |
