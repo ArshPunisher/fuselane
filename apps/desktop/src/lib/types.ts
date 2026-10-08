@@ -60,6 +60,8 @@ export interface UiError {
 export interface AppInfo {
   version: string
   defaultDir: string
+  /** Set on the first launch after an update. */
+  updatedFrom: string | null
 }
 
 export interface PreviewView {

@@ -279,7 +279,12 @@ export function createDemoBackend(params: URLSearchParams): Backend {
 
   return {
     demo: true,
-    appInfo: async () => ({ version: '0.0.0', defaultDir: '~/Downloads' }),
+    appInfo: async () => ({
+      version: '0.0.0',
+      defaultDir: '~/Downloads',
+      updatedFrom: params.get('updated'),
+    }),
+    openReleaseNotes: async () => {},
     listJobs: async () => jobs.map(view),
     listNetworks: async () => NETWORKS.map((n) => ({ ...n })),
     add: async (raw, dir) => {

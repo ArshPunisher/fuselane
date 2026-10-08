@@ -1627,3 +1627,8 @@ kbd {
   font-family: var(--font-mono);
   font-size: 12px;
 }
+
+.update-banner.updated {
+  border-color: color-mix(in oklch, var(--success) 40%, transparent);
+  background: color-mix(in oklch, var(--success) 10%, transparent);
+}

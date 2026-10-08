@@ -576,3 +576,16 @@ test('keyboard shortcuts never fire while typing in a field', async ({ page }) =
   await page.getByRole('button', { name: 'Downloads' }).click()
   await expect(page.locator('article.detail .speed')).toContainText('MB/s', { timeout: 5000 })
 })
+
+test('after an update, a one-time message says it worked', async ({ page }) => {
+  await page.goto('/?empty=1&updated=0.1.0-beta.1')
+  const done = page.locator('.update-banner.updated')
+  await expect(done).toContainText('Fuselane was updated to 0.0.0')
+  await expect(done).toContainText('Your downloads and settings are kept.')
+  await expect(done.getByRole('button', { name: "What's new" })).toBeVisible()
+  await done.getByRole('button', { name: 'Close' }).click()
+  await expect(done).toHaveCount(0)
+  // A normal launch shows nothing.
+  await page.goto('/?empty=1')
+  await expect(page.locator('.update-banner.updated')).toHaveCount(0)
+})

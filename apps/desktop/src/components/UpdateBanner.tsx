@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowCircleUp, X } from '@phosphor-icons/react'
+import { ArrowCircleUp, CheckCircle, X } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 
 /** Checks quietly a little after launch, then offers the update without nagging. */
@@ -42,6 +42,29 @@ export function UpdateBanner() {
         {busy ? 'Updating…' : 'Update and restart'}
       </button>
       <button className="icon-btn" aria-label="Later" title="Later" onClick={dismiss}>
+        <X size={16} aria-hidden />
+      </button>
+    </div>
+  )
+}
+
+/** Shown once after the app updated itself, so people know it worked. */
+export function UpdatedBanner() {
+  const info = useApp((s) => s.info)
+  const act = useApp((s) => s.act)
+  const [hidden, setHidden] = useState(false)
+  if (!info?.updatedFrom || hidden) return null
+  return (
+    <div className="update-banner updated" role="status">
+      <CheckCircle size={18} weight="fill" aria-hidden className="ic-success" />
+      <p>
+        Fuselane was updated to <span className="num">{info.version}</span>.
+        <span className="muted"> Your downloads and settings are kept.</span>
+      </p>
+      <button className="btn" onClick={() => act((b) => b.openReleaseNotes())}>
+        What&apos;s new
+      </button>
+      <button className="icon-btn" aria-label="Close" title="Close" onClick={() => setHidden(true)}>
         <X size={16} aria-hidden />
       </button>
     </div>
