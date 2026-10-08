@@ -52,6 +52,8 @@ jobs:
         run: pnpm format:check
       - name: TypeScript
         run: pnpm typecheck
+      - name: Extension capture rules and message schema
+        run: pnpm --filter @fuselane/capture test
       - name: UI tests (WebKit and Chromium, demo backend)
         run: |
           pnpm --filter @fuselane/desktop exec playwright install --with-deps webkit chromium
