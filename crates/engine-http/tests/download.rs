@@ -664,3 +664,43 @@ async fn snapshots_describe_the_job_for_the_ui() {
     );
     assert!(mid.networks.iter().all(|n| n.bytes > 0 || n.streams > 0));
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_rate_limited_probe_waits_and_then_downloads() {
+    let content = Content::new(256 * KB, 72);
+    let server = RangeServer::start(content).await.unwrap();
+    // The very first answers are 429 with Retry-After, as a throttling mirror does.
+    server.add_rule(Rule {
+        skip: 0,
+        times: 2,
+        fault: Fault::Status(429, Some("1".into())),
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let report = download(source(&server), vec![plain(1)], dir.path(), tuning())
+        .await
+        .unwrap();
+    assert_exact(&report, content);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_server_that_never_stops_rate_limiting_reports_429() {
+    let content = Content::new(64 * KB, 73);
+    let server = RangeServer::start(content).await.unwrap();
+    server.add_rule(Rule {
+        skip: 0,
+        times: u32::MAX,
+        fault: Fault::Status(429, Some("3600".into())),
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let start = std::time::Instant::now();
+    let err = download(source(&server), vec![plain(1)], dir.path(), tuning())
+        .await
+        .unwrap_err();
+    assert!(matches!(err, JobError::ProbeStatus(429)), "{err:?}");
+    // Retry-After is capped, so an hour-long ask doesn't hang the probe.
+    assert!(
+        start.elapsed() < Duration::from_secs(10),
+        "{:?}",
+        start.elapsed()
+    );
+}

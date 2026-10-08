@@ -389,24 +389,47 @@ fn now_unix() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
+/// Busy answers the probe waits out before reporting the status.
+const PROBE_BUSY_RETRIES: u32 = 3;
+/// Longest Retry-After the probe honours (a server asking for an hour is answered later).
+const PROBE_RETRY_AFTER_CAP_MS: u64 = 30_000;
+
 /// Probes with `Range: bytes=0-0` on the first network that answers (L-01, L-04).
 pub async fn probe(src: &Source, networks: &[Network], t: &Tuning) -> Result<Probe, JobError> {
     let mut last = String::from("no networks");
     for net in networks {
-        let mut conn = match connect(net, src, t).await {
-            Ok(c) => c,
-            Err(_) => {
-                last = format!("{} couldn't connect", net.name);
+        let mut busy = 0;
+        let res = loop {
+            let mut conn = match connect(net, src, t).await {
+                Ok(c) => c,
+                Err(_) => {
+                    last = format!("{} couldn't connect", net.name);
+                    break None;
+                }
+            };
+            let res = match send(&mut conn, request(src, t, Some((0, Some(0))), None), t).await {
+                Ok(r) => r,
+                Err(_) => {
+                    last = format!("{} got no answer", net.name);
+                    break None;
+                }
+            };
+            let status = res.status().as_u16();
+            // A busy server (429, 503...) gets a few patient retries before we give up,
+            // honouring Retry-After (L-110): one rate-limit answer must not end a download.
+            if crate::retry::is_busy(status) && busy < PROBE_BUSY_RETRIES {
+                let wait = header(&res, hyper::header::RETRY_AFTER)
+                    .and_then(|v| crate::retry::parse_retry_after(&v, now_unix()))
+                    .unwrap_or(2_000 << busy)
+                    .min(PROBE_RETRY_AFTER_CAP_MS);
+                busy += 1;
+                drop(res);
+                tokio::time::sleep(scaled(wait, t)).await;
                 continue;
             }
+            break Some(res);
         };
-        let res = match send(&mut conn, request(src, t, Some((0, Some(0))), None), t).await {
-            Ok(r) => r,
-            Err(_) => {
-                last = format!("{} got no answer", net.name);
-                continue;
-            }
-        };
+        let Some(res) = res else { continue };
         let status = res.status().as_u16();
         let raw_etag = header(&res, ETAG)
             .map(|e| e.trim().to_string())
