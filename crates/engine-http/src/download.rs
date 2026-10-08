@@ -75,6 +75,88 @@ impl std::fmt::Debug for ProgressFn {
     }
 }
 
+/// Stops a running download cleanly (pause). Cheap to clone.
+#[derive(Clone, Default)]
+pub struct Cancel {
+    flag: Arc<AtomicBool>,
+    notify: Arc<tokio::sync::Notify>,
+}
+
+impl Cancel {
+    pub fn new() -> Cancel {
+        Cancel::default()
+    }
+    pub fn cancel(&self) {
+        self.flag.store(true, Ordering::Release);
+        self.notify.notify_waiters();
+    }
+    pub fn is_cancelled(&self) -> bool {
+        self.flag.load(Ordering::Acquire)
+    }
+}
+
+impl std::fmt::Debug for Cancel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Cancel")
+            .field("cancelled", &self.is_cancelled())
+            .finish()
+    }
+}
+
+/// What must be saved to resume later. Emitted only after the staging file is fsynced,
+/// so every byte counted in `secured` is durable (L-55).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Checkpoint {
+    pub staging_path: PathBuf,
+    pub filename: String,
+    pub total: Option<u64>,
+    pub block_size: u64,
+    /// Bytes secured from the start of each block.
+    pub secured: Vec<u64>,
+    pub raw_etag: Option<String>,
+    pub last_modified: Option<String>,
+}
+
+impl Checkpoint {
+    pub fn secured_bytes(&self) -> u64 {
+        self.secured.iter().sum()
+    }
+}
+
+/// Receives checkpoints (the core persists them).
+#[derive(Clone)]
+pub struct CheckpointFn(pub Arc<dyn Fn(&Checkpoint) + Send + Sync>);
+
+impl std::fmt::Debug for CheckpointFn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("CheckpointFn")
+    }
+}
+
+/// A saved download to continue. Treated as untrusted input (L-53).
+#[derive(Debug, Clone)]
+pub struct Resume {
+    pub staging_path: PathBuf,
+    pub total: u64,
+    pub block_size: u64,
+    pub secured: Vec<u64>,
+    pub raw_etag: Option<String>,
+    pub last_modified: Option<String>,
+}
+
+impl From<Checkpoint> for Option<Resume> {
+    fn from(c: Checkpoint) -> Option<Resume> {
+        Some(Resume {
+            staging_path: c.staging_path,
+            total: c.total?,
+            block_size: c.block_size,
+            secured: c.secured,
+            raw_etag: c.raw_etag,
+            last_modified: c.last_modified,
+        })
+    }
+}
+
 /// Every tunable in one place (CLAUDE.md coding conventions).
 #[derive(Debug, Clone)]
 pub struct Tuning {
@@ -95,6 +177,10 @@ pub struct Tuning {
     pub auto_streams: bool,
     /// How often the stream-count controller runs.
     pub controller_tick: Duration,
+    pub checkpoint: Option<CheckpointFn>,
+    /// fsync + checkpoint at most this often while running (and always on stop).
+    pub checkpoint_every: Duration,
+    pub cancel: Option<Cancel>,
 }
 
 impl Default for Tuning {
@@ -112,6 +198,9 @@ impl Default for Tuning {
             progress: None,
             auto_streams: true,
             controller_tick: Duration::from_millis(500),
+            checkpoint: None,
+            checkpoint_every: Duration::from_secs(15),
+            cancel: None,
         }
     }
 }
@@ -131,6 +220,10 @@ pub enum JobError {
     Disk(DiskFailure),
     #[error("every network failed; last error: {0}")]
     AllNetworksFailed(String),
+    #[error("paused; progress is saved")]
+    Paused,
+    #[error("this download can't be resumed: {0}")]
+    NotResumable(String),
     #[error(transparent)]
     Staging(#[from] StagingError),
 }
@@ -364,6 +457,9 @@ struct Ctx {
     live_networks: usize,
     epoch: Instant,
     written_total: AtomicU64,
+    staging_path: PathBuf,
+    filename: String,
+    last_modified: Option<String>,
 }
 
 impl Ctx {
@@ -612,6 +708,37 @@ fn scaled(ms: u64, t: &Tuning) -> Duration {
     Duration::from_millis((ms as f64 * t.retry_delay_scale.clamp(0.0, 1.0)) as u64)
 }
 
+/// fsyncs the staging file, then hands the durable progress to the checkpoint sink (L-55).
+async fn emit_checkpoint(ctx: &Arc<Ctx>) {
+    let Some(sink) = ctx.tuning.checkpoint.clone() else {
+        return;
+    };
+    // Read progress *before* syncing: everything counted is then covered by the fsync.
+    let cp = {
+        let s = ctx.lock();
+        Checkpoint {
+            staging_path: ctx.staging_path.clone(),
+            filename: ctx.filename.clone(),
+            total: s.plan.total,
+            block_size: s.plan.block_size,
+            secured: s.blocks.iter().map(|b| b.secured).collect(),
+            raw_etag: s.if_range.clone().filter(|v| v.starts_with('"')),
+            last_modified: ctx.last_modified.clone(),
+        }
+    };
+    let Ok(file) = ctx.file.try_clone() else {
+        return;
+    };
+    if tokio::task::spawn_blocking(move || file.sync_data())
+        .await
+        .ok()
+        .and_then(Result::ok)
+        .is_some()
+    {
+        (sink.0)(&cp);
+    }
+}
+
 fn is_weak(etag: &str) -> bool {
     etag.starts_with("W/") || etag.starts_with("w/")
 }
@@ -733,7 +860,7 @@ async fn fetch_block(
     loop {
         let lost = {
             let s = ctx.lock();
-            s.blocks[work.block].complete() || s.fatal.is_some()
+            s.blocks[work.block].complete() || s.fatal.is_some() || ctx.stop.load(Ordering::Acquire)
         };
         if lost {
             *conn = None;
@@ -942,6 +1069,17 @@ pub async fn download(
     dir: &Path,
     tuning: Tuning,
 ) -> Result<Report, JobError> {
+    download_with(src, networks, dir, tuning, None).await
+}
+
+/// Like [`download`], continuing from a saved [`Resume`] when given.
+pub async fn download_with(
+    src: Source,
+    networks: Vec<Network>,
+    dir: &Path,
+    tuning: Tuning,
+    resume: Option<Resume>,
+) -> Result<Report, JobError> {
     if networks.is_empty() {
         return Err(JobError::Unreachable("no networks selected".into()));
     }
@@ -956,7 +1094,57 @@ pub async fn download(
             blocks: total.div_ceil(bs),
         };
     }
-    let staging = Staging::create(dir, &probe.filename, probe.total)?;
+    // Resume: the server must still have the same file (size proof), and ranges (L-42, L-53).
+    let mut resumed_secured: Option<Vec<u64>> = None;
+    let mut resumed_validators: Option<(Option<String>, Option<String>)> = None;
+    let staging = match &resume {
+        Some(r) => {
+            if probe.total != Some(r.total) {
+                let _ = std::fs::remove_file(&r.staging_path); // a different file now
+                return Err(JobError::VersionChanged);
+            }
+            if !splittable {
+                return Err(JobError::NotResumable(
+                    "the server no longer supports resuming".into(),
+                ));
+            }
+            let staging = match Staging::reopen(&r.staging_path, Some(r.total)) {
+                Ok(s) => s,
+                Err(StagingError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => {
+                    return Err(JobError::NotResumable("the partial file is missing".into()));
+                }
+                Err(e) => return Err(e.into()),
+            };
+            plan = Plan {
+                total: Some(r.total),
+                block_size: r.block_size.max(1),
+                blocks: r.total.div_ceil(r.block_size.max(1)),
+            };
+            // Reconcile with what's really on disk: never trust progress past the file's length.
+            let on_disk = std::fs::metadata(&r.staging_path)
+                .map(|m| m.len())
+                .unwrap_or(0);
+            if on_disk < r.total {
+                staging
+                    .handle()
+                    .and_then(|f| f.set_len(r.total))
+                    .map_err(StagingError::from)?;
+            }
+            let valid = r.secured.len() as u64 == plan.blocks;
+            resumed_secured = Some(
+                (0..plan.blocks)
+                    .map(|i| {
+                        let (start, len) = plan.block(i).unwrap_or((0, 0));
+                        let saved = if valid { r.secured[i as usize] } else { 0 };
+                        saved.min(len).min(on_disk.saturating_sub(start))
+                    })
+                    .collect(),
+            );
+            resumed_validators = Some((r.raw_etag.clone(), r.last_modified.clone()));
+            staging
+        }
+        None => Staging::create(dir, &probe.filename, probe.total)?,
+    };
     let file = staging.handle().map_err(StagingError::from)?;
 
     if probe.total == Some(0) {
@@ -974,7 +1162,10 @@ pub async fn download(
     let blocks: Vec<Block> = (0..plan.blocks)
         .map(|i| Block {
             len: plan.block(i).map_or(0, |(_, l)| l),
-            secured: 0,
+            secured: resumed_secured
+                .as_ref()
+                .and_then(|v| v.get(i as usize).copied())
+                .unwrap_or(0),
             attempts: vec![],
             avoid: None,
             hedges: 0,
@@ -997,12 +1188,20 @@ pub async fn download(
             idle: HashMap::new(),
             dead_networks: HashSet::new(),
             link_refused: HashMap::new(),
-            accepted_etag: probe.etag.clone(),
-            if_range: probe
-                .raw_etag
-                .clone()
-                .filter(|e| !is_weak(e))
-                .or(probe.last_modified.clone()),
+            // On resume, keep the *saved* validators: if the server's differ, the first
+            // segment triggers the byte-sampling check (L-05).
+            accepted_etag: match &resumed_validators {
+                Some((raw, _)) => raw.as_deref().map(headers::normalize_etag),
+                None => probe.etag.clone(),
+            },
+            if_range: match &resumed_validators {
+                Some((raw, lm)) => raw.clone().filter(|e| !is_weak(e)).or(lm.clone()),
+                None => probe
+                    .raw_etag
+                    .clone()
+                    .filter(|e| !is_weak(e))
+                    .or(probe.last_modified.clone()),
+            },
             bytes_by_network: HashMap::new(),
             fatal: None,
             last_error: String::new(),
@@ -1018,6 +1217,11 @@ pub async fn download(
         live_networks: networks.len(),
         epoch: Instant::now(),
         written_total: AtomicU64::new(0),
+        staging_path: staging.path().to_path_buf(),
+        filename: staging.name().to_string(),
+        last_modified: resumed_validators
+            .as_ref()
+            .map_or(probe.last_modified.clone(), |(_, lm)| lm.clone()),
     });
 
     // Interleave stream starts across networks (L-23).
@@ -1055,6 +1259,8 @@ pub async fn download(
     }
 
     // The supervisor: tick the controller until every stream has finished.
+    let mut last_checkpoint = Instant::now();
+    let cancel = tuning.cancel.clone().unwrap_or_default();
     let mut ticker = tokio::time::interval(tuning.controller_tick);
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
@@ -1062,7 +1268,19 @@ pub async fn download(
             joined = tasks.join_next() => {
                 if joined.is_none() { break; }
             }
+            _ = cancel.notify.notified() => {
+                ctx.stop.store(true, Ordering::Release);
+                ctx.wake.notify_waiters();
+            }
             _ = ticker.tick() => {
+                if cancel.is_cancelled() {
+                    ctx.stop.store(true, Ordering::Release);
+                    ctx.wake.notify_waiters();
+                }
+                if last_checkpoint.elapsed() >= tuning.checkpoint_every {
+                    last_checkpoint = Instant::now();
+                    emit_checkpoint(&ctx).await;
+                }
                 let (ticks, spare) = {
                     let mut s = ctx.lock();
                     let spare = s.blocks.iter().filter(|b| !b.complete() && b.attempts.is_empty()).count() as u32;
@@ -1123,10 +1341,16 @@ pub async fn download(
     if let Some(e) = fatal {
         if matches!(e, JobError::VersionChanged) {
             let _ = staging.discard(); // a different file: the partial data is useless (L-05)
+        } else {
+            emit_checkpoint(&ctx).await; // keep what we have for a later resume
         }
         return Err(e);
     }
     if !complete {
+        emit_checkpoint(&ctx).await;
+        if cancel.is_cancelled() {
+            return Err(JobError::Paused);
+        }
         return Err(JobError::AllNetworksFailed(last_error));
     }
     let total = probe.total.or(unknown_total).unwrap_or(0);
