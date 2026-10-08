@@ -48,6 +48,10 @@ jobs:
         run: pnpm format:check
       - name: TypeScript
         run: pnpm typecheck
+      - name: UI tests (WebKit and Chromium, demo backend)
+        run: |
+          pnpm --filter @fuselane/desktop exec playwright install --with-deps webkit chromium
+          pnpm --filter @fuselane/desktop exec playwright test
 
   commits:
     name: Commit messages

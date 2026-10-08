@@ -10,4 +10,5 @@ echo "== tests";    cargo nextest run --workspace --locked --no-fail-fast --stat
 echo "== deny";     cargo deny check -s 2>/dev/null || cargo deny check
 echo "== prettier"; pnpm -s format:check
 echo "== tsc";      pnpm -s typecheck >/dev/null
+echo "== ui";       pnpm -s --filter @fuselane/desktop exec playwright test --reporter=dot
 echo "All checks passed."
