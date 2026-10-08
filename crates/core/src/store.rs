@@ -64,7 +64,20 @@ const MIGRATIONS: &[&str] = &[
     ALTER TABLE jobs_v3 RENAME TO jobs;",
     // v4: app settings (speed limits and later preferences), as small JSON values.
     "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);",
+    // v5: queue order, a name chosen before starting, and a checksum to verify.
+    "ALTER TABLE jobs ADD COLUMN position INTEGER;
+     ALTER TABLE jobs ADD COLUMN chosen_name TEXT;
+     ALTER TABLE jobs ADD COLUMN expected_sha256 TEXT;",
 ];
+
+/// What a person can set when adding a download, beyond the link and folder.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct NewJob {
+    /// Save under this name instead of the server's.
+    pub name: Option<String>,
+    /// SHA-256 to verify, as 64 hex digits.
+    pub sha256: Option<String>,
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
@@ -102,6 +115,10 @@ pub struct Job {
     pub final_path: Option<PathBuf>,
     pub created_at: i64,
     pub updated_at: i64,
+    /// Queue order: lower starts first. Jobs from before v5 sort by id.
+    pub position: i64,
+    pub chosen_name: Option<String>,
+    pub expected_sha256: Option<String>,
 }
 
 impl Job {
@@ -261,13 +278,49 @@ impl Store {
     }
 
     pub fn create(&self, url: &str, dir: &Path) -> Result<i64, StoreError> {
+        self.create_with(url, dir, &NewJob::default())
+    }
+
+    /// A new queued job at the end of the queue.
+    pub fn create_with(&self, url: &str, dir: &Path, new: &NewJob) -> Result<i64, StoreError> {
         let c = self.lock();
         let t = now();
         c.execute(
-            "INSERT INTO jobs (url, dir, status, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?4)",
-            params![url, dir.to_string_lossy(), Status::Queued.as_str(), t],
+            "INSERT INTO jobs (url, dir, status, created_at, updated_at, position, chosen_name, expected_sha256)
+             VALUES (?1, ?2, ?3, ?4, ?4,
+                     (SELECT COALESCE(MAX(COALESCE(position, id)), 0) + 1 FROM jobs), ?5, ?6)",
+            params![
+                url,
+                dir.to_string_lossy(),
+                Status::Queued.as_str(),
+                t,
+                new.name,
+                new.sha256
+            ],
         )?;
         Ok(c.last_insert_rowid())
+    }
+
+    /// Puts `ids` first in the queue, in that order; everyone else keeps their order after.
+    pub fn reorder(&self, ids: &[i64]) -> Result<(), StoreError> {
+        let mut c = self.lock();
+        let tx = c.transaction()?;
+        let rest: Vec<i64> = {
+            let mut stmt = tx.prepare("SELECT id FROM jobs ORDER BY COALESCE(position, id), id")?;
+            stmt.query_map([], |r| r.get(0))?
+                .collect::<Result<Vec<i64>, _>>()?
+                .into_iter()
+                .filter(|id| !ids.contains(id))
+                .collect()
+        };
+        for (pos, id) in ids.iter().chain(rest.iter()).enumerate() {
+            tx.execute(
+                "UPDATE jobs SET position = ?2 WHERE id = ?1",
+                params![id, pos as i64 + 1],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
     }
 
     pub fn get(&self, id: i64) -> Result<Job, StoreError> {
@@ -437,6 +490,11 @@ fn row_to_job(r: &rusqlite::Row<'_>) -> rusqlite::Result<Job> {
         final_path: path(r.get("final_path")?),
         created_at: r.get("created_at")?,
         updated_at: r.get("updated_at")?,
+        position: r
+            .get::<_, Option<i64>>("position")?
+            .unwrap_or(r.get::<_, i64>("id")?),
+        chosen_name: r.get("chosen_name")?,
+        expected_sha256: r.get("expected_sha256")?,
     })
 }
 
@@ -599,6 +657,67 @@ mod tests {
             "original kept"
         );
         assert!(s.list().unwrap().is_empty());
+    }
+
+    #[test]
+    fn new_jobs_join_the_end_of_the_queue_with_their_choices() {
+        let d = tempfile::tempdir().unwrap();
+        let s = Store::open(&d.path().join("jobs.db")).unwrap();
+        let a = s.create("http://x/a", Path::new("/tmp")).unwrap();
+        let b = s
+            .create_with(
+                "http://x/b",
+                Path::new("/tmp"),
+                &NewJob {
+                    name: Some("mine.iso".into()),
+                    sha256: Some("ab".repeat(32)),
+                },
+            )
+            .unwrap();
+        let (ja, jb) = (s.get(a).unwrap(), s.get(b).unwrap());
+        assert!(ja.position < jb.position);
+        assert_eq!(jb.chosen_name.as_deref(), Some("mine.iso"));
+        assert_eq!(jb.expected_sha256, Some("ab".repeat(32)));
+        assert_eq!(ja.chosen_name, None);
+    }
+
+    #[test]
+    fn the_queue_can_be_reordered_and_unknown_ids_are_ignored() {
+        let d = tempfile::tempdir().unwrap();
+        let s = Store::open(&d.path().join("jobs.db")).unwrap();
+        let ids: Vec<i64> = (0..4)
+            .map(|i| {
+                s.create(&format!("http://x/{i}"), Path::new("/tmp"))
+                    .unwrap()
+            })
+            .collect();
+        s.reorder(&[ids[2], 999, ids[0]]).unwrap();
+        let mut jobs = s.list().unwrap();
+        jobs.sort_by_key(|j| j.position);
+        let order: Vec<i64> = jobs.iter().map(|j| j.id).collect();
+        assert_eq!(order, vec![ids[2], ids[0], ids[1], ids[3]]);
+    }
+
+    #[test]
+    fn jobs_from_before_queue_order_sort_by_when_they_were_added() {
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path().join("jobs.db");
+        let s = Store::open(&p).unwrap();
+        let a = s.create("http://x/a", Path::new("/tmp")).unwrap();
+        let b = s.create("http://x/b", Path::new("/tmp")).unwrap();
+        // As a v4 database would have them: no position.
+        s.lock()
+            .execute("UPDATE jobs SET position = NULL", [])
+            .unwrap();
+        let c = s.create("http://x/c", Path::new("/tmp")).unwrap();
+        let pos = |id| s.get(id).unwrap().position;
+        assert!(
+            pos(a) < pos(b) && pos(b) < pos(c),
+            "{} {} {}",
+            pos(a),
+            pos(b),
+            pos(c)
+        );
     }
 
     #[test]

@@ -268,6 +268,8 @@ pub struct RunOptions {
     /// Look the server up through each network (public resolvers) as well as the
     /// system resolver. Off by default: those resolvers see the server's name.
     pub per_network_dns: bool,
+    /// Save under this name instead of the server's.
+    pub filename: Option<String>,
 }
 
 /// Why a job couldn't start at all (nothing in the store changed state).
@@ -585,6 +587,7 @@ pub async fn run(
         expected_sha256: opts.sha256,
         retry_delay_scale: opts.retry_delay_scale.unwrap_or(defaults.retry_delay_scale),
         limiter: opts.limiter,
+        filename: opts.filename,
         ..defaults
     };
     let _ = store.apply(id, Event::Start, None);
