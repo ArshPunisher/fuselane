@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useApp, type Theme } from '../lib/store'
 import { LimitField } from './LimitField'
+import { SlowToggle } from './SlowMode'
 
 const THEMES: { id: Theme; label: string }[] = [
   { id: 'system', label: 'System' },
@@ -59,6 +60,7 @@ function SpeedLimitSetting() {
   return (
     <form
       className="setting"
+      aria-label="Speed limit"
       onSubmit={async (e) => {
         e.preventDefault()
         if (draft === null) return
@@ -81,6 +83,46 @@ function SpeedLimitSetting() {
           rate={limits.global}
           onChange={setDraft}
         />
+        <button type="submit" className="btn" disabled={!changed}>
+          Save
+        </button>
+      </div>
+    </form>
+  )
+}
+
+function SlowModeSetting() {
+  const limits = useApp((s) => s.limits)
+  const save = useApp((s) => s.saveLimits)
+  const [draft, setDraft] = useState<number | null>(limits.slowRate)
+  const [status, setStatus] = useState('')
+  const changed = draft !== null && draft > 0 && draft !== limits.slowRate
+  return (
+    <form
+      className="setting setting-stack"
+      aria-label="Slow mode"
+      onSubmit={async (e) => {
+        e.preventDefault()
+        if (draft === null || draft <= 0) return
+        setStatus('')
+        if (await save({ ...limits, slowRate: draft })) setStatus('Saved.')
+      }}
+    >
+      <div className="setting-row">
+        <div>
+          <p className="setting-name">Slow mode</p>
+          <p className="muted">
+            One switch for calls and streaming: caps all downloads, then puts your normal limits
+            back.
+          </p>
+          <p className="muted" role="status">
+            {status}
+          </p>
+        </div>
+        <SlowToggle labelled={false} />
+      </div>
+      <div className="setting-control">
+        <LimitField label="Slow mode speed" rate={limits.slowRate} onChange={setDraft} />
         <button type="submit" className="btn" disabled={!changed}>
           Save
         </button>
@@ -200,6 +242,7 @@ export function SettingsView() {
           <p className="muted num">{info?.defaultDir ?? ''}</p>
         </div>
       </div>
+      <SlowModeSetting />
       <UpdateSetting />
       <DiagnosticsSetting />
       <div className="setting">

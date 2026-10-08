@@ -5,6 +5,7 @@ import type {
   AppInfo,
   JobView,
   LimitsView,
+  NetPref,
   NetView,
   PreviewView,
   UiError,
@@ -26,6 +27,9 @@ export interface Backend {
   /** A folder the user picked, or null if they cancelled. */
   pickFolder(): Promise<string | null>
   getLimits(): Promise<LimitsView>
+  setSlow(on: boolean): Promise<LimitsView>
+  networkPrefs(): Promise<NetPref[]>
+  setNetworkPref(pref: NetPref): Promise<NetPref[]>
   /** A privacy-safe report for bug reports. */
   diagnostics(): Promise<string>
   /** A newer signed version, or null when up to date. */
@@ -84,6 +88,9 @@ async function tauriBackend(): Promise<Backend> {
     openFile: (id) => call('open_file', { id }),
     pickFolder: () => call('pick_folder'),
     getLimits: () => call('get_limits'),
+    setSlow: (on) => call('set_slow', { on }),
+    networkPrefs: () => call('network_prefs'),
+    setNetworkPref: (pref) => call('set_network_pref', { pref }),
     diagnostics: () => call('diagnostics'),
     checkUpdate: () => call('check_update'),
     installUpdate: () => call('install_update'),

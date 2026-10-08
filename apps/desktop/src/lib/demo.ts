@@ -7,11 +7,12 @@
 // drop=0 (the phone never drops out).
 import type { Backend } from './backend'
 import type {
-  LimitsView,
   JobStatus,
   JobView,
+  LimitsView,
   Live,
   LiveNet,
+  NetPref,
   NetView,
   PreviewView,
   UiError,
@@ -68,7 +69,8 @@ export function createDemoBackend(params: URLSearchParams): Backend {
   let nextId = 1
   let clock = 0
   let listener: ((e: UiEvent) => void) | null = null
-  let limits: LimitsView = { global: 0, networks: [] }
+  let limits: LimitsView = { global: 0, networks: [], slow: false, slowRate: 1024 * 1024 }
+  let prefs: NetPref[] = []
 
   const now = () => Math.floor(Date.now() / 1000)
 
@@ -392,6 +394,24 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         )
     },
     getLimits: async () => structuredClone(limits),
+    setSlow: async (on) => {
+      limits = { ...limits, slow: on }
+      return structuredClone(limits)
+    },
+    networkPrefs: async () => structuredClone(prefs),
+    setNetworkPref: async (pref) => {
+      const label = pref.label?.trim() || null
+      if (label && label.length > 40)
+        throw err('bad-network-name', 'That name is too long.', 'Use up to 40 characters.')
+      if (
+        pref.lane &&
+        !['tide', 'volt', 'iris', 'rose', 'mint', 'sky', 'lilac', 'steel'].includes(pref.lane)
+      )
+        throw err('bad-network-color', "That colour isn't one of Fuselane's network colours.", null)
+      prefs = prefs.filter((p) => p.name !== pref.name)
+      if (label || pref.lane) prefs.push({ name: pref.name, label, lane: pref.lane })
+      return structuredClone(prefs)
+    },
     diagnostics: async () =>
       [
         'Fuselane 0.0.0 on demo browser',
@@ -430,6 +450,8 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       limits = {
         global: Math.round(next.global),
         networks: next.networks.filter((n) => n.rate > 0),
+        slow: next.slow,
+        slowRate: next.slowRate || 1024 * 1024,
       }
       return structuredClone(limits)
     },

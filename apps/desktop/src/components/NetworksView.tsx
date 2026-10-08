@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { ArrowClockwise } from '@phosphor-icons/react'
+import { ArrowClockwise, PencilSimple } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
-import { assignLanes, kindLabel, netTitle } from '../lib/lanes'
+import { assignLanes, kindLabel, LANES, netTitle, type Lane } from '../lib/lanes'
+import type { NetView } from '../lib/types'
 import { rateText } from '../lib/format'
 import { NetIcon } from './NetIcon'
 import { Orb } from './Orb'
@@ -20,9 +21,85 @@ function useLiveRates(): Record<string, number> {
   return out
 }
 
+/** Inline editor for a network's name and colour. */
+function NetEditor({ net, lane, onDone }: { net: NetView; lane: Lane; onDone: () => void }) {
+  const prefs = useApp((s) => s.netPrefs)
+  const save = useApp((s) => s.saveNetPref)
+  const current = prefs.find((p) => p.name === net.name)
+  const [label, setLabel] = useState(current?.label ?? '')
+  const [color, setColor] = useState<Lane>((current?.lane as Lane | undefined) ?? lane)
+  const id = `edit-${net.name}`
+  const tooLong = label.trim().length > 40
+  return (
+    <form
+      className="net-editor"
+      onSubmit={async (e) => {
+        e.preventDefault()
+        if (tooLong) return
+        if (await save({ name: net.name, label: label.trim() || null, lane: color })) onDone()
+      }}
+    >
+      <label htmlFor={id}>Name</label>
+      <input
+        id={id}
+        value={label}
+        maxLength={60}
+        autoComplete="off"
+        placeholder={`${netTitle({ ...net, name: '' })}…`}
+        aria-invalid={tooLong ? true : undefined}
+        aria-describedby={tooLong ? `${id}-err` : undefined}
+        onChange={(e) => setLabel(e.target.value)}
+      />
+      {tooLong && (
+        <p id={`${id}-err`} className="field-error" aria-live="polite">
+          Use up to 40 characters.
+        </p>
+      )}
+      <fieldset className="swatches">
+        <legend>Colour</legend>
+        {LANES.map((l) => (
+          <label
+            key={l}
+            className="swatch"
+            style={{ '--lane': `var(--lane-${l})` } as React.CSSProperties}
+          >
+            <input
+              type="radio"
+              name={`${id}-lane`}
+              value={l}
+              checked={color === l}
+              onChange={() => setColor(l)}
+            />
+            <span className="sr-only">{l}</span>
+          </label>
+        ))}
+      </fieldset>
+      <div className="net-editor-foot">
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={async () => {
+            if (await save({ name: net.name, label: null, lane: null })) onDone()
+          }}
+        >
+          Reset
+        </button>
+        <button type="button" className="btn btn-ghost" onClick={onDone}>
+          Cancel
+        </button>
+        <button type="submit" className="btn btn-primary" disabled={tooLong}>
+          Save
+        </button>
+      </div>
+    </form>
+  )
+}
+
 export function NetworkList({ compact = false }: { compact?: boolean }) {
   const networks = useApp((s) => s.networks)
+  useApp((s) => s.netPrefs) // re-render when names or colours change
   const rates = useLiveRates()
+  const [editing, setEditing] = useState<string | null>(null)
   const usable = networks.filter((n) => n.usable)
   const lanes = assignLanes(usable)
   const max = Math.max(1, ...Object.values(rates))
@@ -37,15 +114,35 @@ export function NetworkList({ compact = false }: { compact?: boolean }) {
       {usable.map((n, i) => {
         const r = rates[n.name] ?? 0
         return (
-          <li key={n.name}>
-            <Orb lane={lanes[i] ?? 'steel'} speed={r / max} state={r > 0 ? 'live' : 'idle'} />
-            <span className="netlist-text">
-              <span className="net-name">{netTitle(n)}</span>
-              <span className="net-kind num">
-                {r > 0 ? rateText(r) : compact ? 'Ready' : `${kindLabel(n.kind)}, ${n.name}`}
+          <li key={n.name} className={editing === n.name ? 'is-editing' : undefined}>
+            <div className="netlist-row">
+              <Orb lane={lanes[i] ?? 'steel'} speed={r / max} state={r > 0 ? 'live' : 'idle'} />
+              <span className="netlist-text">
+                <span className="net-name" translate="no">
+                  {netTitle(n)}
+                </span>
+                <span className="net-kind num">
+                  {r > 0 ? rateText(r) : compact ? 'Ready' : `${kindLabel(n.kind)}, ${n.name}`}
+                </span>
               </span>
-            </span>
-            {!compact && <NetIcon kind={n.kind} />}
+              {!compact && (
+                <>
+                  <NetIcon kind={n.kind} />
+                  <button
+                    className="icon-btn"
+                    aria-label={`Rename or recolour ${netTitle(n)}`}
+                    title="Rename or recolour"
+                    aria-expanded={editing === n.name}
+                    onClick={() => setEditing(editing === n.name ? null : n.name)}
+                  >
+                    <PencilSimple size={16} aria-hidden />
+                  </button>
+                </>
+              )}
+            </div>
+            {editing === n.name && (
+              <NetEditor net={n} lane={lanes[i] ?? 'steel'} onDone={() => setEditing(null)} />
+            )}
           </li>
         )
       })}

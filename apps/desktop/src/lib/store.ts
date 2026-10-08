@@ -1,6 +1,16 @@
 import { create } from 'zustand'
 import { connect, toUiError, type Backend } from './backend'
-import type { AppInfo, JobView, LimitsView, Live, NetView, UiError, UpdateInfo } from './types'
+import { setNetPrefs } from './lanes'
+import type {
+  AppInfo,
+  JobView,
+  LimitsView,
+  Live,
+  NetPref,
+  NetView,
+  UiError,
+  UpdateInfo,
+} from './types'
 
 /** Rate history for the Stream graph: newest last, about five samples a second. */
 export interface History {
@@ -21,6 +31,7 @@ interface State {
   history: Record<number, History>
   networks: NetView[]
   limits: LimitsView
+  netPrefs: NetPref[]
   update: UpdateInfo | null
   updateDismissed: boolean
   selected: number | null
@@ -39,6 +50,9 @@ interface State {
   refreshNetworks(): Promise<void>
   /** Saves limits; true when the backend accepted them. */
   saveLimits(next: LimitsView): Promise<boolean>
+  setSlow(on: boolean): Promise<void>
+  /** Saves a network's name and colour; true when accepted. */
+  saveNetPref(pref: NetPref): Promise<boolean>
   /** Checks the feed; quiet=true never shows errors (the launch check). */
   checkUpdate(quiet: boolean): Promise<'available' | 'current' | 'error'>
   dismissUpdate(): void
@@ -68,7 +82,8 @@ export const useApp = create<State>((set, get) => ({
   live: {},
   history: {},
   networks: [],
-  limits: { global: 0, networks: [] },
+  limits: { global: 0, networks: [], slow: false, slowRate: 1024 * 1024 },
+  netPrefs: [],
   update: null,
   updateDismissed: false,
   selected: null,
@@ -87,9 +102,13 @@ export const useApp = create<State>((set, get) => ({
       const [info, networks, limits] = await Promise.all([
         backend.appInfo(),
         backend.listNetworks().catch(() => []),
-        backend.getLimits().catch(() => ({ global: 0, networks: [] })),
+        backend
+          .getLimits()
+          .catch(() => ({ global: 0, networks: [], slow: false, slowRate: 1024 * 1024 })),
       ])
-      set({ info, networks, limits })
+      const netPrefs = await backend.networkPrefs().catch(() => [])
+      setNetPrefs(netPrefs)
+      set({ info, networks, limits, netPrefs })
       await backend.subscribe((e) => {
         if (e.type === 'jobs') {
           const ids = new Set(e.jobs.map((j) => j.id))
@@ -143,6 +162,28 @@ export const useApp = create<State>((set, get) => ({
     }
   },
   dismissUpdate: () => set({ updateDismissed: true }),
+  async setSlow(on) {
+    const b = get().backend
+    if (!b) return
+    try {
+      set({ limits: await b.setSlow(on) })
+    } catch (e) {
+      set({ toast: { ...toUiError(e), at: Date.now() } })
+    }
+  },
+  async saveNetPref(pref) {
+    const b = get().backend
+    if (!b) return false
+    try {
+      const netPrefs = await b.setNetworkPref(pref)
+      setNetPrefs(netPrefs)
+      set({ netPrefs })
+      return true
+    } catch (e) {
+      set({ toast: { ...toUiError(e), at: Date.now() } })
+      return false
+    }
+  },
   async saveLimits(next) {
     const b = get().backend
     if (!b) return false

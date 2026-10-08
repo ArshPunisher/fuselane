@@ -406,7 +406,7 @@ test('an overall speed limit is validated, saved and can be removed', async ({ p
   await page.goto('/?empty=1')
   await page.getByRole('button', { name: 'Settings' }).click()
   const field = page.getByLabel('Speed limit for all networks', { exact: true })
-  const save = page.locator('form.setting').getByRole('button', { name: 'Save' })
+  const save = page.getByRole('form', { name: 'Speed limit' }).getByRole('button', { name: 'Save' })
   await expect(save).toBeDisabled() // nothing changed yet
   for (const bad of ['abc', '-5', '1e9', '5 MB']) {
     await field.fill(bad)
@@ -495,4 +495,48 @@ test('update checks: quiet when offline at launch, clear when asked', async ({ p
   await page.getByRole('button', { name: 'Settings' }).click()
   await page.getByRole('button', { name: 'Check for updates' }).click()
   await expect(page.getByRole('status').filter({ hasText: "You're up to date." })).toBeVisible()
+})
+
+test('a network can be renamed and recoloured, and the name shows everywhere', async ({ page }) => {
+  await page.goto('/?drop=0')
+  await page.getByRole('button', { name: 'Networks' }).click()
+  await page.getByRole('button', { name: 'Rename or recolour Wi-Fi' }).click()
+  const name = page.getByLabel('Name', { exact: true })
+  await name.fill('x'.repeat(41))
+  await expect(page.getByText('Use up to 40 characters.')).toBeVisible()
+  await expect(page.locator('.net-editor').getByRole('button', { name: 'Save' })).toBeDisabled()
+  await name.fill('Home Wi-Fi')
+  await page.getByRole('radio', { name: 'rose' }).check()
+  await page.locator('.net-editor').getByRole('button', { name: 'Save' }).click()
+  await expect(page.locator('.page .netlist .net-name').first()).toHaveText('Home Wi-Fi')
+  // The running download's network table uses the new name too.
+  await page.getByRole('button', { name: 'Downloads' }).click()
+  await expect(page.getByRole('table', { name: 'Networks in this download' })).toContainText(
+    'Home Wi-Fi',
+    { timeout: 5000 },
+  )
+  // Reset brings the system name back.
+  await page.getByRole('button', { name: 'Networks' }).click()
+  await page.getByRole('button', { name: 'Rename or recolour Home Wi-Fi' }).click()
+  await page.locator('.net-editor').getByRole('button', { name: 'Reset' }).click()
+  await expect(page.locator('.page .netlist .net-name').first()).toHaveText('Wi-Fi')
+})
+
+test('slow mode switches on and off and its speed can be changed', async ({ page }) => {
+  await page.goto('/?empty=1')
+  const toggle = page.locator('.sidebar').getByRole('switch', { name: 'Slow mode' })
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-checked', 'true')
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await expect(page.locator('.page').getByRole('switch', { name: 'Slow mode' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  )
+  await page.getByLabel('Slow mode speed', { exact: true }).fill('300')
+  await page.getByLabel('Slow mode speed unit').selectOption('KB')
+  await page.getByRole('form', { name: 'Slow mode' }).getByRole('button', { name: 'Save' }).click()
+  await expect(page.locator('.sidebar .slow-toggle')).toContainText('300 KB/s max')
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
 })
