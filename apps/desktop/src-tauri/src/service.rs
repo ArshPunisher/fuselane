@@ -316,8 +316,13 @@ pub async fn preview(url: &str) -> Result<PreviewView, UiError> {
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum UiEvent {
-    Jobs { jobs: Vec<JobView> },
+    Jobs {
+        jobs: Vec<JobView>,
+    },
     Live(Live),
+    Torrents {
+        torrents: Vec<crate::torrents::TorrentView>,
+    },
 }
 
 /// An error the window can show as is: a stable code, what happened, what to do.
@@ -591,6 +596,11 @@ impl Service {
         self.publish_jobs();
     }
 
+    /// The shared store (torrents keep their list in it too).
+    pub fn store(&self) -> Arc<Store> {
+        self.store.clone()
+    }
+
     pub fn default_dir(&self) -> &Path {
         &self.default_dir
     }
@@ -600,7 +610,7 @@ impl Service {
         lock(&self.listeners).push(f);
     }
 
-    fn send(&self, e: UiEvent) {
+    pub fn send(&self, e: UiEvent) {
         let emit = lock(&self.emit).clone();
         let listeners = lock(&self.listeners).clone();
         for l in &listeners {

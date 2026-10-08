@@ -8,6 +8,7 @@
 mod native;
 mod selftest;
 mod service;
+mod torrents;
 
 use std::sync::Arc;
 
@@ -21,6 +22,7 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 
 type State<'a> = tauri::State<'a, Arc<Service>>;
+type Tor<'a> = tauri::State<'a, Arc<torrents::Torrents>>;
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -249,6 +251,85 @@ fn open_file(app: tauri::AppHandle, svc: State<'_>, id: i64) -> Result<(), UiErr
         .map_err(|e| ui_error("open-failed", format!("Couldn't open the file: {e}")))
 }
 
+#[tauri::command]
+async fn torrent_inspect_magnet(
+    tor: Tor<'_>,
+    magnet: String,
+    dir: Option<String>,
+) -> Result<torrents::ListingView, UiError> {
+    tor.inspect_magnet(&magnet, dir.as_deref()).await
+}
+
+#[tauri::command]
+async fn torrent_inspect_file(
+    tor: Tor<'_>,
+    path: String,
+    dir: Option<String>,
+) -> Result<torrents::ListingView, UiError> {
+    tor.inspect_file(std::path::Path::new(&path), dir.as_deref())
+        .await
+}
+
+#[tauri::command]
+async fn torrent_add(tor: Tor<'_>, token: String, files: Vec<usize>) -> Result<String, UiError> {
+    tor.add(&token, files).await
+}
+
+#[tauri::command]
+async fn torrent_list(tor: Tor<'_>) -> Result<Vec<torrents::TorrentView>, UiError> {
+    Ok(tor.list().await)
+}
+
+#[tauri::command]
+async fn torrent_files(
+    tor: Tor<'_>,
+    id: String,
+) -> Result<Vec<torrents::TorrentFileView>, UiError> {
+    tor.files(&id).await
+}
+
+#[tauri::command]
+async fn torrent_pause(tor: Tor<'_>, id: String) -> Result<(), UiError> {
+    tor.pause(&id).await
+}
+
+#[tauri::command]
+async fn torrent_resume(tor: Tor<'_>, id: String) -> Result<(), UiError> {
+    tor.resume(&id).await
+}
+
+#[tauri::command]
+async fn torrent_select(tor: Tor<'_>, id: String, files: Vec<usize>) -> Result<(), UiError> {
+    tor.select(&id, files).await
+}
+
+#[tauri::command]
+async fn torrent_remove(tor: Tor<'_>, id: String, delete_files: bool) -> Result<(), UiError> {
+    tor.remove(&id, delete_files).await
+}
+
+#[tauri::command]
+async fn torrent_reveal(app: tauri::AppHandle, tor: Tor<'_>, id: String) -> Result<(), UiError> {
+    use tauri_plugin_opener::OpenerExt;
+    let path = tor.folder_of(&id).await?;
+    app.opener()
+        .reveal_item_in_dir(&path)
+        .map_err(|e| ui_error("open-failed", format!("Couldn't show the files: {e}")))
+}
+
+/// Asks for a .torrent file; `None` if they cancel.
+#[tauri::command]
+async fn pick_torrent(app: tauri::AppHandle) -> Option<String> {
+    use tauri_plugin_dialog::DialogExt;
+    app.dialog()
+        .file()
+        .set_title("Open a torrent")
+        .add_filter("Torrent", &["torrent"])
+        .blocking_pick_file()
+        .and_then(|p| p.into_path().ok())
+        .map(|p| p.to_string_lossy().into_owned())
+}
+
 /// Asks the user for a folder to save into; `None` if they cancel.
 #[tauri::command]
 async fn pick_folder(app: tauri::AppHandle) -> Option<String> {
@@ -331,6 +412,7 @@ fn watch_for_shell(app: tauri::AppHandle, svc: &Arc<Service>) {
                 }
                 paint(&w);
             }
+            UiEvent::Torrents { .. } => {}
             UiEvent::Live(l) => {
                 w.live(l);
                 // The icon and tooltip don't need 5 updates a second.
@@ -359,6 +441,25 @@ fn open_service() -> Result<Arc<Service>, String> {
         .or_else(dirs::home_dir)
         .unwrap_or_else(|| home.clone());
     Service::new(store, downloads).map_err(|e| e.message)
+}
+
+fn open_torrents(svc: &Arc<Service>) -> Arc<torrents::Torrents> {
+    let state = fuselane_core::home::home()
+        .map(|h| h.join("torrents"))
+        .unwrap_or_else(|_| std::env::temp_dir().join("fuselane-torrents"));
+    let weak = Arc::downgrade(svc);
+    torrents::Torrents::new(
+        svc.store(),
+        state,
+        svc.default_dir().to_path_buf(),
+        Arc::new(|| fuselane_core::runner::pick_networks(&[])),
+        true,
+        Arc::new(move |e| {
+            if let Some(svc) = weak.upgrade() {
+                svc.send(e);
+            }
+        }),
+    )
 }
 
 fn main() {
@@ -406,6 +507,7 @@ fn main() {
             }
         });
     }
+    let tor = open_torrents(&svc);
     let for_shell = svc.clone();
     // Debug builds only (L-100): start a download at launch for smoke tests and
     // screenshots of the real window. Compiled out of release builds.
@@ -431,6 +533,7 @@ fn main() {
         // Remembers the window's size and position between launches.
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(svc)
+        .manage(tor.clone())
         .setup(move |app| {
             let show = MenuItem::with_id(app, "show", "Show Fuselane", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -448,6 +551,15 @@ fn main() {
             })
             .build(app)?;
             watch_for_shell(app.handle().clone(), &for_shell);
+            // Saved torrents come back (rechecked from disk), then a tick every second.
+            let tor = tor.clone();
+            tauri::async_runtime::spawn(async move {
+                tor.restore().await;
+                loop {
+                    tor.tick().await;
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                }
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -477,6 +589,17 @@ fn main() {
             start_over,
             open_file,
             pick_folder,
+            pick_torrent,
+            torrent_inspect_magnet,
+            torrent_inspect_file,
+            torrent_add,
+            torrent_list,
+            torrent_files,
+            torrent_pause,
+            torrent_resume,
+            torrent_select,
+            torrent_remove,
+            torrent_reveal,
             subscribe
         ])
         .build(tauri::generate_context!());

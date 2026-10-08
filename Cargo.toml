@@ -16,6 +16,7 @@ fuselane-transport = { path = "crates/transport" }
 fuselane-storage = { path = "crates/storage" }
 fuselane-limits = { path = "crates/limits" }
 fuselane-engine-http = { path = "crates/engine-http" }
+fuselane-engine-torrent = { path = "crates/engine-torrent" }
 fuselane-core = { path = "crates/core" }
 fuselane-api = { path = "crates/api" }
 fuselane-testkit = { path = "crates/testkit" }
