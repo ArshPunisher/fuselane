@@ -139,7 +139,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [x] 5.4 Torrent path safety + hostile fixtures — L-68, L-121
 - [x] 5.5 File selection before and during; edge-piece cleanup — L-69
 - [x] 5.6 Per-network credit after verification; peers UI
-- [ ] 5.7 Optional seeding with ratio/time limits; metered-network guard
+- [x] 5.7 Optional seeding with ratio/time limits; metered-network guard (off by default; tethers and cellular skipped while only seeding)
 - [x] 5.8 Local swarm tests (isolated temp dirs) + a public swarm benchmark — L-70 (Debian 13.7 netinst in the real app: 16 MB/s over Ethernet + Wi-Fi, SHA-256 matched)
 - [ ] 5.9 Upstream PR: librqbit connector hook + Windows binding
 
