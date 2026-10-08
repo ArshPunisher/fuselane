@@ -54,6 +54,11 @@ jobs:
         run: pnpm typecheck
       - name: Extension capture rules and message schema
         run: pnpm --filter @fuselane/capture test
+      - name: Extension hand-off logic and builds (Chrome, Firefox)
+        run: |
+          pnpm --filter @fuselane/extension test
+          pnpm --filter @fuselane/extension build
+          pnpm --filter @fuselane/extension build:firefox
       - name: UI tests (WebKit and Chromium, demo backend)
         run: |
           pnpm --filter @fuselane/desktop exec playwright install --with-deps webkit chromium
