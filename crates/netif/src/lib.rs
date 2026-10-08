@@ -263,6 +263,12 @@ pub fn windows_kind(if_type: u32, description: &str) -> Option<Kind> {
     {
         return Some(Kind::Tether);
     }
+    // Inside a VM (Hyper-V, Azure, Parallels on Windows hosts), "Microsoft Hyper-V
+    // Network Adapter" is the machine's real network card. The host's virtual
+    // switch is the "Hyper-V Virtual Ethernet Adapter" (vEthernet), skipped below.
+    if d.contains("hyper-v network adapter") {
+        return Some(Kind::Ethernet);
+    }
     if d.contains("hyper-v")
         || d.contains("virtualbox")
         || d.contains("vmware")
@@ -488,6 +494,15 @@ mod tests {
         assert_eq!(
             windows_kind(6, "Hyper-V Virtual Ethernet Adapter"),
             Some(Kind::Virtual)
+        );
+        // A Windows guest's own card (GitHub's runners, Azure VMs) is real.
+        assert_eq!(
+            windows_kind(6, "Microsoft Hyper-V Network Adapter"),
+            Some(Kind::Ethernet)
+        );
+        assert_eq!(
+            windows_kind(6, "Microsoft Hyper-V Network Adapter #2"),
+            Some(Kind::Ethernet)
         );
         assert_eq!(windows_kind(53, "WireGuard Tunnel"), Some(Kind::Vpn));
         assert_eq!(
