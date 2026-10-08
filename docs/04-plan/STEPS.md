@@ -52,7 +52,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 **2C transport**
 - [x] 2.11 `Pinner` trait + per-OS implementations from the spikes + `self_test()` — L-56, L-57, L-58 (Windows path awaits a native CI run)
 - [ ] 2.12 Pinned connector for hyper-util + rustls, keep-alive pool per (network, origin), stale-socket retry — L-66
-- [ ] 2.13 Per-network DNS resolver per OS with a fallback — EC-208 — L-65
+- [x] 2.13 Per-network DNS resolver per OS with a fallback — EC-208 — L-65 (opt-in: public resolvers pinned per network; OS per-interface resolvers later)
 - [x] 2.14 Happy Eyeballs (250 ms, last-good first) and layered deadlines — EC-0xx (dead AAAA) — L-09, L-11
 - [ ] 2.15 Link probes: reachability, captive portal, public IP, latency — L-62
 
