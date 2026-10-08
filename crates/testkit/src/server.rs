@@ -85,6 +85,13 @@ struct State {
     etag: String,
     rules: Vec<Rule>,
     log: Vec<RequestLog>,
+    /// Bodies being sent right now, and the most at once.
+    active: u32,
+    peak: u32,
+    /// Refuse (503) a new transfer when this many are already running (CDN-style).
+    max_concurrent: Option<u32>,
+    /// Swap to this file (and ETag) atomically when request number N arrives (1-based).
+    swap_at: Option<(usize, Content, String)>,
 }
 
 /// A running server; stops when dropped (the runtime task is aborted).
@@ -111,6 +118,10 @@ impl RangeServer {
             etag: "\"v1\"".into(),
             rules: vec![],
             log: vec![],
+            active: 0,
+            peak: 0,
+            max_concurrent: None,
+            swap_at: None,
         }));
         let st = state.clone();
         let task = tokio::spawn(async move {
@@ -153,6 +164,22 @@ impl RangeServer {
         let mut s = self.lock();
         s.content = content;
         s.etag = etag.to_string();
+    }
+
+    /// Refuse new transfers with 503 while `n` are already being sent.
+    pub fn set_max_concurrent(&self, n: Option<u32>) {
+        self.lock().max_concurrent = n;
+    }
+
+    /// Atomically replaces the file and ETag when request number `n` arrives (1-based),
+    /// so tests can change the file at an exact point in a download.
+    pub fn swap_at_request(&self, n: usize, content: Content, etag: &str) {
+        self.lock().swap_at = Some((n, content, etag.to_string()));
+    }
+
+    /// Most bodies sent at the same time so far.
+    pub fn peak_concurrent(&self) -> u32 {
+        self.lock().peak
     }
 
     pub fn requests(&self) -> Vec<RequestLog> {
@@ -201,8 +228,20 @@ async fn handle(
         let mut s = state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some((n, c, e)) = s.swap_at.clone()
+            && s.log.len() + 1 >= n
+        {
+            s.content = c;
+            s.etag = e;
+            s.swap_at = None;
+        }
         let mut fault = None;
-        for rule in s.rules.iter_mut() {
+        let busy =
+            s.max_concurrent.is_some_and(|m| s.active >= m) && req.headers().contains_key(RANGE);
+        if busy {
+            fault = Some(Fault::Status(503, None));
+        }
+        for rule in s.rules.iter_mut().filter(|_| !busy) {
             if rule.times == 0 {
                 continue;
             }
@@ -279,21 +318,25 @@ async fn handle(
     }
 
     let (tx, rx) = mpsc::channel::<Result<Frame<Bytes>, std::io::Error>>(4);
+    let guard = ActiveGuard::new(state.clone());
     tokio::spawn(async move {
+        let _guard = guard;
         let mut off = first;
         let end = first + send;
         while off < end {
             let n = (end - off).min(64 * 1024);
-            let n = throttle.map_or(n, |bps| n.min(bps.max(1)));
+            // Throttle: pace in 1/20 s slices, sleeping *before* each slice, so even a
+            // small body takes its real time and a finished body isn't counted as busy.
+            let n = throttle.map_or(n, |bps| n.min((bps / 20).max(1)));
+            if let Some(bps) = throttle {
+                tokio::time::sleep(Duration::from_millis(1000 * n / bps.max(1))).await;
+            }
             let mut buf = vec![0u8; n as usize];
             content.fill(off, &mut buf);
             if tx.send(Ok(Frame::data(Bytes::from(buf)))).await.is_err() {
                 return;
             }
             off += n;
-            if let Some(bps) = throttle {
-                tokio::time::sleep(Duration::from_millis(1000 * n / bps.max(1))).await;
-            }
         }
         if stall {
             // Hold the connection open, silent, until the client gives up.
@@ -305,6 +348,32 @@ async fn handle(
     });
     let body = StreamBody::new(tokio_stream_from(rx)).boxed();
     Ok(res.body(body).unwrap_or_else(|_| Response::new(empty())))
+}
+
+/// Counts a body as active from creation until its sender task ends.
+struct ActiveGuard(Arc<Mutex<State>>);
+
+impl ActiveGuard {
+    fn new(state: Arc<Mutex<State>>) -> ActiveGuard {
+        {
+            let mut s = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            s.active += 1;
+            s.peak = s.peak.max(s.active);
+        }
+        ActiveGuard(state)
+    }
+}
+
+impl Drop for ActiveGuard {
+    fn drop(&mut self) {
+        let mut s = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        s.active = s.active.saturating_sub(1);
+    }
 }
 
 /// Adapts an mpsc receiver into a `Stream` without pulling in tokio-stream.
