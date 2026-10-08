@@ -61,7 +61,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [x] 2.17 Staging file: exclusive create, preallocate/sparse per OS, FAT32 4 GiB check — L-37, L-41
 - [ ] 2.18 Writer pool with coalescing + backpressure signal — slow-disk test — L-13, L-27
 - [x] 2.19 Publish: complete check, intent record, rename with Windows retries, dir fsync, quarantine/MOTW — L-43, L-45, L-54, L-99
-- [ ] 2.20 Free-space check before and during; ENOSPC → immediate pause — EC-209 — L-46
+- [x] 2.20 Free-space check before and during; ENOSPC → immediate pause — EC-209 — L-46
 
 **2E limits**
 - [x] 2.21 Token buckets (global, per network, per job) — property tests — L-30

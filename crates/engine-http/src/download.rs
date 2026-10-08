@@ -280,6 +280,9 @@ pub enum JobError {
     Disk(DiskFailure),
     #[error("every network failed; last error: {0}")]
     AllNetworksFailed(String),
+    /// The disk can't hold what's left of the file (checked before writing).
+    #[error("not enough free space: need {needed} bytes, {free} free")]
+    NoSpace { needed: u64, free: u64 },
     #[error("the downloaded file doesn't match the expected SHA-256")]
     ChecksumMismatch {
         expected: [u8; 32],
@@ -907,6 +910,19 @@ async fn emit_checkpoint(ctx: &Arc<Ctx>) {
     }
 }
 
+/// Fails early with the numbers when the disk can't hold `needed` more bytes.
+fn check_space(dir: &Path, needed: u64) -> Result<(), JobError> {
+    let free = fuselane_storage::free::free_space(dir).ok();
+    if fuselane_storage::free::fits(free, needed) {
+        Ok(())
+    } else {
+        Err(JobError::NoSpace {
+            needed,
+            free: free.unwrap_or(0),
+        })
+    }
+}
+
 /// Builds the UI's view of the job (cheap: one pass over blocks, grouped into ticks).
 fn make_snapshot(ctx: &Arc<Ctx>, networks: &[Network]) -> Snapshot {
     let now = ctx.now_ms();
@@ -1456,6 +1472,12 @@ pub async fn download_with(
     // Resume: the server must still have the same file (size proof), and ranges (L-42, L-53).
     let mut resumed_secured: Option<Vec<u64>> = None;
     let mut resumed_validators: Option<(Option<String>, Option<String>)> = None;
+    // Room for the whole file before creating it (resumes check what's left, below).
+    if resume.is_none()
+        && let Some(total) = probe.total
+    {
+        check_space(dir, total)?;
+    }
     let staging = match &resume {
         Some(r) => {
             if probe.total != Some(r.total) {
@@ -1500,6 +1522,8 @@ pub async fn download_with(
                     .collect(),
             );
             resumed_validators = Some((r.raw_etag.clone(), r.last_modified.clone()));
+            let have: u64 = resumed_secured.iter().flatten().sum();
+            check_space(dir, r.total.saturating_sub(have))?;
             staging
         }
         None => Staging::create(dir, &probe.filename, probe.total)?,

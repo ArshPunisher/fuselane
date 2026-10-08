@@ -222,7 +222,12 @@ pub fn describe(e: &JobError) -> String {
         JobError::ProbeStatus(s) => format!("The server answered with status {s}, so the download couldn't start."),
         JobError::LinkExpired(s) => format!("This link stopped working (the server said {s}). Get a fresh link to the same file and try again."),
         JobError::VersionChanged => "The file on the server changed during the download, so it was stopped to avoid a mixed file. Start it again.".into(),
-        JobError::Disk(d) => format!("Saving failed ({d:?}). Check free space and that the folder is writable."),
+        JobError::NoSpace { needed, free } => format!(
+            "Not enough free space on that disk: this download needs {} more and only {} is free. Free up space or choose another folder.",
+            human_bytes(*needed),
+            human_bytes(*free)
+        ),
+                JobError::Disk(d) => format!("Saving failed ({d:?}). Check free space and that the folder is writable."),
         JobError::AllNetworksFailed(last) => format!("Every network failed. Last problem: {last}"),
         JobError::ChecksumMismatch { .. } => "The downloaded file doesn't match the SHA-256 you gave, so it wasn't saved under its name. The partial file is kept for inspection.".into(),
         JobError::Paused => "Paused. Progress is saved.".into(),
@@ -288,6 +293,22 @@ pub enum Outcome {
     },
 }
 
+/// Sizes for messages: 1.5 GB, 820 MB.
+fn human_bytes(n: u64) -> String {
+    const U: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+    let mut v = n as f64;
+    let mut i = 0;
+    while v >= 1024.0 && i < U.len() - 1 {
+        v /= 1024.0;
+        i += 1;
+    }
+    if i == 0 {
+        format!("{n} B")
+    } else {
+        format!("{v:.1} {}", U[i])
+    }
+}
+
 /// The fix the UI offers for a failure (stored with the job; ERRORS.md §2).
 pub fn action_for(e: &JobError) -> &'static str {
     match e {
@@ -295,7 +316,7 @@ pub fn action_for(e: &JobError) -> &'static str {
         JobError::VersionChanged
         | JobError::NotResumable(_)
         | JobError::ChecksumMismatch { .. } => "start-over",
-        JobError::Disk(_) | JobError::Staging(_) => "free-space",
+        JobError::Disk(_) | JobError::Staging(_) | JobError::NoSpace { .. } => "free-space",
         JobError::Unreachable(_)
         | JobError::ProbeStatus(_)
         | JobError::AllNetworksFailed(_)

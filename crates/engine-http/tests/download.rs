@@ -854,3 +854,28 @@ async fn with_every_network_blocked_the_download_waits_and_can_still_pause() {
     stopper.await.unwrap();
     assert!(matches!(r, Err(JobError::Paused)), "{r:?}");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_file_bigger_than_the_disk_fails_before_anything_is_written() {
+    // The server claims 10 PB; no disk has that, so the download must stop at once.
+    let content = Content::new(10 * 1024_u64.pow(5), 79);
+    let server = RangeServer::start(content).await.unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let start = std::time::Instant::now();
+    let err = download(source(&server), vec![plain(1)], dir.path(), tuning())
+        .await
+        .unwrap_err();
+    match err {
+        JobError::NoSpace { needed, free } => {
+            assert_eq!(needed, content.size);
+            assert!(free < needed);
+        }
+        other => panic!("expected NoSpace, got {other:?}"),
+    }
+    assert!(start.elapsed() < Duration::from_secs(5));
+    assert_eq!(
+        std::fs::read_dir(dir.path()).unwrap().count(),
+        0,
+        "no partial file left behind"
+    );
+}
