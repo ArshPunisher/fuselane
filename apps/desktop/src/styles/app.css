@@ -2088,3 +2088,98 @@ kbd {
 .skipped .num {
   overflow-wrap: anywhere;
 }
+
+/* ---------- Downloads list: search and filters ---------- */
+
+.list-tools {
+  display: grid;
+  gap: 8px;
+  padding: 12px 12px 4px;
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--mute);
+}
+
+.search:focus-within {
+  outline: 2px solid var(--fuse);
+  outline-offset: 1px;
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.search input::placeholder {
+  color: var(--mute);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.filter {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--body);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--dur-quick) var(--ease-out);
+}
+
+.filter .num {
+  color: var(--mute);
+}
+
+.filter:hover {
+  color: var(--ink);
+}
+
+.filter[aria-checked='true'] {
+  border-color: var(--hairline-strong);
+  background: var(--surface-3);
+  color: var(--ink);
+}
+
+.filter:focus-visible {
+  outline: 2px solid var(--fuse);
+  outline-offset: 1px;
+}
+
+.list-empty {
+  padding: 16px 12px;
+  color: var(--mute);
+  font-size: 13px;
+}
+
+.link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fuse-text);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}

@@ -107,6 +107,11 @@ export interface BatchResult {
   skipped: { url: string; reason: string }[]
 }
 
+export interface WindowPrefs {
+  startAtLogin: boolean
+  closeToTray: boolean
+}
+
 export interface AppInfo {
   version: string
   defaultDir: string

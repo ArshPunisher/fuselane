@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { connect, toUiError, type Backend } from './backend'
 import { setNetPrefs } from './lanes'
+import { setSpeedUnit, type SpeedUnit } from './format'
 import type {
   AppInfo,
   Automation,
@@ -52,6 +53,8 @@ interface State {
   draftSeq: number
   toast: (UiError & { at: number }) | null
   theme: Theme
+  speedUnit: SpeedUnit
+  setSpeedUnit(u: SpeedUnit): void
   /** Schedule, when-done action, keep awake, sorting; loaded at start. */
   automation: AutomationView | null
   /** A sleep / shut-down / quit counting down, until when (ms since epoch). */
@@ -78,6 +81,17 @@ interface State {
   dismissUpdate(): void
   /** Runs an action; failures become a toast. Returns false on failure. */
   act(f: (b: Backend) => Promise<unknown>): Promise<boolean>
+}
+
+function savedUnit(): SpeedUnit {
+  try {
+    const u = localStorage.getItem('fuselane.speedUnit')
+    const unit: SpeedUnit = u === 'bits' ? 'bits' : 'bytes'
+    setSpeedUnit(unit)
+    return unit
+  } catch {
+    return 'bytes'
+  }
 }
 
 function savedTheme(): Theme {
@@ -118,6 +132,7 @@ export const useApp = create<State>((set, get) => ({
   draftSeq: 0,
   toast: null,
   theme: savedTheme(),
+  speedUnit: savedUnit(),
 
   start() {
     // React StrictMode runs effects twice in development: without this, two
@@ -166,6 +181,15 @@ export const useApp = create<State>((set, get) => ({
     set({ theme })
   },
   dismissToast: () => set({ toast: null }),
+  setSpeedUnit: (speedUnit) => {
+    setSpeedUnit(speedUnit)
+    try {
+      localStorage.setItem('fuselane.speedUnit', speedUnit)
+    } catch {
+      // Private mode: it lasts until the window closes.
+    }
+    set({ speedUnit })
+  },
   setAutomation: async (a) => {
     const b = get().backend
     if (!b) return false

@@ -322,3 +322,56 @@ export function SortSetting() {
     />
   )
 }
+
+export function WindowSettings() {
+  const backend = useApp((s) => s.backend)
+  const [prefs, setPrefs] = useState<{ startAtLogin: boolean; closeToTray: boolean } | null>(null)
+  const [status, setStatus] = useState('')
+  useEffect(() => {
+    void backend
+      ?.windowPrefs()
+      .then(setPrefs)
+      .catch(() => setPrefs(null))
+  }, [backend])
+  if (!prefs || !backend) return null
+  return (
+    <>
+      <div className="setting">
+        <div>
+          <p className="setting-name">Start at login</p>
+          <p className="muted">
+            Opens quietly in the tray when you sign in, so scheduled downloads run.
+          </p>
+          <p className="muted" role="status">
+            {status}
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          className="switch"
+          aria-label="Start at login"
+          aria-checked={prefs.startAtLogin}
+          onClick={async () => {
+            setStatus('')
+            try {
+              const on = await backend.setStartAtLogin(!prefs.startAtLogin)
+              setPrefs({ ...prefs, startAtLogin: on })
+            } catch (e) {
+              setStatus((e as { message?: string }).message ?? "Couldn't change it. Try again.")
+            }
+          }}
+        />
+      </div>
+      <ToggleSetting
+        name="Keep running when the window closes"
+        help="Closing the window leaves Fuselane in the tray and downloads carry on. Quit from the tray menu."
+        on={prefs.closeToTray}
+        onChange={async (on) => {
+          const saved = await backend.setCloseToTray(on).catch(() => prefs.closeToTray)
+          setPrefs({ ...prefs, closeToTray: saved })
+        }}
+      />
+    </>
+  )
+}

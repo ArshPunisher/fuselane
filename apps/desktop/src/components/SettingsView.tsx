@@ -10,6 +10,7 @@ import {
   ScheduleSetting,
   SortSetting,
   WhenDoneSetting,
+  WindowSettings,
 } from './AutomationSettings'
 
 const THEMES: { id: Theme; label: string }[] = [
@@ -56,6 +57,46 @@ export function ThemePicker() {
           {t.label}
         </button>
       ))}
+    </div>
+  )
+}
+
+function SpeedUnitSetting() {
+  const unit = useApp((s) => s.speedUnit)
+  const setUnit = useApp((s) => s.setSpeedUnit)
+  const options = [
+    { id: 'bytes', label: 'MB/s' },
+    { id: 'bits', label: 'Mbps' },
+  ] as const
+  return (
+    <div className="setting">
+      <div>
+        <p className="setting-name" id="unit-label">
+          Speed unit
+        </p>
+        <p className="muted">
+          MB/s matches file sizes. Mbps matches how internet plans are sold (8 times bigger).
+        </p>
+      </div>
+      <div className="segmented" role="radiogroup" aria-labelledby="unit-label">
+        {options.map((o) => (
+          <button
+            key={o.id}
+            role="radio"
+            aria-checked={unit === o.id}
+            tabIndex={unit === o.id ? 0 : -1}
+            onClick={() => setUnit(o.id)}
+            onKeyDown={(e) => {
+              if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+                e.preventDefault()
+                setUnit(unit === 'bytes' ? 'bits' : 'bytes')
+              }
+            }}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
@@ -439,6 +480,7 @@ export function SettingsView() {
         </div>
         <ThemePicker />
       </div>
+      <SpeedUnitSetting />
       <SpeedLimitSetting />
       <DownloadsAtOnceSetting />
       <div className="setting">
@@ -452,6 +494,7 @@ export function SettingsView() {
       <ScheduleSetting />
       <WhenDoneSetting />
       <KeepAwakeSetting />
+      <WindowSettings />
       <SharingSetting />
       <LookupSetting />
       <UpdateSetting />

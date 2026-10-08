@@ -19,7 +19,28 @@ export function bytes(n: number): string {
   return `${s.value}${NBSP}${s.unit}`
 }
 
+/** Speeds in bytes (MB/s, as files are measured) or bits (Mbps, as internet plans are sold). */
+export type SpeedUnit = 'bytes' | 'bits'
+let speedUnit: SpeedUnit = 'bytes'
+export function setSpeedUnit(u: SpeedUnit) {
+  speedUnit = u
+}
+
+const BIT_UNITS = ['bps', 'Kbps', 'Mbps', 'Gbps', 'Tbps']
+
 export function rate(n: number): { value: string; unit: string } {
+  if (speedUnit === 'bits') {
+    let v = Math.max(0, n) * 8
+    let i = 0
+    while (v >= 1000 && i < BIT_UNITS.length - 1) {
+      v /= 1000
+      i++
+    }
+    return {
+      value: i === 0 || v >= 100 ? nf0.format(v) : nf1.format(v),
+      unit: BIT_UNITS[i] ?? 'bps',
+    }
+  }
   const s = splitBytes(n)
   return { value: s.value, unit: `${s.unit}/s` }
 }

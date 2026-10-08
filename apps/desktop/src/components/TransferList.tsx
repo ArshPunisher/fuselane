@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import {
   CheckCircle,
+  MagnifyingGlass,
   DownloadSimple,
   Pause,
   Play,
@@ -190,9 +192,31 @@ function TorrentRow({ t }: { t: TorrentView }) {
   )
 }
 
+type Filter = 'all' | 'active' | 'done' | 'failed'
+const FILTERS: { id: Filter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'active', label: 'Active' },
+  { id: 'done', label: 'Finished' },
+  { id: 'failed', label: 'Failed' },
+]
+
+function jobKind(j: JobView): Filter {
+  if (j.status === 'running' || j.status === 'queued' || j.status === 'paused') return 'active'
+  if (j.status === 'completed') return 'done'
+  return 'failed'
+}
+
+function torrentKind(t: TorrentView): Filter {
+  if (t.status === 'completed' || t.status === 'seeding') return 'done'
+  if (t.status === 'failed') return 'failed'
+  return 'active'
+}
+
 export function TransferList() {
-  const jobs = useApp((s) => s.jobs)
-  const torrents = useApp((s) => s.torrents)
+  const allJobs = useApp((s) => s.jobs)
+  const allTorrents = useApp((s) => s.torrents)
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<Filter>('all')
   const ready = useApp((s) => s.ready)
   const setAdding = useApp((s) => s.setAdding)
   if (!ready) {
@@ -210,7 +234,7 @@ export function TransferList() {
       </ul>
     )
   }
-  if (!jobs.length && !torrents.length) {
+  if (!allJobs.length && !allTorrents.length) {
     return (
       <div className="empty">
         <p className="empty-title">Nothing downloading yet</p>
@@ -224,10 +248,77 @@ export function TransferList() {
       </div>
     )
   }
-  const active = jobs.filter((j) => j.status === 'running' || j.status === 'queued')
+  const q = query.trim().toLowerCase()
+  const matches = (text: string) => !q || text.toLowerCase().includes(q)
+  const counts: Record<Filter, number> = { all: 0, active: 0, done: 0, failed: 0 }
+  for (const k of [...allJobs.map(jobKind), ...allTorrents.map(torrentKind)]) {
+    counts.all++
+    counts[k]++
+  }
+  const jobs = allJobs.filter(
+    (j) => (filter === 'all' || jobKind(j) === filter) && (matches(j.name) || matches(j.url)),
+  )
+  const torrents = allTorrents.filter(
+    (t) => (filter === 'all' || torrentKind(t) === filter) && matches(t.name),
+  )
+  // Running first, then the queue in the order it will start.
+  const active = jobs
+    .filter((j) => j.status === 'running' || j.status === 'queued')
+    .sort((a, b) =>
+      a.status === b.status ? a.position - b.position : a.status === 'running' ? -1 : 1,
+    )
   const rest = jobs.filter((j) => !(j.status === 'running' || j.status === 'queued'))
+  const nothing = !jobs.length && !torrents.length
   return (
     <div className="list-wrap">
+      <div className="list-tools">
+        <label className="search">
+          <MagnifyingGlass size={16} aria-hidden />
+          <input
+            type="search"
+            name="search"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="Search downloads…"
+            aria-label="Search downloads"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && query) {
+                e.stopPropagation()
+                setQuery('')
+              }
+            }}
+          />
+        </label>
+        <div className="filters" role="radiogroup" aria-label="Show">
+          {FILTERS.map((f) => (
+            <button
+              key={f.id}
+              role="radio"
+              aria-checked={filter === f.id}
+              className="filter"
+              onClick={() => setFilter(f.id)}
+            >
+              {f.label} <span className="num">{counts[f.id]}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      {nothing && (
+        <p className="list-empty" role="status">
+          {q ? `Nothing matches "${query.trim()}".` : 'Nothing here.'}{' '}
+          <button
+            className="link-btn"
+            onClick={() => {
+              setQuery('')
+              setFilter('all')
+            }}
+          >
+            Show everything
+          </button>
+        </p>
+      )}
       {active.length > 0 && (
         <section aria-labelledby="g-active">
           <h2 id="g-active" className="group">

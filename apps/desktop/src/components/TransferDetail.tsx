@@ -5,6 +5,7 @@ import {
   ArrowSquareOut,
   FolderOpen,
   Pause,
+  ArrowLineUp,
   Play,
   Trash,
   WarningCircle,
@@ -231,6 +232,15 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
           </p>
         </div>
         <div className="detail-actions">
+          {job.status === 'queued' && (
+            <button
+              className="btn"
+              title="Starts as soon as a download finishes"
+              onClick={() => act((b) => b.reorder([job.id]))}
+            >
+              <ArrowLineUp size={16} aria-hidden /> Start next
+            </button>
+          )}
           {canPause && (
             <button className="btn" onClick={() => act((b) => b.pause(job.id))}>
               <Pause size={16} aria-hidden /> Pause
