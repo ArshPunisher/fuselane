@@ -9,12 +9,14 @@
     "zip": "wxt zip && wxt zip -b firefox --mv3",
     "postinstall": "wxt prepare",
     "typecheck": "wxt prepare && tsc --noEmit",
-    "test": "node --test test/*.test.ts"
+    "test": "node --test test/*.test.ts",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@fuselane/capture": "workspace:*"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/node": "^26.6.4",
     "typescript": "^5.9.3",
     "wxt": "0.21.4"

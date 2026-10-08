@@ -86,6 +86,29 @@ jobs:
           done
           exit $status
 
+  extension-host:
+    name: Extension ↔ native host (Linux)
+    # A real Chromium loads the built extension, `fuselane browsers` writes the host
+    # manifest into a temporary config folder, and the extension pings the host.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Build the CLI
+        run: cargo build --locked -p fuselane-cli
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build the extension
+        run: pnpm --filter @fuselane/extension build
+      - name: Extension talks to the host
+        run: |
+          pnpm --filter @fuselane/extension exec playwright install --with-deps chromium
+          pnpm --filter @fuselane/extension e2e
+
   test:
     name: Tests (${{ matrix.os }})
     strategy:
