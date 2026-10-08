@@ -492,7 +492,19 @@ async fn two_networks_share_a_torrent_and_credit_sums_to_the_file() {
         dht: false,
         listen: None,
         state_dir: None,
-        limiter: None,
+        // Each network capped, so one fast loopback peer can't finish before the
+        // other network's peer joins in (it did, flaking the test).
+        limiter: Some(std::sync::Arc::new({
+            let l = fuselane_limits::Limiter::default();
+            l.apply(&fuselane_limits::LimitSettings {
+                global: 0,
+                networks: vec![
+                    ("lo0".into(), 2 * 1024 * 1024),
+                    ("lo0-b".into(), 2 * 1024 * 1024),
+                ],
+            });
+            l
+        })),
     })
     .await
     .unwrap();
