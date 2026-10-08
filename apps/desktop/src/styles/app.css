@@ -393,7 +393,7 @@ h2 {
 
 .nav-tabs .nav-item[aria-current='page'] {
   background: transparent;
-  color: var(--fuse);
+  color: var(--fuse-text);
 }
 
 .nav-label {
@@ -403,7 +403,7 @@ h2 {
 
 .nav-count {
   font-size: 11px;
-  color: var(--fuse);
+  color: var(--fuse-text);
 }
 
 .group {
@@ -532,7 +532,7 @@ h2 {
 }
 
 .row[data-status='running'] .row-state {
-  color: var(--fuse);
+  color: var(--fuse-text);
 }
 
 .row[data-status='failed'] .row-state,
@@ -817,7 +817,7 @@ h2 {
 
 .speed-sub {
   margin-top: 6px;
-  color: var(--fuse);
+  color: var(--fuse-text);
   font-size: 12px;
   font-weight: 500;
 }

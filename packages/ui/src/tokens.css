@@ -21,6 +21,8 @@
   --mute: oklch(0.5 0.015 260);
 
   --fuse: oklch(0.56 0.165 42);
+  /* Small orange text: a touch darker so it stays 4.5:1 on selected rows (axe). */
+  --fuse-text: oklch(0.5 0.16 40);
   --fuse-ink: oklch(0.99 0 0);
   --fuse-soft: oklch(0.56 0.165 42 / 0.1);
 
@@ -79,6 +81,7 @@
     --mute: oklch(0.66 0.012 260);
 
     --fuse: oklch(0.74 0.17 50);
+    --fuse-text: oklch(0.74 0.17 50);
     --fuse-ink: oklch(0.155 0.01 260);
     --fuse-soft: oklch(0.74 0.17 50 / 0.14);
 
@@ -112,6 +115,7 @@
   --mute: oklch(0.66 0.012 260);
 
   --fuse: oklch(0.74 0.17 50);
+  --fuse-text: oklch(0.74 0.17 50);
   --fuse-ink: oklch(0.155 0.01 260);
   --fuse-soft: oklch(0.74 0.17 50 / 0.14);
 
