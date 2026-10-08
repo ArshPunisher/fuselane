@@ -18,7 +18,7 @@
   - UI in a browser (demo data): `pnpm --filter @fuselane/desktop dev`, then open http://localhost:5190.
   - Real app: `pnpm --filter @fuselane/desktop build`, then `cargo run -p fuselane-desktop --features tauri/custom-protocol` (or `pnpm --filter @fuselane/desktop tauri dev`).
 - **Next steps, in order:**
-  3. 3.6 complete/error screens with catalogue actions. (Done: Open / Show in Finder, Dock/taskbar progress, finish/stop notifications, tray speed tooltip, link preview, paste/drop a link.)
+  3. Done this round: error panel with fixes (Fix link, Start over), live speed limits (overall + per network), job ids never reused (L-116). Next: data allowances and slow mode (3.9), network rename/recolour (3.8), keyboard shortcuts and window-state memory (3.11, 3.10).
   5. P2 leftovers: per-network DNS (2.13), Windows/Linux friendly names (2.7, 2.8), free-space check (2.20), sleep/wake (2.39), `--json`.
 - **Repo:** public at https://github.com/ArshPunisher/fuselane (pushed 2026-10-08). First CI run **green on macOS, Windows and Linux**. `main` blocks force-push and deletion. Push only `main` and only when the owner says "push"; spikes stay local.
 - **Waiting on the owner:**
