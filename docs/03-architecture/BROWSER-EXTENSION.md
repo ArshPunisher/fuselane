@@ -21,7 +21,7 @@ Built with WXT 0.21 (MV3) for Chrome, Edge, Brave and Opera, and Firefox. Safari
 - An AppImage registers the `.AppImage` file (`$APPIMAGE`), not its temporary mount. An app running from the disk image or an App Translocation path registers nothing and says "move it to Applications" instead.
 - `allowed_origins` / `allowed_extensions` list only our store IDs (Chrome `nggljghjikdkigiekdciocigdnnhponl`, Firefox `fuselane@fuselane.app`). `FUSELANE_EXTRA_EXTENSION_IDS` adds unpacked development ids (validated as Chrome ids).
 - Flatpak and Snap browsers can't start hosts outside their sandbox; they need the localhost fallback below.
-- Tested end to end on Linux CI: a real Chromium loads the built extension and pings the host (`apps/extension/e2e`).
+- Tested end to end on macOS (local gate) and Linux (CI): a real Chromium loads the built extension and pings the host (`apps/extension/e2e`). Chromium reads host manifests from inside its profile folder too, so the test never touches real browser folders.
 
 **Fallback: localhost WebSocket with pairing** (for Flatpak/Snap browsers, Safari, or a missing host manifest).
 - Listen on `127.0.0.1` only, on a fixed port range.

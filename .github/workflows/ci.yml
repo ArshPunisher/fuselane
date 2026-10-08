@@ -89,7 +89,7 @@ jobs:
   extension-host:
     name: Extension ↔ native host (Linux)
     # A real Chromium loads the built extension, `fuselane browsers` writes the host
-    # manifest into a temporary config folder, and the extension pings the host.
+    # manifest into a temporary HOME, and the extension pings the host.
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
