@@ -4,40 +4,36 @@
 
 ## Now
 
-- **Phase:** P1 spikes (hardware-blocked parts pending) running alongside **P2 Core + CLI** (started).
-- **P2 done (tested, committed):**
-  - storage: names (2.16), staging + publish (2.17, 2.19);
-  - limits (2.21, 2.22);
-  - engine-http: headers (2.23, 2.24), plan (2.25), scheduler (2.26), concurrency (2.27), retry (2.29), measure (2.31), and the multi-network downloader (2.28);
-  - testkit hostile server (2.1).
-  - Tests: 62 in engine-http, including a 15-test end-to-end attack suite plus a chaos test (100/100 seeds byte-exact).
-- **Also done:**
-  - netif (2.5);
-  - transport: pinning on macOS, Linux and Windows + rustls TLS (2.11);
-  - CLI `fuselane get` / `fuselane nets` (part of 2.44).
-  - **A real HTTPS download over a pinned socket is byte-identical to curl.**
-  - Workspace: **109 tests pass**.
-- **Also done since:**
-  - controller wired (Auto grows to 32, settles at server caps);
-  - **pause/checkpoint/resume** with byte sampling and a lying-checkpoint defence;
-  - SHA-256 verification;
-  - `core` SQLite store + state machine;
-  - CLI `ls`/`resume`/`rm`/Ctrl-C;
-  - **kill -9 mid-download, then resume, is byte-exact**.
-  - Workspace about 135 tests, all green.
+- **Phase:** **P3 desktop app** in progress on top of a working P2 core + CLI. P1 hardware spikes still wait on a phone to tether.
+- **P3 done (tested, committed):**
+  - Engine snapshots for the UI (per-network bytes, rates, streams; 180 ring ticks with fill, owner, in-flight).
+  - `core::runner`: one job runner shared by the CLI and the desktop app (link checks, network choice, Happy Eyeballs connects, store bookkeeping, plain-language errors). `core::home`: one shared download list.
+  - `apps/desktop/src-tauri`: Tauri 2 shell + `Service` (3-slot queue, pause/resume/remove, crash recovery, live events). 12 service tests against the hostile server, including break tests (duplicate links, 0-byte files, range-ignoring servers, a 30-job flood).
+  - `apps/desktop`: React UI with the live Fuse Core, Stream, list, New download dialog, Networks and Settings; compact/regular/wide layouts; light/dark/system. In a plain browser it runs a labelled demo engine (`src/lib/demo.ts`, URL params documented at the top).
+  - **32 Playwright UI tests** (WebKit + Chromium) are part of `tools/check.sh` and CI.
+  - Real-world bugs found and fixed this session: IPv6 source binding hung downloads (L-109); 429 on the probe ended downloads (L-110); CLI and app used different databases (L-111); "0 B" for fast completed downloads (L-112); dialog focus (L-113).
+  - Workspace: **156 Rust tests + 32 UI tests, all green**.
+- **Run it:**
+  - UI in a browser (demo data): `pnpm --filter @fuselane/desktop dev`, then open http://localhost:5190.
+  - Real app: `pnpm --filter @fuselane/desktop build`, then `cargo run -p fuselane-desktop --features tauri/custom-protocol` (or `pnpm --filter @fuselane/desktop tauri dev`).
 - **Next steps, in order:**
-  1. macOS friendly names/kinds via SystemConfiguration (2.6), plus Windows/Linux equivalents.
-  2. Per-network DNS (2.13) and Happy Eyeballs (2.14).
-  3. Edge-case coverage table.
-  4. **P3 desktop app** (Tauri + Fuse Core, real engine).
+  1. Owner looks at the real window (I can't capture the screen on this Mac) and gives design feedback.
+  2. 3.4 dialog: native folder picker (tauri-plugin-dialog), drop a link, probe preview (name and size before starting).
+  3. 3.6 complete/error screens with catalogue actions; 3.7 Reveal in Finder/Explorer; 3.10 tray progress, notifications.
+  4. tauri-specta (or a schema test) so `types.ts` can't drift from `service.rs`.
+  5. P2 leftovers: per-network DNS (2.13), Windows/Linux friendly names (2.7, 2.8), free-space check (2.20), sleep/wake (2.39), `--json`.
 - **Waiting on the owner:**
-  - Approve the S9b Fuse Core contact sheets (`docs/04-plan/spikes/S9b-fuse-core.md`).
-  - Q13: OK to create the **public** GitHub repo? (CI can't run until then.)
-  - Q10: test hardware (a phone to tether) for S1/S2-part-2/S3.
-- **Parked:** S5 torrent spike (librqbit + SOCKS5). Only scaffolding existed; restart it in P5 or when time allows.
-- **Environment:** Rust via rustup (`source ~/.cargo/env`), cargo-nextest, cargo-deny, actionlint (Homebrew), Node 24, pnpm 11, Playwright WebKit + Chromium, gh logged in as ArshPunisher.
+  - Design review of the desktop window (and the S9b contact sheets it is based on).
+  - Q13: OK to create the **public** GitHub repo? CI can't run until then.
+  - Q10: a phone to tether, for S1/S2-part-2/S3.
+- **Parked:** S5 torrent spike (librqbit + SOCKS5).
+- **Environment:** Rust via rustup (`source ~/.cargo/env`), cargo-nextest, cargo-deny, actionlint (Homebrew), Node 24, pnpm 11, Playwright WebKit + Chromium, gh logged in as ArshPunisher. macOS has no `timeout` command; screen capture is not permitted for the agent.
 
 ## Log
+
+### 2026-10-08 (session 3)
+- P3 started: snapshots, shared runner, Tauri service, React UI with the Fuse Core, 32 UI tests in the gate.
+- Real downloads exposed L-109 (IPv6 source binding hang, so Happy Eyeballs 2.14 was built), L-110 (429 on the probe) and L-111 (two databases).
 
 ### 2026-10-08 (session 2, latest)
 - Controller wiring, core store, resume and checksums.

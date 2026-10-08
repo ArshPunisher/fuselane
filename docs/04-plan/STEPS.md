@@ -53,7 +53,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [x] 2.11 `Pinner` trait + per-OS implementations from the spikes + `self_test()` — L-56, L-57, L-58 (Windows path awaits a native CI run)
 - [ ] 2.12 Pinned connector for hyper-util + rustls, keep-alive pool per (network, origin), stale-socket retry — L-66
 - [ ] 2.13 Per-network DNS resolver per OS with a fallback — EC-208 — L-65
-- [ ] 2.14 Happy Eyeballs (250 ms, last-good first) and layered deadlines — EC-0xx (dead AAAA) — L-09, L-11
+- [x] 2.14 Happy Eyeballs (250 ms, last-good first) and layered deadlines — EC-0xx (dead AAAA) — L-09, L-11
 - [ ] 2.15 Link probes: reachability, captive portal, public IP, latency — L-62
 
 **2D storage**
@@ -100,13 +100,13 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 
 ## P3 Desktop app (load the design-taste-frontend skill first; review with web-design-guidelines; check with playwright-cli)
 
-- [ ] 3.1 Tauri 2 app shell embedding the core; capabilities and CSP locked down; tauri-specta types generated into `packages/api-types`
+- [x] 3.1 Tauri 2 app shell embedding the core; capabilities and CSP locked down (types hand-kept in `apps/desktop/src/lib/types.ts`; tauri-specta generation still to do)
 - [ ] 3.2 Design system in `packages/ui` from [DESIGN-SYSTEM.md](../07-design/DESIGN-SYSTEM.md): tokens, light/dark/system, Geist fonts, Phosphor icons, components with every state
 - [ ] 3.2b Contact-sheet script (Playwright: keyframes × themes × widths → one PNG) used on every UI PR — MOTION.md §6
-- [ ] 3.2c Responsive shell: compact (bottom tabs, sheets), regular (rail), wide (three panes); min window 360 × 560
-- [ ] 3.3 Downloads list: groups, filters, rows, per-network progress, virtualized — L-81, L-84
-- [ ] 3.4 New download dialog: paste/clipboard/drop, probe states, file name, destination, network chips, streams, warnings — L-62
-- [ ] 3.5 Detail screen: hero speed (NumberFlow), ×-faster chip, Fuse Core, Stream graph, network table with streams and orbs
+- [x] 3.2c Responsive shell: compact (bottom tabs, sheets), regular (rail), wide (three panes); min window 360 × 560
+- [ ] 3.3 Downloads list: groups, filters, rows, per-network progress, virtualized — L-81, L-84 (done: groups, rows, per-network bar, content-visibility; to do: filters, true virtualization)
+- [ ] 3.4 New download dialog: paste/clipboard/drop, probe states, file name, destination, network chips, streams, warnings — L-62 (done: paste-anywhere, clipboard prefill, destination, inline errors; to do: drop, probe states, folder picker, chips, streams)
+- [x] 3.5 Detail screen: hero speed (NumberFlow), ×-faster chip, Fuse Core, Stream graph, network table with streams and orbs
 - [ ] 3.6 Complete and error screens with the error catalogue actions; Fix link
 - [ ] 3.7 Selection toolbar with confirmations; Trash; Reveal
 - [ ] 3.8 Networks menu, rename/recolour, health probe and speed test, guided setup (Windows Wi-Fi policy, Android-on-Mac)
@@ -115,7 +115,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [ ] 3.11 Keyboard shortcuts, drag-drop anywhere, single instance + link hand-over
 - [ ] 3.12 Settings screen + diagnostics ("Copy diagnostics", log level)
 - [ ] 3.13 a11y pass (axe in CI), reduced motion, 24px targets, screen-reader labels — L-83
-- [ ] 3.14 tauri-driver e2e smoke (Linux, Windows) + Playwright mockIPC UI tests
+- [ ] 3.14 tauri-driver e2e smoke (Linux, Windows) + Playwright mockIPC UI tests (Playwright on the demo backend done: 32 tests, WebKit + Chromium)
 - [ ] 3.15 **Gate review:** parity checklist (HTTP parts) ticked
 
 ## P4 Signed beta 0.1
