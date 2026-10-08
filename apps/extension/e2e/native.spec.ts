@@ -1,6 +1,6 @@
 import { test, expect, chromium, type BrowserContext, type Worker } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -19,6 +19,9 @@ const extension = resolve(import.meta.dirname, '../.output/chrome-mv3')
 const cli = process.env.FUSELANE_CLI ?? join(root, 'target/debug/fuselane')
 
 let tmp: string
+/** A copy of the CLI outside the repo: macOS blocks a browser from running a
+ *  program inside ~/Documents (a privacy-protected folder) until someone allows it. */
+let host: string
 
 // Where `fuselane browsers` looks for Chromium inside the temporary HOME.
 const chromiumDir = () =>
@@ -41,6 +44,9 @@ test.beforeAll(async () => {
   expect(existsSync(join(extension, 'manifest.json')), 'run `wxt build` first').toBe(true)
   expect(existsSync(cli), `build the CLI first (${cli})`).toBe(true)
   tmp = mkdtempSync(join(tmpdir(), 'fuselane-e2e-'))
+  host = join(tmp, process.platform === 'win32' ? 'fuselane.exe' : 'fuselane')
+  copyFileSync(cli, host)
+  chmodSync(host, 0o755)
   // Chromium has "run" once: its folder exists, so `fuselane browsers` sees it.
   mkdirSync(chromiumDir(), { recursive: true })
   context = await chromium.launchPersistentContext(join(tmp, 'profile'), {
@@ -74,7 +80,7 @@ test('without the manifest the browser says the host is missing', async () => {
 
 test('after `fuselane browsers`, the extension reaches the host and hears the app is closed', async () => {
   const id = new URL(worker.url()).host
-  const out = execFileSync(cli, ['browsers', '--json'], {
+  const out = execFileSync(host, ['browsers', '--json'], {
     env: env({ FUSELANE_EXTRA_EXTENSION_IDS: id }),
     encoding: 'utf8',
   })
