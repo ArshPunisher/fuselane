@@ -431,6 +431,18 @@ impl TorrentEngine {
         self.session.pause(&t.handle).await.map_err(engine)
     }
 
+    /// Starts the torrent's peers afresh. librqbit waits 10 s, then 60 s, then 6
+    /// minutes before retrying a peer that failed, so after every network was
+    /// blocked (data allowances) a torrent could sit idle for minutes once one is
+    /// back. Pausing and resuming rebuilds the peer list with fresh retry timers.
+    pub async fn reconnect(&self, t: &Torrent) -> Result<(), TorrentError> {
+        if t.progress().phase == Phase::Paused {
+            return Ok(());
+        }
+        self.session.pause(&t.handle).await.map_err(engine)?;
+        self.session.unpause(&t.handle).await.map_err(engine)
+    }
+
     pub async fn resume(&self, t: &Torrent) -> Result<(), TorrentError> {
         self.session.unpause(&t.handle).await.map_err(engine)
     }

@@ -736,7 +736,7 @@ async fn a_network_past_its_allowance_stops_the_torrent_until_it_is_lifted() {
     limiter.set_blocked(["lo0".to_string()]);
     tokio::time::sleep(Duration::from_millis(1500)).await;
     let held = t.progress().done;
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    tokio::time::sleep(Duration::from_secs(4)).await;
     let later = t.progress().done;
     assert!(
         later - held <= 64 * 1024,
@@ -746,7 +746,9 @@ async fn a_network_past_its_allowance_stops_the_torrent_until_it_is_lifted() {
     // Allowance raised or reset: the torrent finishes.
     limiter.set_blocked(Vec::new());
     limiter.apply(&fuselane_limits::LimitSettings::default());
-    tokio::time::timeout(Duration::from_secs(90), t.finished())
+    // librqbit's retry timers grew while blocked (10 s, then 60 s...): start afresh.
+    engine.reconnect(&t).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(30), t.finished())
         .await
         .expect("never resumed")
         .unwrap();

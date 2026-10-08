@@ -138,6 +138,8 @@ struct Saved {
 
 struct Entry {
     torrent: Option<Torrent>,
+    /// Every network it uses had reached its data allowance at the last tick.
+    starved: bool,
     /// When the download finished (sharing time counts from here).
     finished_at: Option<Instant>,
     base: PathBuf,
@@ -517,6 +519,7 @@ impl Torrents {
         let last = view_of(&t, added_at, 0);
         self.entries.lock().await.push(Entry {
             torrent: Some(t),
+            starved: false,
             finished_at: None,
             base,
             added_at,
@@ -754,7 +757,18 @@ impl Torrents {
                     n.rate = (n.received.saturating_sub(was) as f64 / elapsed) as u64;
                 }
             }
-            if p.phase == Phase::Downloading && self.all_networks_used_up(&e.last) {
+            let starved = self.all_networks_used_up(&e.last);
+            // An allowance was raised or reset: reconnect now instead of waiting out
+            // librqbit's growing retry timers.
+            if e.starved
+                && !starved
+                && p.phase == Phase::Downloading
+                && let Some(engine) = &engine
+            {
+                let _ = engine.reconnect(&t).await;
+            }
+            e.starved = starved;
+            if p.phase == Phase::Downloading && starved {
                 e.last.error = Some(
                     "Every network has reached its data allowance, so this torrent is waiting. Raise an allowance on the Networks page, or wait for it to reset."
                         .into(),
@@ -861,6 +875,7 @@ impl Torrents {
             if let Some(done) = s.completed {
                 self.entries.lock().await.push(Entry {
                     torrent: None,
+                    starved: false,
                     finished_at: None,
                     base: s.base,
                     added_at: s.added_at,
@@ -888,6 +903,7 @@ impl Torrents {
                     let last = view_of(&t, s.added_at, 0);
                     self.entries.lock().await.push(Entry {
                         torrent: Some(t),
+                        starved: false,
                         finished_at: None,
                         base: s.base,
                         added_at: s.added_at,
