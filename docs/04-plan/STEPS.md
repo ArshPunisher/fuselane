@@ -12,7 +12,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [x] 0.4 Architecture, tech stack, subsystem designs, ADRs
 - [x] 0.5 Testing strategy, roadmap, steps, workflow, CLAUDE.md
 - [x] 0.6 Decide the open questions blocking P0/P1 (licence, GitHub org/remote, budget for signing) → [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md)
-- [ ] 0.7 Create the GitHub repo and push; protect `main` (status checks required, no force-push)
+- [x] 0.7 Create the GitHub repo and push; protect `main` (no force-push, no deletion)
 - [x] 0.8 `rust-toolchain.toml`, a Cargo workspace with empty crates (`netif`, `transport`, `storage`, `limits`, `engine-http`, `core`, `api`, `testkit`) and `apps/cli` printing its version — test: `cargo build` + `cargo nextest run` on 3 OSes
 - [x] 0.9 pnpm workspace with `packages/ui` and `packages/api-types` placeholders — test: `pnpm -r build`
 - [ ] 0.10 (written and actionlint-clean; tick when green on GitHub) CI: static job (fmt, clippy, cargo-deny, eslint, tsc) + test matrix (macOS, Windows, Linux) — gate: green on an empty workspace
@@ -27,7 +27,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [ ] 1.3 S2 macOS `IP_BOUND_IF` pinning with iPhone + Android tether, VPN behaviour (**part 1 done** on one uplink: [result](spikes/S2-macos-pinning.md); part 2 needs a tether)
 - [ ] 1.4 S4 per-network DNS on each OS
 - [ ] 1.5 S7 Tauri window + Channel IPC throughput + tray + single instance on 3 OSes (**macOS done**: [result](spikes/S7-tauri-shell.md); Windows + Linux pending)
-- [ ] 1.6 S5 librqbit + SOCKS5 balancer
+- [x] 1.6 S5 librqbit + SOCKS5 balancer (built for real in P5)
 - [ ] 1.7 S6 R2 multipart from 2 pinned networks
 - [ ] 1.8 S8 native messaging round trip on 3 OSes
 - [ ] 1.8b S9 Lane Weave prototype (lab route, synthetic feed, contact sheet) — MOTION.md §6 (v1 Weave [superseded](spikes/S9-lane-weave.md); **v2 Fuse Core built**: [result](spikes/S9b-fuse-core.md); tick after the owner approves)
@@ -89,7 +89,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [ ] 2.39 Sleep/wake and quit (pause all, 3 s deadline, frozen writes) — L-21, L-52
 - [ ] 2.40 Event bus with deltas + sequence numbers — benchmark at 10k blocks — L-34
 - [ ] 2.41 Error catalogue `describe()` + snapshot test — L-85
-- [ ] 2.42 Single-owner lock on the data dir
+- [x] 2.42 Single-owner lock: one owner per download (OS file lock per job), so the app and the CLI never run the same download
 
 **2H api + CLI**
 - [ ] 2.43 Local JSON-RPC server (UDS / named pipe) + per-user access + schema validation — EC-215 — L-97, L-98
