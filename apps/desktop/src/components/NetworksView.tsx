@@ -27,6 +27,22 @@ function useLiveRates(): Record<string, number> {
   return out
 }
 
+/** A network answering with a sign-in page (hotel, café, airport Wi-Fi). */
+function SignIn({ net }: { net: NetView }) {
+  const act = useApp((s) => s.act)
+  return (
+    <div className="signin" role="note">
+      <p>
+        {netTitle(net)} wants you to sign in before it reaches the internet, so downloads leave it
+        out for now. Fuselane checks again every minute.
+      </p>
+      <button className="btn" onClick={() => act((b) => b.openSignIn())}>
+        Open sign-in page
+      </button>
+    </div>
+  )
+}
+
 /** Inline editor for a network's name and colour. */
 function NetEditor({ net, lane, onDone }: { net: NetView; lane: Lane; onDone: () => void }) {
   const prefs = useApp((s) => s.netPrefs)
@@ -127,8 +143,14 @@ export function NetworkList({ compact = false }: { compact?: boolean }) {
                 <span className="net-name" translate="no">
                   {netTitle(n)}
                 </span>
-                <span className="net-kind num">
-                  {r > 0 ? rateText(r) : compact ? 'Ready' : `${kindLabel(n.kind)}, ${n.name}`}
+                <span className="net-kind num" data-reach={n.reach ?? undefined}>
+                  {n.reach === 'portal'
+                    ? 'Sign in needed'
+                    : r > 0
+                      ? rateText(r)
+                      : compact
+                        ? 'Ready'
+                        : `${kindLabel(n.kind)}, ${n.name}`}
                 </span>
               </span>
               {!compact && (
@@ -146,6 +168,7 @@ export function NetworkList({ compact = false }: { compact?: boolean }) {
                 </>
               )}
             </div>
+            {n.reach === 'portal' && !compact && <SignIn net={n} />}
             {editing === n.name && (
               <NetEditor net={n} lane={lanes[i] ?? 'steel'} onDone={() => setEditing(null)} />
             )}

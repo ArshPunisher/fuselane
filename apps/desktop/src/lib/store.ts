@@ -133,6 +133,10 @@ export const useApp = create<State>((set, get) => ({
         })
         .catch(() => {})
       await backend.subscribe((e) => {
+        if (e.type === 'networks') {
+          set({ networks: e.networks })
+          return
+        }
         if (e.type === 'open') {
           // The OS handed over a magnet link or a .torrent file: start the dialog with it.
           set((s) => ({

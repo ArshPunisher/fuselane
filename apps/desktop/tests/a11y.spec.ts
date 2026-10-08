@@ -56,6 +56,13 @@ for (const scheme of ['light', 'dark'] as const) {
       await audit(page, 'settings')
     })
 
+    test('a network behind a sign-in page', async ({ page }) => {
+      await page.goto('/?portal=en0')
+      await page.getByRole('button', { name: 'Networks' }).first().click()
+      await expect(page.getByRole('note')).toBeVisible()
+      await audit(page, 'sign-in needed')
+    })
+
     test('empty list', async ({ page }) => {
       await page.goto('/?empty=1')
       await expect(page.getByText('Nothing downloading yet')).toBeVisible()

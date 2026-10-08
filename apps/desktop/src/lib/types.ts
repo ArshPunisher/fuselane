@@ -25,6 +25,8 @@ export interface NetView {
   kind: string
   usable: boolean
   addrs: string[]
+  /** Whether it really reaches the internet; 'portal' means a sign-in page is in the way. */
+  reach: 'online' | 'portal' | 'offline' | null
 }
 
 export interface LiveNet {
@@ -54,6 +56,7 @@ export type UiEvent =
   | ({ type: 'live' } & Live)
   | { type: 'torrents'; torrents: TorrentView[] }
   | { type: 'open'; target: string }
+  | { type: 'networks'; networks: NetView[] }
 
 export interface UiError {
   code: string

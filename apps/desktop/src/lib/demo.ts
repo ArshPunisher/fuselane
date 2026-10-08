@@ -4,7 +4,7 @@
 //
 // URL parameters: empty=1 (no sample jobs), speed=N (time multiplier),
 // seed=N, freeze=SECONDS (advance to that instant, then stop: for screenshots),
-// drop=0 (the phone never drops out).
+// drop=0 (the phone never drops out), portal=en0 (that network shows a sign-in page).
 import type { Backend } from './backend'
 import { createDemoTorrents } from './demoTorrents'
 import type {
@@ -35,10 +35,31 @@ function rng(seed: number) {
 }
 
 const NETWORKS: NetView[] = [
-  { name: 'en0', label: 'Wi-Fi', kind: 'wifi', usable: true, addrs: ['192.168.1.24'] },
-  { name: 'en7', label: 'iPhone USB', kind: 'tether', usable: true, addrs: ['172.20.10.2'] },
-  { name: 'en5', label: 'Ethernet', kind: 'ethernet', usable: true, addrs: ['10.0.0.31'] },
-  { name: 'utun4', label: 'utun4', kind: 'vpn', usable: false, addrs: ['100.64.0.7'] },
+  {
+    name: 'en0',
+    label: 'Wi-Fi',
+    kind: 'wifi',
+    usable: true,
+    addrs: ['192.168.1.24'],
+    reach: 'online',
+  },
+  {
+    name: 'en7',
+    label: 'iPhone USB',
+    kind: 'tether',
+    usable: true,
+    addrs: ['172.20.10.2'],
+    reach: 'online',
+  },
+  {
+    name: 'en5',
+    label: 'Ethernet',
+    kind: 'ethernet',
+    usable: true,
+    addrs: ['10.0.0.31'],
+    reach: 'online',
+  },
+  { name: 'utun4', label: 'utun4', kind: 'vpn', usable: false, addrs: ['100.64.0.7'], reach: null },
 ]
 const BASE_RATE = [7.4 * MB, 3.2 * MB, 10.8 * MB]
 
@@ -309,7 +330,12 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     }),
     openReleaseNotes: async () => {},
     listJobs: async () => jobs.map(view),
-    listNetworks: async () => NETWORKS.map((n) => ({ ...n })),
+    listNetworks: async () =>
+      NETWORKS.map((n) => ({
+        ...n,
+        reach: n.name === params.get('portal') ? ('portal' as const) : n.reach,
+      })),
+    openSignIn: async () => {},
     add: async (raw, dir) => {
       const text = raw.trim()
       if (!text)

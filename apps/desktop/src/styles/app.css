@@ -1887,3 +1887,27 @@ kbd {
     justify-self: start;
   }
 }
+
+.net-kind[data-reach='portal'] {
+  color: var(--warning);
+}
+
+.signin {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  margin: 4px 0 10px 40px;
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  border: 1px solid color-mix(in oklch, var(--warning) 40%, transparent);
+  background: color-mix(in oklch, var(--warning) 8%, transparent);
+  color: var(--ink);
+  font-size: 13px;
+  max-width: 60ch;
+}
+
+@media (max-width: 640px) {
+  .signin {
+    margin-left: 0;
+  }
+}

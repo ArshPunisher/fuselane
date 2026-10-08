@@ -633,3 +633,15 @@ test('per-network lookups are off by default, explained, and can be turned on', 
   await toggle.click()
   await expect(toggle).toHaveAttribute('aria-checked', 'true')
 })
+
+test('a network behind a sign-in page says so and offers the page', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/?portal=en0')
+  await expect(page.locator('.sidebar-nets').getByText('Sign in needed')).toBeVisible()
+  await page.getByRole('button', { name: 'Networks' }).first().click()
+  const note = page.getByRole('note')
+  await expect(note).toContainText('wants you to sign in')
+  await expect(note.getByRole('button', { name: 'Open sign-in page' })).toBeVisible()
+  // Only that network: the others read normally.
+  await expect(page.getByRole('main').getByText('Sign in needed')).toHaveCount(1)
+})

@@ -58,6 +58,8 @@ export interface Backend {
   preview(url: string): Promise<PreviewView>
   subscribe(onEvent: (e: UiEvent) => void): Promise<void>
   listJobs(): Promise<JobView[]>
+  /** Opens a web page so a hotel or café network shows its sign-in page. */
+  openSignIn(): Promise<void>
   /** A .torrent file the user picked, or null if they cancelled. */
   pickTorrent(): Promise<string | null>
   /** Reads a magnet's file list (from peers; can take a while). Writes nothing. */
@@ -137,6 +139,7 @@ async function tauriBackend(): Promise<Backend> {
     startOver: (id) => call('start_over', { id }),
     preview: (url) => call('preview', { url }),
     pickTorrent: () => call('pick_torrent'),
+    openSignIn: () => call('open_sign_in'),
     inspectMagnet: (magnet, dir) => call('torrent_inspect_magnet', { magnet, dir }),
     inspectTorrentFile: (path, dir) => call('torrent_inspect_file', { path, dir }),
     inspectTorrentBytes: (bytes, dir) =>
