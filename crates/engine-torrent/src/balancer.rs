@@ -39,6 +39,8 @@ pub struct Balancer {
     torrents: Mutex<HashMap<(String, String), Arc<NetCounters>>>,
     /// The app's speed limits and data allowances, shared with HTTP downloads.
     limiter: Option<Arc<Limiter>>,
+    /// Networks that take no new peers for now (metered ones while only seeding).
+    avoid: Mutex<std::collections::HashSet<String>>,
 }
 
 /// One network's part in one torrent: raw bytes moved and the verified bytes it
@@ -80,7 +82,21 @@ impl Balancer {
             next: Mutex::new(0),
             torrents: Mutex::new(HashMap::new()),
             limiter: None,
+            avoid: Mutex::default(),
         }
+    }
+
+    /// Replaces the networks that take no new peers. Open connections carry on.
+    pub fn set_avoid<I: IntoIterator<Item = String>>(&self, names: I) {
+        *self
+            .avoid
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = names.into_iter().collect();
+    }
+
+    /// The networks, for callers that decide what to avoid.
+    pub fn networks(&self) -> Vec<Interface> {
+        self.nets.iter().map(|(i, _)| i.clone()).collect()
     }
 
     /// Applies the app's speed limits and data allowances to torrent traffic.
@@ -99,6 +115,13 @@ impl Balancer {
             .nets
             .iter()
             .enumerate()
+            .filter(|(_, (i, _))| {
+                !self
+                    .avoid
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .contains(&i.name)
+            })
             // A network past its data allowance takes no new peers.
             .filter(|(_, (i, _))| !self.limiter.as_ref().is_some_and(|l| l.blocked(&i.name)))
             .filter(|(_, (i, _))| {
@@ -254,6 +277,23 @@ mod tests {
             b.order_for(v4).is_empty(),
             "no route at all once every network is used up"
         );
+    }
+
+    #[test]
+    fn avoided_networks_take_no_new_peers_until_cleared() {
+        let b = Balancer::new(vec![
+            iface("en0", &["10.0.0.2"]),
+            iface("en7", &["172.20.10.2"]),
+        ]);
+        let v4: SocketAddr = "203.0.113.9:6881".parse().unwrap();
+        b.set_avoid(["en7".to_string()]);
+        for _ in 0..4 {
+            assert_eq!(b.order_for(v4).len(), 1);
+            assert_eq!(b.order_for(v4)[0].0.name, "en0");
+        }
+        b.set_avoid(Vec::new());
+        assert_eq!(b.order_for(v4).len(), 2);
+        assert_eq!(b.networks().len(), 2);
     }
 
     #[test]

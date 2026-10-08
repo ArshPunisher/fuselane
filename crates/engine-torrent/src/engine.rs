@@ -268,6 +268,17 @@ impl TorrentEngine {
         self.session.listen_addr()
     }
 
+    /// Networks that take no new peers until changed (the app avoids metered
+    /// networks while torrents only seed).
+    pub fn avoid_networks<I: IntoIterator<Item = String>>(&self, names: I) {
+        self.balancer.set_avoid(names);
+    }
+
+    /// The networks this engine was started with.
+    pub fn interfaces(&self) -> Vec<Interface> {
+        self.balancer.networks()
+    }
+
     pub fn networks(&self) -> Vec<NetStat> {
         self.balancer.snapshot()
     }
