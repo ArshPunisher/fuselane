@@ -253,7 +253,8 @@ export function TorrentDetail({ t, onBack }: { t: TorrentView; onBack: (() => vo
         <p className="field-help">
           Each network is credited only with pieces that passed their checksum.
         </p>
-        <Files t={t} />
+        {/* A finished torrent has let go of its files; its choice can't change. */}
+        {t.status !== 'completed' && <Files t={t} />}
       </div>
     </article>
   )

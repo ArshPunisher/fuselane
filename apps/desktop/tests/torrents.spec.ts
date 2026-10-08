@@ -171,3 +171,18 @@ test('a damaged or oversized dropped file gets a clear error', async ({ page }) 
   await expect(page.getByText(/a \.torrent file is at most 8 MiB/)).toBeVisible()
   await expect(page.getByRole('dialog')).toBeHidden()
 })
+
+test('a finished torrent keeps its credit but offers no file choice', async ({ page }) => {
+  await page.goto('/?speed=50')
+  await page.getByRole('button', { name: /^Sprite Fright \(2021\) 4K/ }).click()
+  await expect(page.getByText('Done', { exact: true }).first()).toBeVisible({ timeout: 15000 })
+  await expect(page.getByRole('region', { name: 'Files' })).toBeHidden()
+  const peers = await page
+    .getByRole('table', { name: 'Networks in this torrent' })
+    .locator('tbody tr td:nth-child(2)')
+    .allTextContents()
+  expect(peers.every((p) => p.trim() === '0')).toBe(true)
+  await expect(
+    page.getByRole('article').getByRole('button', { name: 'Pause', exact: true }),
+  ).toBeHidden()
+})

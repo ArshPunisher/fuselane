@@ -590,6 +590,10 @@ impl Torrents {
                 let _ = engine.release(t).await;
                 last.rate = 0;
                 last.status = "completed".into();
+                // Released: no peers any more; the credit stays as the record.
+                for n in &mut last.networks {
+                    n.peers = 0;
+                }
                 e.last = last;
                 e.torrent = None;
                 released = true;
@@ -655,7 +659,8 @@ impl Torrents {
             return;
         }
         for s in saved {
-            if !valid_id(&s.id) {
+            // Skip anything already added this launch (restore runs alongside new adds).
+            if !valid_id(&s.id) || self.entries.lock().await.iter().any(|e| e.last.id == s.id) {
                 continue;
             }
             if let Some(done) = s.completed {
@@ -1002,6 +1007,10 @@ mod tests {
             done.networks.iter().map(|n| n.credited).sum::<u64>(),
             done.done
         );
+        assert!(
+            done.networks.iter().all(|n| n.peers == 0),
+            "released: no peers"
+        );
         let t = s.downloads.join("T");
         for n in ["a.bin", "c.bin"] {
             assert_eq!(
@@ -1024,6 +1033,10 @@ mod tests {
         // Bad ids and bad actions on a finished torrent get clear errors.
         assert_eq!(s.tor.pause("nope").await.unwrap_err().code, "not-found");
         assert_eq!(s.tor.pause(&id).await.unwrap_err().code, "finished");
+
+        // Restoring while the torrent is already listed must not add it twice.
+        s.tor.restore().await;
+        assert_eq!(s.tor.list().await.len(), 1);
 
         // Restart: the finished row comes back as it was.
         let again = reopen(
