@@ -81,6 +81,23 @@ async fn handle(endpoint: &Path, msg: &[u8]) -> Value {
     }
 }
 
+/// Runs as the host for the app whose data lives in `home`, until the browser
+/// closes the pipe. Returns the process exit code. Nothing but framed messages may
+/// reach stdout: the browser reads it.
+pub fn run_host(home: &Path) -> i32 {
+    let endpoint = crate::client::endpoint(home);
+    let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    else {
+        return 1;
+    };
+    match runtime.block_on(relay(&endpoint, tokio::io::stdin(), tokio::io::stdout())) {
+        Ok(()) => 0,
+        Err(_) => 1,
+    }
+}
+
 /// Relays until the browser closes the pipe. An oversized or broken frame ends it.
 pub async fn relay<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
     endpoint: &Path,

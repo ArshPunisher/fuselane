@@ -1564,12 +1564,14 @@ checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
 name = "fuselane-api"
 version = "0.1.0-beta.3"
 dependencies = [
+ "dirs 6.0.0",
  "libc",
  "serde",
  "serde_json",
  "tempfile",
  "tokio",
  "url",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
