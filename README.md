@@ -33,3 +33,7 @@ Start with [`docs/00-overview/VISION.md`](docs/00-overview/VISION.md), then [`do
 ## Inspiration and originality
 
 Fuselane was inspired by [Plexo](https://github.com/anmolkapil/plexo) (MIT), which proved that multi-network downloading without a VPN is wanted. We studied its behaviour, bugs and history to learn from them. **We do not copy its code.** Fuselane is a clean-room implementation in a different language (Rust) with a different architecture. See [ADR 0005](docs/adr/0005-clean-room-policy.md).
+
+## Licence
+
+[Apache-2.0](LICENSE). Fuselane is free and open source, and it uses only free services ([ADR 0009](docs/adr/0009-zero-cost-policy.md)).
