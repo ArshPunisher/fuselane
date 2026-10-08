@@ -1,11 +1,12 @@
-import { DEFAULT_RULES, type Rules } from '@fuselane/capture'
+import { normalizeRules, type Rules } from '@fuselane/capture'
 import { handOff, offerFor, type Item } from '../lib/handoff.ts'
 
 const HOST = 'app.fuselane.host'
 
 async function rules(): Promise<Rules> {
   const { rules } = await browser.storage.local.get('rules')
-  return { ...DEFAULT_RULES, ...(rules as Partial<Rules> | undefined) }
+  // Cleaned: stored rules may come from an older version or a hand edit.
+  return normalizeRules(rules)
 }
 
 const ask = (message: unknown) => browser.runtime.sendNativeMessage(HOST, message as object)

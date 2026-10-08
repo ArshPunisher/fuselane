@@ -1,0 +1,229 @@
+/* Same tokens as the popup. One accent (fuse), 8px radius on every control. */
+:root {
+  color-scheme: light dark;
+  --bg: oklch(0.985 0.003 260);
+  --ink: oklch(0.21 0.015 260);
+  --mute: oklch(0.45 0.015 260);
+  --line: oklch(0.89 0.006 260);
+  --field: oklch(1 0 0);
+  --fuse: oklch(0.5 0.16 40);
+  --on-fuse: oklch(0.99 0.005 40);
+  --bad: oklch(0.5 0.19 25);
+  --good: oklch(0.47 0.12 150);
+  --radius: 8px;
+  font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: oklch(0.185 0.011 260);
+    --ink: oklch(0.965 0.004 260);
+    --mute: oklch(0.72 0.012 260);
+    --line: oklch(0.3 0.012 260);
+    --field: oklch(0.225 0.012 260);
+    --fuse: oklch(0.74 0.17 50);
+    --on-fuse: oklch(0.2 0.03 50);
+    --bad: oklch(0.72 0.17 25);
+    --good: oklch(0.76 0.14 150);
+  }
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+}
+main {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 40px 16px 64px;
+}
+header {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 24px;
+}
+h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.status {
+  margin: 0;
+  color: var(--mute);
+}
+.status::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--mute);
+  vertical-align: 1px;
+}
+.status[data-state='connected']::before {
+  background: var(--good);
+}
+.status[data-state='not-installed']::before {
+  background: var(--bad);
+}
+section {
+  display: grid;
+  gap: 18px;
+  padding: 24px 0;
+  border-top: 1px solid var(--line);
+}
+h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+.field {
+  display: grid;
+  gap: 6px;
+}
+.field > label {
+  font-weight: 500;
+}
+input:not([type='checkbox']),
+textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--field);
+  color: inherit;
+  font: inherit;
+}
+textarea {
+  resize: vertical;
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: 13px;
+}
+input:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--fuse);
+  outline-offset: 2px;
+}
+[aria-invalid] {
+  border-color: var(--bad) !important;
+}
+.help,
+.error {
+  margin: 0;
+  font-size: 13px;
+}
+.help {
+  color: var(--mute);
+}
+.error {
+  color: var(--bad);
+}
+.switch {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  cursor: pointer;
+}
+.switch span {
+  display: grid;
+  gap: 2px;
+}
+.switch strong {
+  font-weight: 500;
+}
+.switch small {
+  color: var(--mute);
+  font-size: 13px;
+}
+input[type='checkbox'] {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--fuse);
+}
+details {
+  display: grid;
+  gap: 12px;
+}
+summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--mute);
+  border-radius: 4px;
+}
+details[open] summary {
+  margin-bottom: 12px;
+}
+footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+button {
+  padding: 8px 18px;
+  border: 1px solid var(--fuse);
+  border-radius: var(--radius);
+  background: var(--fuse);
+  color: var(--on-fuse);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+button:active {
+  transform: translateY(1px);
+}
+button:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+button.quiet {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--ink);
+}
+@media (hover: hover) {
+  button:hover {
+    filter: brightness(1.06);
+  }
+  button.quiet:hover {
+    border-color: var(--mute);
+    filter: none;
+  }
+}
+.saved {
+  margin: 0;
+  flex-basis: 100%;
+  font-size: 13px;
+  color: var(--mute);
+}
+.saved:empty {
+  display: none;
+}
+.saved[data-state='ok'] {
+  color: var(--good);
+}
+.saved[data-state='error'] {
+  color: var(--bad);
+}
+@media (prefers-reduced-motion: reduce) {
+  button:active {
+    transform: none;
+  }
+}

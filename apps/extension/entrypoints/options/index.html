@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="manifest.open_in_tab" content="true" />
+    <title>Fuselane settings</title>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Fuselane settings</h1>
+        <p id="status" class="status" role="status" data-state="checking">
+          Checking for the Fuselane app…
+        </p>
+      </header>
+
+      <form id="settings" novalidate>
+        <section aria-labelledby="h-handoff">
+          <h2 id="h-handoff">Hand-off</h2>
+          <label class="switch">
+            <input type="checkbox" id="enabled" name="enabled" role="switch" />
+            <span>
+              <strong>Hand big downloads to Fuselane</strong>
+              <small>When off, every download stays in the browser.</small>
+            </span>
+          </label>
+          <div class="field">
+            <label for="minSize">Smallest download to hand over</label>
+            <input
+              id="minSize"
+              name="minSize"
+              inputmode="decimal"
+              autocomplete="off"
+              spellcheck="false"
+              aria-describedby="minSize-help minSize-error"
+            />
+            <p id="minSize-help" class="help">
+              Like 1&nbsp;MB, 500&nbsp;KB or 2&nbsp;GB. Downloads of unknown size are always handed
+              over.
+            </p>
+            <p id="minSize-error" class="error" hidden></p>
+          </div>
+        </section>
+
+        <section aria-labelledby="h-sites">
+          <h2 id="h-sites">Sites</h2>
+          <div class="field">
+            <label for="includeDomains">Only from these sites</label>
+            <textarea
+              id="includeDomains"
+              name="includeDomains"
+              rows="3"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="releases.ubuntu.com…"
+              aria-describedby="includeDomains-help includeDomains-error"
+            ></textarea>
+            <p id="includeDomains-help" class="help">
+              One per line. Subdomains count too. Leave empty for every site.
+            </p>
+            <p id="includeDomains-error" class="error" hidden></p>
+          </div>
+          <div class="field">
+            <label for="excludeDomains">Never from these sites</label>
+            <textarea
+              id="excludeDomains"
+              name="excludeDomains"
+              rows="3"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="mail.example.com…"
+              aria-describedby="excludeDomains-help excludeDomains-error"
+            ></textarea>
+            <p id="excludeDomains-help" class="help">
+              Useful for sites that need you to be signed in, until Fuselane can carry your login.
+            </p>
+            <p id="excludeDomains-error" class="error" hidden></p>
+          </div>
+        </section>
+
+        <section aria-labelledby="h-types">
+          <h2 id="h-types">File types</h2>
+          <div class="field">
+            <label for="extensions">Only these file types</label>
+            <input
+              id="extensions"
+              name="extensions"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="iso zip mkv…"
+              aria-describedby="extensions-help extensions-error"
+            />
+            <p id="extensions-help" class="help">
+              Separated by spaces, without the dot. Leave empty for any type.
+            </p>
+            <p id="extensions-error" class="error" hidden></p>
+          </div>
+          <details id="advanced">
+            <summary>MIME types</summary>
+            <div class="field">
+              <label for="mimeTypes">Only these MIME types</label>
+              <input
+                id="mimeTypes"
+                name="mimeTypes"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="application/zip video/*…"
+                aria-describedby="mimeTypes-help mimeTypes-error"
+              />
+              <p id="mimeTypes-help" class="help">
+                For links without a file name. Leave empty for any type.
+              </p>
+              <p id="mimeTypes-error" class="error" hidden></p>
+            </div>
+          </details>
+        </section>
+
+        <footer>
+          <button type="submit" id="save">Save settings</button>
+          <button type="button" id="reset" class="quiet">Restore defaults</button>
+          <p id="saved" class="saved" role="status" aria-live="polite"></p>
+        </footer>
+      </form>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
