@@ -46,6 +46,9 @@ enum Command {
         /// No progress line (for scripts).
         #[arg(short, long)]
         quiet: bool,
+        /// Expected SHA-256 (64 hex characters); the file is only saved if it matches.
+        #[arg(long, value_parser = parse_sha256)]
+        sha256: Option<[u8; 32]>,
     },
     /// Continue a paused or interrupted download.
     Resume {
@@ -106,7 +109,8 @@ fn main() -> ExitCode {
                 networks,
                 streams,
                 quiet,
-            } => get(&url, out, &networks, streams, quiet).await,
+                sha256,
+            } => get(&url, out, &networks, streams, quiet, sha256).await,
         }
     })
 }
@@ -269,6 +273,7 @@ async fn resume(id: &str, names: &[String], streams: Option<u32>, quiet: bool) -
         streams,
         quiet,
         r,
+        None,
     )
     .await
 }
@@ -425,10 +430,23 @@ fn describe(e: &JobError) -> String {
         JobError::VersionChanged => "The file on the server changed during the download, so it was stopped to avoid a mixed file. Start it again.".into(),
         JobError::Disk(d) => format!("Saving failed ({d:?}). Check free space and that the folder is writable."),
         JobError::AllNetworksFailed(last) => format!("Every network failed. Last problem: {last}"),
+        JobError::ChecksumMismatch { .. } => "The downloaded file doesn't match the SHA-256 you gave, so it wasn't saved under its name. The partial file is kept for inspection.".into(),
         JobError::Paused => "Paused. Progress is saved.".into(),
         JobError::NotResumable(why) => format!("This download can't be resumed ({why}). Start it again."),
         JobError::Staging(e) => format!("Couldn't save the file: {e}"),
     }
+}
+
+fn parse_sha256(s: &str) -> Result<[u8; 32], String> {
+    let s = s.trim();
+    if s.len() != 64 || !s.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err("a SHA-256 is 64 hexadecimal characters".into());
+    }
+    let mut out = [0u8; 32];
+    for (i, byte) in out.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).map_err(|e| e.to_string())?;
+    }
+    Ok(out)
 }
 
 async fn get(
@@ -437,6 +455,7 @@ async fn get(
     names: &[String],
     streams: Option<u32>,
     quiet: bool,
+    sha256: Option<[u8; 32]>,
 ) -> ExitCode {
     if let Err(msg) = parse_link(link) {
         eprintln!("fuselane: {msg}");
@@ -461,7 +480,7 @@ async fn get(
             return ExitCode::FAILURE;
         }
     };
-    run(store, id, link, out, names, streams, quiet, None).await
+    run(store, id, link, out, names, streams, quiet, None, sha256).await
 }
 
 /// Runs (or continues) download `id`, keeping the store in step with the engine.
@@ -475,6 +494,7 @@ async fn run(
     streams: Option<u32>,
     quiet: bool,
     resume: Option<Resume>,
+    sha256: Option<[u8; 32]>,
 ) -> ExitCode {
     let (https, host, port, path) = match parse_link(link) {
         Ok(p) => p,
@@ -583,6 +603,7 @@ async fn run(
         checkpoint: Some(sink),
         checkpoint_every,
         cancel: Some(cancel),
+        expected_sha256: sha256,
         ..Tuning::default()
     };
     let _ = store.apply(id, Event::Start, None);
@@ -626,7 +647,12 @@ async fn run(
             ExitCode::from(130)
         }
         Err(e) => {
-            let resumable = !matches!(e, JobError::VersionChanged | JobError::NotResumable(_));
+            let resumable = !matches!(
+                e,
+                JobError::VersionChanged
+                    | JobError::NotResumable(_)
+                    | JobError::ChecksumMismatch { .. }
+            );
             let _ = store.apply(id, Event::Fail { resumable }, Some(&e.to_string()));
             eprintln!("fuselane: {}", describe(&e));
             if resumable {
@@ -676,6 +702,14 @@ mod tests {
             "magnet:?xt=urn:btih:abc",
         ] {
             assert!(parse_link(bad).is_err(), "{bad:?} accepted");
+        }
+    }
+
+    #[test]
+    fn sha256_flag_is_validated() {
+        assert!(parse_sha256(&"ab".repeat(32)).is_ok());
+        for bad in ["", "abc", &"zz".repeat(32), &"ab".repeat(33)] {
+            assert!(parse_sha256(bad).is_err(), "{bad:?}");
         }
     }
 
