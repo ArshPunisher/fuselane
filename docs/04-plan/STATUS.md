@@ -18,14 +18,14 @@
   - UI in a browser (demo data): `pnpm --filter @fuselane/desktop dev`, then open http://localhost:5190.
   - Real app: `pnpm --filter @fuselane/desktop build`, then `cargo run -p fuselane-desktop --features tauri/custom-protocol` (or `pnpm --filter @fuselane/desktop tauri dev`).
 - **Next steps, in order:**
-  1. Owner design feedback on the real window (screenshots: a live Ethernet + Wi-Fi download at ~50 MB/s and the finished screen).
+  1. Get CI green on all three OSes (first run on Windows and Linux), then protect `main` with required checks.
   2. 3.4 dialog: native folder picker (tauri-plugin-dialog), drop a link, probe preview (name and size before starting).
   3. 3.6 complete/error screens with catalogue actions; 3.7 Reveal in Finder/Explorer; 3.10 tray progress, notifications.
   4. tauri-specta (or a schema test) so `types.ts` can't drift from `service.rs`.
   5. P2 leftovers: per-network DNS (2.13), Windows/Linux friendly names (2.7, 2.8), free-space check (2.20), sleep/wake (2.39), `--json`.
+- **Repo:** public at https://github.com/ArshPunisher/fuselane (pushed 2026-10-08). Push only `main`; spikes stay local.
 - **Waiting on the owner:**
-  - Design review of the desktop window (and the S9b contact sheets it is based on).
-  - Q13: OK to create the **public** GitHub repo? CI can't run until then.
+  - Enable Renovate on the repo (install the free Renovate GitHub app); SignPath application once there is a release.
   - Q10: a phone to tether, for S1/S2-part-2/S3.
 - **Parked:** S5 torrent spike (librqbit + SOCKS5).
 - **Environment:** Rust via rustup (`source ~/.cargo/env`), cargo-nextest, cargo-deny, actionlint (Homebrew), Node 24, pnpm 11, Playwright WebKit + Chromium, gh logged in as ArshPunisher. macOS has no `timeout` command. Screen recording is granted (capture a window with `screencapture -l<id>`; find the id with a CGWindowList script); clicking is not (no Accessibility), so drive the real window with `FUSELANE_DEV_ADD=<url>` in debug builds.
@@ -51,7 +51,7 @@
 - Spikes:
   - S2 macOS pinning part 1 (found that iCloud Private Relay relays plain HTTP);
   - S7 Tauri shell on macOS (5.76 MiB app, about 75–80 MB of RAM);
-  - S9 Lane Weave, then the owner rejected it as too close to Plexo → **S9b Fuse Core** (original radial design, contact sheets pending approval).
+  - S9 Lane Weave, then the owner rejected it as too close to Plexo → **S9b Fuse Core** (original radial design, approved by the owner on seeing the real window).
 - P2 engine built test-first with property tests, attack tests and chaos. Our tests found and fixed three real bugs (L-103 hidden or NBSP names, L-104 transient 403 treated as an expired link, L-105 range overflow).
 
 ### 2026-10-08 (session 2)
