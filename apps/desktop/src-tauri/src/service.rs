@@ -428,6 +428,69 @@ impl Service {
             .collect())
     }
 
+    /// A plain-text report for bug reports, built to share safely (ADR 0009: no
+    /// crash-reporting service). It never contains IP addresses, links or file
+    /// names; the user sees it before pasting it anywhere.
+    pub fn diagnostics(&self, checks: &[(String, bool, String)]) -> String {
+        use std::fmt::Write;
+        let mut r = String::new();
+        let _ = writeln!(
+            r,
+            "Fuselane {} on {} {}",
+            env!("CARGO_PKG_VERSION"),
+            std::env::consts::OS,
+            std::env::consts::ARCH
+        );
+        let _ = writeln!(r, "\nChecks:");
+        for (name, ok, detail) in checks {
+            let _ = writeln!(r, "  {} {name}: {detail}", if *ok { "ok" } else { "FAIL" });
+        }
+        let _ = writeln!(r, "\nNetworks:");
+        match fuselane_netif::list() {
+            Ok(list) => {
+                for i in list {
+                    let v4 = i.addrs.iter().filter(|a| a.is_ipv4()).count();
+                    let v6 = i.addrs.len() - v4;
+                    let _ = writeln!(
+                        r,
+                        "  {} ({}){}: {v4} IPv4, {v6} IPv6",
+                        i.name,
+                        kind_word(i.kind),
+                        if i.usable() { ", used" } else { "" }
+                    );
+                }
+            }
+            Err(e) => {
+                let _ = writeln!(r, "  couldn't list: {e}");
+            }
+        }
+        let limits = self.limits();
+        let _ = writeln!(
+            r,
+            "\nSpeed limits: overall {} B/s, {} per-network",
+            limits.global,
+            limits.networks.len()
+        );
+        let _ = writeln!(r, "\nRecent downloads (newest first):");
+        for j in self.store.list().unwrap_or_default().iter().take(20) {
+            let scheme = j.url.split("://").next().unwrap_or("?");
+            let _ = writeln!(
+                r,
+                "  #{} {} {}{} written {} of {}",
+                j.id,
+                scheme,
+                j.status.as_str(),
+                j.error_code
+                    .as_deref()
+                    .map(|c| format!(" ({c})"))
+                    .unwrap_or_default(),
+                j.secured_bytes(),
+                j.total.map_or("unknown".into(), |t| t.to_string()),
+            );
+        }
+        r
+    }
+
     pub fn networks(&self) -> Result<Vec<NetView>, UiError> {
         let all = fuselane_netif::list().map_err(|e| {
             UiError::new(
@@ -1438,6 +1501,37 @@ mod tests {
         let svc = Service::new(Store::open(&db).unwrap(), dir.path().to_path_buf()).unwrap();
         assert_eq!(svc.limits().global, 512 * KB);
         assert_eq!(svc.limits().networks.len(), 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn diagnostics_never_leak_addresses_links_or_names() {
+        let content = Content::new(64 * KB, 107);
+        let server = RangeServer::start(content).await.unwrap();
+        let h = harness(3);
+        let secret = format!(
+            "http://{}/private-report-name.pdf?token=hunter2",
+            server.addr()
+        );
+        let id = h.svc.add(&secret, None).unwrap();
+        h.wait("finished", |h| {
+            h.job(id).status != "queued" && h.job(id).status != "running"
+        })
+        .await;
+        let report = h.svc.diagnostics(&[("tls".into(), true, "ready".into())]);
+        assert!(report.contains(env!("CARGO_PKG_VERSION")));
+        assert!(report.contains("ok tls: ready"));
+        for leak in ["127.0.0.1", "private-report-name", "hunter2", "token"] {
+            assert!(
+                !report.contains(leak),
+                "diagnostics leaked {leak:?}:\n{report}"
+            );
+        }
+        for iface in fuselane_netif::list().unwrap() {
+            for a in iface.addrs {
+                assert!(!report.contains(&a.to_string()), "leaked address {a}");
+            }
+        }
+        assert!(report.contains(&format!("#{id} http")));
     }
 
     #[test]

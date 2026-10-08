@@ -76,6 +76,21 @@ async fn start_over(svc: State<'_>, id: i64) -> Result<i64, UiError> {
     svc.start_over(id)
 }
 
+/// A privacy-safe report for bug reports (the window copies it to the clipboard).
+#[tauri::command]
+async fn diagnostics(svc: State<'_>) -> Result<String, UiError> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let checks: Vec<(String, bool, String)> = selftest::quick()
+            .into_iter()
+            .map(|c| (c.name.to_string(), c.ok, c.detail))
+            .collect();
+        svc.diagnostics(&checks)
+    })
+    .await
+    .map_err(|e| ui_error("diagnostics", format!("Couldn't build the report: {e}")))
+}
+
 #[tauri::command]
 fn get_limits(svc: State<'_>) -> LimitsView {
     svc.limits()
@@ -311,6 +326,7 @@ fn main() {
             reveal,
             preview,
             get_limits,
+            diagnostics,
             set_limits,
             fix_link,
             start_over,

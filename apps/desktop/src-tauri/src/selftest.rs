@@ -140,6 +140,22 @@ async fn loopback_download() -> Result<String, String> {
 }
 
 pub fn run() -> Vec<Check> {
+    let mut out = quick();
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build();
+    out.push(check(
+        "download",
+        match rt {
+            Ok(rt) => rt.block_on(loopback_download()),
+            Err(e) => Err(e.to_string()),
+        },
+    ));
+    out
+}
+
+/// The checks that need no download: safe to run inside the app (diagnostics).
+pub fn quick() -> Vec<Check> {
     let mut out = vec![
         check("version", Ok(env!("CARGO_PKG_VERSION").to_string())),
         check(
@@ -172,16 +188,6 @@ pub fn run() -> Vec<Check> {
         .map(|_| "SQLite opens and migrates".to_string());
     let _ = std::fs::remove_dir_all(&dir);
     out.push(check("store", store));
-    let rt = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build();
-    out.push(check(
-        "download",
-        match rt {
-            Ok(rt) => rt.block_on(loopback_download()),
-            Err(e) => Err(e.to_string()),
-        },
-    ));
     out
 }
 
