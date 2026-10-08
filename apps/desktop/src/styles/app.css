@@ -278,6 +278,12 @@ h2 {
   background: var(--surface-1);
 }
 
+.wordmark .mark {
+  width: 22px;
+  height: 22px;
+  flex: none;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -286,6 +292,9 @@ h2 {
 }
 
 .wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   color: var(--ink);
   font-size: 16px;
   font-weight: 650;
