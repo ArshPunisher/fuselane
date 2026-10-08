@@ -517,6 +517,24 @@ fn main() {
         });
     }
     let tor = open_torrents(&svc);
+    // Debug builds only (like FUSELANE_DEV_ADD): add a .torrent file with all its
+    // files at launch, for checking the real window without clicking.
+    #[cfg(debug_assertions)]
+    if let Some(path) = std::env::var_os("FUSELANE_DEV_TORRENT") {
+        let tor = tor.clone();
+        tauri::async_runtime::spawn(async move {
+            let path = std::path::PathBuf::from(path);
+            match tor.inspect_file(&path, None).await {
+                Ok(l) => {
+                    let all = l.files.iter().map(|f| f.index).collect();
+                    if let Err(e) = tor.add(&l.token, all).await {
+                        eprintln!("fuselane: FUSELANE_DEV_TORRENT refused: {e}");
+                    }
+                }
+                Err(e) => eprintln!("fuselane: FUSELANE_DEV_TORRENT refused: {e}"),
+            }
+        });
+    }
     let for_shell = svc.clone();
     // Debug builds only (L-100): start a download at launch for smoke tests and
     // screenshots of the real window. Compiled out of release builds.
