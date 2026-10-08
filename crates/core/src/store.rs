@@ -215,9 +215,11 @@ impl Store {
 
     fn open_inner(path: &Path) -> Result<Connection, StoreError> {
         let mut conn = Connection::open(path)?;
+        // Set before anything else touches the file, so every statement here
+        // (including the WAL switch) waits for another process instead of failing.
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
-        conn.busy_timeout(std::time::Duration::from_secs(5))?;
         // Integrity first: a garbage file must fail here, not later.
         let ok: String = conn.query_row("PRAGMA quick_check", [], |r| r.get(0))?;
         if ok != "ok" {
