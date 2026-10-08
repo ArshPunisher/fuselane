@@ -1,5 +1,5 @@
 # 0002. Tauri 2 desktop shell, not Electron
-- Status: Accepted (to be confirmed by spike S7: Tauri window on all 3 OSes, incl. Linux NVIDIA/Wayland)
+- Status: Accepted. Confirmed on macOS by spike S7 (5.76 MiB app, ~75–80 MB total memory, 10 Hz Channel IPC). Windows and Linux halves pending.
 - Date: 2026-10-08
 
 ## Context

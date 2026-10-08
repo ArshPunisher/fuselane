@@ -26,7 +26,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [ ] 1.2 S1 Windows `IP_UNICAST_IF` pinning on real hardware (x64; ARM64 if available)
 - [ ] 1.3 S2 macOS `IP_BOUND_IF` pinning with iPhone + Android tether, VPN behaviour (**part 1 done** on one uplink: [result](spikes/S2-macos-pinning.md); part 2 needs a tether)
 - [ ] 1.4 S4 per-network DNS on each OS
-- [ ] 1.5 S7 Tauri window + Channel IPC throughput + tray + single instance on 3 OSes
+- [ ] 1.5 S7 Tauri window + Channel IPC throughput + tray + single instance on 3 OSes (**macOS done**: [result](spikes/S7-tauri-shell.md); Windows + Linux pending)
 - [ ] 1.6 S5 librqbit + SOCKS5 balancer
 - [ ] 1.7 S6 R2 multipart from 2 pinned networks
 - [ ] 1.8 S8 native messaging round trip on 3 OSes
