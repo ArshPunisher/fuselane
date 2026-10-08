@@ -126,8 +126,8 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [ ] 4.4 Linux AppImage/deb/rpm + checksums; Flatpak manifest (submission can wait until 1.0) (done: AppImage x64, deb/rpm x64 + arm64, SHA256SUMS; to do: Flatpak manifest)
 - [x] 4.5 Tauri updater: minisign key (backed up offline), our own `latest.json` feed, real semver tests — L-76, L-77, L-78
 - [x] 4.6 Packaged smoke (`--self-test`) on signed artifacts per OS — L-75
-- [ ] 4.7 Updater e2e: install N-1, update to N, data intact
-- [ ] 4.8 Landing page (`apps/site`): OS/arch detection, signed downloads, checksums (use the design skills)
+- [x] 4.7 Updater e2e: install N-1, update to N, data intact (2026-10-08: real beta.1 → beta.2 on macOS; a 31% download resumed in beta.2, byte-exact)
+- [x] 4.8 Landing page (`apps/site`): OS/arch detection, signed downloads, checksums (use the design skills)
 - [x] 4.9 Local diagnostics bundle + privacy policy (no crash-reporting service, ADR 0009)
 - [ ] 4.10 Real-hardware matrix pass → tag `v0.1.0-beta.1`
 
