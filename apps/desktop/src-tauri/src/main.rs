@@ -62,6 +62,46 @@ async fn remove(svc: State<'_>, id: i64) -> Result<(), UiError> {
     svc.remove(id)
 }
 
+/// Shows a finished file in Finder / Explorer / the file manager.
+#[tauri::command]
+fn reveal(app: tauri::AppHandle, svc: State<'_>, id: i64) -> Result<(), UiError> {
+    use tauri_plugin_opener::OpenerExt;
+    let path = svc.finished_file(id)?;
+    app.opener()
+        .reveal_item_in_dir(&path)
+        .map_err(|e| ui_error("open-failed", format!("Couldn't show the file: {e}")))
+}
+
+/// Opens a finished file with its default app.
+#[tauri::command]
+fn open_file(app: tauri::AppHandle, svc: State<'_>, id: i64) -> Result<(), UiError> {
+    use tauri_plugin_opener::OpenerExt;
+    let path = svc.finished_file(id)?;
+    app.opener()
+        .open_path(path.to_string_lossy(), None::<&str>)
+        .map_err(|e| ui_error("open-failed", format!("Couldn't open the file: {e}")))
+}
+
+/// Asks the user for a folder to save into; `None` if they cancel.
+#[tauri::command]
+async fn pick_folder(app: tauri::AppHandle) -> Option<String> {
+    use tauri_plugin_dialog::DialogExt;
+    app.dialog()
+        .file()
+        .set_title("Save downloads to")
+        .blocking_pick_folder()
+        .and_then(|p| p.into_path().ok())
+        .map(|p| p.to_string_lossy().into_owned())
+}
+
+fn ui_error(code: &'static str, message: String) -> UiError {
+    UiError {
+        code,
+        message,
+        hint: None,
+    }
+}
+
 /// The window subscribes once; job lists and live updates then arrive on `channel`.
 #[tauri::command]
 fn subscribe(svc: State<'_>, channel: Channel<UiEvent>) {
@@ -119,6 +159,8 @@ fn main() {
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             show_main(app)
         }))
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(svc)
         .setup(|app| {
             let show = MenuItem::with_id(app, "show", "Show Fuselane", true, None::<&str>)?;
@@ -144,6 +186,9 @@ fn main() {
             pause,
             resume,
             remove,
+            reveal,
+            open_file,
+            pick_folder,
             subscribe
         ])
         .build(tauri::generate_context!());

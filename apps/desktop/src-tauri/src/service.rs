@@ -409,6 +409,30 @@ impl Service {
         Ok(())
     }
 
+    /// Where a finished download's file is, checked to still exist. The window
+    /// passes an id, never a path, so it can't open arbitrary files (L-98).
+    pub fn finished_file(&self, id: i64) -> Result<PathBuf, UiError> {
+        let job = self.store.get(id).map_err(|_| not_found(id))?;
+        let path = match (job.status, job.final_path) {
+            (Status::Completed, Some(p)) => p,
+            _ => {
+                return Err(UiError::new(
+                    "not-finished",
+                    "This download hasn't finished yet, so there's no file to show.",
+                    None,
+                ));
+            }
+        };
+        if !path.is_file() {
+            return Err(UiError::new(
+                "file-missing",
+                format!("The file is no longer at {}.", path.display()),
+                Some("It may have been moved, renamed or deleted."),
+            ));
+        }
+        Ok(path)
+    }
+
     /// Pauses everything that's running (used when the app quits).
     pub fn pause_all(&self) {
         for r in lock(&self.running).values() {
@@ -870,6 +894,35 @@ mod tests {
             h.job(first).status == "completed" && h.job(waiting).status == "completed"
         })
         .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn only_finished_files_that_still_exist_can_be_revealed() {
+        let content = Content::new(64 * KB, 102);
+        let server = RangeServer::start(content).await.unwrap();
+        let h = harness(3);
+        assert_eq!(h.svc.finished_file(404).unwrap_err().code, "not-found");
+        let id = h.svc.add(&link(&server), None).unwrap();
+        h.wait("done", |h| h.job(id).status == "completed").await;
+        let path = h.svc.finished_file(id).unwrap();
+        assert!(path.starts_with(std::fs::canonicalize(h.dir.path()).unwrap()));
+        std::fs::remove_file(&path).unwrap();
+        let e = h.svc.finished_file(id).unwrap_err();
+        assert_eq!(e.code, "file-missing");
+        assert!(e.hint.is_some());
+        // An unfinished download has no file to show.
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let bad = h
+            .svc
+            .add(&format!("http://127.0.0.1:{port}/x"), None)
+            .unwrap();
+        h.wait("failed", |h| h.job(bad).status.starts_with("failed"))
+            .await;
+        assert_eq!(h.svc.finished_file(bad).unwrap_err().code, "not-finished");
     }
 
     #[test]
