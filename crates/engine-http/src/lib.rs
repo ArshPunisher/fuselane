@@ -4,6 +4,7 @@
 //! checks and retry policy. Design: `docs/03-architecture/ENGINE-DOWNLOAD.md`.
 //! Rules: L-01–L-35.
 
+pub mod concurrency;
 pub mod headers;
 pub mod plan;
 pub mod scheduler;
