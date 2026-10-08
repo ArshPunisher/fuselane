@@ -266,10 +266,13 @@ async fn close(mut client: TcpStream) -> std::io::Result<()> {
     Ok(())
 }
 
-/// The first bytes the client sends: enough for a BitTorrent handshake's info
-/// hash (48 bytes), or whatever arrives before the client stops or goes quiet.
+/// The client's whole opening: a BitTorrent handshake is 68 bytes (BEP 3) and is
+/// forwarded in one write. librqbit, and other clients, read the peer's handshake
+/// in one go and drop the connection if part of it is missing; forwarding the
+/// first 48 bytes (enough for the info hash) separately broke every connection on
+/// Linux, where the two writes arrive apart. A tracker's HTTP request stops early.
 async fn read_opening(client: &mut TcpStream) -> Vec<u8> {
-    const WANT: usize = 48;
+    const WANT: usize = 68;
     let mut buf = vec![0u8; WANT];
     let mut n = 0;
     let _ = tokio::time::timeout(HANDSHAKE, async {
@@ -500,6 +503,41 @@ mod tests {
         )
         .await;
         assert!(r.is_err());
+    }
+
+    #[tokio::test]
+    async fn a_handshake_sent_in_pieces_reaches_the_peer_in_one_piece() {
+        // The peer reads once, as librqbit does, and needs all 68 bytes in that read.
+        let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let target = l.local_addr().unwrap();
+        let peer = tokio::spawn(async move {
+            let (mut s, _) = l.accept().await.unwrap();
+            let mut buf = [0u8; 256];
+            s.read(&mut buf).await.unwrap()
+        });
+        let server = start(lo_balancer()).await.unwrap();
+        let mut c = tokio_socks::tcp::Socks5Stream::connect_with_password(
+            server.addr,
+            target,
+            &server.user,
+            &server.pass,
+        )
+        .await
+        .unwrap();
+        let mut hs = PROTOCOL.to_vec();
+        hs.extend([0u8; 8]);
+        hs.extend([7u8; 20]);
+        hs.extend([9u8; 20]);
+        assert_eq!(hs.len(), 68);
+        c.write_all(&hs[..48]).await.unwrap();
+        c.flush().await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        c.write_all(&hs[48..]).await.unwrap();
+        assert_eq!(
+            peer.await.unwrap(),
+            68,
+            "the peer's first read held the whole handshake"
+        );
     }
 
     #[test]
