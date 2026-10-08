@@ -53,6 +53,27 @@ impl Offer {
     pub fn needs_session(&self) -> bool {
         self.cookies.as_deref().is_some_and(|c| !c.is_empty()) || !self.headers.is_empty()
     }
+
+    /// What to send with the download so the server sees the same browser session:
+    /// cookies, the page it came from, the browser's User-Agent and any extra
+    /// headers, as (name, value) pairs. The engine checks them again before use.
+    pub fn session_headers(&self) -> Vec<(String, String)> {
+        let mut out: Vec<(String, String)> = self
+            .headers
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        if let Some(c) = self.cookies.as_deref().filter(|c| !c.is_empty()) {
+            out.push(("Cookie".into(), c.into()));
+        }
+        if let Some(r) = &self.referrer {
+            out.push(("Referer".into(), r.clone()));
+        }
+        if let Some(ua) = self.user_agent.as_deref().filter(|u| !u.is_empty()) {
+            out.push(("User-Agent".into(), ua.into()));
+        }
+        out
+    }
 }
 
 fn link(v: &Value, what: &str, schemes: &[&str]) -> Result<String, String> {
@@ -216,6 +237,33 @@ mod tests {
             let r = check_offer(&case["offer"]);
             assert!(r.is_err(), "{} was accepted: {r:?}", case["why"]);
         }
+    }
+
+    #[test]
+    fn the_session_becomes_headers_the_engine_can_check() {
+        let o = check_offer(&serde_json::json!({
+            "v": 1, "type": "download.offer", "url": "https://e.org/f.zip",
+            "cookies": "a=1; b=2", "referrer": "https://e.org/page",
+            "userAgent": "Mozilla/5.0", "headers": {"Authorization": "Bearer t"},
+        }))
+        .unwrap();
+        let h = o.session_headers();
+        for want in [
+            ("Cookie", "a=1; b=2"),
+            ("Referer", "https://e.org/page"),
+            ("User-Agent", "Mozilla/5.0"),
+            ("Authorization", "Bearer t"),
+        ] {
+            assert!(
+                h.iter().any(|(k, v)| k == want.0 && v == want.1),
+                "{want:?} in {h:?}"
+            );
+        }
+        let bare = check_offer(
+            &serde_json::json!({"v": 1, "type": "download.offer", "url": "https://e.org/f"}),
+        )
+        .unwrap();
+        assert!(bare.session_headers().is_empty());
     }
 
     #[test]

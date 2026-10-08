@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use fuselane_engine_http::download::{
-    BoxIo, Cancel, CheckpointFn, Connect, JobError, Network, ProgressFn, Report, Resume,
+    BoxIo, Cancel, CheckpointFn, Connect, Headers, JobError, Network, ProgressFn, Report, Resume,
     SnapshotFn, Source, Tuning, download_with,
 };
 use fuselane_netif::Interface;
@@ -270,6 +270,8 @@ pub struct RunOptions {
     pub per_network_dns: bool,
     /// Save under this name instead of the server's.
     pub filename: Option<String>,
+    /// A browser session's cookies and referrer (checked; never logged).
+    pub headers: Headers,
 }
 
 /// Why a job couldn't start at all (nothing in the store changed state).
@@ -526,16 +528,24 @@ pub struct Preview {
     pub total: Option<u64>,
     /// The server answers byte ranges, so the file can be split across networks.
     pub splittable: bool,
+    /// A web page rather than a file (often a sign-in page).
+    pub web_page: bool,
 }
 
 /// Asks the server about a link (one tiny ranged request, L-01).
 pub async fn preview(link: &str) -> Result<Preview, String> {
+    preview_with(link, Headers::default()).await
+}
+
+/// `preview` with a browser session's headers (what the extension handed over).
+pub async fn preview_with(link: &str, headers: Headers) -> Result<Preview, String> {
     let (source, networks, _) = connect_plan(link, &[], false)
         .await
         .map_err(|e| e.to_string())?;
     let tuning = Tuning {
         connect_timeout: Duration::from_secs(6),
         first_byte_timeout: Duration::from_secs(6),
+        headers,
         ..Tuning::default()
     };
     let p = fuselane_engine_http::download::probe(&source, &networks, &tuning)
@@ -545,6 +555,7 @@ pub async fn preview(link: &str) -> Result<Preview, String> {
         filename: fuselane_storage::names::sanitize(&p.filename),
         total: p.total,
         splittable: p.ranges,
+        web_page: p.is_web_page(),
     })
 }
 
@@ -588,6 +599,7 @@ pub async fn run(
         retry_delay_scale: opts.retry_delay_scale.unwrap_or(defaults.retry_delay_scale),
         limiter: opts.limiter,
         filename: opts.filename,
+        headers: opts.headers,
         ..defaults
     };
     let _ = store.apply(id, Event::Start, None);
