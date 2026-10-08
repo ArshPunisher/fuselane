@@ -19,6 +19,7 @@ fuselane-engine-http = { path = "crates/engine-http" }
 fuselane-engine-torrent = { path = "crates/engine-torrent" }
 fuselane-core = { path = "crates/core" }
 fuselane-api = { path = "crates/api" }
+fuselane-send = { path = "crates/send" }
 fuselane-testkit = { path = "crates/testkit" }
 
 [workspace.lints.rust]
