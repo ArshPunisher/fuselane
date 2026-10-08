@@ -189,6 +189,9 @@ dependencies = [
 [[package]]
 name = "fuselane-limits"
 version = "0.0.0"
+dependencies = [
+ "proptest",
+]
 
 [[package]]
 name = "fuselane-netif"
