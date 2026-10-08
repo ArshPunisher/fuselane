@@ -18,12 +18,10 @@
   - UI in a browser (demo data): `pnpm --filter @fuselane/desktop dev`, then open http://localhost:5190.
   - Real app: `pnpm --filter @fuselane/desktop build`, then `cargo run -p fuselane-desktop --features tauri/custom-protocol` (or `pnpm --filter @fuselane/desktop tauri dev`).
 - **Next steps, in order:**
-  1. Get CI green on all three OSes (first run on Windows and Linux), then protect `main` with required checks.
-  2. 3.4 dialog: native folder picker (tauri-plugin-dialog), drop a link, probe preview (name and size before starting).
-  3. 3.6 complete/error screens with catalogue actions; 3.7 Reveal in Finder/Explorer; 3.10 tray progress, notifications.
-  4. tauri-specta (or a schema test) so `types.ts` can't drift from `service.rs`.
+  2. 3.4 dialog: drop a link, probe preview (name and size before starting). (Folder picker done.)
+  3. 3.6 complete/error screens with catalogue actions; 3.10 tray progress, notifications. (Open / Show in Finder done.)
   5. P2 leftovers: per-network DNS (2.13), Windows/Linux friendly names (2.7, 2.8), free-space check (2.20), sleep/wake (2.39), `--json`.
-- **Repo:** public at https://github.com/ArshPunisher/fuselane (pushed 2026-10-08). Push only `main`; spikes stay local.
+- **Repo:** public at https://github.com/ArshPunisher/fuselane (pushed 2026-10-08). First CI run **green on macOS, Windows and Linux**. `main` blocks force-push and deletion. Push only `main` and only when the owner says "push"; spikes stay local.
 - **Waiting on the owner:**
   - Enable Renovate on the repo (install the free Renovate GitHub app); SignPath application once there is a release.
   - Q10: a phone to tether, for S1/S2-part-2/S3.
