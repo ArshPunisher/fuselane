@@ -47,6 +47,26 @@ jobs:
       - name: TypeScript
         run: pnpm typecheck
 
+  commits:
+    name: Commit messages
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Conventional subjects, no AI attribution (WORKFLOW.md §3)
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          status=0
+          for c in $(git rev-list "$BASE..$HEAD"); do
+            git log -1 --format=%B "$c" > msg.txt
+            tools/check-commit-msg.sh msg.txt || status=1
+          done
+          exit $status
+
   test:
     name: Tests (${{ matrix.os }})
     strategy:
