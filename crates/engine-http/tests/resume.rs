@@ -249,3 +249,28 @@ async fn an_expected_checksum_is_enforced() {
         "a mismatching file is never published"
     );
 }
+
+#[tokio::test]
+async fn a_chosen_name_is_used_and_made_safe() {
+    use fuselane_engine_http::download::download;
+    let content = Content::new(100 * KB, 50);
+    let server = RangeServer::start(content).await.unwrap();
+    for (chosen, saved) in [
+        ("my notes.bin", "my notes.bin"),
+        ("../../escape.bin", "_.._escape.bin"), // never leaves the folder
+        ("   ", "file.bin"),                    // nothing usable: the server's name
+    ] {
+        let d = tempfile::tempdir().unwrap();
+        let t = Tuning {
+            filename: Some(chosen.into()),
+            retry_delay_scale: 0.05,
+            ..Tuning::default()
+        };
+        let report = download(source(&server), vec![plain(1)], d.path(), t)
+            .await
+            .unwrap();
+        assert_eq!(report.path, d.path().join(saved), "{chosen:?}");
+        assert_eq!(report.path.parent(), Some(d.path()), "inside the folder");
+        assert_eq!(sha256_file(&report.path).unwrap(), content.sha256());
+    }
+}

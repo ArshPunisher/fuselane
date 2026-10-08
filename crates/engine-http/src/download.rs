@@ -236,6 +236,8 @@ pub struct Tuning {
     pub snapshot_every: Duration,
     /// Live speed limits shared with other downloads (by network name).
     pub limiter: Option<Arc<fuselane_limits::Limiter>>,
+    /// The name the person chose, instead of the server's (made safe first).
+    pub filename: Option<String>,
 }
 
 impl Default for Tuning {
@@ -260,6 +262,7 @@ impl Default for Tuning {
             resume_samples: 4,
             snapshot: None,
             snapshot_every: Duration::from_millis(200),
+            filename: None,
             limiter: None,
         }
     }
@@ -1526,7 +1529,19 @@ pub async fn download_with(
             check_space(dir, r.total.saturating_sub(have))?;
             staging
         }
-        None => Staging::create(dir, &probe.filename, probe.total)?,
+        None => {
+            // A chosen name wins, made safe like a server's; an unusable one falls back.
+            let chosen = tuning
+                .filename
+                .as_deref()
+                .map(fuselane_storage::names::sanitize)
+                .filter(|n| !n.is_empty() && n != "download");
+            Staging::create(
+                dir,
+                chosen.as_deref().unwrap_or(&probe.filename),
+                probe.total,
+            )?
+        }
     };
     let file = staging.handle().map_err(StagingError::from)?;
 
