@@ -57,6 +57,16 @@
       "nsis": {
         "installMode": "currentUser"
       }
+    },
+    "createUpdaterArtifacts": false
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQxOUE3RThGOUJFNTU3ODIKUldTQ1YrV2JqMzZhMFhnQmppRXB4TkpGTkt0Z0Jna3NFWnVWYlU2NFhnYUhORlVVUHE0VXprV2wK",
+      "endpoints": ["https://arshpunisher.github.io/fuselane/updates/latest.json"],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

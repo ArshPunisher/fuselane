@@ -102,6 +102,64 @@ fn set_limits(svc: State<'_>, limits: LimitsView) -> Result<LimitsView, UiError>
     svc.set_limits(limits)
 }
 
+/// A newer version on our signed feed, if any (L-77: our own feed, not GitHub's
+/// /releases/latest, which skips betas). Errors are quiet: offline is normal.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateInfo {
+    version: String,
+    notes: Option<String>,
+}
+
+#[tauri::command]
+async fn check_update(app: tauri::AppHandle) -> Result<Option<UpdateInfo>, UiError> {
+    use tauri_plugin_updater::UpdaterExt;
+    let updater = app
+        .updater()
+        .map_err(|e| ui_error("update-check", format!("Couldn't check for updates: {e}")))?;
+    match updater.check().await {
+        Ok(Some(u)) => Ok(Some(UpdateInfo {
+            version: u.version.clone(),
+            notes: u.body.clone(),
+        })),
+        Ok(None) => Ok(None),
+        Err(e) => Err(ui_error(
+            "update-check",
+            format!("Couldn't check for updates: {e}"),
+        )),
+    }
+}
+
+/// Downloads and installs the update (its signature is verified against the
+/// built-in key), after pausing downloads so their progress is saved, then restarts.
+#[tauri::command]
+async fn install_update(app: tauri::AppHandle, svc: State<'_>) -> Result<(), UiError> {
+    use tauri_plugin_updater::UpdaterExt;
+    let fail = |e: &dyn std::fmt::Display| {
+        ui_error(
+            "update-failed",
+            format!("The update couldn't be installed: {e}"),
+        )
+    };
+    let update = app
+        .updater()
+        .map_err(|e| fail(&e))?
+        .check()
+        .await
+        .map_err(|e| fail(&e))?
+        .ok_or_else(|| ui_error("no-update", "There's no update to install.".into()))?;
+    svc.pause_all();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while svc.running() > 0 && std::time::Instant::now() < deadline {
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    update
+        .download_and_install(|_, _| {}, || {})
+        .await
+        .map_err(|e| fail(&e))?;
+    app.restart();
+}
+
 /// Name, size and splittability of a link, before downloading it.
 #[tauri::command]
 async fn preview(url: String) -> Result<PreviewView, UiError> {
@@ -295,6 +353,7 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(svc)
         .setup(move |app| {
             let show = MenuItem::with_id(app, "show", "Show Fuselane", true, None::<&str>)?;
@@ -327,6 +386,8 @@ fn main() {
             preview,
             get_limits,
             diagnostics,
+            check_update,
+            install_update,
             set_limits,
             fix_link,
             start_over,
