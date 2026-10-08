@@ -2,7 +2,7 @@
 
 ## Assets
 
-User files and destinations · cookies and auth headers forwarded by the extension · share-link keys · device tokens · signing credentials (SignPath token, updater minisign key) · the update channel · the backend (R2, D1).
+User files and destinations · cookies and auth headers forwarded by the extension · Fuse Send link keys · signing credentials (SignPath token, updater minisign key) · the update channel · the backend (R2, D1).
 
 ## Threats and controls
 

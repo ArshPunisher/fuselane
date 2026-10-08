@@ -18,7 +18,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [ ] 0.10 (written and actionlint-clean; tick when green on GitHub) CI: static job (fmt, clippy, cargo-deny, eslint, tsc) + test matrix (macOS, Windows, Linux) — gate: green on an empty workspace
 - [x] 0.11 Commit-message lint (conventional commits) and a PR template that lists the `L-xx` rules a PR relies on
 - [x] 0.12 Renovate config (grouped weekly updates, lockfile maintenance)
-- [ ] 0.13 Free accounts only (ADR 0009): apply to SignPath Foundation once the repo is public; Cloudflare free tier (P6); domain later (owner)
+- [ ] 0.13 Free accounts only (ADR 0009): apply to SignPath Foundation once the repo is public; no hosted services (ADR 0011); domain later (owner)
 
 ## P1 Risk spikes (throwaway code on `spike/*` branches; results in `docs/04-plan/spikes/`)
 
@@ -28,7 +28,8 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [ ] 1.4 S4 per-network DNS on each OS
 - [ ] 1.5 S7 Tauri window + Channel IPC throughput + tray + single instance on 3 OSes (**macOS done**: [result](spikes/S7-tauri-shell.md); Windows + Linux pending)
 - [x] 1.6 S5 librqbit + SOCKS5 balancer (built for real in P5)
-- [ ] 1.7 S6 R2 multipart from 2 pinned networks
+- [x] ~~1.7 S6 R2 multipart from 2 pinned networks~~ dropped with cloud uploads (ADR 0011)
+- [ ] 1.7b S7 Fuse Send reachability: two machines on home Wi-Fi, a phone hotspot and CGNAT find and connect over DHT (UPnP, uTP, TCP); record how often each pair works
 - [ ] 1.8 S8 native messaging round trip on 3 OSes
 - [ ] 1.8b S9 Lane Weave prototype (lab route, synthetic feed, contact sheet) — MOTION.md §6 (v1 Weave [superseded](spikes/S9-lane-weave.md); **v2 Fuse Core built**: [result](spikes/S9b-fuse-core.md); tick after the owner approves)
 - [ ] 1.9 Update ADRs 0002/0006/0007 (Accepted or superseded) and adjust the design docs to the spike results
@@ -143,20 +144,17 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [x] 5.8 Local swarm tests (isolated temp dirs) + a public swarm benchmark — L-70 (Debian 13.7 netinst in the real app: 16 MB/s over Ethernet + Wi-Fi, SHA-256 matched)
 - [ ] 5.9 Upstream PR: librqbit connector hook + Windows binding
 
-## P6 Bonded uploads (0.3)
+## P6 Fuse Send (0.3): direct sharing, no cloud ([FUSE-SEND.md](../03-architecture/FUSE-SEND.md), [ADR 0011](../adr/0011-fuse-send-p2p.md))
 
-- [ ] 6.1 Backend: Worker + Hono + D1 schema + R2 bucket; create/presign/list/complete routes with the error statuses (413/415/409/410/429/503) — tests with Miniflare
-- [ ] 6.2 Device-key auth + quotas + rate limits
-- [ ] 6.3 `engine-upload`: part planner (R2 equal parts, ≤ 10k parts) — property tests
-- [ ] 6.4 Uploader over pinned networks with the shared scheduler + upload concurrency controller; per-part checksum
-- [ ] 6.5 Resume: persisted parts + ListParts reconciliation — chaos tests
-- [ ] 6.6 `crypto` crate (chunked AES-256-GCM STREAM) + `packages/crypto-web` + shared test vectors
-- [ ] 6.7 Share page (Worker-served): metadata, download via presigned GET, in-browser decrypt (Service Worker streaming)
-- [ ] 6.8 Link options: expiry, download limit, password; hourly expiry cron + lifecycle rules
-- [ ] 6.9 Abuse: report button, takedown runbook, ToS
-- [ ] 6.10 Upload UI in the desktop app (drop zone, Launch moment, progress per network, copy link, history of shares)
-- [ ] 6.11 Receiver flow: Fuselane opens share links and downloads them bonded
-- [ ] 6.12 netlab e2e: 2 links → real R2 staging bucket; summed throughput recorded
+- [ ] 6.1 `send` crate: link format `v1.<info-hash ‖ key ‖ flags>` (parse/print, version check) with shared vectors; negative tests for truncated, tampered and future links
+- [ ] 6.2 Encryption: seekable XChaCha20 at byte offsets + sealed header (name, size, BLAKE3); vectors; tamper and wrong-key tests
+- [ ] 6.3 Encrypting `StorageFactory` for librqbit: encrypt on read (sender), decrypt on write (receiver), no temp copy
+- [ ] 6.4 Sender: build the torrent over ciphertext, seed over every network, stop when the file changes, "arrived" when a peer has every piece
+- [ ] 6.5 Receiver: open `fuselane://send/…` and pasted links; DHT + public tracker lookup; the error table in FUSE-SEND §5 with exact messages
+- [ ] 6.6 Incoming peers per network (L-71) and UPnP per network, so senders are reachable
+- [ ] 6.7 Static link page on GitHub Pages (`/s#…`): hands the link to the app, install help, never sends the fragment anywhere
+- [ ] 6.8 Send UI in the desktop app (drop zone, link + QR, "keep Fuselane open", progress per network, stop sharing, first-download-only option)
+- [ ] 6.9 netlab e2e: sender and receiver each with 2 networks; summed throughput recorded; one side behind simulated NAT
 
 ## P7 Browser extension (0.4)
 

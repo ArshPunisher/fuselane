@@ -2,24 +2,22 @@
 
 Parity with Plexo is tracked in [PARITY-CHECKLIST.md](PARITY-CHECKLIST.md). This file lists what Fuselane adds. Priority: **P0** = needed for 1.0, **P1** = 1.x, **P2** = later. Ph = roadmap phase. Evidence is in [`../01-research/market-research.md`](../01-research/market-research.md).
 
-## A. Bonded uploads and share links (P0, Phase 6) — *the main thing that sets us apart*
+## A. Fuse Send: direct sharing over every network (P0, Phase 6) — *the main thing that sets us apart*
 
-Validated by Plexo issue #58, WeTransfer/Smash free-tier limits, and MASV's per-GB pricing. Design in [`../03-architecture/BONDED-UPLOADS.md`](../03-architecture/BONDED-UPLOADS.md).
+Validated by Plexo issue #58 and WeTransfer/Smash free-tier limits. No cloud and no plans: files go straight from the sender to the receiver ([`../03-architecture/FUSE-SEND.md`](../03-architecture/FUSE-SEND.md), [ADR 0011](../adr/0011-fuse-send-p2p.md)).
 
 | Feature | P |
 |---|---|
-| Drop files or folders, then get a share link; parts upload in parallel over every network | P0 |
-| Resume per part after network loss, sleep or restart (the upload ID and finished parts are persisted) | P0 |
-| Link options: expiry (1/7/30 days), download limit, password | P0 |
-| Optional end-to-end encryption (key in the URL `#fragment`, never sent to the server) | P0 |
-| Share page in the browser: preview metadata, download (decrypting in the browser if encrypted) | P0 |
-| Receivers using Fuselane download the link bonded too | P0 |
-| Notification and copy-link when the upload is done; "upload failed overnight" can't happen silently | P0 |
-| Multi-file bundle: one link for many files, with an optional zip on download | P1 |
-| Bring your own bucket (S3, R2, B2, MinIO), with credentials in the OS keychain | P1 |
-| Dropbox concurrent upload sessions as a destination | P2 |
-| Watch folders: auto-upload new exports (creator workflow) | P2 |
-| Branded share pages for creators and teams | P2 |
+| Drop files or folders, get a link; the transfer uses every network on both sides | P0 |
+| Always end-to-end encrypted (key only in the link's `#fragment`) | P0 |
+| Resume after network loss, sleep or restart on either side | P0 |
+| Clear status: "keep Fuselane open", progress per network, "arrived" | P0 |
+| Every failure says why and what to try (sender offline, can't reach each other, disk full) | P0 |
+| Stop sharing any time; optional "stop after the first full download" | P0 |
+| QR code for the link | P1 |
+| Same-network sending without the DHT (mDNS discovery) | P1 |
+| Bring your own cloud (the user's own Dropbox or S3, at their cost) for offline handover | P2 |
+| Receiving in a browser without the app (needs WebRTC) | P3, research |
 
 ## B. Browser capture (P0, Phase 7)
 
@@ -32,7 +30,7 @@ Design in [`../03-architecture/BROWSER-EXTENSION.md`](../03-architecture/BROWSER
 | Right-click "Download with Fuselane" on links and media | P0 |
 | Forward cookies (including partitioned), Referer, User-Agent and auth headers for logged-in downloads | P0 |
 | Native messaging channel plus a paired localhost fallback | P0 |
-| "Upload with Fuselane" from the extension (send a page's file to a share link) | P1 |
+| "Send with Fuselane" from the extension (share a page's file with a Fuse Send link) | P2 |
 | Refresh an expired link automatically by re-asking the page | P1 |
 | Safari extension (Xcode wrapper) | P2 |
 

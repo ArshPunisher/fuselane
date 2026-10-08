@@ -22,9 +22,9 @@ Versions are current as of 2026-10-08 (from [`../01-research/tech-research.md`](
 | Disk | std positional I/O + fs4 (allocate, locks) + `FSCTL_SET_SPARSE` on Windows | fs4 1.1 | Offset writes, preallocation, sparse files |
 | Database | SQLite via rusqlite (bundled) | 0.40 | Crash-safe, migrations, queryable history ([ADR 0008](../adr/0008-sqlite-persistence.md)) |
 | Torrent | **librqbit** + our per-network peer dialer (in-process SOCKS5 balancer first, an upstream connector hook later). Plan B: libtorrent-rasterbar | 9.0.1 | Pure Rust; libtorrent means maintaining C++ bindings ([ADR 0006](../adr/0006-torrent-engine.md)) |
-| Upload client | presigned UploadPart URLs from our backend; rusty-s3 for bring-your-own-bucket | 0.10 | The client never holds our credentials |
+| Fuse Send | librqbit `create_torrent` + a custom `StorageFactory`; XChaCha20 + BLAKE3 | — | Reuses the torrent engine; no server ([ADR 0011](../adr/0011-fuse-send-p2p.md)) |
 | Crypto | aes-gcm (RustCrypto) or aws-lc-rs AEAD; HKDF-SHA256 | aes-gcm 0.11 | AES-256-GCM is native in WebCrypto, so browsers can decrypt |
-| Backend | **Cloudflare Workers + R2 + D1**, Hono router, Cron Triggers | wrangler 4.148, hono 4.13 | **$0 egress**, global, cheap ([ADR 0007](../adr/0007-upload-backend.md)) |
+| Backend | **None** | — | Nothing hosted, so nothing costs more as users grow ([ADR 0011](../adr/0011-fuse-send-p2p.md)) |
 | Extension | **WXT** (MV3 for Chromium browsers and Firefox) | 0.21 | One codebase, Vite-based |
 | CLI | clap 4 | – | Standard |
 | Logging | tracing + tracing-appender | – | Structured, rotating |
@@ -60,5 +60,5 @@ Versions are current as of 2026-10-08 (from [`../01-research/tech-research.md`](
 | reqwest only | `interface()` is cfg'd out on Windows; we need our own connector anyway |
 | HTTP/3 for v1 | Little benefit for downloads; reqwest's support is unstable. Revisit after 1.0. |
 | WebTorrent / Node | Not in a Rust core |
-| AWS S3 as the backend | Egress costs about $0.09/GB, which kills a sharing product |
+| Any hosted storage (S3, R2) for sharing | Costs grow with users; ADR 0011 chose direct transfer |
 | JSON state files | Plexo's corruption and reset problems; no migrations or queries |

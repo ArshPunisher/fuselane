@@ -1,5 +1,7 @@
 # Bonded uploads and share links
 
+> **Superseded (2026-10-09)** by [FUSE-SEND.md](FUSE-SEND.md) and [ADR 0011](../adr/0011-fuse-send-p2p.md): no hosted storage. Kept for history; nothing here is planned.
+
 The feature that sets Fuselane apart. Crates: `engine-upload`, `crypto`. Service: `apps/backend`. Decision: [ADR 0007](../adr/0007-upload-backend.md).
 
 ## 1. Why it works

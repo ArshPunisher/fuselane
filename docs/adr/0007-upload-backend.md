@@ -1,5 +1,5 @@
 # 0007. Cloudflare Workers + R2 + D1 for uploads and share links
-- Status: Proposed — confirmed or rejected by spike S6
+- Status: **Superseded** by [ADR 0011](0011-fuse-send-p2p.md) (2026-10-09): no hosted service whose cost grows with users. The Worker, bucket and code were removed.
 - Date: 2026-10-08
 
 ## Context

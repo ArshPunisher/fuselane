@@ -21,7 +21,8 @@ Template:
 | [0004](0004-monorepo.md) | One monorepo for all parts | Accepted |
 | [0005](0005-clean-room-policy.md) | Clean-room policy toward Plexo | Accepted |
 | [0006](0006-torrent-engine.md) | librqbit + per-network SOCKS5 balancer | Proposed (spike S5) |
-| [0007](0007-upload-backend.md) | Cloudflare Workers + R2 + D1 for uploads | Proposed (spike S6) |
+| [0007](0007-upload-backend.md) | Cloudflare Workers + R2 + D1 for uploads | Superseded by 0011 |
 | [0008](0008-sqlite-persistence.md) | SQLite for all app state | Accepted |
 | [0009](0009-zero-cost-policy.md) | Zero-cost policy: open source, free services only | Accepted |
 | [0010](0010-no-android-app.md) | No Android app (Android phones remain supported as tethered networks) | Accepted |
+| [0011](0011-fuse-send-p2p.md) | Fuse Send: peer-to-peer sharing replaces cloud uploads | Accepted (spike S7) |

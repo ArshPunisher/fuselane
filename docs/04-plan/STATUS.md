@@ -27,6 +27,11 @@
 
 ## Log
 
+### 2026-10-09
+- Extension settings page (size, sites, file types, MIME types) with inline validation; Chrome Web Store draft filled, waiting on the publisher email check.
+- Fixed: `Store::open` moved a busy (not damaged) database aside, orphaning every job; this was the Linux kill -9 test flake.
+- Owner decision: no plans and no hosted services. Cloud uploads dropped and removed; P6 is now Fuse Send, direct peer-to-peer sharing (ADR 0011).
+
 ### 2026-10-08 (session 3, evening)
 - P5 torrents end to end: engine (SOCKS5 relay per network, path safety, file choice, credit, resume, sharing) and the desktop app (magnet, .torrent, paste, drop, OS Open with as an alternate handler, limits and allowances, sign-in page checks). Real Debian 13.7 download over Ethernet + Wi-Fi verified by SHA-256.
 - CI had been red on Linux and Windows for about a dozen pushes (L-124). Causes fixed: the relay split the BitTorrent handshake (L-123), Windows runners' Hyper-V card read as virtual, a list-only add opening peer connections, librqbit's retry backoff after an allowance block, and two backends starting under React StrictMode. All three platforms green again; the release dry run builds all four targets.

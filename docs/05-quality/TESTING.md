@@ -53,7 +53,7 @@ Branch protection: all required jobs green, no force-push to `main` (L-79).
 | 3 Desktop | L4 smoke + axe clean; UI reviewed with the design-taste and web-design-guidelines skills; 375px…min-window checks |
 | 4 Release | L5 on release builds; updater e2e (old → new); first-launch test for each install path (script, Homebrew, DMG, NSIS, AppImage/deb) with no terminal commands needed |
 | 5 Torrents | Local swarm tests; hostile `.torrent` fixtures; public swarm benchmark |
-| 6 Uploads | Fake-S3 L2; real R2 staging e2e with 2 links in netlab; crypto vectors shared Rust ↔ web; backend error-status tests (413/415/410/429) |
+| 6 Fuse Send | Link and crypto vectors (valid, truncated, tampered, future version); encrypting storage round-trips at random offsets; two-peer L2 transfer over loopback networks; netlab e2e with NAT on one side |
 | 7 Extension | Playwright extension e2e; native-messaging install test per OS; fallback-to-browser test |
 | 8 Power features | Feature-specific L2 + L4 |
 

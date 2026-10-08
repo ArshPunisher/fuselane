@@ -5,7 +5,7 @@ Order: **risky things first, a shippable thing early, the differentiators next, 
 ```text
 P0 Foundations ─► P1 Risk spikes ─► P2 Core + CLI ─► P3 Desktop app ─► P4 Signed beta (0.1)
                                                                             │
-     P9 1.0 launch ◄─ P8 Power features ◄─ P7 Extension ◄─ P6 Bonded uploads ◄─ P5 Torrents
+     P9 1.0 launch ◄─ P8 Power features ◄─ P7 Extension ◄─ P6 Fuse Send ◄─ P5 Torrents
 ```
 
 | Phase | Goal | Delivers | Exit gate |
@@ -16,13 +16,13 @@ P0 Foundations ─► P1 Risk spikes ─► P2 Core + CLI ─► P3 Desktop app 
 | **P3 Desktop app** | Plexo parity for HTTP downloads, in a great UI | Tauri app: list, new download, detail, complete and error screens, networks, limits, tray, notifications, settings | Parity checklist §1, 3–9 ticked for HTTP; L4 smoke and axe clean |
 | **P4 Beta 0.1** | Ship to real users with no terminal commands | Free signing (SignPath, ad-hoc), install script, Homebrew tap, auto-update, landing page, release workflow | L5 on release builds; updater e2e; real-hardware matrix |
 | **P5 Torrents (0.2)** | Torrents with per-network peers | `engine-torrent`, magnet/file input, file picker, peers view, optional seeding | Torrent gates |
-| **P6 Bonded uploads (0.3)** | Upload any file fast and get a share link | `engine-upload`, `crypto`, backend Worker, share page, upload UI | Upload gates; abuse controls live |
+| **P6 Fuse Send (0.3)** | Send any file directly to someone, over every network, with a link; no cloud | `send` crate, encrypting storage, link page, send UI | Two real machines on different networks transfer a 5 GB file; S7 reachability recorded |
 | **P7 Browser extension (0.4)** | Downloads captured from the browser | WXT extension, native-messaging host + installer registration, pairing fallback | Extension gates; store submissions |
 | **P8 Power features (0.5–0.9)** | Daily-use parity with IDM, beyond Plexo | Scheduler, checksums, mirrors, proxy, categories, search, throttle detection, remote API, i18n | Per-feature gates |
 | **P9 1.0 launch** | Stable, documented, distributed | Soak, performance pass, docs, winget/Homebrew/Flathub, store listings, launch | All gates; 2 weeks with no P0/P1 bugs |
 | ~~P10 Android~~ | Dropped ([ADR 0010](../adr/0010-no-android-app.md)) | – | – |
 
-Extension (P7) and uploads (P6) can swap, or run in parallel once P4 has shipped: both depend only on the core API.
+Extension (P7) and Fuse Send (P6) can swap, or run in parallel once P4 has shipped: both depend only on the core API.
 
 ## Phase 1 spikes
 
@@ -35,7 +35,8 @@ Each spike is a throwaway branch `spike/sN-*` with a written result in `docs/04-
 | **S3** | Linux `SO_BINDTODEVICE` on Ubuntu 22.04/24.04 and Fedora, and inside Flatpak | Same, plus netlab script working in GitHub Actions |
 | **S4** | Per-network DNS on each OS returns that network's answers | Netlab per-link DNS test passes; macOS/Windows APIs proven |
 | **S5** | librqbit through the SOCKS5 balancer pins every peer; performance on a public swarm | Peer connections per network logged; throughput within 10% of no-proxy |
-| **S6** | R2 multipart from 2 pinned networks in parallel; presigned URLs from different IPs; per-part checksums | 2 GB upload, throughput sums, object SHA-256 matches |
+| ~~S6~~ | ~~R2 multipart~~: dropped with cloud uploads (ADR 0011) | |
+| **S7** | Fuse Send reachability: DHT lookup and connect between home Wi-Fi, phone hotspot and CGNAT peers, with UPnP, uTP and TCP | Share of pairs that connect within 60 s, per pair type |
 | **S7** | Tauri 2 window on 3 OSes (including Linux NVIDIA/Wayland), `Channel` IPC at 10 Hz with 10k blocks, tray, single instance | Smooth UI, memory measured, workarounds documented |
 | **S9** | The "hardest second": the signature visual (now the Fuse Core, S9b) in a `lab` route with a synthetic feed (2–3 lanes, a drop, a hedge race), in both themes | Within the MOTION.md budget on macOS and WebKitGTK; contact sheet approved by the owner |
 | **S8** | Native messaging round trip (Chrome + Firefox) to a Rust host on 3 OSes; localhost pairing fallback | Message received with cookies; host manifest install script per OS |

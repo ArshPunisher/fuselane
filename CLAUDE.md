@@ -45,7 +45,7 @@ A cross-platform (macOS, Windows, Linux; Android later) **download and upload ma
 ## Architecture in brief
 
 - **Rust core** in `crates/` (netif → transport → engine-http / engine-torrent / engine-upload → core → api), with storage, limits and crypto as leaves. No crate depends on Tauri or the UI.
-- **Apps** in `apps/`: `desktop` (Tauri 2 + React 19 + Vite + Tailwind 4; the core runs in-process), `cli` (`fuselane`, `fuselaned`, `--native-messaging`), `extension` (WXT MV3), `backend` (Cloudflare Worker + R2 + D1), later `android`.
+- **Apps** in `apps/`: `desktop` (Tauri 2 + React 19 + Vite + Tailwind 4; the core runs in-process), `cli` (`fuselane`, `fuselaned`, `--native-messaging`), `extension` (WXT MV3). No hosted backend: Fuselane runs only on users' machines ([ADR 0011](docs/adr/0011-fuse-send-p2p.md)).
 - **Shared TS** in `packages/` (`ui`, `api-types` generated from Rust with specta (never hand-edit), `crypto-web`).
 - **State** in SQLite (WAL) with numbered migrations. **Scheduler, concurrency, retry policy and limits are pure functions of a snapshot.**
 - **OS-specific code** only behind traits (`Pinner`, `Watcher`, `FileOps`, `Integration`) with `cfg(target_os)` modules and a fake for tests.

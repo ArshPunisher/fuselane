@@ -12,14 +12,14 @@ Status: **proposed** (to be confirmed by the Phase 1 spikes). Decisions are reco
                          │                        ▼              ▼                                 │
                          │   ┌──────────────── Fuselane core (Rust library) ─────────────────┐     │
                          │   │ jobs · queue · limits · scheduler · persistence · events     │     │
-                         │   │ engines: http · torrent · upload       storage · crypto      │     │
+                         │   │ engines: http · torrent · send         storage · crypto      │     │
                          │   │ transport (pinned sockets, per-network DNS) · netif          │     │
                          │   └───────┬──────────────┬──────────────┬────────────────────────┘     │
                          │   Desktop app (Tauri 2: Rust shell + React UI) embeds the core           │
                          └───────────┼──────────────┼──────────────┼───────────────────────────────┘
                                  Wi-Fi         USB tether      Ethernet        (each socket pinned)
                                      \             |              /
-                    HTTP servers · CDNs · torrent peers · Fuselane backend (Cloudflare Workers + R2 + D1)
+                    HTTP servers · CDNs · torrent peers · Fuse Send peers (no Fuselane server)
                                                                           │
                                                        share page in the receiver's browser
 ```
@@ -47,7 +47,7 @@ fuselane/
 │  ├─ storage/        # staging files, preallocate/sparse, offset writer pool, name claiming/sanitizing, publish, free space
 │  ├─ engine-http/    # probe, planner, scheduler, concurrency controller, streams, hedging, retry policy, validators
 │  ├─ engine-torrent/ # librqbit integration + per-network peer dialer
-│  ├─ engine-upload/  # multipart part planner, uploader, resume; backend client
+│  ├─ send/           # Fuse Send: link format, encryption, encrypting torrent storage
 │  ├─ crypto/         # chunked AES-256-GCM format + shared test vectors
 │  ├─ limits/         # token buckets, data-usage periods, schedules
 │  ├─ core/           # job manager + state machines, queue, persistence (SQLite), events, settings, history
@@ -58,7 +58,6 @@ fuselane/
 │  ├─ desktop/        # Tauri 2: src-tauri/ (thin commands → core) + src/ (React UI)
 │  ├─ cli/            # `fuselane` CLI, `fuselaned` daemon, `--native-messaging` mode (clap)
 │  ├─ extension/      # WXT: chrome-mv3, firefox-mv3 (Safari later)
-│  ├─ backend/        # Cloudflare Worker (Hono) + D1 migrations + share page
 │  ├─ site/           # landing page (later)
 │  └─ android/        # Kotlin app over crates/ffi (Phase 10)
 ├─ packages/
@@ -73,7 +72,7 @@ fuselane/
 ### Layering rules (checked in CI with `cargo-deny` bans and a dependency-graph test)
 
 ```text
-netif → transport → { engine-http, engine-torrent, engine-upload } → core → api → apps
+netif → transport → { engine-http, engine-torrent, send } → core → api → apps
 storage, limits, crypto are leaves used by the engines/core.
 ```
 
@@ -86,8 +85,8 @@ storage, limits, crypto are leaves used by the engines/core.
 | Entity | Meaning |
 |---|---|
 | `Network` | A usable interface: id (stable, derived from the MAC/GUID, not the device name), device name, index, friendly name, kind, addresses, gateway, DNS servers, metered flag, status |
-| `Job` | A user-level transfer: `Download(Http\|Torrent)` or `Upload` |
-| `Plan` | How a job's bytes are split: blocks (download), parts (upload), pieces (torrent) |
+| `Job` | A user-level transfer: `Download(Http\|Torrent)` or `Send` |
+| `Plan` | How a job's bytes are split: blocks (download), pieces (torrent and Fuse Send) |
 | `Stream` | One pinned connection doing work on one network |
 | `Attempt` | One request for one block on one stream (primary or hedge) |
 | `Version` | What the server says the file is: size, ETag (normalized), Last-Modified |
@@ -136,7 +135,7 @@ storage, limits, crypto are leaves used by the engines/core.
 | Interface discovery, pinning, DNS, probes | [NETWORKING.md](NETWORKING.md) |
 | HTTP download engine | [ENGINE-DOWNLOAD.md](ENGINE-DOWNLOAD.md) |
 | Torrents | [TORRENT.md](TORRENT.md) |
-| Bonded uploads, backend, share links | [BONDED-UPLOADS.md](BONDED-UPLOADS.md) |
+| Fuse Send (direct sharing) | [FUSE-SEND.md](FUSE-SEND.md) |
 | Browser extension | [BROWSER-EXTENSION.md](BROWSER-EXTENSION.md) |
 | Error taxonomy and messages | [ERRORS.md](ERRORS.md) |
 | Threat model | [SECURITY.md](SECURITY.md) |
