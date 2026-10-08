@@ -24,6 +24,8 @@ type State<'a> = tauri::State<'a, Arc<Service>>;
 struct AppInfo {
     version: &'static str,
     default_dir: String,
+    /// Set on the first launch after an update, for a one-time "Updated" message.
+    updated_from: Option<String>,
 }
 
 #[tauri::command]
@@ -31,7 +33,25 @@ fn app_info(svc: State<'_>) -> AppInfo {
     AppInfo {
         version: env!("CARGO_PKG_VERSION"),
         default_dir: svc.default_dir().to_string_lossy().into_owned(),
+        updated_from: svc.updated_from().map(str::to_string),
     }
+}
+
+/// Opens this version's release notes in the browser. The URL is built here from
+/// the app's own version, so the window can't open arbitrary links.
+#[tauri::command]
+fn open_release_notes(app: tauri::AppHandle) -> Result<(), UiError> {
+    use tauri_plugin_opener::OpenerExt;
+    let url = format!(
+        "https://github.com/ArshPunisher/fuselane/releases/tag/v{}",
+        env!("CARGO_PKG_VERSION")
+    );
+    app.opener().open_url(url, None::<&str>).map_err(|e| {
+        ui_error(
+            "open-failed",
+            format!("Couldn't open the release notes: {e}"),
+        )
+    })
 }
 
 #[tauri::command]
@@ -409,6 +429,7 @@ fn main() {
             set_network_pref,
             diagnostics,
             check_update,
+            open_release_notes,
             install_update,
             set_limits,
             fix_link,

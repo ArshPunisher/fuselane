@@ -293,6 +293,8 @@ pub struct Service {
     /// Limits as saved (the limiter holds the effective ones, after slow mode).
     saved_limits: Mutex<LimitsView>,
     net_prefs: Mutex<Vec<NetPref>>,
+    /// The version that ran before this one, when this launch follows an update.
+    updated_from: Option<String>,
     /// Shrinks engine retry waits; only tests set it.
     retry_scale: Option<f64>,
 }
@@ -420,7 +422,16 @@ impl Service {
         store.recover_interrupted().map_err(store_error)?;
         // Saved limits come back on launch; a damaged value is ignored, not fatal.
         let limiter = Arc::new(Limiter::default());
-        let mut saved_limits = LimitsView::default();
+        // A fresh install has no saved limits: slow mode still has its default speed.
+        let mut saved_limits = LimitsView {
+            slow_rate: DEFAULT_SLOW,
+            ..LimitsView::default()
+        };
+        // Which version ran last: an update is announced once (never on a fresh install).
+        let current = env!("CARGO_PKG_VERSION");
+        let previous = store.setting("last_version").ok().flatten();
+        let updated_from = previous.filter(|p| p != current);
+        let _ = store.set_setting("last_version", current);
         let net_prefs: Vec<NetPref> = store
             .setting("network_prefs")
             .ok()
@@ -449,6 +460,7 @@ impl Service {
             limiter,
             saved_limits: Mutex::new(saved_limits),
             net_prefs: Mutex::new(net_prefs),
+            updated_from,
         }))
     }
 
@@ -675,6 +687,11 @@ impl Service {
         self.publish_jobs();
         self.pump();
         Ok(())
+    }
+
+    /// The previous version, if this is the first launch after an update.
+    pub fn updated_from(&self) -> Option<&str> {
+        self.updated_from.as_deref()
     }
 
     pub fn limits(&self) -> LimitsView {
@@ -1546,7 +1563,13 @@ mod tests {
         let server = RangeServer::start(content).await.unwrap();
         {
             let svc = Service::new(Store::open(&db).unwrap(), dir.path().to_path_buf()).unwrap();
-            assert_eq!(svc.limits(), LimitsView::default());
+            assert_eq!(
+                svc.limits(),
+                LimitsView {
+                    slow_rate: DEFAULT_SLOW,
+                    ..LimitsView::default()
+                }
+            );
             for bad in [
                 LimitsView {
                     global: MAX_LIMIT + 1,
@@ -1748,6 +1771,24 @@ mod tests {
         drop(svc);
         let svc = Service::new(Store::open(&db).unwrap(), dir.path().to_path_buf()).unwrap();
         assert_eq!(svc.network_prefs(), vec![pref("en5", None, Some("iris"))]);
+    }
+
+    #[test]
+    fn an_update_is_announced_once_and_never_on_a_fresh_install() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("fuselane.db");
+        let open = || Service::new(Store::open(&db).unwrap(), dir.path().to_path_buf()).unwrap();
+        assert_eq!(open().updated_from(), None, "fresh install");
+        assert_eq!(open().updated_from(), None, "same version again");
+        // Pretend an older version ran last.
+        Store::open(&db)
+            .unwrap()
+            .set_setting("last_version", "0.0.1-old")
+            .unwrap();
+        assert_eq!(open().updated_from(), Some("0.0.1-old"));
+        assert_eq!(open().updated_from(), None, "only once");
+        // Slow mode has its default speed without anything saved.
+        assert_eq!(open().limits().slow_rate, DEFAULT_SLOW);
     }
 
     #[test]
