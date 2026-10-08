@@ -3,6 +3,7 @@
 //! loopback only and demands random credentials, so other local programs can't
 //! use it. Everything a client sends is treated as untrusted.
 
+use std::future::Future;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -221,6 +222,9 @@ async fn serve(
             let mut peer = Counted {
                 inner: peer,
                 sinks: &sinks,
+                net: &iface.name,
+                limiter: balancer.limiter(),
+                wait: None,
             };
             let res = async {
                 peer.write_all(&first).await?;
@@ -292,6 +296,10 @@ fn handshake_info_hash(b: &[u8]) -> Option<String> {
 struct Counted<'a> {
     inner: TcpStream,
     sinks: &'a [Arc<crate::balancer::NetCounters>],
+    net: &'a str,
+    limiter: Option<&'a Arc<fuselane_limits::Limiter>>,
+    /// Speed limit debt: no more reading from the peer until this passes.
+    wait: Option<Pin<Box<tokio::time::Sleep>>>,
 }
 
 impl AsyncRead for Counted<'_> {
@@ -300,12 +308,31 @@ impl AsyncRead for Counted<'_> {
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<std::io::Result<()>> {
+        // Past its data allowance: end the connection (EOF) so librqbit moves on.
+        if self.limiter.is_some_and(|l| l.blocked(self.net)) {
+            return Poll::Ready(Ok(()));
+        }
+        if let Some(w) = self.wait.as_mut() {
+            if w.as_mut().poll(cx).is_pending() {
+                return Poll::Pending;
+            }
+            self.wait = None;
+        }
         let before = buf.filled().len();
         let r = Pin::new(&mut self.inner).poll_read(cx, buf);
         let n = (buf.filled().len() - before) as u64;
         self.sinks.iter().for_each(|c| {
             c.down.fetch_add(n, Ordering::Relaxed);
         });
+        if n > 0
+            && let Some(l) = self.limiter
+        {
+            // Same limits as HTTP downloads; TCP then slows the sender down.
+            let d = l.take(self.net, n);
+            if !d.is_zero() {
+                self.wait = Some(Box::pin(tokio::time::sleep(d)));
+            }
+        }
         r
     }
 }
@@ -321,6 +348,10 @@ impl AsyncWrite for Counted<'_> {
             self.sinks.iter().for_each(|c| {
                 c.up.fetch_add(*n as u64, Ordering::Relaxed);
             });
+            // Sent bytes count toward a data allowance too (plans bill both ways).
+            if let Some(l) = self.limiter {
+                l.count(self.net, *n as u64);
+            }
         }
         r
     }

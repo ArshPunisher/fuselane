@@ -1655,6 +1655,7 @@ name = "fuselane-engine-torrent"
 version = "0.1.0-beta.3"
 dependencies = [
  "anyhow",
+ "fuselane-limits",
  "fuselane-netif",
  "fuselane-transport",
  "librqbit",

@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
+use fuselane_limits::Limiter;
 use fuselane_netif::Interface;
 
 /// One network's live numbers.
@@ -36,6 +37,8 @@ pub struct Balancer {
     /// Per torrent (info hash, lowercase hex) and network name, learned from the
     /// BitTorrent handshake each peer connection starts with.
     torrents: Mutex<HashMap<(String, String), Arc<NetCounters>>>,
+    /// The app's speed limits and data allowances, shared with HTTP downloads.
+    limiter: Option<Arc<Limiter>>,
 }
 
 /// One network's part in one torrent: raw bytes moved and the verified bytes it
@@ -76,7 +79,18 @@ impl Balancer {
                 .collect(),
             next: Mutex::new(0),
             torrents: Mutex::new(HashMap::new()),
+            limiter: None,
         }
+    }
+
+    /// Applies the app's speed limits and data allowances to torrent traffic.
+    pub fn with_limiter(mut self, limiter: Option<Arc<Limiter>>) -> Balancer {
+        self.limiter = limiter;
+        self
+    }
+
+    pub fn limiter(&self) -> Option<&Arc<Limiter>> {
+        self.limiter.as_ref()
     }
 
     /// Networks to try for `dest`, best first. Loopback peers (local tests) may use any.
@@ -85,6 +99,8 @@ impl Balancer {
             .nets
             .iter()
             .enumerate()
+            // A network past its data allowance takes no new peers.
+            .filter(|(_, (i, _))| !self.limiter.as_ref().is_some_and(|l| l.blocked(&i.name)))
             .filter(|(_, (i, _))| {
                 dest.ip().is_loopback() || i.addrs.iter().any(|a| a.is_ipv4() == dest.is_ipv4())
             })
@@ -211,6 +227,33 @@ mod tests {
         assert_eq!(b.order_for(v4)[0].0.name, "en1");
         b.nets[1].1.peers.store(5, Ordering::Relaxed);
         assert_eq!(b.order_for(v4)[0].0.name, "en0");
+    }
+
+    #[test]
+    fn a_network_past_its_allowance_gets_no_new_peers() {
+        let limiter = Arc::new(Limiter::default());
+        let b = Balancer::new(vec![
+            iface("en0", &["10.0.0.2"]),
+            iface("en1", &["192.168.1.2"]),
+        ])
+        .with_limiter(Some(limiter.clone()));
+        let v4: SocketAddr = "203.0.113.9:6881".parse().unwrap();
+        limiter.set_blocked(["en0".to_string()]);
+        for _ in 0..4 {
+            let order = b.order_for(v4);
+            assert_eq!(
+                order
+                    .iter()
+                    .map(|(i, _)| i.name.as_str())
+                    .collect::<Vec<_>>(),
+                vec!["en1"]
+            );
+        }
+        limiter.set_blocked(["en0".to_string(), "en1".to_string()]);
+        assert!(
+            b.order_for(v4).is_empty(),
+            "no route at all once every network is used up"
+        );
     }
 
     #[test]

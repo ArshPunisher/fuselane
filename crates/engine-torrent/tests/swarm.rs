@@ -107,6 +107,7 @@ async fn a_torrent_downloads_byte_exact_through_the_proxy() {
         dht: false,
         listen: None,
         state_dir: None,
+        limiter: None,
     })
     .await
     .unwrap();
@@ -146,6 +147,7 @@ async fn broken_inputs_get_clear_errors() {
         dht: false,
         listen: None,
         state_dir: None,
+        limiter: None,
     })
     .await;
     assert!(matches!(none, Err(TorrentError::NoNetworks)));
@@ -156,6 +158,7 @@ async fn broken_inputs_get_clear_errors() {
         dht: false,
         listen: None,
         state_dir: None,
+        limiter: None,
     })
     .await
     .unwrap();
@@ -201,6 +204,7 @@ async fn an_existing_file_is_never_overwritten() {
         dht: false,
         listen: None,
         state_dir: None,
+        limiter: None,
     })
     .await
     .unwrap();
@@ -308,6 +312,7 @@ async fn chosen_files_download_and_edge_pieces_are_cleaned_up() {
         dht: false,
         listen: None,
         state_dir: None,
+        limiter: None,
     })
     .await
     .unwrap();
@@ -391,6 +396,7 @@ async fn removing_with_files_deletes_the_torrent_folder() {
         dht: false,
         listen: None,
         state_dir: None,
+        limiter: None,
     })
     .await
     .unwrap();
@@ -472,6 +478,7 @@ async fn two_networks_share_a_torrent_and_credit_sums_to_the_file() {
         dht: false,
         listen: None,
         state_dir: None,
+        limiter: None,
     })
     .await
     .unwrap();
@@ -523,6 +530,7 @@ async fn after_a_restart_saved_files_are_rechecked_not_downloaded_again() {
         dht: false,
         listen: None,
         state_dir: Some(state.path().to_path_buf()),
+        limiter: None,
     };
     let first = TorrentEngine::start(opts(leech.path())).await.unwrap();
     let t = first
@@ -591,6 +599,7 @@ async fn a_torrent_can_start_paused() {
         dht: false,
         listen: None,
         state_dir: None,
+        limiter: None,
     })
     .await
     .unwrap();
@@ -614,4 +623,110 @@ async fn a_torrent_can_start_paused() {
         .await
         .unwrap()
         .unwrap();
+}
+
+fn limited_engine_opts(
+    dir: &std::path::Path,
+    limiter: std::sync::Arc<fuselane_limits::Limiter>,
+) -> EngineOptions {
+    EngineOptions {
+        download_dir: dir.to_path_buf(),
+        networks: vec![loopback()],
+        dht: false,
+        listen: None,
+        state_dir: None,
+        limiter: Some(limiter),
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_apps_speed_limit_holds_for_torrents_and_usage_is_counted() {
+    let seed = tempfile::tempdir().unwrap();
+    let leech = tempfile::tempdir().unwrap();
+    let data = payload(3 * 1024 * 1024);
+    let (_s, addr, torrent) = seeder(seed.path(), &data).await;
+    let limiter = std::sync::Arc::new(fuselane_limits::Limiter::default());
+    limiter.apply(&fuselane_limits::LimitSettings {
+        global: 1024 * 1024,
+        networks: vec![],
+    });
+    let engine = TorrentEngine::start(limited_engine_opts(leech.path(), limiter.clone()))
+        .await
+        .unwrap();
+    let started = std::time::Instant::now();
+    let t = engine
+        .add(
+            Source::File(torrent),
+            None,
+            vec![addr],
+            AddOptions::default(),
+        )
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(60), t.finished())
+        .await
+        .unwrap()
+        .unwrap();
+    let took = started.elapsed().as_secs_f64();
+    // 3 MiB at 1 MiB/s from an empty bucket: about 3 s (a little less if the last
+    // read's debt is never slept off).
+    assert!(took > 2.3, "the limit wasn't applied: {took:.2} s");
+    assert!(took < 12.0, "far slower than the limit: {took:.2} s");
+    assert!(std::fs::read(leech.path().join("payload.bin")).unwrap() == data);
+    let used: u64 = limiter.drain_usage().iter().map(|(_, b)| b).sum();
+    assert!(
+        used >= data.len() as u64,
+        "torrent bytes count toward allowances: {used}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_network_past_its_allowance_stops_the_torrent_until_it_is_lifted() {
+    let seed = tempfile::tempdir().unwrap();
+    let leech = tempfile::tempdir().unwrap();
+    let data = payload(4 * 1024 * 1024);
+    let (_s, addr, torrent) = seeder(seed.path(), &data).await;
+    let limiter = std::sync::Arc::new(fuselane_limits::Limiter::default());
+    // Slow enough to block mid-download.
+    limiter.apply(&fuselane_limits::LimitSettings {
+        global: 512 * 1024,
+        networks: vec![],
+    });
+    let engine = TorrentEngine::start(limited_engine_opts(leech.path(), limiter.clone()))
+        .await
+        .unwrap();
+    let t = engine
+        .add(
+            Source::File(torrent),
+            None,
+            vec![addr],
+            AddOptions::default(),
+        )
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(30), async {
+        while t.progress().done < 256 * 1024 {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("never started");
+    limiter.set_blocked(["lo0".to_string()]);
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    let held = t.progress().done;
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    let later = t.progress().done;
+    assert!(
+        later - held <= 64 * 1024,
+        "kept downloading on a used-up network: {held} -> {later}"
+    );
+    assert!(later < data.len() as u64);
+    // Allowance raised or reset: the torrent finishes.
+    limiter.set_blocked(Vec::new());
+    limiter.apply(&fuselane_limits::LimitSettings::default());
+    tokio::time::timeout(Duration::from_secs(90), t.finished())
+        .await
+        .expect("never resumed")
+        .unwrap();
+    assert!(std::fs::read(leech.path().join("payload.bin")).unwrap() == data);
 }

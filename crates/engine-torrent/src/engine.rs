@@ -100,6 +100,8 @@ pub struct EngineOptions {
     /// Where the DHT keeps its node list. None: not saved. Never the library's
     /// default folder (L-70).
     pub state_dir: Option<PathBuf>,
+    /// The app's speed limits and data allowances (shared with HTTP downloads).
+    pub limiter: Option<Arc<fuselane_limits::Limiter>>,
 }
 
 /// How to start a torrent.
@@ -218,7 +220,7 @@ impl TorrentEngine {
         if opts.networks.is_empty() {
             return Err(TorrentError::NoNetworks);
         }
-        let balancer = Arc::new(Balancer::new(opts.networks));
+        let balancer = Arc::new(Balancer::new(opts.networks).with_limiter(opts.limiter.clone()));
         let socks = socks::start(balancer.clone()).await.map_err(engine)?;
         let download_dir = opts.download_dir;
         let session = Session::new_with_opts(
