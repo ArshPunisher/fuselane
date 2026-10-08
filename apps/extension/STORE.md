@@ -3,6 +3,8 @@
 Everything the store forms ask for, in one place. Build the upload with
 `pnpm --filter @fuselane/extension zip` (files land in `apps/extension/.output/`).
 
+**Chrome Web Store:** item `nggljghjikdkigiekdciocigdnnhponl`, submitted for review 2026-10-09 (publishes automatically once approved).
+
 ## Name and summary
 
 - **Name:** Fuselane
@@ -19,6 +21,7 @@ This extension connects your browser to the Fuselane desktop app:
 - Big downloads (1 MB or more) go to Fuselane when the app is running. Anything it can't take stays in the browser, so you never lose a download.
 - Right-click a link and choose "Download with Fuselane".
 - The toolbar button shows whether the app is connected, with a switch to turn hand-off off.
+- A settings page lets you choose the smallest download to hand over, only or never certain sites, and which file types.
 
 You need the Fuselane app on the same computer (macOS, Windows or Linux): https://arshpunisher.github.io/fuselane/
 

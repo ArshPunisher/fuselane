@@ -12,7 +12,7 @@ echo "== deny";     cargo deny check -s 2>/dev/null || cargo deny check
 echo "== prettier"; pnpm -s format:check
 echo "== tsc";      pnpm -s typecheck >/dev/null
 echo "== capture";  pnpm -s --filter @fuselane/capture test >/dev/null
-echo "== extension"; pnpm -s --filter @fuselane/extension test >/dev/null && pnpm -s --filter @fuselane/extension build >/dev/null && pnpm -s --filter @fuselane/extension build:firefox >/dev/null && pnpm -s --filter @fuselane/extension build >/dev/null && pnpm -s --filter @fuselane/extension e2e >/dev/null
+echo "== extension"; pnpm -s --filter @fuselane/extension test >/dev/null && pnpm -s --filter @fuselane/extension build >/dev/null && pnpm -s --filter @fuselane/extension build:firefox >/dev/null && pnpm -s --filter @fuselane/extension e2e >/dev/null
 echo "== ui";       pnpm -s --filter @fuselane/desktop exec playwright test --reporter=dot
 echo "== site";     pnpm -s --filter @fuselane/site exec playwright test --reporter=dot
 echo "All checks passed."

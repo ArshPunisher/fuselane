@@ -7,7 +7,6 @@ says what is waiting and on whom. Last updated 2026-10-09.
 
 | What | Why it's needed | How |
 |---|---|---|
-| **Chrome Web Store: add and verify the publisher contact email** | The draft (item id `nggljghjikdkigiekdciocigdnnhponl`) is filled in and saved; this is the only thing the store says blocks submitting | Developer console → Settings → contact email → click the link in the verification email. Then say so, and the draft gets submitted for review |
 | Firefox Add-ons and Edge Add-ons listings (free) | Same, for Firefox and Edge users | Same zip flow; Firefox gets its own build (`build:firefox`) |
 | Google Search Console verification (postponed) | Search indexing of the download page | Owner adds the site in Search Console and sends the verification tag |
 | SignPath approval (applied 2026-10-08) | Signed Windows installers | Wait for their email, then add the secrets |
@@ -19,6 +18,7 @@ says what is waiting and on whom. Last updated 2026-10-09.
 | What | State |
 |---|---|
 | librqbit PR [#699](https://github.com/ikatson/rqbit/pull/699) (handshake read in pieces) | Open, no reply yet. Fuselane already works around it. |
+| Chrome Web Store review of item `nggljghjikdkigiekdciocigdnnhponl` (submitted 2026-10-09) | Pending; publishes automatically once approved. Ship an app release with the native host before it goes live. |
 
 ## Next for the agent (no owner action needed)
 
