@@ -65,6 +65,53 @@ pub struct Source {
     pub path: String,
 }
 
+/// One network's part of a [`Snapshot`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct NetSnapshot {
+    pub id: NetId,
+    pub bytes: u64,
+    /// Bytes per second over the last few seconds (L-30).
+    pub rate: f64,
+    pub streams: u32,
+    pub dead: bool,
+}
+
+/// One tick of the Fuse Core ring: a group of blocks.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TickSnapshot {
+    /// 0.0..=1.0 of this tick's bytes secured.
+    pub fill: f32,
+    /// The network that fetched most of it so far.
+    pub owner: Option<NetId>,
+    /// A network currently fetching inside it.
+    pub in_flight: Option<NetId>,
+}
+
+/// What the UI draws, emitted a few times a second (deltas come later, L-34).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Snapshot {
+    pub written: u64,
+    pub total: Option<u64>,
+    pub rate: f64,
+    pub networks: Vec<NetSnapshot>,
+    /// At most `TICKS` ticks, in file order.
+    pub ticks: Vec<TickSnapshot>,
+    pub retries: u64,
+    pub hedges: u64,
+}
+
+/// Ring resolution: blocks are grouped into at most this many ticks.
+pub const TICKS: usize = 180;
+
+#[derive(Clone)]
+pub struct SnapshotFn(pub Arc<dyn Fn(&Snapshot) + Send + Sync>);
+
+impl std::fmt::Debug for SnapshotFn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SnapshotFn")
+    }
+}
+
 /// Called with (bytes written so far, total if known). Keep it cheap; it runs on the data path.
 #[derive(Clone)]
 pub struct ProgressFn(pub Arc<dyn Fn(u64, Option<u64>) + Send + Sync>);
@@ -185,6 +232,8 @@ pub struct Tuning {
     pub expected_sha256: Option<[u8; 32]>,
     /// Windows of secured bytes re-checked against the server on resume (lying checkpoints).
     pub resume_samples: u32,
+    pub snapshot: Option<SnapshotFn>,
+    pub snapshot_every: Duration,
 }
 
 impl Default for Tuning {
@@ -207,6 +256,8 @@ impl Default for Tuning {
             cancel: None,
             expected_sha256: None,
             resume_samples: 4,
+            snapshot: None,
+            snapshot_every: Duration::from_millis(200),
         }
     }
 }
@@ -423,6 +474,10 @@ struct Shared {
     /// Per-network stream bookkeeping for the concurrency controller.
     nets: HashMap<NetId, NetStats>,
     peak_streams: HashMap<NetId, u32>,
+    /// Bytes each network delivered into each block (for the ring's colours).
+    block_net_bytes: Vec<Vec<(NetId, u64)>>,
+    meters: HashMap<NetId, crate::measure::Meter>,
+    total_meter: crate::measure::Meter,
 }
 
 #[derive(Debug, Default)]
@@ -801,6 +856,75 @@ async fn emit_checkpoint(ctx: &Arc<Ctx>) {
     }
 }
 
+/// Builds the UI's view of the job (cheap: one pass over blocks, grouped into ticks).
+fn make_snapshot(ctx: &Arc<Ctx>, networks: &[Network]) -> Snapshot {
+    let now = ctx.now_ms();
+    let mut s = ctx.lock();
+    let n_blocks = s.blocks.len().max(1);
+    let n_ticks = n_blocks.min(TICKS);
+    let mut ticks = vec![
+        TickSnapshot {
+            fill: 0.0,
+            owner: None,
+            in_flight: None
+        };
+        n_ticks
+    ];
+    let mut tick_len = vec![0u64; n_ticks];
+    let mut tick_secured = vec![0u64; n_ticks];
+    let mut tick_owner: Vec<HashMap<NetId, u64>> = vec![HashMap::new(); n_ticks];
+    for (i, b) in s.blocks.iter().enumerate() {
+        let t = i * n_ticks / n_blocks;
+        tick_len[t] += b.len;
+        let written = b
+            .attempts
+            .iter()
+            .map(|a| a.position)
+            .fold(b.secured, u64::max)
+            .min(b.len);
+        tick_secured[t] += written;
+        if let Some(a) = b.attempts.first() {
+            ticks[t].in_flight = Some(a.network);
+        }
+        for (net, bytes) in s.block_net_bytes.get(i).into_iter().flatten() {
+            *tick_owner[t].entry(*net).or_default() += bytes;
+        }
+    }
+    for (t, tick) in ticks.iter_mut().enumerate() {
+        tick.fill = if tick_len[t] == 0 {
+            0.0
+        } else {
+            (tick_secured[t] as f64 / tick_len[t] as f64) as f32
+        };
+        tick.owner = tick_owner[t]
+            .iter()
+            .max_by_key(|(_, b)| **b)
+            .map(|(n, _)| *n);
+    }
+    let dead = s.dead_networks.clone();
+    let bytes = s.bytes_by_network.clone();
+    let streams: HashMap<NetId, u32> = s.nets.iter().map(|(n, st)| (*n, st.live)).collect();
+    let nets = networks
+        .iter()
+        .map(|n| NetSnapshot {
+            id: n.id,
+            bytes: bytes.get(&n.id).copied().unwrap_or(0),
+            rate: s.meters.get_mut(&n.id).map_or(0.0, |m| m.rate(now)),
+            streams: streams.get(&n.id).copied().unwrap_or(0),
+            dead: dead.contains(&n.id),
+        })
+        .collect();
+    Snapshot {
+        written: ctx.written_total.load(Ordering::Relaxed),
+        total: s.plan.total,
+        rate: s.total_meter.rate(now),
+        networks: nets,
+        ticks,
+        retries: s.retries,
+        hedges: s.hedges,
+    }
+}
+
 fn sha256_of(path: &Path) -> std::io::Result<[u8; 32]> {
     use sha2::Digest;
     use std::io::Read;
@@ -1077,6 +1201,15 @@ async fn fetch_block(
 
 fn advance(ctx: &Ctx, block: usize, stream: StreamId, net: NetId, position: u64, new_bytes: u64) {
     let mut s = ctx.lock();
+    let now = ctx.now_ms();
+    s.meters.entry(net).or_default().add(new_bytes, now);
+    s.total_meter.add(new_bytes, now);
+    if let Some(row) = s.block_net_bytes.get_mut(block) {
+        match row.iter_mut().find(|(n, _)| *n == net) {
+            Some((_, b)) => *b += new_bytes,
+            None => row.push((net, new_bytes)),
+        }
+    }
     let stats = s.nets.entry(net).or_default();
     stats.served_tick.insert(stream);
     stats.answered.insert(stream);
@@ -1357,6 +1490,9 @@ pub async fn download_with(
             unknown_total: None,
             nets: HashMap::new(),
             peak_streams: HashMap::new(),
+            block_net_bytes: vec![Vec::new(); n_blocks],
+            meters: HashMap::new(),
+            total_meter: crate::measure::Meter::default(),
         }),
         file,
         wake: tokio::sync::Notify::new(),
@@ -1426,6 +1562,9 @@ pub async fn download_with(
 
     // The supervisor: tick the controller until every stream has finished.
     let mut last_checkpoint = Instant::now();
+    let mut snap_ticker =
+        tokio::time::interval(tuning.snapshot_every.max(Duration::from_millis(16)));
+    snap_ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let cancel = tuning.cancel.clone().unwrap_or_default();
     let mut ticker = tokio::time::interval(tuning.controller_tick);
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -1433,6 +1572,12 @@ pub async fn download_with(
         tokio::select! {
             joined = tasks.join_next() => {
                 if joined.is_none() { break; }
+            }
+            _ = snap_ticker.tick(), if tuning.snapshot.is_some() => {
+                if let Some(sink) = &tuning.snapshot {
+                    let snap = make_snapshot(&ctx, &networks);
+                    (sink.0)(&snap);
+                }
             }
             _ = cancel.notify.notified() => {
                 ctx.stop.store(true, Ordering::Release);

@@ -622,3 +622,45 @@ async fn an_etag_change_before_any_byte_is_secured_is_adopted_not_looped() {
     .expect("looped instead of adopting the new ETag");
     assert_exact(&res.unwrap(), content);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn snapshots_describe_the_job_for_the_ui() {
+    use fuselane_engine_http::download::{Snapshot, SnapshotFn, TICKS};
+    let content = Content::new(2 * 1024 * KB, 71);
+    let server = RangeServer::start(content).await.unwrap();
+    server.add_rule(Rule {
+        skip: 1,
+        times: u32::MAX,
+        fault: Fault::Throttle(900 * KB),
+    });
+    let seen: Arc<std::sync::Mutex<Vec<Snapshot>>> = Arc::default();
+    let mut t = tuning();
+    t.snapshot_every = Duration::from_millis(50);
+    t.snapshot = Some(SnapshotFn(Arc::new({
+        let seen = seen.clone();
+        move |s| seen.lock().unwrap().push(s.clone())
+    })));
+    let dir = tempfile::tempdir().unwrap();
+    let report = download(source(&server), vec![plain(1), plain(2)], dir.path(), t)
+        .await
+        .unwrap();
+    assert_exact(&report, content);
+    let snaps = seen.lock().unwrap();
+    assert!(snaps.len() >= 3, "only {} snapshots", snaps.len());
+    let mut last_written = 0;
+    for s in snaps.iter() {
+        assert!(s.written >= last_written, "written went backwards");
+        last_written = s.written;
+        assert!(s.ticks.len() <= TICKS && !s.ticks.is_empty());
+        assert!(s.ticks.iter().all(|t| (0.0..=1.0).contains(&t.fill)));
+        assert!(s.rate.is_finite() && s.rate >= 0.0);
+        assert_eq!(s.total, Some(content.size));
+        assert_eq!(s.networks.len(), 2);
+    }
+    let mid = &snaps[snaps.len() / 2];
+    assert!(
+        mid.ticks.iter().any(|t| t.owner.is_some()),
+        "ticks should know who fetched them"
+    );
+    assert!(mid.networks.iter().all(|n| n.bytes > 0 || n.streams > 0));
+}
