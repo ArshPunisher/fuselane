@@ -135,7 +135,12 @@ pub async fn connect_pinned(
             iface: iface.name.clone(),
             source,
         })?;
-        socket.bind(&SocketAddr::new(source, 0).into())?;
+        // Windows needs an explicit source address (L-59). Elsewhere the pin is enough,
+        // and binding would pick the interface's first IPv6 address, which may be a
+        // deprecated privacy address that no longer routes (L-109): let the OS choose.
+        if cfg!(windows) {
+            socket.bind(&SocketAddr::new(source, 0).into())?;
+        }
     }
     socket.set_nonblocking(true)?;
     socket.set_tcp_nodelay(true)?;
