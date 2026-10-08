@@ -20,7 +20,7 @@
 - **P4 beta:** **`v0.1.0-beta.1` published 2026-10-08** (pre-release, 16 files). Verified after publishing: macOS app checksum + self-test, live update feed (4 platforms), the Homebrew cask, and the live install script. Release workflow builds macOS universal (ad-hoc signed), Windows x64, Linux x64/arm64 natively, checks contents, self-tests the packaged app, and drafts a pre-release with SHA256SUMS. Publishing a release deploys the signed update feed to https://arshpunisher.github.io/fuselane/updates/latest.json. Updater key: `~/.tauri/fuselane.key` (password in Keychain "Fuselane updater key password"; both are GitHub secrets). Homebrew tap: `ArshPunisher/homebrew-fuselane` (cask from `packaging/homebrew/update-cask.sh <tag>`).
 - **Next steps, in order:**
   2. 4.7 updater end-to-end (install beta.1, publish beta.2, update, data intact).
-  3. 4.3 SignPath for Windows: the owner applies at signpath.org (free for open source); then wire the signing step.
+  3. 4.3 SignPath for Windows: **applied 2026-10-08** (owner, signpath.org form). Waiting for their email; then add the organization ID, project slug and API token as secrets and wire the signing step into release.yml.
   4. 4.8 landing page on Pages (replaces the redirect), with OS detection and checksums.
   5. P3 leftovers (data allowances, slow mode, rename networks, shortcuts) and P2 leftovers, then P5 torrents.
 - **Repo:** public at https://github.com/ArshPunisher/fuselane (pushed 2026-10-08). First CI run **green on macOS, Windows and Linux**. `main` blocks force-push and deletion. Push only `main` and only when the owner says "push"; spikes stay local.
