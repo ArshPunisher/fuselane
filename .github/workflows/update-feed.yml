@@ -1,0 +1,58 @@
+name: Update feed
+
+# When a release is published (never while it is a draft), writes the signed
+# updater feed and deploys it with the site to GitHub Pages. Fuselane reads
+# https://arshpunisher.github.io/fuselane/updates/latest.json (L-77: our own
+# feed, because GitHub's /releases/latest skips pre-releases).
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Published release tag to (re)deploy the feed for'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  feed:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    env:
+      TAG: ${{ inputs.tag || github.event.release.tag_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Signatures and notes from the release
+        run: |
+          mkdir -p sigs
+          gh release download "$TAG" --pattern '*.sig' --dir sigs
+          gh release view "$TAG" --json body --jq .body > notes.md
+          ls sigs
+      - name: Write the feed
+        run: |
+          version="${TAG#v}"
+          mkdir -p site/updates
+          python3 tools/update_feed.py "$version" \
+            "https://github.com/${{ github.repository }}/releases/download/$TAG" sigs notes.md > site/updates/latest.json
+          cp packaging/site/index.html site/index.html
+          cat site/updates/latest.json
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

@@ -91,8 +91,14 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      - name: Build the desktop app
-        run: pnpm --filter @fuselane/desktop tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - name: Build the desktop app (update files signed with the release key)
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          pnpm --filter @fuselane/desktop tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} \
+            --config '{"bundle":{"createUpdaterArtifacts":true}}'
 
       - name: Build the CLI
         shell: bash
@@ -118,17 +124,23 @@ jobs:
           case "$NAME" in
             macos-*)
               cp "$bundle"/dmg/*.dmg "$out/$base.dmg"
-              tar -C "$bundle/macos" -czf "$out/$base.app.tar.gz" Fuselane.app
+              # The updater's archive and its signature, exactly as signed.
+              cp "$bundle/macos/Fuselane.app.tar.gz" "$out/$base.app.tar.gz"
+              cp "$bundle/macos/Fuselane.app.tar.gz.sig" "$out/$base.app.tar.gz.sig"
               tar -C "target/${{ matrix.target }}/release" -czf "$out/fuselane-cli_${VERSION}_${NAME}.tar.gz" fuselane
               ;;
             windows-*)
               cp "$bundle"/nsis/*-setup.exe "$out/$base-setup.exe"
+              cp "$bundle"/nsis/*-setup.exe.sig "$out/$base-setup.exe.sig"
               cp "target/${{ matrix.target }}/release/fuselane.exe" "$out/fuselane-cli_${VERSION}_${NAME}.exe"
               ;;
             linux-*)
               for f in "$bundle"/deb/*.deb; do cp "$f" "$out/$base.deb"; done
               for f in "$bundle"/rpm/*.rpm; do cp "$f" "$out/$base.rpm"; done
-              if [ -d "$bundle/appimage" ]; then cp "$bundle"/appimage/*.AppImage "$out/$base.AppImage"; fi
+              if [ -d "$bundle/appimage" ]; then
+                cp "$bundle"/appimage/*.AppImage "$out/$base.AppImage"
+                cp "$bundle"/appimage/*.AppImage.sig "$out/$base.AppImage.sig"
+              fi
               tar -C "target/${{ matrix.target }}/release" -czf "$out/fuselane-cli_${VERSION}_${NAME}.tar.gz" fuselane
               ;;
           esac
@@ -157,7 +169,7 @@ jobs:
       - name: Self-test the packaged app (macOS)
         if: runner.os == 'macOS'
         run: |
-          tar -xzf dist-release/*.app.tar.gz -C "$RUNNER_TEMP"
+          tar -xzf dist-release/Fuselane_*.app.tar.gz -C "$RUNNER_TEMP"
           "$RUNNER_TEMP/Fuselane.app/Contents/MacOS/fuselane-desktop" --self-test
       - name: Self-test the packaged app (Linux)
         if: runner.os == 'Linux'
