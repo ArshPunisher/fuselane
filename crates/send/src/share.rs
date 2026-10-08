@@ -6,6 +6,7 @@ use std::io::{self, Read};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
 use fuselane_engine_torrent::{AddOptions, Source, Storage, Torrent, TorrentEngine, TorrentError};
 use librqbit::storage::StorageFactoryExt;
@@ -33,6 +34,10 @@ pub enum ShareError {
     Changed(String),
     #[error("This link doesn't lead to a Fuse Send share. Ask the sender for the link again.")]
     NotAShare,
+    #[error(
+        "Fuselane couldn't find the sender. Ask them to open Fuselane and keep it open until the file arrives, then try the link again."
+    )]
+    SenderOffline,
     #[error(
         "Fuselane couldn't save into {dir} ({source}). Check the folder exists and you can write to it."
     )]
@@ -189,22 +194,30 @@ fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
+/// How long `receive` looks for the sender before saying they seem offline.
+pub const LOOKUP: Duration = Duration::from_secs(60);
+
 /// Finds the share by its info-hash, checks it has a share's shape, and starts it.
-/// `peers`: addresses to try first (tests, or the same network).
+/// `peers`: addresses to try first (tests, or the same network). `lookup`: how long
+/// to look for the sender (normally `LOOKUP`).
 pub async fn receive(
     engine: &TorrentEngine,
     link: &Link,
     dir: &Path,
     peers: Vec<SocketAddr>,
+    lookup: Duration,
 ) -> Result<Receiving, ShareError> {
     let id = hex(&link.info_hash);
-    let listing = engine
-        .inspect(
+    let listing = tokio::time::timeout(
+        lookup,
+        engine.inspect(
             Source::Magnet(format!("magnet:?xt=urn:btih:{id}")),
             Some(dir.to_path_buf()),
             peers,
-        )
-        .await?;
+        ),
+    )
+    .await
+    .map_err(|_| ShareError::SenderOffline)??;
     // Anything else under this info-hash is not ours to open.
     let size = match listing.files.as_slice() {
         [f] if !f.padding && f.parts == [torrent::NAME] && f.len >= HEADER_BLOCK as u64 => {

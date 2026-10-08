@@ -69,7 +69,7 @@ async fn a_link_brings_the_file_across_under_its_real_name() {
     // The receiver has only the URL someone pasted.
     let link = Link::parse(&url).unwrap();
     let receiver = engine(recv_dir.path(), false).await;
-    let r = share::receive(&receiver, &link, recv_dir.path(), vec![addr])
+    let r = share::receive(&receiver, &link, recv_dir.path(), vec![addr], share::LOOKUP)
         .await
         .unwrap();
     assert_eq!(r.size, data.len() as u64);
@@ -114,9 +114,15 @@ async fn the_right_info_hash_with_the_wrong_key_is_caught_and_deleted() {
     let mut wrong = prepared.link.clone();
     wrong.key[0] ^= 1;
     let receiver = engine(recv_dir.path(), false).await;
-    let r = share::receive(&receiver, &wrong, recv_dir.path(), vec![addr])
-        .await
-        .unwrap();
+    let r = share::receive(
+        &receiver,
+        &wrong,
+        recv_dir.path(),
+        vec![addr],
+        share::LOOKUP,
+    )
+    .await
+    .unwrap();
     tokio::time::timeout(Duration::from_secs(60), r.torrent.finished())
         .await
         .unwrap()
@@ -128,5 +134,45 @@ async fn the_right_info_hash_with_the_wrong_key_is_caught_and_deleted() {
         std::fs::read_dir(recv_dir.path()).unwrap().count(),
         0,
         "nothing left behind"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn nobody_answering_says_the_sender_seems_offline() {
+    let dir = tempfile::tempdir().unwrap();
+    let link = Link::new([0xab; 20], Default::default()).unwrap();
+    // An address that accepts connections and then says nothing, like a sender
+    // whose app is closed behind a router that still answers.
+    let silent = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+        .await
+        .unwrap();
+    let addr = silent.local_addr().unwrap();
+    tokio::spawn(async move {
+        let mut held = Vec::new();
+        while let Ok((sock, _)) = silent.accept().await {
+            held.push(sock);
+        }
+    });
+    let receiver = engine(dir.path(), false).await;
+    let started = std::time::Instant::now();
+    let err = share::receive(
+        &receiver,
+        &link,
+        dir.path(),
+        vec![addr],
+        Duration::from_millis(800),
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(err, ShareError::SenderOffline), "{err:?}");
+    assert!(err.to_string().contains("keep it open"), "{err}");
+    assert!(
+        started.elapsed() < Duration::from_secs(10),
+        "gives up on time"
+    );
+    assert_eq!(
+        std::fs::read_dir(dir.path()).unwrap().count(),
+        0,
+        "nothing written"
     );
 }
