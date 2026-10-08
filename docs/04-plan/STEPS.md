@@ -149,8 +149,8 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [x] 6.1 `send` crate: link format `v1.<info-hash ‖ key ‖ flags>` (parse/print, version check) with shared vectors; negative tests for truncated, tampered and future links
 - [x] 6.2 Encryption: seekable XChaCha20 at byte offsets + sealed header (name, size, BLAKE3); vectors; tamper and wrong-key tests
 - [x] 6.3 Encrypting `StorageFactory` for librqbit: encrypt on read (sender), decrypt on write (receiver), no temp copy
-- [ ] 6.4 Sender: build the torrent over ciphertext, seed over every network, stop when the file changes, "arrived" when a peer has every piece
-- [ ] 6.5 Receiver: open `fuselane://send/…` and pasted links; DHT + public tracker lookup; the error table in FUSE-SEND §5 with exact messages
+- [x] 6.4 Sender: build the torrent over ciphertext, seed over every network, stop when the file changes, "arrived" when a peer has every piece
+- [x] 6.5 Receiver: open `fuselane://send/…` and pasted links; DHT + public tracker lookup; the error table in FUSE-SEND §5 with exact messages
 - [ ] 6.6 Incoming peers per network (L-71) and UPnP per network, so senders are reachable
 - [ ] 6.7 Static link page on GitHub Pages (`/s#…`): hands the link to the app, install help, never sends the fragment anywhere
 - [ ] 6.8 Send UI in the desktop app (drop zone, link + QR, "keep Fuselane open", progress per network, stop sharing, first-download-only option)
