@@ -94,6 +94,28 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     return job
   }
 
+  // many=N adds N finished downloads with awkward names (stress tests).
+  const many = Math.min(5000, Number(params.get('many') ?? 0))
+  const awkward = [
+    'a'.repeat(240) + '.bin',
+    'تقرير-السنة-المالية-٢٠٢٦.pdf',
+    '📦 release (final) [v2] {copy}.zip',
+    'no-extension',
+    '.hidden',
+    'zero-bytes.txt',
+  ]
+  for (let i = 0; i < many; i++) {
+    const name = awkward[i % awkward.length] ?? 'file'
+    const j = make(
+      `${i}-${name}`,
+      name === 'zero-bytes.txt' ? 0 : (i % 7) * 13 * MB,
+      i % 9 === 0 ? 'failed' : 'completed',
+      1,
+      i % 9 === 0 ? "The server answered with status 500, so the download couldn't start." : null,
+    )
+    if (i % 11 === 0) j.total = null
+  }
+
   if (params.get('empty') !== '1') {
     make('Blender-5.1-macos-arm64.dmg', 412 * MB, 'completed', 1)
     make(

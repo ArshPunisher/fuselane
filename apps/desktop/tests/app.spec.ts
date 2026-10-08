@@ -178,3 +178,21 @@ test('reduced motion still shows progress', async ({ page }) => {
   await page.goto('/')
   await expect(page.locator('.speed')).toContainText('MB/s', { timeout: 5000 })
 })
+
+test('200 downloads with awkward names stay usable and never scroll sideways', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 })
+  await page.goto('/?many=200')
+  await expect(page.locator('.row')).toHaveCount(204)
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
+  expect(overflow).toBeLessThanOrEqual(0)
+  // The 240-character name is cut with an ellipsis, not wrapped or overflowing.
+  const long = page.locator('.row-name').filter({ hasText: 'aaaaaaaaaa' }).first()
+  const box = await long.boundingBox()
+  expect(box && box.x + box.width).toBeLessThanOrEqual(375)
+  // Right-to-left and emoji names open fine; unknown and zero sizes read sensibly.
+  await page.locator('.row-name').filter({ hasText: 'تقرير' }).first().click()
+  await expect(page.locator('article.detail')).toBeVisible()
+  await page.getByRole('button', { name: 'Back to downloads' }).click()
+  await page.locator('.row-name').filter({ hasText: 'zero-bytes' }).first().click()
+  await expect(page.locator('article.detail .facts')).toContainText('0\u00A0B')
+})
