@@ -274,7 +274,12 @@ impl TorrentEngine {
         self.balancer.set_avoid(names);
     }
 
-    /// The networks this engine was started with.
+    /// Follows network changes (plugged in, unplugged, new address).
+    pub fn set_networks(&self, now: Vec<Interface>) {
+        self.balancer.set_networks(now);
+    }
+
+    /// The networks present now.
     pub fn interfaces(&self) -> Vec<Interface> {
         self.balancer.networks()
     }

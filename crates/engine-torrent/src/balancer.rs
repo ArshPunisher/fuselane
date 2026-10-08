@@ -29,9 +29,18 @@ pub struct NetStat {
     pub up: u64,
 }
 
+/// A network the balancer has seen. Gone networks stay listed (their credit is
+/// history) but take no new peers.
+#[derive(Debug, Clone)]
+struct Known {
+    iface: Interface,
+    counters: Arc<NetCounters>,
+    present: bool,
+}
+
 #[derive(Debug)]
 pub struct Balancer {
-    nets: Vec<(Interface, Arc<NetCounters>)>,
+    nets: Mutex<Vec<Known>>,
     /// Round-robin cursor so equal networks share new peers.
     next: Mutex<usize>,
     /// Per torrent (info hash, lowercase hex) and network name, learned from the
@@ -75,10 +84,16 @@ pub fn credit(received: &[u64], verified: u64) -> Vec<u64> {
 impl Balancer {
     pub fn new(networks: Vec<Interface>) -> Balancer {
         Balancer {
-            nets: networks
-                .into_iter()
-                .map(|i| (i, Arc::new(NetCounters::default())))
-                .collect(),
+            nets: Mutex::new(
+                networks
+                    .into_iter()
+                    .map(|iface| Known {
+                        iface,
+                        counters: Arc::new(NetCounters::default()),
+                        present: true,
+                    })
+                    .collect(),
+            ),
             next: Mutex::new(0),
             torrents: Mutex::new(HashMap::new()),
             limiter: None,
@@ -94,9 +109,42 @@ impl Balancer {
             .unwrap_or_else(std::sync::PoisonError::into_inner) = names.into_iter().collect();
     }
 
-    /// The networks, for callers that decide what to avoid.
+    fn known(&self) -> std::sync::MutexGuard<'_, Vec<Known>> {
+        self.nets
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// The networks present now, for callers that decide what to avoid.
     pub fn networks(&self) -> Vec<Interface> {
-        self.nets.iter().map(|(i, _)| i.clone()).collect()
+        self.known()
+            .iter()
+            .filter(|k| k.present)
+            .map(|k| k.iface.clone())
+            .collect()
+    }
+
+    /// Follows network changes: new networks join, gone ones take no new peers
+    /// (open connections on them end by themselves), returning ones keep their
+    /// counters, and addresses are refreshed.
+    pub fn set_networks(&self, now: Vec<Interface>) {
+        let mut known = self.known();
+        for k in known.iter_mut() {
+            k.present = false;
+        }
+        for iface in now {
+            match known.iter_mut().find(|k| k.iface.name == iface.name) {
+                Some(k) => {
+                    k.iface = iface;
+                    k.present = true;
+                }
+                None => known.push(Known {
+                    iface,
+                    counters: Arc::new(NetCounters::default()),
+                    present: true,
+                }),
+            }
+        }
     }
 
     /// Applies the app's speed limits and data allowances to torrent traffic.
@@ -111,21 +159,27 @@ impl Balancer {
 
     /// Networks to try for `dest`, best first. Loopback peers (local tests) may use any.
     pub fn order_for(&self, dest: SocketAddr) -> Vec<(Interface, Arc<NetCounters>)> {
-        let mut usable: Vec<(usize, &(Interface, Arc<NetCounters>))> = self
-            .nets
-            .iter()
+        let known = self.known().clone();
+        let avoid = self
+            .avoid
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        let len = known.len().max(1);
+        let mut usable: Vec<(usize, Known)> = known
+            .into_iter()
             .enumerate()
-            .filter(|(_, (i, _))| {
-                !self
-                    .avoid
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .contains(&i.name)
-            })
+            .filter(|(_, k)| k.present && !avoid.contains(&k.iface.name))
             // A network past its data allowance takes no new peers.
-            .filter(|(_, (i, _))| !self.limiter.as_ref().is_some_and(|l| l.blocked(&i.name)))
-            .filter(|(_, (i, _))| {
-                dest.ip().is_loopback() || i.addrs.iter().any(|a| a.is_ipv4() == dest.is_ipv4())
+            .filter(|(_, k)| {
+                !self
+                    .limiter
+                    .as_ref()
+                    .is_some_and(|l| l.blocked(&k.iface.name))
+            })
+            .filter(|(_, k)| {
+                dest.ip().is_loopback()
+                    || k.iface.addrs.iter().any(|a| a.is_ipv4() == dest.is_ipv4())
             })
             .collect();
         let start = {
@@ -136,16 +190,15 @@ impl Balancer {
             *n = n.wrapping_add(1);
             *n
         };
-        let len = self.nets.len().max(1);
-        usable.sort_by_key(|(idx, (_, c))| {
+        usable.sort_by_key(|(idx, k)| {
             (
-                c.peers.load(Ordering::Relaxed),
+                k.counters.peers.load(Ordering::Relaxed),
                 (idx + len - start % len) % len,
             )
         });
         usable
             .into_iter()
-            .map(|(_, n)| (n.0.clone(), n.1.clone()))
+            .map(|(_, k)| (k.iface, k.counters))
             .collect()
     }
 
@@ -168,19 +221,18 @@ impl Balancer {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let rows: Vec<(String, usize, u64, u64)> = self
-            .nets
+            .known()
             .iter()
-            .map(
-                |(i, _)| match m.get(&(info_hash.to_owned(), i.name.clone())) {
-                    Some(c) => (
-                        i.name.clone(),
-                        c.peers.load(Ordering::Relaxed),
-                        c.down.load(Ordering::Relaxed),
-                        c.up.load(Ordering::Relaxed),
-                    ),
-                    None => (i.name.clone(), 0, 0, 0),
-                },
-            )
+            .map(|k| &k.iface)
+            .map(|i| match m.get(&(info_hash.to_owned(), i.name.clone())) {
+                Some(c) => (
+                    i.name.clone(),
+                    c.peers.load(Ordering::Relaxed),
+                    c.down.load(Ordering::Relaxed),
+                    c.up.load(Ordering::Relaxed),
+                ),
+                None => (i.name.clone(), 0, 0, 0),
+            })
             .collect();
         let credited = credit(&rows.iter().map(|r| r.2).collect::<Vec<_>>(), verified);
         rows.into_iter()
@@ -205,8 +257,9 @@ impl Balancer {
     }
 
     pub fn snapshot(&self) -> Vec<NetStat> {
-        self.nets
+        self.known()
             .iter()
+            .map(|k| (&k.iface, &k.counters))
             .map(|(i, c)| NetStat {
                 name: i.name.clone(),
                 peers: c.peers.load(Ordering::Relaxed),
@@ -246,9 +299,9 @@ mod tests {
         assert_eq!(order.len(), 1);
         assert_eq!(order[0].0.name, "en1");
         // en0 is busier, so en1 comes first for an IPv4 peer.
-        b.nets[0].1.peers.store(3, Ordering::Relaxed);
+        b.known()[0].counters.peers.store(3, Ordering::Relaxed);
         assert_eq!(b.order_for(v4)[0].0.name, "en1");
-        b.nets[1].1.peers.store(5, Ordering::Relaxed);
+        b.known()[1].counters.peers.store(5, Ordering::Relaxed);
         assert_eq!(b.order_for(v4)[0].0.name, "en0");
     }
 
@@ -294,6 +347,45 @@ mod tests {
         b.set_avoid(Vec::new());
         assert_eq!(b.order_for(v4).len(), 2);
         assert_eq!(b.networks().len(), 2);
+    }
+
+    #[test]
+    fn networks_can_come_and_go_without_losing_their_history() {
+        let b = Balancer::new(vec![
+            iface("en0", &["10.0.0.2"]),
+            iface("en1", &["192.168.1.2"]),
+        ]);
+        let v4: SocketAddr = "203.0.113.9:6881".parse().unwrap();
+        b.torrent_counters("aa", "en1")
+            .down
+            .store(500, Ordering::Relaxed);
+        // en1 unplugged, a phone tethered.
+        b.set_networks(vec![
+            iface("en0", &["10.0.0.2"]),
+            iface("en7", &["172.20.10.2"]),
+        ]);
+        let names: Vec<String> = b.order_for(v4).into_iter().map(|(i, _)| i.name).collect();
+        assert!(
+            names.contains(&"en7".into()) && !names.contains(&"en1".into()),
+            "{names:?}"
+        );
+        assert_eq!(b.networks().len(), 2);
+        // en1's credit is still shown.
+        let shares = b.torrent_shares("aa", 100);
+        assert_eq!(
+            shares.iter().find(|s| s.name == "en1").map(|s| s.credited),
+            Some(100)
+        );
+        // en1 back with a new address: same counters, new address used.
+        b.set_networks(vec![iface("en1", &["192.168.1.99"])]);
+        let order = b.order_for(v4);
+        assert_eq!(order.len(), 1);
+        assert_eq!(order[0].0.addrs[0].to_string(), "192.168.1.99");
+        assert_eq!(
+            b.snapshot().len(),
+            3,
+            "every network ever seen stays listed"
+        );
     }
 
     #[test]
