@@ -544,6 +544,7 @@ async fn run_stream(ctx: Arc<Ctx>, net: Network, stream: StreamId) {
                     stream,
                     network: net.id,
                     started_ms: now,
+                    from: w.from,
                     position: w.from,
                     rate: 0.0,
                 });
@@ -721,7 +722,29 @@ async fn emit_checkpoint(ctx: &Arc<Ctx>) {
             filename: ctx.filename.clone(),
             total: s.plan.total,
             block_size: s.plan.block_size,
-            secured: s.blocks.iter().map(|b| b.secured).collect(),
+            // Count what live attempts have already written too: those bytes are on disk and
+            // covered by the fsync below, so a crash loses at most the unsynced tail.
+            secured: s
+                .blocks
+                .iter()
+                .zip(&s.extra)
+                .map(|(b, ex)| {
+                    let mut intervals: Vec<(u64, u64)> = ex.written.clone();
+                    intervals.extend(b.attempts.iter().map(|a| (a.from, a.position)));
+                    let mut secured = b.secured;
+                    let mut moved = true;
+                    while moved {
+                        moved = false;
+                        for &(from, to) in &intervals {
+                            if from <= secured && to > secured {
+                                secured = to.min(b.len);
+                                moved = true;
+                            }
+                        }
+                    }
+                    secured
+                })
+                .collect(),
             raw_etag: s.if_range.clone().filter(|v| v.starts_with('"')),
             last_modified: ctx.last_modified.clone(),
         }

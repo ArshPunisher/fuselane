@@ -43,7 +43,9 @@ pub struct Attempt {
     pub stream: StreamId,
     pub network: NetId,
     pub started_ms: u64,
-    /// Bytes into the block this attempt has written.
+    /// Bytes into the block where this attempt started writing.
+    pub from: u64,
+    /// Bytes into the block this attempt has written up to.
     pub position: u64,
     /// Recent rate in bytes/s (0 = silent).
     pub rate: f64,
@@ -224,6 +226,7 @@ mod tests {
                 stream,
                 network: net,
                 started_ms: started,
+                from: 0,
                 position: pos,
                 rate,
             }],
@@ -395,6 +398,7 @@ mod tests {
                         stream,
                         network,
                         started_ms,
+                        from: secured,
                         position: secured + (len - secured) * p / 100,
                         rate,
                     })
