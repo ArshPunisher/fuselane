@@ -85,6 +85,28 @@ impl<D: Disk> Disk for ReadOnly<D> {
     }
 }
 
+/// Read-only bytes in memory (the sender's header block).
+#[derive(Debug, Clone)]
+pub struct Bytes(pub Vec<u8>);
+
+impl Disk for Bytes {
+    fn read_at(&self, offset: u64, buf: &mut [u8]) -> io::Result<()> {
+        let start = usize::try_from(offset).map_err(|_| io::ErrorKind::UnexpectedEof)?;
+        let src = start
+            .checked_add(buf.len())
+            .and_then(|end| self.0.get(start..end))
+            .ok_or(io::ErrorKind::UnexpectedEof)?;
+        buf.copy_from_slice(src);
+        Ok(())
+    }
+    fn write_at(&self, _: u64, _: &[u8]) -> io::Result<()> {
+        Err(io::Error::new(io::ErrorKind::PermissionDenied, "read-only"))
+    }
+    fn set_len(&self, _: u64) -> io::Result<()> {
+        Ok(())
+    }
+}
+
 /// The torrent's view of one share.
 pub struct View {
     keys: Keys,

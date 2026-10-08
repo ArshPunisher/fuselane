@@ -2,6 +2,8 @@
 //! encrypted view, the other receives it into a plain file. Proves the view, the
 //! torrent builder and the storage adapter work together (STEPS 6.3).
 
+#![allow(clippy::unwrap_used, clippy::expect_used)] // test-only file (CLAUDE.md)
+
 use std::net::Ipv4Addr;
 use std::sync::Arc;
 use std::time::Duration;
