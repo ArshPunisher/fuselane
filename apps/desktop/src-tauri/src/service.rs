@@ -309,17 +309,31 @@ pub struct PreviewView {
 
 /// Looks a link up without downloading it. Bad links fail fast with `bad-link`.
 pub async fn preview(url: &str) -> Result<PreviewView, UiError> {
+    preview_with(url, fuselane_engine_http::download::Headers::default())
+        .await
+        .map(|(v, _)| v)
+}
+
+/// `preview` with a browser session's headers; also says whether the answer was a
+/// web page (often a sign-in page) rather than a file.
+pub async fn preview_with(
+    url: &str,
+    headers: fuselane_engine_http::download::Headers,
+) -> Result<(PreviewView, bool), UiError> {
     let url = url.trim();
     parse_link(url)
         .map_err(|m| UiError::new("bad-link", m, Some("Links start with http:// or https://.")))?;
-    let p = runner::preview(url)
+    let p = runner::preview_with(url, headers)
         .await
         .map_err(|m| UiError::new("preview-failed", m, None))?;
-    Ok(PreviewView {
-        filename: p.filename,
-        total: p.total,
-        splittable: p.splittable,
-    })
+    Ok((
+        PreviewView {
+            filename: p.filename,
+            total: p.total,
+            splittable: p.splittable,
+        },
+        p.web_page,
+    ))
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -414,6 +428,9 @@ pub struct AddRequest {
     pub name: Option<String>,
     pub sha256: Option<String>,
     pub allow_duplicate: bool,
+    /// A browser session's cookies and referrer (from the extension, never the window).
+    #[serde(skip)]
+    pub headers: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -485,6 +502,10 @@ pub struct Service {
     subscribed: std::sync::atomic::AtomicBool,
     /// Last sign-in-page check per network (2.15).
     reach: Mutex<HashMap<String, fuselane_transport::probe::Reach>>,
+    /// Browser sessions for downloads handed over by the extension. Memory only:
+    /// cookies are never written to disk; after a restart the download carries on
+    /// without them (Fix link covers a server that then refuses).
+    sessions: Mutex<HashMap<i64, fuselane_engine_http::download::Headers>>,
     automation: Mutex<crate::automation::Automation>,
     /// Jobs the schedule paused; they resume when the window opens again.
     schedule_paused: Mutex<std::collections::HashSet<i64>>,
@@ -747,6 +768,7 @@ impl Service {
             pending_opens: Mutex::default(),
             subscribed: std::sync::atomic::AtomicBool::new(false),
             reach: Mutex::default(),
+            sessions: Mutex::default(),
             automation: Mutex::new(automation),
             schedule_paused: Mutex::default(),
             clock: Mutex::new(None),
@@ -1053,6 +1075,14 @@ impl Service {
                 Some(s.to_ascii_lowercase())
             }
         };
+        let session =
+            fuselane_engine_http::download::Headers::checked(&req.headers).map_err(|m| {
+                UiError::new(
+                    "bad-headers",
+                    format!("The browser's request can't be used: {m}."),
+                    None,
+                )
+            })?;
         if !req.allow_duplicate
             && let Some(existing) = self
                 .store
@@ -1071,6 +1101,9 @@ impl Service {
             .store
             .create_with(url, &dir, &fuselane_core::NewJob { name, sha256 })
             .map_err(store_error)?;
+        if !session.is_empty() {
+            lock(&self.sessions).insert(id, session);
+        }
         self.publish_jobs();
         self.pump();
         Ok(id)
@@ -1813,6 +1846,7 @@ impl Service {
                 .per_network_dns
                 .load(std::sync::atomic::Ordering::Relaxed),
             filename: job.chosen_name.clone(),
+            headers: lock(&self.sessions).get(&id).cloned().unwrap_or_default(),
             sha256: job
                 .expected_sha256
                 .as_deref()
@@ -1862,6 +1896,10 @@ impl Service {
             .is_some_and(|r| r.remove_after);
         if removed {
             let _ = runner::remove(&self.store, id);
+        }
+        // A finished or removed download needs its session no more.
+        if removed || matches!(&outcome, Ok(Outcome::Completed { .. })) {
+            lock(&self.sessions).remove(&id);
         }
         self.publish_jobs();
         self.pump();
@@ -2199,6 +2237,7 @@ mod tests {
                     .collect(),
             ),
             allow_duplicate: false,
+            headers: vec![],
         };
         let id = h.svc.add_with(&link(&server), None, &good).unwrap();
         assert_eq!(h.job(id).name, "report final.bin", "shown before it starts");
