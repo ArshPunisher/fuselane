@@ -1,0 +1,65 @@
+import AxeBuilder from '@axe-core/playwright'
+import { expect, test, type Page } from '@playwright/test'
+
+// Accessibility checks (P3): every main screen and dialog, in light and dark,
+// must have no serious or critical axe-core violations (WCAG 2.2 A and AA).
+async function audit(page: Page, what: string) {
+  // Measure a dialog once it has finished fading in (live orbs elsewhere keep animating).
+  await page.waitForFunction(() => {
+    const d = document.querySelector('dialog[open]')
+    return !d || d.getAnimations({ subtree: true }).every((a) => a.playState !== 'running')
+  })
+  const r = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+    .analyze()
+  const bad = r.violations
+    .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+    .map((v) => `${v.id} (${v.impact}): ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)
+  expect(bad, `${what}: ${bad.join('\n')}`).toEqual([])
+}
+
+for (const scheme of ['light', 'dark'] as const) {
+  test.describe(`${scheme} mode`, () => {
+    test.use({ colorScheme: scheme })
+
+    test('downloads and a download in progress', async ({ page }) => {
+      await page.goto('/?freeze=3')
+      await expect(page.getByTestId('fuse-core')).toBeVisible()
+      await audit(page, 'downloads')
+    })
+
+    test('a torrent', async ({ page }) => {
+      await page.goto('/?freeze=3')
+      await page.getByRole('button', { name: /^Sprite Fright \(2021\) 4K/ }).click()
+      await expect(page.getByRole('table', { name: 'Networks in this torrent' })).toBeVisible()
+      await audit(page, 'torrent detail')
+    })
+
+    test('new download and choose files', async ({ page }) => {
+      await page.goto('/?torrents=0')
+      await page.getByRole('button', { name: 'New download' }).first().click()
+      await expect(page.getByRole('dialog', { name: 'New download' })).toBeVisible()
+      await audit(page, 'new download')
+      await page.getByRole('button', { name: 'Open .torrent…' }).click()
+      await expect(page.getByRole('dialog', { name: 'Choose files' })).toBeVisible()
+      await audit(page, 'choose files')
+    })
+
+    test('networks and settings', async ({ page }) => {
+      await page.goto('/?share=1')
+      await page.getByRole('button', { name: 'Networks' }).first().click()
+      await expect(page.getByRole('heading', { level: 1, name: 'Networks' })).toBeVisible()
+      await audit(page, 'networks')
+      await page.getByRole('button', { name: 'Settings' }).first().click()
+      await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
+      await page.getByRole('switch', { name: 'Share torrents after downloading' }).click()
+      await audit(page, 'settings')
+    })
+
+    test('empty list', async ({ page }) => {
+      await page.goto('/?empty=1')
+      await expect(page.getByText('Nothing downloading yet')).toBeVisible()
+      await audit(page, 'empty')
+    })
+  })
+}
