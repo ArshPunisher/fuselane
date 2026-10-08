@@ -3,6 +3,7 @@
 # through `head` in a commit chain (that hides the exit code).
 set -eu
 cd "$(dirname "$0")/.."
+# shellcheck source=/dev/null
 [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
 echo "== rustfmt";  cargo fmt --all --check
 echo "== clippy";   cargo clippy --workspace --all-targets --locked -q -- -D warnings
