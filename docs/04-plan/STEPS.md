@@ -146,8 +146,8 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 
 ## P6 Fuse Send (0.3): direct sharing, no cloud ([FUSE-SEND.md](../03-architecture/FUSE-SEND.md), [ADR 0011](../adr/0011-fuse-send-p2p.md))
 
-- [ ] 6.1 `send` crate: link format `v1.<info-hash ‖ key ‖ flags>` (parse/print, version check) with shared vectors; negative tests for truncated, tampered and future links
-- [ ] 6.2 Encryption: seekable XChaCha20 at byte offsets + sealed header (name, size, BLAKE3); vectors; tamper and wrong-key tests
+- [x] 6.1 `send` crate: link format `v1.<info-hash ‖ key ‖ flags>` (parse/print, version check) with shared vectors; negative tests for truncated, tampered and future links
+- [x] 6.2 Encryption: seekable XChaCha20 at byte offsets + sealed header (name, size, BLAKE3); vectors; tamper and wrong-key tests
 - [ ] 6.3 Encrypting `StorageFactory` for librqbit: encrypt on read (sender), decrypt on write (receiver), no temp copy
 - [ ] 6.4 Sender: build the torrent over ciphertext, seed over every network, stop when the file changes, "arrived" when a peer has every piece
 - [ ] 6.5 Receiver: open `fuselane://send/…` and pasted links; DHT + public tracker lookup; the error table in FUSE-SEND §5 with exact messages
