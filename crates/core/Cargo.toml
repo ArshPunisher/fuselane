@@ -14,12 +14,14 @@ thiserror = "2"
 fuselane-engine-http.workspace = true
 fuselane-netif.workspace = true
 fuselane-transport.workspace = true
-tokio = { version = "1", features = ["net", "time"] }
+tokio = { version = "1", features = ["net", "time", "rt", "macros"] }
 url = "2"
+dirs = "6"
 
 [lints]
 workspace = true
 
 [dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "test-util"] }
 tempfile = "3"
 proptest = "1"

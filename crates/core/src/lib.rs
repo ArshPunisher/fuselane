@@ -9,5 +9,7 @@ pub mod runner;
 pub mod store;
 
 pub use job::{Event, InvalidTransition, Status};
+pub mod home;
+pub use home::open_default;
 pub use runner::{Outcome, RunOptions, StartError};
 pub use store::{Job, Store, StoreError};

@@ -65,6 +65,103 @@ pub fn pick_networks(names: &[String]) -> Result<Vec<Interface>, String> {
         .collect()
 }
 
+/// Addresses a network can try, in Happy Eyeballs order (RFC 8305 §4): families
+/// interleaved starting with the first resolved, and the last address that worked
+/// first. Families the network has no address in are left out.
+pub fn candidates(
+    addrs: &[SocketAddr],
+    local: &[std::net::IpAddr],
+    preferred: Option<SocketAddr>,
+) -> Vec<SocketAddr> {
+    let usable: Vec<SocketAddr> = addrs
+        .iter()
+        .copied()
+        .filter(|a| a.ip().is_loopback() || local.iter().any(|l| l.is_ipv4() == a.is_ipv4()))
+        .collect();
+    let first_v6 = usable.first().is_some_and(SocketAddr::is_ipv6);
+    let (mut a, mut b): (Vec<_>, Vec<_>) =
+        usable.into_iter().partition(|x| x.is_ipv6() == first_v6);
+    a.reverse();
+    b.reverse();
+    let mut out = Vec::with_capacity(a.len() + b.len());
+    while let Some(x) = a.pop() {
+        out.push(x);
+        if let Some(y) = b.pop() {
+            out.push(y);
+        }
+    }
+    while let Some(y) = b.pop() {
+        out.push(y);
+    }
+    if let Some(p) = preferred
+        && let Some(pos) = out.iter().position(|x| *x == p)
+    {
+        let p = out.remove(pos);
+        out.insert(0, p);
+    }
+    out
+}
+
+/// Delay before starting the next address while earlier ones are still trying.
+pub const ATTEMPT_DELAY: Duration = Duration::from_millis(250);
+
+/// Races connection attempts: starts the first candidate, then another every
+/// `ATTEMPT_DELAY` (or at once when one fails), and keeps the first that connects.
+/// A broken IPv6 path (L-109) costs 250 ms instead of hanging the download.
+pub async fn happy_connect<T, F, Fut>(
+    candidates: &[SocketAddr],
+    total: Duration,
+    connect: F,
+) -> std::io::Result<(T, SocketAddr)>
+where
+    T: Send + 'static,
+    F: Fn(SocketAddr) -> Fut,
+    Fut: std::future::Future<Output = std::io::Result<T>> + Send + 'static,
+{
+    use std::io::{Error, ErrorKind};
+    if candidates.is_empty() {
+        return Err(Error::new(
+            ErrorKind::AddrNotAvailable,
+            "no address in a family this network has",
+        ));
+    }
+    let race = async {
+        let mut set = tokio::task::JoinSet::new();
+        let mut next = 0;
+        let mut last_err = Error::new(ErrorKind::TimedOut, "connection timed out");
+        loop {
+            if next < candidates.len() && (set.is_empty() || next == 0) {
+                let addr = candidates[next];
+                let fut = connect(addr);
+                set.spawn(async move { (addr, fut.await) });
+                next += 1;
+                continue;
+            }
+            let more = next < candidates.len();
+            tokio::select! {
+                joined = set.join_next(), if !set.is_empty() => match joined {
+                    Some(Ok((addr, Ok(conn)))) => return Ok((conn, addr)),
+                    Some(Ok((_, Err(e)))) => last_err = e,
+                    Some(Err(e)) => last_err = Error::other(e),
+                    None => {}
+                },
+                () = tokio::time::sleep(ATTEMPT_DELAY), if more => {}
+            }
+            if next < candidates.len() {
+                let addr = candidates[next];
+                let fut = connect(addr);
+                set.spawn(async move { (addr, fut.await) });
+                next += 1;
+            } else if set.is_empty() {
+                return Err(last_err);
+            }
+        }
+    };
+    tokio::time::timeout(total, race)
+        .await
+        .unwrap_or_else(|_| Err(Error::new(ErrorKind::TimedOut, "connection timed out")))
+}
+
 pub fn network_for(
     id: u32,
     iface: Interface,
@@ -75,25 +172,32 @@ pub fn network_for(
 ) -> Network {
     let name = iface.name.clone();
     let iface = Arc::new(iface);
+    // The address that last worked on this network is tried first next time.
+    let preferred: Arc<std::sync::Mutex<Option<SocketAddr>>> = Arc::default();
     let connect: Connect = Arc::new(move |_| {
-        let (iface, addrs, host) = (iface.clone(), addrs.clone(), host.clone());
+        let (iface, addrs, host, preferred) = (
+            iface.clone(),
+            addrs.clone(),
+            host.clone(),
+            preferred.clone(),
+        );
         Box::pin(async move {
-            // Use the first resolved address this network can reach (matching family).
-            let dest = addrs
-                .iter()
-                .find(|a| {
-                    a.ip().is_loopback() || iface.addrs.iter().any(|l| l.is_ipv4() == a.is_ipv4())
-                })
-                .copied()
-                .ok_or_else(|| {
-                    std::io::Error::new(
-                        std::io::ErrorKind::AddrNotAvailable,
-                        "no address in a family this network has",
-                    )
-                })?;
-            let tcp = fuselane_transport::connect_pinned(&iface, dest, timeout)
-                .await
-                .map_err(std::io::Error::other)?;
+            let last = *preferred
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let order = candidates(&addrs, &iface.addrs, last);
+            let (tcp, used) = happy_connect(&order, timeout, |dest| {
+                let iface = iface.clone();
+                async move {
+                    fuselane_transport::connect_pinned(&iface, dest, timeout)
+                        .await
+                        .map_err(std::io::Error::other)
+                }
+            })
+            .await?;
+            *preferred
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(used);
             if https {
                 let tls = fuselane_transport::tls(tcp, &host)
                     .await
@@ -110,9 +214,11 @@ pub fn network_for(
 /// The plain-language message for each failure (ERRORS.md §2).
 pub fn describe(e: &JobError) -> String {
     match e {
-        JobError::Unreachable(_) => "Couldn't reach the server on any selected network. Check your connection and the link.".into(),
+        JobError::Unreachable(why) => format!("Couldn't reach the server on any selected network ({why}). Check your connection and the link."),
         JobError::ProbeStatus(404) => "The server says this file doesn't exist (404). Check the link.".into(),
         JobError::ProbeStatus(401 | 403) => "The server refused access to this file. The link may need you to be signed in.".into(),
+        JobError::ProbeStatus(429) => "The server is limiting downloads right now (429 Too Many Requests). Wait a few minutes, then resume.".into(),
+        JobError::ProbeStatus(s) if fuselane_engine_http::retry::is_busy(*s) => format!("The server is busy (status {s}). Wait a minute, then resume."),
         JobError::ProbeStatus(s) => format!("The server answered with status {s}, so the download couldn't start."),
         JobError::LinkExpired(s) => format!("This link stopped working (the server said {s}). Get a fresh link to the same file and try again."),
         JobError::VersionChanged => "The file on the server changed during the download, so it was stopped to avoid a mixed file. Start it again.".into(),
@@ -413,6 +519,107 @@ mod tests {
             job_to_resume(&store, &id.to_string()),
             Err(StartError::BadInput(_))
         ));
+    }
+
+    fn sa(s: &str) -> SocketAddr {
+        s.parse().unwrap()
+    }
+
+    #[test]
+    fn candidates_interleave_families_and_prefer_what_worked() {
+        let v6a = sa("[2001:db8::1]:443");
+        let v6b = sa("[2001:db8::2]:443");
+        let v4a = sa("192.0.2.1:443");
+        let v4b = sa("192.0.2.2:443");
+        let both: Vec<std::net::IpAddr> =
+            vec!["10.0.0.2".parse().unwrap(), "2001:db8::99".parse().unwrap()];
+        let addrs = [v6a, v6b, v4a, v4b];
+        assert_eq!(candidates(&addrs, &both, None), vec![v6a, v4a, v6b, v4b]);
+        assert_eq!(
+            candidates(&addrs, &both, Some(v4b)),
+            vec![v4b, v6a, v4a, v6b]
+        );
+        // A preferred address that is no longer resolved is ignored.
+        assert_eq!(
+            candidates(&addrs, &both, Some(sa("198.51.100.1:443")))[0],
+            v6a
+        );
+        // IPv4-only network: IPv6 addresses are skipped entirely.
+        let v4only: Vec<std::net::IpAddr> = vec!["10.0.0.2".parse().unwrap()];
+        assert_eq!(candidates(&addrs, &v4only, None), vec![v4a, v4b]);
+        assert!(candidates(&[v6a], &v4only, None).is_empty());
+        // Loopback is always allowed (tests, local servers).
+        assert_eq!(candidates(&[sa("127.0.0.1:9")], &[], None).len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_hanging_ipv6_path_falls_back_to_ipv4_quickly() {
+        let dead = sa("[2001:db8::1]:443");
+        let good = sa("192.0.2.1:443");
+        let start = std::time::Instant::now();
+        let (conn, used) = happy_connect(
+            &[dead, good],
+            Duration::from_secs(10),
+            move |a| async move {
+                if a == dead {
+                    std::future::pending::<()>().await; // SYN never answered
+                }
+                Ok(a.port())
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!((conn, used), (443, good));
+        assert!(
+            start.elapsed() < Duration::from_secs(2),
+            "took {:?}",
+            start.elapsed()
+        );
+    }
+
+    #[tokio::test]
+    async fn a_refused_address_moves_on_at_once_and_all_failing_is_an_error() {
+        let a = sa("192.0.2.1:1");
+        let b = sa("192.0.2.2:2");
+        let start = std::time::Instant::now();
+        let r = happy_connect(&[a, b], Duration::from_secs(10), move |x| async move {
+            if x == a {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::ConnectionRefused,
+                    "no",
+                ))
+            } else {
+                Ok(x)
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(r.1, b);
+        assert!(
+            start.elapsed() < ATTEMPT_DELAY,
+            "should not wait after a refusal"
+        );
+        let all_bad = happy_connect::<(), _, _>(&[a, b], Duration::from_secs(10), |_| async {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::ConnectionRefused,
+                "no",
+            ))
+        })
+        .await;
+        assert_eq!(
+            all_bad.unwrap_err().kind(),
+            std::io::ErrorKind::ConnectionRefused
+        );
+        let hung = happy_connect::<(), _, _>(&[a], Duration::from_millis(100), |_| async {
+            std::future::pending::<std::io::Result<()>>().await
+        })
+        .await;
+        assert_eq!(hung.unwrap_err().kind(), std::io::ErrorKind::TimedOut);
+        assert!(
+            happy_connect::<(), _, _>(&[], Duration::from_secs(1), |_| async { Ok(()) })
+                .await
+                .is_err()
+        );
     }
 
     #[test]

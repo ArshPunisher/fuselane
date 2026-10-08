@@ -79,19 +79,14 @@ fn show_main(app: &tauri::AppHandle) {
 }
 
 fn open_service() -> Result<Arc<Service>, String> {
-    let home = match std::env::var_os("FUSELANE_HOME") {
-        Some(h) => std::path::PathBuf::from(h),
-        None => dirs::data_dir()
-            .ok_or("no data folder on this system")?
-            .join(if cfg!(target_os = "macos") {
-                "app.fuselane"
-            } else {
-                "fuselane"
-            }),
-    };
-    std::fs::create_dir_all(&home)
-        .map_err(|e| format!("couldn't create {}: {e}", home.display()))?;
-    let store = fuselane_core::Store::open(&home.join("fuselane.db")).map_err(|e| e.to_string())?;
+    let store = fuselane_core::open_default()?;
+    if let Some(aside) = &store.recovered_from {
+        eprintln!(
+            "fuselane: the download list was damaged, so a fresh one was started. The old file is kept at {}.",
+            aside.display()
+        );
+    }
+    let home = fuselane_core::home::home()?;
     let downloads = dirs::download_dir()
         .or_else(dirs::home_dir)
         .unwrap_or_else(|| home.clone());

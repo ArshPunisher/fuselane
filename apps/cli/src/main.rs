@@ -114,21 +114,7 @@ fn main() -> ExitCode {
 /// Where downloads are remembered: `FUSELANE_HOME`, else the OS app-data folder
 /// (ARCHITECTURE.md §7).
 fn open_store() -> Result<Store, String> {
-    let dir = match std::env::var_os("FUSELANE_HOME") {
-        Some(h) => PathBuf::from(h),
-        None => {
-            let base = dirs::data_dir().ok_or("couldn't find the app-data folder")?;
-            base.join(if cfg!(target_os = "macos") {
-                "app.fuselane"
-            } else if cfg!(windows) {
-                "Fuselane"
-            } else {
-                "fuselane"
-            })
-        }
-    };
-    let store = Store::open(&dir.join("jobs.db"))
-        .map_err(|e| format!("couldn't open the download list: {e}"))?;
+    let store = fuselane_core::open_default()?;
     if let Some(aside) = &store.recovered_from {
         eprintln!(
             "fuselane: the download list was damaged, so a fresh one was started. The old file is kept at {}.",
