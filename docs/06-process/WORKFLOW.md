@@ -7,7 +7,7 @@
 2. Plan   If the step changes a design decision: write or update the design doc / an ADR first
 3. Test   Write the failing test first (unit/property for pure logic; testkit scenario for behaviour)
 4. Build  The smallest change that makes it pass, on all three OSes
-5. Check  fmt, clippy, tests locally; push; CI green on macOS, Windows, Linux
+5. Check  tools/check.sh (all gates, fails loudly); push; CI green on macOS, Windows, Linux
 6. Commit Small, focused commits (see §3), each one building and passing
 7. Record Tick the step in STEPS.md (and PARITY-CHECKLIST.md if it applies), update STATUS.md
 ```

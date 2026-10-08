@@ -84,10 +84,12 @@ Whenever building or changing UI (desktop, extension popup, share page, landing 
 - **The author is the repo owner only: no `Co-Authored-By`, no "Generated with Claude Code", no AI attribution** in commits or PRs.
 - "commit" = commit only; "commit and push" = commit, then push the current branch. Never force-push. Never push to another branch without asking.
 - Commit after each completed step; don't let work pile up uncommitted.
+- Gate every commit on `tools/check.sh` (never pipe checks through `head` in a commit chain: it hides failures, which once let a broken build be committed).
 
 ## Commands
 
 ```bash
+tools/check.sh                          # ALL gates; run before every commit: `tools/check.sh && git commit ...`
 source ~/.cargo/env                     # Rust isn't on the zsh PATH by default on this Mac
 git config core.hooksPath .githooks     # once per clone: commit-msg rules (no AI attribution)
 cargo fmt --all && cargo clippy --workspace --all-targets -- -D warnings
