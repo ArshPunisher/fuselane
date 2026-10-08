@@ -17,6 +17,15 @@ Fuselane is a cross-platform download **and upload** manager. It spreads one tra
 
 All files are on [Releases](https://github.com/ArshPunisher/fuselane/releases) with `SHA256SUMS`. The app updates itself from a signed feed. It sends nothing else: see [PRIVACY.md](docs/PRIVACY.md).
 
+## Code signing policy
+
+Windows releases are to be signed through the [SignPath Foundation](https://signpath.org) (free code signing for open source; application in progress). Until then, Windows installers are unsigned and SmartScreen may warn.
+
+- Every release is built by GitHub Actions from this public repository; nothing is built or signed on a personal machine.
+- Committers and reviewers: [@ArshPunisher](https://github.com/ArshPunisher). Approver of each signed release: [@ArshPunisher](https://github.com/ArshPunisher).
+- macOS builds are ad-hoc signed; app updates are signed with the project's own update key and verified by the app before installing.
+- Privacy: the app collects no user data ([PRIVACY.md](docs/PRIVACY.md)).
+
 ## What it does
 
 | Pillar | What it means |
