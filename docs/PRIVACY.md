@@ -16,6 +16,10 @@ Fuselane is a download manager that runs on your computer. It does not have acco
 
 Nothing else is sent. There is no background reporting of usage, errors or files.
 
+## Browser extension
+
+The Fuselane browser extension only talks to the Fuselane app on your own computer (native messaging). When a download starts, it passes the app the link, the file name, its size and type, and the page it came from, so the app can download it. It reads no pages, cookies or browsing history, and sends nothing to the internet.
+
 ## Diagnostics
 
 **Settings → Copy diagnostics** builds a text report for bug reports and shows it to you first. It includes the app version, operating system, network device names and kinds, address counts (never the addresses), speed limits, and recent downloads' states and error codes (never links or file names). It only leaves your computer if you paste it somewhere.
