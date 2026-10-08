@@ -5,6 +5,11 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
+ignore = [
+  # Build-time macro crate pulled in by gtk-rs 0.18 (Tauri's Linux webview stack); not
+  # a vulnerability, no maintained replacement upstream yet. Revisit when Tauri moves to gtk4.
+  { id = "RUSTSEC-2024-0370", reason = "unmaintained, transitive via gtk 0.18 in Tauri on Linux" },
+]
 
 [licenses]
 version = 2
@@ -13,6 +18,8 @@ allow = [
   "Apache-2.0", "MIT", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Unicode-3.0", "Zlib", "CC0-1.0", "MPL-2.0",
   # Mozilla root-certificate data (webpki-root-certs, via rustls-platform-verifier): permissive data licence.
   "CDLA-Permissive-2.0",
+  # target-lexicon (via Tauri's Linux build deps): Apache-2.0 with a permissive extra exception.
+  "Apache-2.0 WITH LLVM-exception",
 ]
 confidence-threshold = 0.9
 
@@ -22,7 +29,7 @@ wildcards = "deny"
 allow-wildcard-paths = true
 # Layering (ARCHITECTURE.md §3): no UI shell inside the engine crates.
 deny = [
-  { name = "tauri", wrappers = ["fuselane-desktop"] },
+  { name = "tauri", wrappers = ["fuselane-desktop", "tauri-plugin-single-instance"] },
 ]
 
 [sources]
