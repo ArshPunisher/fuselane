@@ -97,6 +97,9 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
       - name: Build
         run: cargo build --workspace --locked
+      - name: Networks this runner has
+        # Classification problems show here first (a VM's card read as virtual).
+        run: cargo run --locked -q -p fuselane-cli -- nets --all
       - name: Test
         # Retries stay off: a flaky test fails the run (L-94).
         run: cargo nextest run --workspace --locked --no-tests=warn
