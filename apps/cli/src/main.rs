@@ -233,6 +233,8 @@ fn describe(e: &JobError) -> String {
         JobError::VersionChanged => "The file on the server changed during the download, so it was stopped to avoid a mixed file. Start it again.".into(),
         JobError::Disk(d) => format!("Saving failed ({d:?}). Check free space and that the folder is writable."),
         JobError::AllNetworksFailed(last) => format!("Every network failed. Last problem: {last}"),
+        JobError::Paused => "Paused. Progress is saved.".into(),
+        JobError::NotResumable(why) => format!("This download can't be resumed ({why}). Start it again."),
         JobError::Staging(e) => format!("Couldn't save the file: {e}"),
     }
 }
