@@ -3,3 +3,6 @@
 
 pub mod crypt;
 pub mod link;
+pub mod storage;
+pub mod torrent;
+pub mod view;

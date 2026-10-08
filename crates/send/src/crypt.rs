@@ -1,7 +1,8 @@
 //! Encryption for a share (FUSE-SEND.md §4). The torrent carries:
 //!
 //! ```text
-//! [u32 LE: sealed header length][sealed header][content XORed with a keystream]
+//! [header block: u32 LE length, nonce, sealed header, zero padding to 1024 bytes]
+//! [content XORed with a keystream]
 //! ```
 //!
 //! - The sealed header (name, size, BLAKE3 of the plaintext) uses XChaCha20-Poly1305
@@ -25,8 +26,9 @@ const HEADER_VERSION: u8 = 1;
 const NONCE: usize = 24;
 /// Longest file name accepted (bytes), as most file systems allow.
 pub const MAX_NAME: usize = 255;
-/// Header sizes beyond this are refused before anything is allocated.
-const MAX_SEALED: usize = 4096;
+/// The header block's fixed size, so a receiver knows where content starts (and
+/// the content's size, from the torrent's length) before it can decrypt anything.
+pub const HEADER_BLOCK: usize = 1024;
 
 /// What the receiver learns only after decrypting.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -95,21 +97,22 @@ impl Keys {
             .encrypt(&XNonce::from(nonce), plain.as_slice())
             .map_err(|_| CryptError::Tampered)?;
         let len = (NONCE + sealed.len()) as u32;
-        let mut out = Vec::with_capacity(4 + len as usize);
+        let mut out = Vec::with_capacity(HEADER_BLOCK);
         out.extend_from_slice(&len.to_le_bytes());
         out.extend_from_slice(&nonce);
         out.extend_from_slice(&sealed);
+        // A 255-byte name seals to about 350 bytes, far below the block.
+        out.resize(HEADER_BLOCK, 0);
         Ok(out)
     }
 
-    /// Reads the header block from the start of the torrent's data. Returns the
-    /// header and how many bytes the block took (where the content starts).
-    pub fn open(&self, data: &[u8]) -> Result<(Header, usize), CryptError> {
+    /// Reads the header block (the first `HEADER_BLOCK` bytes of the torrent's data).
+    pub fn open(&self, data: &[u8]) -> Result<Header, CryptError> {
         let len = data
             .get(..4)
             .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize)
             .ok_or(CryptError::Tampered)?;
-        if !(NONCE + 16..=MAX_SEALED).contains(&len) {
+        if !(NONCE + 16..=HEADER_BLOCK - 4).contains(&len) {
             return Err(CryptError::Tampered);
         }
         let block = data.get(4..4 + len).ok_or(CryptError::Tampered)?;
@@ -135,7 +138,7 @@ impl Keys {
         let name = String::from_utf8(name.to_vec()).map_err(|_| CryptError::Tampered)?;
         // Checked again on this side: a sender's app could be modified.
         check_name(&name)?;
-        Ok((Header { name, size, hash }, 4 + len))
+        Ok(Header { name, size, hash })
     }
 }
 
@@ -196,9 +199,19 @@ mod tests {
     fn a_sealed_header_opens_with_the_same_key() {
         let k = Keys::derive(&LINK_KEY);
         let block = k.seal(&header()).unwrap();
+        assert_eq!(block.len(), HEADER_BLOCK, "always the same size");
         let mut data = block.clone();
         data.extend_from_slice(b"content follows");
-        assert_eq!(k.open(&data), Ok((header(), block.len())));
+        assert_eq!(k.open(&data), Ok(header()));
+        let long = Header {
+            name: "x".repeat(MAX_NAME),
+            ..header()
+        };
+        assert_eq!(
+            k.open(&k.seal(&long).unwrap()),
+            Ok(long),
+            "longest name fits"
+        );
     }
 
     #[test]
@@ -209,7 +222,8 @@ mod tests {
             Keys::derive(&[43; 32]).open(&block),
             Err(CryptError::Tampered)
         );
-        for i in 4..block.len() {
+        let used = 4 + u32::from_le_bytes(block[..4].try_into().unwrap()) as usize;
+        for i in 4..used {
             let mut b = block.clone();
             b[i] ^= 0x01;
             assert_eq!(k.open(&b), Err(CryptError::Tampered), "byte {i}");
@@ -220,7 +234,8 @@ mod tests {
     fn short_or_oversized_header_blocks_are_refused_without_panicking() {
         let k = Keys::derive(&LINK_KEY);
         let block = k.seal(&header()).unwrap();
-        for cut in [0, 3, 4, 10, block.len() - 1] {
+        let used = 4 + u32::from_le_bytes(block[..4].try_into().unwrap()) as usize;
+        for cut in [0, 3, 4, 10, used - 1] {
             assert_eq!(
                 k.open(&block[..cut]),
                 Err(CryptError::Tampered),
@@ -240,7 +255,7 @@ mod tests {
         let k = Keys::derive(&LINK_KEY);
         let (a, b) = (k.seal(&header()).unwrap(), k.seal(&header()).unwrap());
         assert_ne!(a, b, "fresh nonce each time");
-        assert_eq!(k.open(&a).unwrap().0, k.open(&b).unwrap().0);
+        assert_eq!(k.open(&a), k.open(&b));
     }
 
     /// The core property: encrypting piece by piece at any offset gives exactly the

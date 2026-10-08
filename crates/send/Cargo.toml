@@ -9,12 +9,19 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+anyhow = "1"
 base64 = "0.22"
 blake3 = "1.8"
 chacha20 = { version = "0.10", features = ["xchacha"] }
 chacha20poly1305 = "0.11"
 getrandom = "0.3"
+librqbit = { version = "9", default-features = false, features = ["rust-tls"] }
+sha1 = "0.11"
 thiserror = "2"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["full"] }
 
 [lints]
 workspace = true
