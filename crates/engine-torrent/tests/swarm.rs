@@ -6,7 +6,9 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
 
-use fuselane_engine_torrent::{EngineOptions, Phase, Source, TorrentEngine, TorrentError};
+use fuselane_engine_torrent::{
+    AddOptions, EngineOptions, Phase, Source, TorrentEngine, TorrentError,
+};
 use fuselane_netif::{Interface, Kind};
 use librqbit::{
     AddTorrent, AddTorrentOptions, CreateTorrentOptions, ListenerOptions, Session, SessionOptions,
@@ -104,11 +106,17 @@ async fn a_torrent_downloads_byte_exact_through_the_proxy() {
         networks: vec![loopback()],
         dht: false,
         listen: None,
+        state_dir: None,
     })
     .await
     .unwrap();
     let t = engine
-        .add(Source::File(torrent), None, vec![seeder_addr], None)
+        .add(
+            Source::File(torrent),
+            None,
+            vec![seeder_addr],
+            AddOptions::default(),
+        )
         .await
         .unwrap();
     tokio::time::timeout(Duration::from_secs(60), t.finished())
@@ -137,6 +145,7 @@ async fn broken_inputs_get_clear_errors() {
         networks: vec![],
         dht: false,
         listen: None,
+        state_dir: None,
     })
     .await;
     assert!(matches!(none, Err(TorrentError::NoNetworks)));
@@ -146,6 +155,7 @@ async fn broken_inputs_get_clear_errors() {
         networks: vec![loopback()],
         dht: false,
         listen: None,
+        state_dir: None,
     })
     .await
     .unwrap();
@@ -156,7 +166,12 @@ async fn broken_inputs_get_clear_errors() {
         b"d8:announce".to_vec(),
     ] {
         let r = engine
-            .add(Source::File(junk.clone()), None, vec![], None)
+            .add(
+                Source::File(junk.clone()),
+                None,
+                vec![],
+                AddOptions::default(),
+            )
             .await;
         assert!(
             matches!(r, Err(TorrentError::Invalid(_))),
@@ -168,7 +183,7 @@ async fn broken_inputs_get_clear_errors() {
             Source::Magnet("magnet:?xt=urn:btih:nothex".into()),
             None,
             vec![],
-            None,
+            AddOptions::default(),
         )
         .await;
     assert!(r.is_err(), "{r:?}");
@@ -185,11 +200,17 @@ async fn an_existing_file_is_never_overwritten() {
         networks: vec![loopback()],
         dht: false,
         listen: None,
+        state_dir: None,
     })
     .await
     .unwrap();
     let r = engine
-        .add(Source::File(torrent), None, vec![seeder_addr], None)
+        .add(
+            Source::File(torrent),
+            None,
+            vec![seeder_addr],
+            AddOptions::default(),
+        )
         .await;
     assert!(matches!(r, Err(TorrentError::FileExists(_))), "{r:?}");
     assert_eq!(
@@ -286,6 +307,7 @@ async fn chosen_files_download_and_edge_pieces_are_cleaned_up() {
         networks: vec![loopback()],
         dht: false,
         listen: None,
+        state_dir: None,
     })
     .await
     .unwrap();
@@ -301,7 +323,13 @@ async fn chosen_files_download_and_edge_pieces_are_cleaned_up() {
     assert!(!leech.path().join("T").exists(), "inspect writes nothing");
 
     let t = engine
-        .add_listed(listing, Some([idx("b.bin")].into()))
+        .add_listed(
+            listing,
+            AddOptions {
+                only: Some([idx("b.bin")].into()),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
     until_finished(&t).await;
@@ -362,11 +390,17 @@ async fn removing_with_files_deletes_the_torrent_folder() {
         networks: vec![loopback()],
         dht: false,
         listen: None,
+        state_dir: None,
     })
     .await
     .unwrap();
     let t = engine
-        .add(Source::File(torrent), None, vec![addr], None)
+        .add(
+            Source::File(torrent),
+            None,
+            vec![addr],
+            AddOptions::default(),
+        )
         .await
         .unwrap();
     until_finished(&t).await;
@@ -437,11 +471,17 @@ async fn two_networks_share_a_torrent_and_credit_sums_to_the_file() {
         networks: vec![loopback(), second],
         dht: false,
         listen: None,
+        state_dir: None,
     })
     .await
     .unwrap();
     let t = engine
-        .add(Source::File(torrent), None, vec![addr1, addr2], None)
+        .add(
+            Source::File(torrent),
+            None,
+            vec![addr1, addr2],
+            AddOptions::default(),
+        )
         .await
         .unwrap();
     tokio::time::timeout(Duration::from_secs(60), t.finished())
@@ -468,4 +508,110 @@ async fn two_networks_share_a_torrent_and_credit_sums_to_the_file() {
         all.iter().zip(&shares).all(|(n, s)| n.down >= s.received),
         "{all:?} {shares:?}"
     );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn after_a_restart_saved_files_are_rechecked_not_downloaded_again() {
+    let seed = tempfile::tempdir().unwrap();
+    let leech = tempfile::tempdir().unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let data = payload(700_001);
+    let (seeder_session, addr, torrent) = seeder(seed.path(), &data).await;
+    let opts = |dir: &std::path::Path| EngineOptions {
+        download_dir: dir.to_path_buf(),
+        networks: vec![loopback()],
+        dht: false,
+        listen: None,
+        state_dir: Some(state.path().to_path_buf()),
+    };
+    let first = TorrentEngine::start(opts(leech.path())).await.unwrap();
+    let t = first
+        .add(
+            Source::File(torrent.clone()),
+            None,
+            vec![addr],
+            AddOptions::default(),
+        )
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(60), t.finished())
+        .await
+        .unwrap()
+        .unwrap();
+    first.release(t).await.unwrap();
+    drop(first);
+    // The seeder is gone: anything that finishes now came from the disk.
+    drop(seeder_session);
+
+    let again = TorrentEngine::start(opts(leech.path())).await.unwrap();
+    let refused = again
+        .add(
+            Source::File(torrent.clone()),
+            None,
+            vec![],
+            AddOptions::default(),
+        )
+        .await;
+    assert!(
+        matches!(refused, Err(TorrentError::FileExists(_))),
+        "{refused:?}"
+    );
+    let t = again
+        .add(
+            Source::File(torrent),
+            None,
+            vec![],
+            AddOptions {
+                resume: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(30), t.finished())
+        .await
+        .expect("recheck timed out")
+        .unwrap();
+    assert_eq!(t.progress().done, data.len() as u64);
+    assert!(std::fs::read(leech.path().join("payload.bin")).unwrap() == data);
+    assert!(
+        state.path().read_dir().unwrap().next().is_none(),
+        "no DHT, so nothing saved"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_torrent_can_start_paused() {
+    let seed = tempfile::tempdir().unwrap();
+    let leech = tempfile::tempdir().unwrap();
+    let (_s, addr, torrent) = seeder(seed.path(), &payload(300_000)).await;
+    let engine = TorrentEngine::start(EngineOptions {
+        download_dir: leech.path().to_path_buf(),
+        networks: vec![loopback()],
+        dht: false,
+        listen: None,
+        state_dir: None,
+    })
+    .await
+    .unwrap();
+    let t = engine
+        .add(
+            Source::File(torrent),
+            None,
+            vec![addr],
+            AddOptions {
+                paused: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let p = t.progress();
+    assert_eq!((p.phase, p.done), (Phase::Paused, 0), "{p:?}");
+    engine.resume(&t).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(30), t.finished())
+        .await
+        .unwrap()
+        .unwrap();
 }

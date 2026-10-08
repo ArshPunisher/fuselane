@@ -5,7 +5,7 @@
 
 use std::net::{IpAddr, Ipv4Addr};
 
-use fuselane_engine_torrent::{EngineOptions, Source, TorrentEngine, TorrentError};
+use fuselane_engine_torrent::{AddOptions, EngineOptions, Source, TorrentEngine, TorrentError};
 use fuselane_netif::{Interface, Kind};
 
 /// Minimal bencode for building fixtures.
@@ -91,6 +91,7 @@ async fn engine(dir: &std::path::Path) -> TorrentEngine {
         }],
         dht: false,
         listen: None,
+        state_dir: None,
     })
     .await
     .unwrap()
@@ -112,7 +113,7 @@ async fn a_well_formed_fixture_is_accepted() {
             Source::File(multi("Fine", &[&["a.txt"], &["sub", "b.txt"]])),
             None,
             vec![],
-            None,
+            AddOptions::default(),
         )
         .await;
     assert!(t.is_ok(), "{t:?}");
@@ -152,7 +153,9 @@ async fn hostile_torrents_are_refused_before_touching_the_disk() {
         let dl = root.path().join("dl");
         std::fs::create_dir(&dl).unwrap();
         let e = engine(&dl).await;
-        let r = e.add(Source::File(bytes), None, vec![], None).await;
+        let r = e
+            .add(Source::File(bytes), None, vec![], AddOptions::default())
+            .await;
         assert!(
             matches!(
                 r,
@@ -187,7 +190,12 @@ async fn a_symlinked_folder_in_the_way_is_refused() {
     std::os::unix::fs::symlink(outside.path(), dl.join("T")).unwrap();
     let e = engine(&dl).await;
     let r = e
-        .add(Source::File(multi("T", &[&["x"]])), None, vec![], None)
+        .add(
+            Source::File(multi("T", &[&["x"]])),
+            None,
+            vec![],
+            AddOptions::default(),
+        )
         .await;
     assert!(
         matches!(&r, Err(TorrentError::UnsafePath(m)) if m.contains("link")),
@@ -205,7 +213,7 @@ async fn messages_name_the_problem() {
             Source::File(multi("T", &[&["Readme.txt"], &["README.TXT"]])),
             None,
             vec![],
-            None,
+            AddOptions::default(),
         )
         .await;
     let msg = r.unwrap_err().to_string();

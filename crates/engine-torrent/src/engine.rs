@@ -8,9 +8,10 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use librqbit::dht::DhtPersistenceConfig;
 use librqbit::{
-    AddTorrent, AddTorrentOptions, AddTorrentResponse, ConnectionOptions, ListenerMode,
-    ListenerOptions, ManagedTorrent, Session, SessionOptions, TorrentStatsState,
+    AddTorrent, AddTorrentOptions, AddTorrentResponse, ConnectionOptions, DhtSessionConfig,
+    ListenerMode, ListenerOptions, ManagedTorrent, Session, SessionOptions, TorrentStatsState,
 };
 
 use crate::balancer::{Balancer, NetShare, NetStat};
@@ -96,6 +97,20 @@ pub struct EngineOptions {
     pub dht: bool,
     /// Accept incoming peers on this address (None: outgoing only).
     pub listen: Option<SocketAddr>,
+    /// Where the DHT keeps its node list. None: not saved. Never the library's
+    /// default folder (L-70).
+    pub state_dir: Option<PathBuf>,
+}
+
+/// How to start a torrent.
+#[derive(Debug, Clone, Default)]
+pub struct AddOptions {
+    /// Files to download by index (None: all of them).
+    pub only: Option<HashSet<usize>>,
+    pub paused: bool,
+    /// Continue into files Fuselane saved earlier (after a restart): librqbit
+    /// rechecks every piece. Without it, an existing file is refused.
+    pub resume: bool,
 }
 
 pub struct TorrentEngine {
@@ -207,11 +222,13 @@ impl TorrentEngine {
         let session = Session::new_with_opts(
             download_dir.clone(),
             SessionOptions {
-                dht: if opts.dht {
-                    Some(Default::default())
-                } else {
-                    None
-                },
+                dht: opts.dht.then(|| DhtSessionConfig {
+                    persistence: opts.state_dir.as_ref().map(|d| DhtPersistenceConfig {
+                        config_filename: Some(d.join("dht.json")),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
                 fastresume: false,
                 persistence: None,
                 listen: opts.listen.map(|listen_addr| ListenerOptions {
@@ -331,19 +348,19 @@ impl TorrentEngine {
         source: Source,
         output_folder: Option<PathBuf>,
         initial_peers: Vec<SocketAddr>,
-        only: Option<HashSet<usize>>,
+        opts: AddOptions,
     ) -> Result<Torrent, TorrentError> {
         let listing = self.inspect(source, output_folder, initial_peers).await?;
-        self.add_listed(listing, only).await
+        self.add_listed(listing, opts).await
     }
 
     /// Adds a torrent already inspected (for example after the user picked files).
     pub async fn add_listed(
         &self,
         listing: Listing,
-        only: Option<HashSet<usize>>,
+        add: AddOptions,
     ) -> Result<Torrent, TorrentError> {
-        let selected = match only {
+        let selected = match add.only {
             Some(set) => check_selection(&listing.files, set)?,
             None => listing.wanted_indices(),
         };
@@ -351,8 +368,10 @@ impl TorrentEngine {
             output_folder: Some(listing.folder.to_string_lossy().into_owned()),
             initial_peers: (!listing.peers.is_empty()).then(|| listing.peers.clone()),
             only_files: Some(selected.iter().copied().collect()),
-            // Never write into a file the user already has (librqbit would reuse it).
-            overwrite: false,
+            // Never write into a file the user already has (librqbit would reuse it),
+            // unless it is Fuselane's own from before a restart.
+            overwrite: add.resume,
+            paused: add.paused,
             ..Default::default()
         };
         let resp = self
