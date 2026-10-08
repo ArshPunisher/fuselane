@@ -14,6 +14,7 @@ thiserror = "2"
 fuselane-engine-http.workspace = true
 fuselane-netif.workspace = true
 fuselane-transport.workspace = true
+fuselane-storage.workspace = true
 tokio = { version = "1", features = ["net", "time", "rt", "macros"] }
 url = "2"
 dirs = "6"
@@ -22,6 +23,7 @@ dirs = "6"
 workspace = true
 
 [dev-dependencies]
+fuselane-testkit.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "test-util"] }
 tempfile = "3"
 proptest = "1"

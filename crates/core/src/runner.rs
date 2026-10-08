@@ -339,17 +339,14 @@ pub fn remove(store: &Store, id: i64) -> Result<(), crate::StoreError> {
     store.delete(id)
 }
 
-/// Runs (or continues) job `id` and records how it ended in the store.
-pub async fn run(
-    store: Arc<Store>,
-    id: i64,
+/// Everything needed to reach the server: the request target and one `Network`
+/// per chosen interface (ids from 1, with their device names for reports).
+async fn connect_plan(
     link: &str,
-    out: PathBuf,
-    resume: Option<Resume>,
-    opts: RunOptions,
-) -> Result<Outcome, StartError> {
+    chosen: &[String],
+) -> Result<(Source, Vec<Network>, Vec<(u32, String)>), StartError> {
     let (https, host, port, path) = parse_link(link).map_err(StartError::BadInput)?;
-    let ifaces = pick_networks(&opts.networks).map_err(StartError::BadInput)?;
+    let ifaces = pick_networks(chosen).map_err(StartError::BadInput)?;
     let addrs: Vec<SocketAddr> = match tokio::time::timeout(
         Duration::from_secs(10),
         tokio::net::lookup_host((host.as_str(), port)),
@@ -387,6 +384,56 @@ pub async fn run(
             )
         })
         .collect();
+    let host_header = if (https && port == 443) || (!https && port == 80) {
+        host.clone()
+    } else {
+        format!("{host}:{port}")
+    };
+    let source = Source {
+        addr: first,
+        host: host_header,
+        path,
+    };
+    Ok((source, networks, names))
+}
+
+/// What a link points at, without downloading it: for the New download dialog.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Preview {
+    pub filename: String,
+    pub total: Option<u64>,
+    /// The server answers byte ranges, so the file can be split across networks.
+    pub splittable: bool,
+}
+
+/// Asks the server about a link (one tiny ranged request, L-01).
+pub async fn preview(link: &str) -> Result<Preview, String> {
+    let (source, networks, _) = connect_plan(link, &[]).await.map_err(|e| e.to_string())?;
+    let tuning = Tuning {
+        connect_timeout: Duration::from_secs(6),
+        first_byte_timeout: Duration::from_secs(6),
+        ..Tuning::default()
+    };
+    let p = fuselane_engine_http::download::probe(&source, &networks, &tuning)
+        .await
+        .map_err(|e| describe(&e))?;
+    Ok(Preview {
+        filename: fuselane_storage::names::sanitize(&p.filename),
+        total: p.total,
+        splittable: p.ranges,
+    })
+}
+
+/// Runs (or continues) job `id` and records how it ended in the store.
+pub async fn run(
+    store: Arc<Store>,
+    id: i64,
+    link: &str,
+    out: PathBuf,
+    resume: Option<Resume>,
+    opts: RunOptions,
+) -> Result<Outcome, StartError> {
+    let (source, networks, names) = connect_plan(link, &opts.networks).await?;
     let sink = {
         let store = store.clone();
         CheckpointFn(Arc::new(move |cp| {
@@ -406,16 +453,6 @@ pub async fn run(
         ..defaults
     };
     let _ = store.apply(id, Event::Start, None);
-    let host_header = if (https && port == 443) || (!https && port == 80) {
-        host.clone()
-    } else {
-        format!("{host}:{port}")
-    };
-    let source = Source {
-        addr: first,
-        host: host_header,
-        path,
-    };
     Ok(
         match download_with(source, networks, &out, tuning, resume).await {
             Ok(report) => {
@@ -619,6 +656,45 @@ mod tests {
             happy_connect::<(), _, _>(&[], Duration::from_secs(1), |_| async { Ok(()) })
                 .await
                 .is_err()
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn preview_reports_name_size_and_whether_it_splits() {
+        use fuselane_testkit::{Content, Fault, RangeServer, Rule};
+        let server = RangeServer::start(Content::new(123_456, 5)).await.unwrap();
+        let link = format!("http://{}{}", server.addr(), server.path());
+        let p = preview(&link).await.unwrap();
+        assert_eq!(p.total, Some(123_456));
+        assert!(p.splittable);
+        assert!(!p.filename.is_empty());
+        // A server that ignores ranges still previews, but can't be split.
+        let whole = RangeServer::start(Content::new(999, 6)).await.unwrap();
+        whole.add_rule(Rule {
+            skip: 0,
+            times: u32::MAX,
+            fault: Fault::IgnoreRange,
+        });
+        let p = preview(&format!("http://{}{}", whole.addr(), whole.path()))
+            .await
+            .unwrap();
+        assert!(!p.splittable);
+        // Failures come back as the catalogue's words.
+        let gone = RangeServer::start(Content::new(10, 7)).await.unwrap();
+        gone.add_rule(Rule {
+            skip: 0,
+            times: u32::MAX,
+            fault: Fault::Status(404, None),
+        });
+        let e = preview(&format!("http://{}{}", gone.addr(), gone.path()))
+            .await
+            .unwrap_err();
+        assert!(e.contains("404"), "{e}");
+        assert!(
+            preview("ftp://example.com/x")
+                .await
+                .unwrap_err()
+                .contains("ftp")
         );
     }
 

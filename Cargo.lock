@@ -1193,6 +1193,8 @@ dependencies = [
  "dirs 6.0.0",
  "fuselane-engine-http",
  "fuselane-netif",
+ "fuselane-storage",
+ "fuselane-testkit",
  "fuselane-transport",
  "proptest",
  "rusqlite",
