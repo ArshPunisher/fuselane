@@ -1,0 +1,26 @@
+# cargo-deny: licences, advisories, bans and sources. Runs in the static CI job.
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+yanked = "deny"
+
+[licenses]
+version = 2
+# Permissive licences compatible with Apache-2.0 distribution.
+allow = ["Apache-2.0", "MIT", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Unicode-3.0", "Zlib", "CC0-1.0", "MPL-2.0"]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+# Layering (ARCHITECTURE.md §3): no UI shell inside the engine crates.
+deny = [
+  { name = "tauri", wrappers = ["fuselane-desktop"] },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
