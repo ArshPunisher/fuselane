@@ -1864,3 +1864,26 @@ kbd {
     max-height: 50vh;
   }
 }
+
+.share-limits {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 200px)) auto;
+  align-items: start;
+  gap: 12px 16px;
+}
+
+.share-limits .btn {
+  margin-top: 22px;
+  justify-self: start;
+}
+
+@media (max-width: 640px) {
+  .share-limits {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .share-limits .btn {
+    margin-top: 0;
+    justify-self: start;
+  }
+}

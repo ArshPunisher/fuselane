@@ -2,7 +2,14 @@
 // pick files, then download with each network credited for verified bytes.
 // URL parameters: torrents=0 (none at start), torrents=1 (the sample even with empty=1),
 // magnet=slow (inspect never ends).
-import type { ListingView, TorrentFileView, TorrentView, UiError, UiEvent } from './types'
+import type {
+  ListingView,
+  SeedSettings,
+  TorrentFileView,
+  TorrentView,
+  UiError,
+  UiEvent,
+} from './types'
 
 const MB = 1024 * 1024
 const NETS = ['en0', 'en7', 'en5']
@@ -47,6 +54,11 @@ const SAMPLES: Record<string, { name: string; files: [string, number][] }> = {
 
 export function createDemoTorrents(params: URLSearchParams, emit: () => (e: UiEvent) => void) {
   const list: SimTorrent[] = []
+  let seed: SeedSettings = {
+    enabled: params.get('share') === '1',
+    ratio: 1,
+    minutes: 60,
+  }
   const pending = new Map<string, ListingView>()
 
   function listing(kind: keyof typeof SAMPLES, dir: string | null): ListingView {
@@ -139,9 +151,15 @@ export function createDemoTorrents(params: URLSearchParams, emit: () => (e: UiEv
         const rate = 14.2 * MB
         t.view.done = Math.min(t.view.total, t.view.done + rate * dt)
         if (t.view.done >= t.view.total) {
-          t.view.status = 'completed'
+          t.view.status = seed.enabled ? 'seeding' : 'completed'
           credit(t, 0)
         } else credit(t, rate)
+        moved = true
+      }
+      for (const t of list) {
+        if (t.view.status !== 'seeding') continue
+        t.view.uploaded = Math.min(t.view.total * seed.ratio, t.view.uploaded + 3.1 * MB * dt)
+        if (t.view.uploaded >= t.view.total * seed.ratio) t.view.status = 'completed'
         moved = true
       }
       return moved
@@ -227,6 +245,34 @@ export function createDemoTorrents(params: URLSearchParams, emit: () => (e: UiEv
       },
       revealTorrent: async (id: string) => {
         find(id)
+      },
+      seedSettings: async () => ({ ...seed }),
+      setSeedSettings: async (s: SeedSettings) => {
+        if (!Number.isFinite(s.ratio) || s.ratio < 0.1 || s.ratio > 10)
+          throw err(
+            'bad-ratio',
+            'The sharing ratio must be between 0.1 and 10.',
+            '1 means upload as much as you downloaded.',
+          )
+        if (!Number.isInteger(s.minutes) || s.minutes < 1 || s.minutes > 10080)
+          throw err(
+            'bad-minutes',
+            'Sharing time must be between 1 minute and 7 days (10080 minutes).',
+            null,
+          )
+        seed = { ...s }
+        if (!seed.enabled)
+          for (const t of list) if (t.view.status === 'seeding') t.view.status = 'completed'
+        send()
+        return { ...seed }
+      },
+      stopSharing: async (id: string) => {
+        const t = find(id)
+        if (t.view.status !== 'seeding')
+          throw err('not-sharing', "This torrent isn't sharing.", null)
+        t.view.status = 'completed'
+        credit(t, 0)
+        send()
       },
       inspectTorrentBytes: async (bytes: Uint8Array, dir: string | null) => {
         await delay(150)

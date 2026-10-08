@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, FolderOpen, Pause, Play, Trash, WarningCircle } from '@phosphor-icons/react'
+import {
+  ArrowLeft,
+  FolderOpen,
+  HandPalm,
+  Pause,
+  Play,
+  Trash,
+  WarningCircle,
+} from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { bytes, eta, percent, rate } from '../lib/format'
 import { assignLanes, kindLabel, netTitle } from '../lib/lanes'
@@ -12,6 +20,7 @@ export const TORRENT_WORD: Record<TorrentView['status'], string> = {
   checking: 'Checking',
   downloading: 'Downloading',
   paused: 'Paused',
+  seeding: 'Sharing',
   completed: 'Done',
   failed: 'Stopped',
 }
@@ -109,7 +118,8 @@ export function TorrentDetail({ t, onBack }: { t: TorrentView; onBack: (() => vo
   const known = useApp((s) => s.networks)
   const nets = torrentNets(t.networks, known)
   const lanes = assignLanes(nets)
-  const pct = t.status === 'completed' ? 100 : (percent(t.done, t.total) ?? 0)
+  const pct =
+    t.status === 'completed' || t.status === 'seeding' ? 100 : (percent(t.done, t.total) ?? 0)
   const r = rate(t.rate)
   const canPause = t.status === 'downloading' || t.status === 'checking'
   const canResume = t.status === 'paused' || t.status === 'failed'
@@ -136,6 +146,11 @@ export function TorrentDetail({ t, onBack }: { t: TorrentView; onBack: (() => vo
           {canPause && (
             <button className="btn" onClick={() => act((b) => b.pauseTorrent(t.id))}>
               <Pause size={16} aria-hidden /> Pause
+            </button>
+          )}
+          {t.status === 'seeding' && (
+            <button className="btn" onClick={() => act((b) => b.stopSharing(t.id))}>
+              <HandPalm size={16} aria-hidden /> Stop sharing
             </button>
           )}
           {canResume && (
@@ -196,6 +211,17 @@ export function TorrentDetail({ t, onBack }: { t: TorrentView; onBack: (() => vo
                 {t.status === 'downloading' ? left || 'Working it out' : TORRENT_WORD[t.status]}
               </dd>
             </div>
+            {t.uploaded > 0 && (
+              <div>
+                <dt>Shared</dt>
+                <dd className="num">
+                  {bytes(t.uploaded)}
+                  {t.total > 0 && (
+                    <span className="of"> ({(t.uploaded / t.total).toFixed(2)}x)</span>
+                  )}
+                </dd>
+              </div>
+            )}
             <div>
               <dt>Files</dt>
               <dd className="num">
@@ -254,7 +280,7 @@ export function TorrentDetail({ t, onBack }: { t: TorrentView; onBack: (() => vo
           Each network is credited only with pieces that passed their checksum.
         </p>
         {/* A finished torrent has let go of its files; its choice can't change. */}
-        {t.status !== 'completed' && <Files t={t} />}
+        {t.status !== 'completed' && t.status !== 'seeding' && <Files t={t} />}
       </div>
     </article>
   )

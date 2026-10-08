@@ -11,6 +11,7 @@ import type {
   NetPref,
   NetView,
   PreviewView,
+  SeedSettings,
   TorrentFileView,
   TorrentView,
   UiError,
@@ -71,6 +72,11 @@ export interface Backend {
   selectTorrentFiles(id: string, files: number[]): Promise<void>
   removeTorrent(id: string, deleteFiles: boolean): Promise<void>
   revealTorrent(id: string): Promise<void>
+  seedSettings(): Promise<SeedSettings>
+  /** Saves sharing settings (validated by the backend); returns what was saved. */
+  setSeedSettings(s: SeedSettings): Promise<SeedSettings>
+  /** Stops sharing a finished torrent now; its files stay. */
+  stopSharing(id: string): Promise<void>
   /** A dropped .torrent's contents (the page can't see its path). */
   inspectTorrentBytes(bytes: Uint8Array, dir: string | null): Promise<ListingView>
 }
@@ -143,6 +149,9 @@ async function tauriBackend(): Promise<Backend> {
     selectTorrentFiles: (id, files) => call('torrent_select', { id, files }),
     removeTorrent: (id, deleteFiles) => call('torrent_remove', { id, deleteFiles }),
     revealTorrent: (id) => call('torrent_reveal', { id }),
+    seedSettings: () => call('torrent_seed_settings'),
+    setSeedSettings: (settings) => call('set_torrent_seed_settings', { settings }),
+    stopSharing: (id) => call('torrent_stop_sharing', { id }),
     subscribe: async (onEvent) => {
       const channel = new Channel<UiEvent>()
       channel.onmessage = onEvent

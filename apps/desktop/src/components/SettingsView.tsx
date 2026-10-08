@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useApp, type Theme } from '../lib/store'
+import { toUiError } from '../lib/backend'
+import type { SeedSettings, UiError } from '../lib/types'
 import { LimitField } from './LimitField'
 import { SlowToggle } from './SlowMode'
 
@@ -162,6 +164,137 @@ function ShortcutsSetting() {
   )
 }
 
+/** Sharing back after a torrent finishes: off by default, with two stop limits. */
+function SharingSetting() {
+  const backend = useApp((s) => s.backend)
+  const [saved, setSaved] = useState<SeedSettings | null>(null)
+  const [ratio, setRatio] = useState('')
+  const [minutes, setMinutes] = useState('')
+  const [error, setError] = useState<UiError | null>(null)
+  const [status, setStatus] = useState('')
+  useEffect(() => {
+    void backend
+      ?.seedSettings()
+      .then((s) => {
+        setSaved(s)
+        setRatio(String(s.ratio))
+        setMinutes(String(s.minutes))
+      })
+      .catch(() => setSaved({ enabled: false, ratio: 1, minutes: 60 }))
+  }, [backend])
+
+  async function save(next: SeedSettings) {
+    if (!backend) return
+    setError(null)
+    setStatus('')
+    try {
+      const s = await backend.setSeedSettings(next)
+      setSaved(s)
+      setRatio(String(s.ratio))
+      setMinutes(String(s.minutes))
+      setStatus(s.enabled ? 'Saved.' : 'Sharing is off. Finished torrents stop at once.')
+    } catch (e) {
+      setError(toUiError(e))
+    }
+  }
+
+  const r = Number(ratio)
+  const m = Number(minutes)
+  const changed = saved !== null && (r !== saved.ratio || m !== saved.minutes)
+  const ratioError = error?.code === 'bad-ratio' ? error : null
+  const minutesError = error?.code === 'bad-minutes' ? error : null
+  return (
+    <form
+      className="setting setting-stack"
+      aria-label="Share torrents after downloading"
+      noValidate
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (saved) void save({ ...saved, ratio: r, minutes: m })
+      }}
+    >
+      <div className="setting-row">
+        <div>
+          <p className="setting-name">Share torrents after downloading</p>
+          <p className="muted">
+            Uploads to other people for a while, then stops. Never over a phone tether or cellular
+            while torrents are only sharing.
+          </p>
+          <p className="muted" role="status">
+            {status}
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          className="switch"
+          aria-label="Share torrents after downloading"
+          aria-checked={saved?.enabled === true}
+          disabled={saved === null}
+          onClick={() => saved && void save({ ...saved, enabled: !saved.enabled })}
+        />
+      </div>
+      {saved?.enabled && (
+        <div className="share-limits">
+          <div className="field">
+            <label htmlFor="share-ratio">Stop at ratio</label>
+            <input
+              id="share-ratio"
+              name="ratio"
+              type="number"
+              inputMode="decimal"
+              min={0.1}
+              max={10}
+              step={0.1}
+              value={ratio}
+              aria-invalid={ratioError ? true : undefined}
+              aria-describedby={ratioError ? 'share-ratio-err' : 'share-ratio-help'}
+              onChange={(e) => setRatio(e.target.value)}
+            />
+            {ratioError ? (
+              <p id="share-ratio-err" className="field-error">
+                {ratioError.message} {ratioError.hint}
+              </p>
+            ) : (
+              <p id="share-ratio-help" className="field-help">
+                1 means upload as much as you downloaded.
+              </p>
+            )}
+          </div>
+          <div className="field">
+            <label htmlFor="share-minutes">Stop after (minutes)</label>
+            <input
+              id="share-minutes"
+              name="minutes"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={10080}
+              step={1}
+              value={minutes}
+              aria-invalid={minutesError ? true : undefined}
+              aria-describedby={minutesError ? 'share-minutes-err' : 'share-minutes-help'}
+              onChange={(e) => setMinutes(e.target.value)}
+            />
+            {minutesError ? (
+              <p id="share-minutes-err" className="field-error">
+                {minutesError.message}
+              </p>
+            ) : (
+              <p id="share-minutes-help" className="field-help">
+                Whichever limit comes first ends sharing.
+              </p>
+            )}
+          </div>
+          <button type="submit" className="btn" disabled={!changed}>
+            Save
+          </button>
+        </div>
+      )}
+    </form>
+  )
+}
+
 function LookupSetting() {
   const backend = useApp((s) => s.backend)
   const act = useApp((s) => s.act)
@@ -307,6 +440,7 @@ export function SettingsView() {
         </div>
       </div>
       <SlowModeSetting />
+      <SharingSetting />
       <LookupSetting />
       <UpdateSetting />
       <ShortcutsSetting />

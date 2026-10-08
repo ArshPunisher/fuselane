@@ -7,6 +7,7 @@ import {
   HourglassMedium,
   Magnet,
   Plus,
+  UploadSimple,
 } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { bytes, percent, rateText } from '../lib/format'
@@ -112,6 +113,7 @@ function Row({ job }: { job: JobView }) {
 
 function torrentMeta(t: TorrentView): string {
   if (t.status === 'completed') return bytes(t.total)
+  if (t.status === 'seeding') return `${bytes(t.total)}, shared ${bytes(t.uploaded)}`
   const pct = percent(t.done, t.total)
   const head = `${pct === null ? 0 : Math.floor(pct)}%, ${bytes(t.done)} of ${bytes(t.total)}`
   return t.status === 'downloading' ? `${head}, ${rateText(t.rate)}` : head
@@ -124,10 +126,12 @@ function TorrentRow({ t }: { t: TorrentView }) {
   const known = useApp((s) => s.networks)
   const nets = torrentNets(t.networks, known)
   const lanes = assignLanes(nets)
-  const pct = t.status === 'completed' ? 100 : (percent(t.done, t.total) ?? 0)
+  const pct =
+    t.status === 'completed' || t.status === 'seeding' ? 100 : (percent(t.done, t.total) ?? 0)
   const canPause = t.status === 'downloading' || t.status === 'checking'
   const canResume = t.status === 'paused' || t.status === 'failed'
-  const status = t.status === 'downloading' ? 'running' : t.status
+  const status =
+    t.status === 'downloading' ? 'running' : t.status === 'seeding' ? 'completed' : t.status
   const p = { size: 18, 'aria-hidden': true } as const
   return (
     <li className="row" data-selected={selected || undefined} data-status={status}>
@@ -138,6 +142,8 @@ function TorrentRow({ t }: { t: TorrentView }) {
       >
         {t.status === 'completed' ? (
           <CheckCircle {...p} className="ic ic-success" weight="fill" />
+        ) : t.status === 'seeding' ? (
+          <UploadSimple {...p} className="ic ic-success" />
         ) : t.status === 'failed' ? (
           <WarningCircle {...p} className="ic ic-danger" weight="fill" />
         ) : (

@@ -118,7 +118,8 @@ export interface AllowanceRequest {
   resetDay: number
 }
 
-export type TorrentStatus = 'checking' | 'downloading' | 'paused' | 'completed' | 'failed'
+export type TorrentStatus =
+  'checking' | 'downloading' | 'paused' | 'seeding' | 'completed' | 'failed'
 
 /** A torrent in the list (apps/desktop/src-tauri/src/torrents.rs). */
 export interface TorrentView {
@@ -162,4 +163,13 @@ export interface ListingView {
   folder: string
   total: number
   files: TorrentFileView[]
+}
+
+/** Sharing back after a download: off by default; stops at whichever limit comes first. */
+export interface SeedSettings {
+  enabled: boolean
+  /** Stop after uploading this many times the download's size (0.1 to 10). */
+  ratio: number
+  /** Stop after sharing this many minutes (1 to 10080). */
+  minutes: number
 }
