@@ -30,6 +30,7 @@ impl Rules {
 #[derive(Debug, Clone)]
 pub struct Planned {
     pub parts: Vec<String>,
+    pub len: u64,
     /// BEP 47 padding files are never written, but their names are still checked.
     pub padding: bool,
 }
@@ -159,6 +160,65 @@ pub fn check(
     Ok(())
 }
 
+/// What a cleanup did. Anything skipped is left on disk and named here.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Cleanup {
+    pub removed: usize,
+    pub skipped: Vec<String>,
+}
+
+/// Deletes these files under `folder`, never following a symlink and never
+/// deleting anything that isn't a regular file. Then removes folders left empty,
+/// up to `folder` itself when the torrent owns it. A folder swapped for a link
+/// between checking and deleting is caught by re-checking each step.
+pub fn remove(folder: &Path, own_folder: bool, files: &[&Planned]) -> Cleanup {
+    let mut out = Cleanup::default();
+    if refuse_link(folder).is_err() {
+        out.skipped.push(folder.display().to_string());
+        return out;
+    }
+    let mut dirs = std::collections::BTreeSet::new();
+    'file: for f in files.iter().filter(|f| !f.padding) {
+        let mut p = folder.to_path_buf();
+        for (i, part) in f.parts.iter().enumerate() {
+            p.push(part);
+            let last = i + 1 == f.parts.len();
+            match std::fs::symlink_metadata(&p) {
+                Ok(m) if m.file_type().is_symlink() => {
+                    out.skipped.push(p.display().to_string());
+                    continue 'file;
+                }
+                Ok(m) if last && !m.is_file() => {
+                    out.skipped.push(p.display().to_string());
+                    continue 'file;
+                }
+                Ok(m) if !last && !m.is_dir() => continue 'file,
+                Ok(_) => {}
+                Err(_) => continue 'file, // already gone
+            }
+            if !last {
+                dirs.insert(p.clone());
+            }
+        }
+        match std::fs::remove_file(&p) {
+            Ok(()) => out.removed += 1,
+            Err(_) => out.skipped.push(p.display().to_string()),
+        }
+    }
+    // Deepest first; remove_dir only succeeds on empty folders.
+    let mut dirs: Vec<_> = dirs.into_iter().collect();
+    dirs.sort_by_key(|d| std::cmp::Reverse(d.components().count()));
+    for d in dirs {
+        if refuse_link(&d).is_ok() {
+            let _ = std::fs::remove_dir(&d);
+        }
+    }
+    if own_folder {
+        let _ = std::fs::remove_dir(folder);
+    }
+    out
+}
+
 fn refuse_link(p: &Path) -> Result<(), String> {
     match std::fs::symlink_metadata(p) {
         Ok(m) if m.file_type().is_symlink() => Err(format!(
@@ -178,6 +238,7 @@ mod tests {
             .iter()
             .map(|p| Planned {
                 parts: p.split('/').map(String::from).collect(),
+                len: 1,
                 padding: false,
             })
             .collect()
@@ -271,6 +332,70 @@ mod tests {
             check(Path::new("/x"), &["CON".into()], &files(&["a"]), WIN).is_err(),
             "folder name too"
         );
+    }
+
+    #[test]
+    fn removal_deletes_only_the_listed_files_and_empty_folders() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().join("T");
+        std::fs::create_dir_all(folder.join("sub/deep")).unwrap();
+        std::fs::write(folder.join("a"), b"1").unwrap();
+        std::fs::write(folder.join("sub/deep/b"), b"2").unwrap();
+        std::fs::write(folder.join("sub/mine.txt"), b"user file").unwrap();
+        let fs = files(&["a", "sub/deep/b", "missing/c"]);
+        let r = remove(&folder, true, &fs.iter().collect::<Vec<_>>());
+        assert_eq!(
+            r,
+            Cleanup {
+                removed: 2,
+                skipped: vec![]
+            }
+        );
+        assert!(!folder.join("sub/deep").exists(), "empty folder removed");
+        assert!(
+            folder.join("sub/mine.txt").exists(),
+            "a file not in the torrent stays"
+        );
+        assert!(folder.exists(), "folder isn't empty, so it stays");
+    }
+
+    #[test]
+    fn removal_skips_a_folder_where_a_file_should_be() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("a/inner")).unwrap();
+        let fs = files(&["a"]);
+        let r = remove(dir.path(), false, &fs.iter().collect::<Vec<_>>());
+        assert_eq!(r.removed, 0);
+        assert_eq!(r.skipped.len(), 1);
+        assert!(dir.path().join("a/inner").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn removal_never_follows_a_swapped_in_link() {
+        let dir = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        std::fs::write(outside.path().join("b"), b"precious").unwrap();
+        let folder = dir.path().join("T");
+        std::fs::create_dir(&folder).unwrap();
+        // The torrent had sub/b; someone replaced sub with a link to another folder.
+        std::os::unix::fs::symlink(outside.path(), folder.join("sub")).unwrap();
+        std::os::unix::fs::symlink(outside.path().join("b"), folder.join("direct")).unwrap();
+        let fs = files(&["sub/b", "direct"]);
+        let r = remove(&folder, true, &fs.iter().collect::<Vec<_>>());
+        assert_eq!(r.removed, 0);
+        assert_eq!(r.skipped.len(), 2);
+        assert_eq!(
+            std::fs::read(outside.path().join("b")).unwrap(),
+            b"precious"
+        );
+        // The whole torrent folder swapped for a link.
+        let dir2 = tempfile::tempdir().unwrap();
+        std::os::unix::fs::symlink(outside.path(), dir2.path().join("T")).unwrap();
+        let fs = files(&["b"]);
+        let r = remove(&dir2.path().join("T"), true, &fs.iter().collect::<Vec<_>>());
+        assert_eq!(r.removed, 0);
+        assert!(outside.path().join("b").exists());
     }
 
     #[cfg(unix)]

@@ -7,4 +7,7 @@ pub mod engine;
 pub mod paths;
 pub mod socks;
 
-pub use engine::{EngineOptions, Phase, Progress, Source, Torrent, TorrentEngine, TorrentError};
+pub use engine::{
+    EngineOptions, Listing, Phase, Progress, Source, Torrent, TorrentEngine, TorrentError,
+};
+pub use paths::{Cleanup, Planned};

@@ -112,6 +112,7 @@ async fn a_well_formed_fixture_is_accepted() {
             Source::File(multi("Fine", &[&["a.txt"], &["sub", "b.txt"]])),
             None,
             vec![],
+            None,
         )
         .await;
     assert!(t.is_ok(), "{t:?}");
@@ -151,7 +152,7 @@ async fn hostile_torrents_are_refused_before_touching_the_disk() {
         let dl = root.path().join("dl");
         std::fs::create_dir(&dl).unwrap();
         let e = engine(&dl).await;
-        let r = e.add(Source::File(bytes), None, vec![]).await;
+        let r = e.add(Source::File(bytes), None, vec![], None).await;
         assert!(
             matches!(
                 r,
@@ -186,7 +187,7 @@ async fn a_symlinked_folder_in_the_way_is_refused() {
     std::os::unix::fs::symlink(outside.path(), dl.join("T")).unwrap();
     let e = engine(&dl).await;
     let r = e
-        .add(Source::File(multi("T", &[&["x"]])), None, vec![])
+        .add(Source::File(multi("T", &[&["x"]])), None, vec![], None)
         .await;
     assert!(
         matches!(&r, Err(TorrentError::UnsafePath(m)) if m.contains("link")),
@@ -204,6 +205,7 @@ async fn messages_name_the_problem() {
             Source::File(multi("T", &[&["Readme.txt"], &["README.TXT"]])),
             None,
             vec![],
+            None,
         )
         .await;
     let msg = r.unwrap_err().to_string();
