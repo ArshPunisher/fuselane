@@ -29,6 +29,8 @@ export interface Backend {
   /** A folder the user picked, or null if they cancelled. */
   pickFolder(): Promise<string | null>
   getLimits(): Promise<LimitsView>
+  perNetworkDns(): Promise<boolean>
+  setPerNetworkDns(on: boolean): Promise<boolean>
   allowances(): Promise<AllowanceView[]>
   setAllowance(req: AllowanceRequest): Promise<AllowanceView[]>
   setSlow(on: boolean): Promise<LimitsView>
@@ -94,6 +96,8 @@ async function tauriBackend(): Promise<Backend> {
     openFile: (id) => call('open_file', { id }),
     pickFolder: () => call('pick_folder'),
     getLimits: () => call('get_limits'),
+    perNetworkDns: () => call('per_network_dns'),
+    setPerNetworkDns: (on) => call('set_per_network_dns', { on }),
     allowances: () => call('allowances'),
     setAllowance: (req) => call('set_allowance', { req }),
     setSlow: (on) => call('set_slow', { on }),

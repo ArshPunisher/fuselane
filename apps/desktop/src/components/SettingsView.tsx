@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useApp, type Theme } from '../lib/store'
 import { LimitField } from './LimitField'
 import { SlowToggle } from './SlowMode'
@@ -162,6 +162,39 @@ function ShortcutsSetting() {
   )
 }
 
+function LookupSetting() {
+  const backend = useApp((s) => s.backend)
+  const act = useApp((s) => s.act)
+  const [on, setOn] = useState<boolean | null>(null)
+  useEffect(() => {
+    void backend
+      ?.perNetworkDns()
+      .then(setOn)
+      .catch(() => setOn(false))
+  }, [backend])
+  return (
+    <div className="setting">
+      <div>
+        <p className="setting-name">Look up servers through each network</p>
+        <p className="muted">
+          Faster when your networks are from different providers: each one gets a server near it.
+          Uses Cloudflare and Google DNS, which then see the names of the sites you download from
+          (never the files).
+        </p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        className="switch"
+        aria-label="Look up servers through each network"
+        aria-checked={on === true}
+        disabled={on === null}
+        onClick={() => void act(async (b) => setOn(await b.setPerNetworkDns(!on)))}
+      />
+    </div>
+  )
+}
+
 function UpdateSetting() {
   const check = useApp((s) => s.checkUpdate)
   const update = useApp((s) => s.update)
@@ -274,6 +307,7 @@ export function SettingsView() {
         </div>
       </div>
       <SlowModeSetting />
+      <LookupSetting />
       <UpdateSetting />
       <ShortcutsSetting />
       <DiagnosticsSetting />

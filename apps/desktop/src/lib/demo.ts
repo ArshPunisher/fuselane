@@ -72,6 +72,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
   let listener: ((e: UiEvent) => void) | null = null
   let limits: LimitsView = { global: 0, networks: [], slow: false, slowRate: 1024 * 1024 }
   let prefs: NetPref[] = []
+  let perNetDns = false
   let allowances: AllowanceView[] = NETWORKS.filter((n) => n.usable).map((n) => ({
     name: n.name,
     allowance: n.name === 'en7' && params.get('allowance') === 'reached' ? 5 * 1024 ** 3 : null,
@@ -418,6 +419,8 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         )
     },
     getLimits: async () => structuredClone(limits),
+    perNetworkDns: async () => perNetDns,
+    setPerNetworkDns: async (on) => (perNetDns = on),
     allowances: async () => structuredClone(allowances),
     setAllowance: async (req) => {
       const bad = (m: string) =>

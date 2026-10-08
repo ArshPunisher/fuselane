@@ -144,6 +144,17 @@ fn set_allowance(svc: State<'_>, req: AllowanceRequest) -> Result<Vec<AllowanceV
 }
 
 #[tauri::command]
+fn per_network_dns(svc: State<'_>) -> bool {
+    svc.per_network_dns()
+}
+
+/// Per-network lookups on or off (they use public resolvers, so off by default).
+#[tauri::command]
+fn set_per_network_dns(svc: State<'_>, on: bool) -> Result<bool, UiError> {
+    svc.set_per_network_dns(on)
+}
+
+#[tauri::command]
 fn get_limits(svc: State<'_>) -> LimitsView {
     svc.limits()
 }
@@ -450,6 +461,8 @@ fn main() {
             reveal,
             preview,
             get_limits,
+            per_network_dns,
+            set_per_network_dns,
             allowances,
             set_allowance,
             set_slow,

@@ -10,6 +10,7 @@ Fuselane is a download manager that runs on your computer. It does not have acco
 ## What goes over the network
 
 - **Your downloads**: Fuselane connects to the servers in the links you give it, over each network you allow, and nowhere else.
+- **Server lookups (only if you turn it on)**: **Settings → Look up servers through each network** asks Cloudflare (1.1.1.1) and Google (8.8.8.8) DNS for each server's address through each network, so every network gets a nearby server. Those resolvers then see the server names (for example `downloads.example.org`), never the files or full links. It is off by default.
 - **Update checks** (from the first signed release): a request for a small signed file listing the newest version. It carries no identifier.
 
 Nothing else is sent. There is no background reporting of usage, errors or files.

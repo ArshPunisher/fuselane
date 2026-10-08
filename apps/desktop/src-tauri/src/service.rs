@@ -365,6 +365,8 @@ pub struct Service {
     usage: Mutex<HashMap<String, Usage>>,
     /// Running jobs paused because every network reached its allowance.
     allowance_paused: Mutex<std::collections::HashSet<i64>>,
+    /// Look servers up through each network too (public resolvers). Off by default.
+    per_network_dns: std::sync::atomic::AtomicBool,
     /// The version that ran before this one, when this launch follows an update.
     updated_from: Option<String>,
     /// Shrinks engine retry waits; only tests set it.
@@ -504,6 +506,7 @@ impl Service {
         let previous = store.setting("last_version").ok().flatten();
         let updated_from = previous.filter(|p| p != current);
         let _ = store.set_setting("last_version", current);
+        let store_flag = store.setting("per_network_dns").ok().flatten().as_deref() == Some("true");
         let allowances: Vec<Allowance> = store
             .setting("allowances")
             .ok()
@@ -563,6 +566,7 @@ impl Service {
             allowances: Mutex::new(allowances),
             usage: Mutex::new(usage),
             allowance_paused: Mutex::default(),
+            per_network_dns: std::sync::atomic::AtomicBool::new(store_flag),
             updated_from,
         }))
     }
@@ -949,6 +953,21 @@ impl Service {
         self.updated_from.as_deref()
     }
 
+    pub fn per_network_dns(&self) -> bool {
+        self.per_network_dns
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Turns per-network lookups on or off; new downloads follow it.
+    pub fn set_per_network_dns(&self, on: bool) -> Result<bool, UiError> {
+        self.store
+            .set_setting("per_network_dns", if on { "true" } else { "false" })
+            .map_err(store_error)?;
+        self.per_network_dns
+            .store(on, std::sync::atomic::Ordering::Relaxed);
+        Ok(on)
+    }
+
     pub fn limits(&self) -> LimitsView {
         lock(&self.saved_limits).clone()
     }
@@ -1145,6 +1164,9 @@ impl Service {
             cancel: Some(cancel),
             retry_delay_scale: self.retry_scale,
             limiter: Some(self.limiter.clone()),
+            per_network_dns: self
+                .per_network_dns
+                .load(std::sync::atomic::Ordering::Relaxed),
             ..RunOptions::default()
         };
         let resume = job.resume();
@@ -2224,6 +2246,18 @@ mod tests {
             fuselane_testkit::sha256_file(Path::new(&path)).unwrap(),
             content.sha256()
         );
+    }
+
+    #[test]
+    fn per_network_lookups_are_off_by_default_and_remembered() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("fuselane.db");
+        let open = || Service::new(Store::open(&db).unwrap(), dir.path().to_path_buf()).unwrap();
+        assert!(!open().per_network_dns(), "private by default");
+        open().set_per_network_dns(true).unwrap();
+        assert!(open().per_network_dns());
+        open().set_per_network_dns(false).unwrap();
+        assert!(!open().per_network_dns());
     }
 
     #[test]

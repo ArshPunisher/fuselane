@@ -620,3 +620,15 @@ test('a reached allowance is explained, and a paused download points to the fix'
     page.getByText(/Allowance reached: Fuselane won.t use this network until/),
   ).toBeVisible()
 })
+
+test('per-network lookups are off by default, explained, and can be turned on', async ({
+  page,
+}) => {
+  await page.goto('/?empty=1')
+  await page.getByRole('button', { name: 'Settings' }).click()
+  const toggle = page.getByRole('switch', { name: 'Look up servers through each network' })
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
+  await expect(page.getByText(/Cloudflare and Google DNS/)).toBeVisible()
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-checked', 'true')
+})
