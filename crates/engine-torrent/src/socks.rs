@@ -182,6 +182,7 @@ async fn serve(
         // Refused or broken: close politely so any reply already sent isn't lost to a reset.
         Ok(Ok(None)) => return close(client).await,
         Ok(Err(e)) => {
+            tracing::debug!(error = %e, "proxy: handshake refused");
             close(client).await?;
             return Err(e);
         }
@@ -205,10 +206,15 @@ async fn serve(
     };
     for dest in dests {
         for (iface, counters) in balancer.order_for(dest) {
-            let Ok(peer) = fuselane_transport::connect_pinned(&iface, dest, DIAL).await else {
-                counters.failures.fetch_add(1, Ordering::Relaxed);
-                continue;
+            let peer = match fuselane_transport::connect_pinned(&iface, dest, DIAL).await {
+                Ok(p) => p,
+                Err(e) => {
+                    tracing::debug!(net = %iface.name, %dest, error = %e, "proxy: dial failed");
+                    counters.failures.fetch_add(1, Ordering::Relaxed);
+                    continue;
+                }
             };
+            tracing::debug!(net = %iface.name, %dest, "proxy: connected");
             reply(&mut client, OK).await?;
             // Which torrent is this? Peer connections open with a handshake naming it.
             let first = read_opening(&mut client).await;
@@ -237,6 +243,7 @@ async fn serve(
             return res.map(|_| ());
         }
     }
+    tracing::debug!(%host, port, "proxy: no network could reach the peer");
     reply(&mut client, HOST_UNREACHABLE).await?;
     close(client).await
 }

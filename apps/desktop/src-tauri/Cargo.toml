@@ -37,6 +37,7 @@ fuselane-limits.workspace = true
 fuselane-transport.workspace = true
 
 [dev-dependencies]
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "ansi"] }
 librqbit = { version = "9", default-features = false, features = ["rust-tls"] }
 fuselane-testkit.workspace = true
 tempfile = "3"

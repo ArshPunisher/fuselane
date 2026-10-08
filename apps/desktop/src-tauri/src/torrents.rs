@@ -1027,6 +1027,14 @@ mod tests {
         assert!(!valid_id(&"a".repeat(41)));
     }
 
+    /// librqbit's and the proxy's debug logs, shown by nextest only when a test fails.
+    fn logs() {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter("librqbit=debug,librqbit_core=info,fuselane_engine_torrent=debug")
+            .with_test_writer()
+            .try_init();
+    }
+
     fn payload(len: usize, seed: u64) -> Vec<u8> {
         let mut x = seed | 1;
         (0..len)
@@ -1236,6 +1244,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn a_torrent_downloads_the_chosen_files_then_releases_and_survives_a_restart() {
+        logs();
         let seed = tempfile::tempdir().unwrap();
         let (_seeder, addr, file) = seeder(seed.path()).await;
         let s = setup();
@@ -1304,6 +1313,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn a_paused_torrent_comes_back_paused_with_its_file_choice() {
+        logs();
         let seed = tempfile::tempdir().unwrap();
         let (_seeder, addr, file) = seeder(seed.path()).await;
         let s = setup();
@@ -1337,6 +1347,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn used_up_allowances_pause_torrents_with_a_reason() {
+        logs();
         let seed = tempfile::tempdir().unwrap();
         let (_seeder, addr, file) = seeder(seed.path()).await;
         let s = setup();
@@ -1387,6 +1398,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn sharing_settings_are_checked_and_remembered() {
+        logs();
         let s = setup();
         assert_eq!(s.tor.seed_settings(), SeedSettings::default());
         assert!(!s.tor.seed_settings().enabled, "off by default");
@@ -1430,6 +1442,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn with_sharing_on_a_finished_torrent_seeds_until_a_limit_or_stop() {
+        logs();
         let seed = tempfile::tempdir().unwrap();
         let (_seeder, addr, file) = seeder(seed.path()).await;
         let s = setup();
@@ -1466,6 +1479,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn stop_sharing_releases_at_once_and_a_finished_torrent_cant_be_added_twice() {
+        logs();
         let seed = tempfile::tempdir().unwrap();
         let (_seeder, addr, file) = seeder(seed.path()).await;
         let s = setup();
@@ -1491,6 +1505,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn turning_sharing_off_releases_seeding_torrents_at_once() {
+        logs();
         let seed = tempfile::tempdir().unwrap();
         let (_seeder, addr, file) = seeder(seed.path()).await;
         let s = setup();
@@ -1522,6 +1537,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn bad_torrent_files_get_specific_errors() {
+        logs();
         let s = setup();
         let dir = tempfile::tempdir().unwrap();
         let missing = s

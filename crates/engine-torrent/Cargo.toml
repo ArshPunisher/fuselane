@@ -14,10 +14,12 @@ tokio = { version = "1", features = ["full"] }
 fuselane-netif.workspace = true
 fuselane-limits.workspace = true
 thiserror = "2"
+tracing = "0.1"
 anyhow = "1"
 fuselane-transport.workspace = true
 
 [dev-dependencies]
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "ansi"] }
 tokio-socks = "0.5"
 tempfile = "3"
 

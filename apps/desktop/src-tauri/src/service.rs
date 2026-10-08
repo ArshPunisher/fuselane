@@ -323,6 +323,10 @@ pub enum UiEvent {
     Torrents {
         torrents: Vec<crate::torrents::TorrentView>,
     },
+    /// The OS asked Fuselane to open a magnet link or a .torrent file.
+    Open {
+        target: String,
+    },
 }
 
 /// An error the window can show as is: a stable code, what happened, what to do.
@@ -376,6 +380,10 @@ pub struct Service {
     updated_from: Option<String>,
     /// Shrinks engine retry waits; only tests set it.
     retry_scale: Option<f64>,
+    /// Opens that arrived before the window subscribed (a double-clicked .torrent
+    /// launching the app); sent once it does.
+    pending_opens: Mutex<Vec<String>>,
+    subscribed: std::sync::atomic::AtomicBool,
 }
 
 impl std::fmt::Debug for Service {
@@ -573,6 +581,8 @@ impl Service {
             allowance_paused: Mutex::default(),
             per_network_dns: std::sync::atomic::AtomicBool::new(store_flag),
             updated_from,
+            pending_opens: Mutex::default(),
+            subscribed: std::sync::atomic::AtomicBool::new(false),
         }))
     }
 
@@ -594,6 +604,24 @@ impl Service {
     pub fn subscribe(self: &Arc<Self>, emit: Emit) {
         *lock(&self.emit) = emit;
         self.publish_jobs();
+        self.subscribed
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let waiting = std::mem::take(&mut *lock(&self.pending_opens));
+        for target in waiting {
+            self.send(UiEvent::Open { target });
+        }
+    }
+
+    /// Hands something the OS asked to open to the window (now, or once it subscribes).
+    pub fn open_request(&self, target: String) {
+        if self.subscribed.load(std::sync::atomic::Ordering::SeqCst) {
+            self.send(UiEvent::Open { target });
+        } else {
+            let mut q = lock(&self.pending_opens);
+            if q.len() < 16 {
+                q.push(target);
+            }
+        }
     }
 
     /// Speed limits and allowances, shared with torrents.
@@ -2273,6 +2301,35 @@ mod tests {
         assert!(open().per_network_dns());
         open().set_per_network_dns(false).unwrap();
         assert!(!open().per_network_dns());
+    }
+
+    #[test]
+    fn opens_wait_for_the_window_then_arrive_in_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("fuselane.db")).unwrap();
+        let svc = Service::new(store, dir.path().to_path_buf()).unwrap();
+        svc.open_request("magnet:?xt=urn:btih:a".into());
+        svc.open_request("/tmp/b.torrent".into());
+        for i in 0..40 {
+            svc.open_request(format!("extra {i}"));
+        }
+        let events: Arc<Mutex<Vec<UiEvent>>> = Arc::default();
+        svc.subscribe({
+            let events = events.clone();
+            Arc::new(move |e| lock(&events).push(e))
+        });
+        svc.open_request("magnet:?xt=urn:btih:c".into());
+        let opens: Vec<String> = lock(&events)
+            .iter()
+            .filter_map(|e| match e {
+                UiEvent::Open { target } => Some(target.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(opens.len(), 17, "16 queued at most, then live");
+        assert_eq!(opens[0], "magnet:?xt=urn:btih:a");
+        assert_eq!(opens[1], "/tmp/b.torrent");
+        assert_eq!(opens[16], "magnet:?xt=urn:btih:c");
     }
 
     #[test]

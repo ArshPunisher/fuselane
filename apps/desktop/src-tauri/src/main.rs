@@ -6,6 +6,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod native;
+mod opens;
 mod selftest;
 mod service;
 mod torrents;
@@ -439,7 +440,7 @@ fn watch_for_shell(app: tauri::AppHandle, svc: &Arc<Service>) {
                 }
                 paint(&w);
             }
-            UiEvent::Torrents { .. } => {}
+            UiEvent::Torrents { .. } | UiEvent::Open { .. } => {}
             UiEvent::Live(l) => {
                 w.live(l);
                 // The icon and tooltip don't need 5 updates a second.
@@ -524,6 +525,11 @@ fn main() {
         }
     };
     let on_exit = svc.clone();
+    // Launched to open something (Windows and Linux pass it as an argument).
+    for t in opens::from_args(std::env::args()) {
+        svc.open_request(t.as_draft());
+    }
+    let for_open = svc.clone();
     // Data allowances: count usage and apply allowances every few seconds.
     {
         let weak = Arc::downgrade(&svc);
@@ -569,8 +575,14 @@ fn main() {
     }
     let result = tauri::Builder::default()
         // Must be registered first: a second launch focuses the existing window.
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            show_main(app)
+        .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+            show_main(app);
+            // A second launch (double-clicked .torrent, a browser's magnet link on
+            // Windows or Linux) hands its arguments to this instance.
+            let svc = app.state::<Arc<Service>>();
+            for t in opens::from_args_in(argv, Some(std::path::Path::new(&cwd))) {
+                svc.open_request(t.as_draft());
+            }
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -654,7 +666,19 @@ fn main() {
         ])
         .build(tauri::generate_context!());
     match result {
-        Ok(app) => app.run(move |_, event| {
+        Ok(app) => app.run(move |app, event| {
+            // macOS delivers "Open with" and magnet links as URLs.
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            if let tauri::RunEvent::Opened { urls } = &event {
+                show_main(app);
+                for u in urls {
+                    if let Some(t) = opens::parse(u.as_str()) {
+                        for_open.open_request(t.as_draft());
+                    }
+                }
+            }
+            #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+            let _ = (app, &for_open);
             if let tauri::RunEvent::Exit = event {
                 // Pausing saves a checkpoint, so the next launch resumes cleanly.
                 on_exit.pause_all();

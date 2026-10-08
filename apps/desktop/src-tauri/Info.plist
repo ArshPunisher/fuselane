@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Magnet links can open in Fuselane. macOS keeps whatever app you already
+       chose for them; System Settings or a browser's prompt picks between apps. -->
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>Magnet link</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>magnet</string>
+      </array>
+      <key>CFBundleTypeRole</key>
+      <string>Viewer</string>
+    </dict>
+  </array>
+</dict>
+</plist>

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "fileAssociations": [
+      {
+        "ext": ["torrent"],
+        "name": "BitTorrent file",
+        "description": "BitTorrent file",
+        "mimeType": "application/x-bittorrent",
+        "role": "Viewer"
+      }
+    ]
+  }
+}

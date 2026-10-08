@@ -14,6 +14,14 @@ use librqbit::{
     AddTorrent, AddTorrentOptions, CreateTorrentOptions, ListenerOptions, Session, SessionOptions,
 };
 
+/// librqbit's and the proxy's debug logs, shown by nextest only when a test fails.
+fn logs() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter("librqbit=debug,librqbit_core=info,fuselane_engine_torrent=debug")
+        .with_test_writer()
+        .try_init();
+}
+
 fn loopback() -> Interface {
     Interface {
         name: "lo0".into(),
@@ -96,6 +104,7 @@ async fn seeder(
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_torrent_downloads_byte_exact_through_the_proxy() {
+    logs();
     let seed_dir = tempfile::tempdir().unwrap();
     let leech_dir = tempfile::tempdir().unwrap();
     let data = payload(3 * 1024 * 1024 + 12_345);
@@ -140,6 +149,7 @@ async fn a_torrent_downloads_byte_exact_through_the_proxy() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn broken_inputs_get_clear_errors() {
+    logs();
     let dir = tempfile::tempdir().unwrap();
     let none = TorrentEngine::start(EngineOptions {
         download_dir: dir.path().to_path_buf(),
@@ -194,6 +204,7 @@ async fn broken_inputs_get_clear_errors() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn an_existing_file_is_never_overwritten() {
+    logs();
     let seed_dir = tempfile::tempdir().unwrap();
     let leech_dir = tempfile::tempdir().unwrap();
     let (_seeder, seeder_addr, torrent) = seeder(seed_dir.path(), &payload(200_000)).await;
@@ -300,6 +311,7 @@ async fn until_finished(t: &fuselane_engine_torrent::Torrent) {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn chosen_files_download_and_edge_pieces_are_cleaned_up() {
+    logs();
     let seed = tempfile::tempdir().unwrap();
     let leech = tempfile::tempdir().unwrap();
     // Sizes that aren't piece-aligned, so neighbours share edge pieces (64 KiB).
@@ -383,6 +395,7 @@ async fn chosen_files_download_and_edge_pieces_are_cleaned_up() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn removing_with_files_deletes_the_torrent_folder() {
+    logs();
     let seed = tempfile::tempdir().unwrap();
     let leech = tempfile::tempdir().unwrap();
     let (_s, addr, torrent) = seed_folder(
@@ -460,6 +473,7 @@ async fn seed_again(
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn two_networks_share_a_torrent_and_credit_sums_to_the_file() {
+    logs();
     let (s1, s2, leech) = (
         tempfile::tempdir().unwrap(),
         tempfile::tempdir().unwrap(),
@@ -519,6 +533,7 @@ async fn two_networks_share_a_torrent_and_credit_sums_to_the_file() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn after_a_restart_saved_files_are_rechecked_not_downloaded_again() {
+    logs();
     let seed = tempfile::tempdir().unwrap();
     let leech = tempfile::tempdir().unwrap();
     let state = tempfile::tempdir().unwrap();
@@ -590,6 +605,7 @@ async fn after_a_restart_saved_files_are_rechecked_not_downloaded_again() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_torrent_can_start_paused() {
+    logs();
     let seed = tempfile::tempdir().unwrap();
     let leech = tempfile::tempdir().unwrap();
     let (_s, addr, torrent) = seeder(seed.path(), &payload(300_000)).await;
@@ -641,6 +657,7 @@ fn limited_engine_opts(
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_apps_speed_limit_holds_for_torrents_and_usage_is_counted() {
+    logs();
     let seed = tempfile::tempdir().unwrap();
     let leech = tempfile::tempdir().unwrap();
     let data = payload(3 * 1024 * 1024);
@@ -704,6 +721,7 @@ async fn the_apps_speed_limit_holds_for_torrents_and_usage_is_counted() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_network_past_its_allowance_stops_the_torrent_until_it_is_lifted() {
+    logs();
     let seed = tempfile::tempdir().unwrap();
     let leech = tempfile::tempdir().unwrap();
     let data = payload(4 * 1024 * 1024);
