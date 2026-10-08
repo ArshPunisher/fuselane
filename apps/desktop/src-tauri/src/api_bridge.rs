@@ -30,6 +30,16 @@ impl Handler for ApiBridge {
                 return Err(Decline::Unsupported);
             }
             let link = offer.final_url.as_deref().unwrap_or(&offer.url);
+            // Without the browser's cookies a server may answer with its login page.
+            // Take the download only when Fuselane's own look at the link finds exactly
+            // the size the browser saw; otherwise the browser carries on with it.
+            let Some(size) = offer.size else {
+                return Err(Decline::Unsupported);
+            };
+            match crate::service::preview(link).await {
+                Ok(p) if p.total == Some(size) => {}
+                _ => return Err(Decline::Unsupported),
+            }
             self.svc
                 .add(link, None)
                 .map(|id| id.to_string())
@@ -63,19 +73,49 @@ mod tests {
         check_offer(&v).unwrap()
     }
 
-    #[tokio::test]
-    async fn web_links_become_downloads_and_the_final_url_is_used() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_web_link_is_taken_only_when_fuselane_sees_the_same_file() {
+        use fuselane_testkit::{Content, RangeServer};
+        let server = RangeServer::start(Content::new(300_000, 3)).await.unwrap();
+        let url = format!("http://{}{}", server.addr(), server.path());
         let (b, _events, _dir) = bridge();
-        let id = b
-            .offer(offer(serde_json::json!({
-                "v": 1, "type": "download.offer",
-                "url": "https://example.org/get?id=9", "finalUrl": "https://cdn.example.org/big.iso"
-            })))
-            .await
+        let ask = |size: Option<u64>, final_url: Option<&str>| {
+            let mut v = serde_json::json!({"v": 1, "type": "download.offer", "url": "http://127.0.0.1:9/landing"});
+            let o = v.as_object_mut().unwrap();
+            o.insert(
+                "finalUrl".into(),
+                final_url.map_or(serde_json::Value::Null, |u| u.into()),
+            );
+            o.insert(
+                "size".into(),
+                size.map_or(serde_json::Value::Null, |s| s.into()),
+            );
+            offer(v)
+        };
+        // Same size from the final URL (after redirects): taken, from that URL.
+        let id = b.offer(ask(Some(300_000), Some(&url))).await.unwrap();
+        let job = b
+            .svc
+            .jobs()
+            .unwrap()
+            .into_iter()
+            .find(|j| j.id.to_string() == id)
             .unwrap();
-        let jobs = b.svc.jobs().unwrap();
-        let job = jobs.iter().find(|j| j.id.to_string() == id).unwrap();
-        assert_eq!(job.url, "https://cdn.example.org/big.iso");
+        assert_eq!(job.url, url);
+        // A different size (a login page, say), an unknown size, or a dead link: the browser keeps it.
+        assert_eq!(
+            b.offer(ask(Some(299_999), Some(&url))).await,
+            Err(Decline::Unsupported)
+        );
+        assert_eq!(
+            b.offer(ask(None, Some(&url))).await,
+            Err(Decline::Unsupported)
+        );
+        assert_eq!(
+            b.offer(ask(Some(300_000), None)).await,
+            Err(Decline::Unsupported)
+        );
+        assert_eq!(b.svc.jobs().unwrap().len(), 1);
     }
 
     #[tokio::test]
