@@ -106,16 +106,14 @@ async fn resume(
     .expect("resume hung")
 }
 
-fn throttled(content: Content) -> impl std::future::Future<Output = RangeServer> {
-    async move {
-        let s = RangeServer::start(content).await.unwrap();
-        s.add_rule(Rule {
-            skip: 1,
-            times: u32::MAX,
-            fault: Fault::Throttle(800 * KB),
-        });
-        s
-    }
+async fn throttled(content: Content) -> RangeServer {
+    let s = RangeServer::start(content).await.unwrap();
+    s.add_rule(Rule {
+        skip: 1,
+        times: u32::MAX,
+        fault: Fault::Throttle(800 * KB),
+    });
+    s
 }
 
 #[tokio::test(flavor = "multi_thread")]
