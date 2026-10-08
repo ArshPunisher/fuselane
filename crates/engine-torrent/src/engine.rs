@@ -291,6 +291,10 @@ impl TorrentEngine {
         output_folder: Option<PathBuf>,
         initial_peers: Vec<SocketAddr>,
     ) -> Result<Listing, TorrentError> {
+        // Only a magnet needs peers to learn its files; a .torrent file has them.
+        // Handing peers to a list-only add opens connections that are then dropped,
+        // and the seeder can hold the real connection back until it times out.
+        let needs_peers = matches!(source, Source::Magnet(_));
         let add = source.checked()?;
         let base = output_folder.unwrap_or_else(|| self.download_dir.clone());
         let listed = self
@@ -300,7 +304,8 @@ impl TorrentEngine {
                 Some(AddTorrentOptions {
                     list_only: true,
                     output_folder: Some(base.to_string_lossy().into_owned()),
-                    initial_peers: (!initial_peers.is_empty()).then(|| initial_peers.clone()),
+                    initial_peers: (needs_peers && !initial_peers.is_empty())
+                        .then(|| initial_peers.clone()),
                     ..Default::default()
                 }),
             )
