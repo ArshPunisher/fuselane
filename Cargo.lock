@@ -202,6 +202,8 @@ name = "fuselane-storage"
 version = "0.0.0"
 dependencies = [
  "proptest",
+ "tempfile",
+ "thiserror",
 ]
 
 [[package]]

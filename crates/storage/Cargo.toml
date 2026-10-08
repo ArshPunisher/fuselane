@@ -9,9 +9,11 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+thiserror = "2"
 
 [lints]
 workspace = true
 
 [dev-dependencies]
 proptest = "1"
+tempfile = "3"

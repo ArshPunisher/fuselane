@@ -5,3 +5,4 @@
 //! Design: `docs/03-architecture/ENGINE-DOWNLOAD.md` §8. Rules: L-36–L-48.
 
 pub mod names;
+pub mod staging;
