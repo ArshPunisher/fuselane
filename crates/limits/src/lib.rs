@@ -171,6 +171,12 @@ impl Limiter {
         }
     }
 
+    /// Counts `bytes` toward network `net`'s data allowance without any speed limit
+    /// (for traffic Fuselane sends, such as torrent uploads).
+    pub fn count(&self, net: &str, bytes: u64) {
+        *self.lock().used.entry(net.to_string()).or_default() += bytes;
+    }
+
     /// Records `bytes` received on network `net`; returns how long to wait.
     pub fn take(&self, net: &str, bytes: u64) -> std::time::Duration {
         std::time::Duration::from_millis(self.take_at(net, bytes, self.now_ms()))
@@ -402,6 +408,24 @@ mod tests {
         assert!(l.blocked("en7") && !l.blocked("en0"));
         l.set_blocked(Vec::new());
         assert!(!l.blocked("en7"));
+    }
+
+    #[test]
+    fn counted_bytes_use_the_allowance_but_never_the_speed_limit() {
+        let limits = LimitSettings {
+            global: 100,
+            networks: vec![],
+        };
+        let (plain, counted) = (Limiter::default(), Limiter::default());
+        plain.apply_at(&limits, 0);
+        counted.apply_at(&limits, 0);
+        counted.count("en0", 1_000_000);
+        assert_eq!(
+            counted.take_at("en0", 50, 0),
+            plain.take_at("en0", 50, 0),
+            "counting borrowed nothing from the bucket"
+        );
+        assert_eq!(counted.drain_usage(), vec![("en0".into(), 1_000_050)]);
     }
 
     #[test]
