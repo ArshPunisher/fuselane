@@ -108,81 +108,12 @@ export const useApp = create<State>((set, get) => ({
   toast: null,
   theme: savedTheme(),
 
-  async start() {
-    if (get().backend) return
-    applyTheme(get().theme)
-    try {
-      const backend = await connect()
-      set({ backend })
-      const [info, networks, limits] = await Promise.all([
-        backend.appInfo(),
-        backend.listNetworks().catch(() => []),
-        backend
-          .getLimits()
-          .catch(() => ({ global: 0, networks: [], slow: false, slowRate: 1024 * 1024 })),
-      ])
-      const netPrefs = await backend.networkPrefs().catch(() => [])
-      setNetPrefs(netPrefs)
-      set({ info, networks, limits, netPrefs })
-      // The first list fills the page until the first event; it never overwrites a newer event.
-      let heard = false
-      backend
-        .listTorrents()
-        .then((torrents) => {
-          if (!heard) set({ torrents })
-        })
-        .catch(() => {})
-      await backend.subscribe((e) => {
-        if (e.type === 'networks') {
-          set({ networks: e.networks })
-          return
-        }
-        if (e.type === 'open') {
-          // The OS handed over a magnet link or a .torrent file: start the dialog with it.
-          set((s) => ({
-            view: 'transfers',
-            adding: true,
-            draft: e.target,
-            draftTorrent: null,
-            draftSeq: s.draftSeq + 1,
-          }))
-          return
-        }
-        if (e.type === 'torrents') {
-          heard = true
-          const ids = new Set(e.torrents.map((t) => t.id))
-          set((s) => ({
-            torrents: e.torrents,
-            selectedTorrent:
-              s.selectedTorrent !== null && !ids.has(s.selectedTorrent) ? null : s.selectedTorrent,
-          }))
-          return
-        }
-        if (e.type === 'jobs') {
-          const ids = new Set(e.jobs.map((j) => j.id))
-          set((s) => ({
-            jobs: e.jobs,
-            ready: true,
-            selected: s.selected !== null && !ids.has(s.selected) ? null : s.selected,
-          }))
-          return
-        }
-        const { type: _t, ...live } = e
-        set((s) => {
-          const prev = s.history[live.id]
-          const names = live.networks.map((n) => n.name)
-          const rates =
-            prev && prev.names.join() === names.join() ? prev.rates.slice(-HISTORY + 1) : []
-          rates.push(live.networks.map((n) => n.rate))
-          return {
-            live: { ...s.live, [live.id]: live },
-            history: { ...s.history, [live.id]: { names, rates } },
-          }
-        })
-      })
-    } catch (e) {
-      set({ ready: true, toast: { ...toUiError(e), at: Date.now() } })
-    }
+  start() {
+    // React StrictMode runs effects twice in development: without this, two
+    // backends (two demo simulations, or two subscriptions) ran side by side and
+    // the window flipped between them.
+    starting ??= startOnce()
+    return starting
   },
   select: (id) => set({ selected: id, selectedTorrent: null }),
   selectTorrent: (id) => set({ selectedTorrent: id, selected: null }),
@@ -291,3 +222,84 @@ export const useApp = create<State>((set, get) => ({
     }
   },
 }))
+
+let starting: Promise<void> | null = null
+
+async function startOnce(): Promise<void> {
+  const set = useApp.setState
+  const get = useApp.getState
+  if (get().backend) return
+  applyTheme(get().theme)
+  try {
+    const backend = await connect()
+    set({ backend })
+    const [info, networks, limits] = await Promise.all([
+      backend.appInfo(),
+      backend.listNetworks().catch(() => []),
+      backend
+        .getLimits()
+        .catch(() => ({ global: 0, networks: [], slow: false, slowRate: 1024 * 1024 })),
+    ])
+    const netPrefs = await backend.networkPrefs().catch(() => [])
+    setNetPrefs(netPrefs)
+    set({ info, networks, limits, netPrefs })
+    // The first list fills the page until the first event; it never overwrites a newer event.
+    let heard = false
+    backend
+      .listTorrents()
+      .then((torrents) => {
+        if (!heard) set({ torrents })
+      })
+      .catch(() => {})
+    await backend.subscribe((e) => {
+      if (e.type === 'networks') {
+        set({ networks: e.networks })
+        return
+      }
+      if (e.type === 'open') {
+        // The OS handed over a magnet link or a .torrent file: start the dialog with it.
+        set((s) => ({
+          view: 'transfers',
+          adding: true,
+          draft: e.target,
+          draftTorrent: null,
+          draftSeq: s.draftSeq + 1,
+        }))
+        return
+      }
+      if (e.type === 'torrents') {
+        heard = true
+        const ids = new Set(e.torrents.map((t) => t.id))
+        set((s) => ({
+          torrents: e.torrents,
+          selectedTorrent:
+            s.selectedTorrent !== null && !ids.has(s.selectedTorrent) ? null : s.selectedTorrent,
+        }))
+        return
+      }
+      if (e.type === 'jobs') {
+        const ids = new Set(e.jobs.map((j) => j.id))
+        set((s) => ({
+          jobs: e.jobs,
+          ready: true,
+          selected: s.selected !== null && !ids.has(s.selected) ? null : s.selected,
+        }))
+        return
+      }
+      const { type: _t, ...live } = e
+      set((s) => {
+        const prev = s.history[live.id]
+        const names = live.networks.map((n) => n.name)
+        const rates =
+          prev && prev.names.join() === names.join() ? prev.rates.slice(-HISTORY + 1) : []
+        rates.push(live.networks.map((n) => n.rate))
+        return {
+          live: { ...s.live, [live.id]: live },
+          history: { ...s.history, [live.id]: { names, rates } },
+        }
+      })
+    })
+  } catch (e) {
+    set({ ready: true, toast: { ...toUiError(e), at: Date.now() } })
+  }
+}
