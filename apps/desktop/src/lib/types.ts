@@ -13,6 +13,8 @@ export interface JobView {
   written: number
   total: number | null
   error: string | null
+  /** The fix to offer for `error`. */
+  errorAction: 'fix-link' | 'retry' | 'start-over' | 'free-space' | null
   finalPath: string | null
   createdAt: number
 }

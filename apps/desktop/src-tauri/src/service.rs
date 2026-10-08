@@ -28,6 +28,8 @@ pub struct JobView {
     pub written: u64,
     pub total: Option<u64>,
     pub error: Option<String>,
+    /// The fix to offer: fix-link, retry, start-over or free-space.
+    pub error_action: Option<String>,
     pub final_path: Option<String>,
     pub created_at: i64,
 }
@@ -140,6 +142,8 @@ pub struct Service {
     listeners: Mutex<Vec<Emit>>,
     default_dir: PathBuf,
     max_running: usize,
+    /// Shrinks engine retry waits; only tests set it.
+    retry_scale: Option<f64>,
 }
 
 impl std::fmt::Debug for Service {
@@ -192,6 +196,7 @@ fn view(job: &Job) -> JobView {
         },
         total: job.total,
         error: job.error.clone(),
+        error_action: job.error_code.clone(),
         final_path: job
             .final_path
             .as_ref()
@@ -269,6 +274,7 @@ impl Service {
             listeners: Mutex::new(Vec::new()),
             default_dir,
             max_running: MAX_RUNNING,
+            retry_scale: None,
         }))
     }
 
@@ -282,6 +288,7 @@ impl Service {
         let s = Service::new(store, dir)?;
         let mut s = Arc::try_unwrap(s).map_err(|_| store_error("busy"))?;
         s.max_running = max.max(1);
+        s.retry_scale = Some(0.05);
         Ok(Arc::new(s))
     }
 
@@ -433,6 +440,58 @@ impl Service {
         Ok(())
     }
 
+    /// Continues a stopped download from a new link to the same file (signed links
+    /// expire). The engine proves it's the same file before keeping any bytes; a
+    /// different file fails with `start-over` instead of being mixed in (L-108).
+    pub fn fix_link(self: &Arc<Self>, id: i64, url: &str) -> Result<(), UiError> {
+        let url = url.trim();
+        parse_link(url).map_err(|m| {
+            UiError::new("bad-link", m, Some("Links start with http:// or https://."))
+        })?;
+        if lock(&self.running).contains_key(&id) {
+            return Err(UiError::new(
+                "not-stopped",
+                "Pause the download before changing its link.",
+                None,
+            ));
+        }
+        let job = self.store.get(id).map_err(|_| not_found(id))?;
+        if !matches!(
+            job.status,
+            Status::Paused | Status::Failed { resumable: true } | Status::Queued
+        ) {
+            return Err(UiError::new(
+                "not-resumable",
+                "This download can't continue from a new link.",
+                Some("Start it again instead."),
+            ));
+        }
+        self.store.set_url(id, url).map_err(store_error)?;
+        self.resume(id)
+    }
+
+    /// Throws away a download that can't continue and starts it fresh from the
+    /// same link and folder.
+    pub fn start_over(self: &Arc<Self>, id: i64) -> Result<i64, UiError> {
+        if lock(&self.running).contains_key(&id) {
+            return Err(UiError::new(
+                "not-stopped",
+                "Pause the download before starting it over.",
+                None,
+            ));
+        }
+        let job = self.store.get(id).map_err(|_| not_found(id))?;
+        if job.status == Status::Completed {
+            return Err(UiError::new(
+                "not-resumable",
+                "This download already finished.",
+                None,
+            ));
+        }
+        runner::remove(&self.store, id).map_err(store_error)?;
+        self.add(&job.url, Some(&job.dir.to_string_lossy()))
+    }
+
     /// Removes a download (and its partial file). A running one is stopped first.
     pub fn remove(self: &Arc<Self>, id: i64) -> Result<(), UiError> {
         if let Some(r) = lock(&self.running).get_mut(&id) {
@@ -524,6 +583,7 @@ impl Service {
             networks: picked.iter().map(|i| i.name.clone()).collect(),
             snapshot: Some(snapshot),
             cancel: Some(cancel),
+            retry_delay_scale: self.retry_scale,
             ..RunOptions::default()
         };
         let resume = job.resume();
@@ -544,6 +604,7 @@ impl Service {
                 let _ = self
                     .store
                     .apply(id, Event::Fail { resumable: true }, Some(&message));
+                let _ = self.store.set_error_code(id, "retry");
             }
             Ok(Outcome::Completed { .. } | Outcome::Paused | Outcome::Failed { .. }) => {}
         }
@@ -599,7 +660,13 @@ mod tests {
             while !f(self) {
                 assert!(
                     start.elapsed() < Duration::from_secs(20),
-                    "timed out waiting for {what}"
+                    "timed out waiting for {what}: {:?}",
+                    self.svc
+                        .jobs()
+                        .unwrap()
+                        .iter()
+                        .map(|j| (j.id, j.status, j.written, j.error.clone()))
+                        .collect::<Vec<_>>()
                 );
                 tokio::time::sleep(Duration::from_millis(20)).await;
             }
@@ -1008,6 +1075,7 @@ mod tests {
             written: 0,
             total: None,
             error: None,
+            error_action: None,
             final_path: None,
             created_at: 0,
         };
@@ -1063,6 +1131,102 @@ mod tests {
         assert!(
             src.contains("{ type: 'jobs'; jobs: JobView[] }")
                 && src.contains("{ type: 'live' } & Live")
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn an_expired_link_can_be_fixed_and_the_download_continues() {
+        let content = Content::new(3 * 1024 * KB, 103);
+        let old = RangeServer::start(content).await.unwrap();
+        // Short answers make the download need many requests; after 12 of them every
+        // request is refused, as when a signed URL expires mid-download.
+        old.add_rule(Rule {
+            skip: 1,
+            times: 12,
+            fault: Fault::CapRange(64 * KB),
+        });
+        old.add_rule(Rule {
+            skip: 1,
+            times: u32::MAX,
+            fault: Fault::Status(403, None),
+        });
+        let h = harness(3);
+        let id = h.svc.add(&link(&old), None).unwrap();
+        h.wait("expired", |h| h.job(id).status.starts_with("failed"))
+            .await;
+        let failed = h.job(id);
+        assert_eq!(
+            failed.error_action.as_deref(),
+            Some("fix-link"),
+            "{:?}",
+            failed.error
+        );
+        assert!(failed.resumable);
+        // Negative cases first: a bad link, an unknown id.
+        assert_eq!(
+            h.svc.fix_link(id, "ftp://x/y").unwrap_err().code,
+            "bad-link"
+        );
+        assert_eq!(
+            h.svc.fix_link(999, "http://x/y").unwrap_err().code,
+            "not-found"
+        );
+        // A fresh link to the same file continues and ends byte-exact.
+        let fresh = RangeServer::start(content).await.unwrap();
+        h.svc.fix_link(id, &link(&fresh)).unwrap();
+        h.wait("completion", |h| h.job(id).status == "completed")
+            .await;
+        let done = h.job(id);
+        assert_eq!(done.url, link(&fresh));
+        assert_eq!(done.error_action, None);
+        assert_eq!(
+            fuselane_testkit::sha256_file(Path::new(&done.final_path.unwrap())).unwrap(),
+            content.sha256()
+        );
+        assert_eq!(
+            h.svc.fix_link(id, &link(&fresh)).unwrap_err().code,
+            "not-resumable"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_new_link_to_a_different_file_is_refused_then_started_over() {
+        let a = Content::new(2 * 1024 * KB, 104);
+        let old = RangeServer::start(a).await.unwrap();
+        // Short answers make the download need many requests; after 12 of them every
+        // request is refused, as when a signed URL expires mid-download.
+        old.add_rule(Rule {
+            skip: 1,
+            times: 12,
+            fault: Fault::CapRange(64 * KB),
+        });
+        old.add_rule(Rule {
+            skip: 1,
+            times: u32::MAX,
+            fault: Fault::Status(403, None),
+        });
+        let h = harness(3);
+        let id = h.svc.add(&link(&old), None).unwrap();
+        h.wait("expired", |h| h.job(id).status.starts_with("failed"))
+            .await;
+        // Same size, different bytes and validator: must never be mixed in.
+        let other = Content::new(2 * 1024 * KB, 105);
+        let wrong = RangeServer::start(other).await.unwrap();
+        wrong.set_etag("\"a-different-file\"");
+        h.svc.fix_link(id, &link(&wrong)).unwrap();
+        h.wait("refused", |h| h.job(id).status == "failed-final")
+            .await;
+        assert_eq!(h.job(id).error_action.as_deref(), Some("start-over"));
+        let fresh = h.svc.start_over(id).unwrap();
+        h.wait("fresh done", |h| h.job(fresh).status == "completed")
+            .await;
+        assert!(
+            h.svc.jobs().unwrap().iter().all(|j| j.id != id),
+            "old job removed"
+        );
+        assert_eq!(
+            fuselane_testkit::sha256_file(Path::new(&h.job(fresh).final_path.unwrap())).unwrap(),
+            other.sha256()
         );
     }
 

@@ -63,6 +63,18 @@ async fn remove(svc: State<'_>, id: i64) -> Result<(), UiError> {
     svc.remove(id)
 }
 
+/// Continues a stopped download from a new link to the same file.
+#[tauri::command]
+async fn fix_link(svc: State<'_>, id: i64, url: String) -> Result<(), UiError> {
+    svc.fix_link(id, &url)
+}
+
+/// Discards a download that can't continue and starts it fresh.
+#[tauri::command]
+async fn start_over(svc: State<'_>, id: i64) -> Result<i64, UiError> {
+    svc.start_over(id)
+}
+
 /// Name, size and splittability of a link, before downloading it.
 #[tauri::command]
 async fn preview(url: String) -> Result<PreviewView, UiError> {
@@ -261,6 +273,8 @@ fn main() {
             remove,
             reveal,
             preview,
+            fix_link,
+            start_over,
             open_file,
             pick_folder,
             subscribe

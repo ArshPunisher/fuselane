@@ -123,6 +123,7 @@ mod tests {
             written: 0,
             total: None,
             error: (status == "failed").then(|| "The server refused access.".into()),
+            error_action: None,
             final_path: None,
             created_at: 0,
         }
