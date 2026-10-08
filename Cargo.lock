@@ -1578,6 +1578,7 @@ version = "0.1.0-beta.3"
 dependencies = [
  "clap",
  "dirs 6.0.0",
+ "fuselane-api",
  "fuselane-core",
  "fuselane-engine-http",
  "fuselane-netif",
@@ -1613,6 +1614,7 @@ version = "0.1.0-beta.3"
 dependencies = [
  "chrono",
  "dirs 6.0.0",
+ "fuselane-api",
  "fuselane-core",
  "fuselane-engine-http",
  "fuselane-engine-torrent",

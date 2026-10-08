@@ -4,5 +4,7 @@
 //! the browser extension's native-messaging host. Every payload is validated at
 //! runtime. Design: `docs/03-architecture/ARCHITECTURE.md` §2. Rules: L-97, L-98.
 
+pub mod client;
+pub mod native;
 pub mod offer;
 pub mod server;

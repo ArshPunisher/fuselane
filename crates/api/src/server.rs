@@ -153,11 +153,36 @@ mod unix {
             std::fs::remove_file(path)?;
         }
         if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir)?;
+            if dir.starts_with("/tmp") {
+                private_dir(dir)?;
+            } else {
+                std::fs::create_dir_all(dir)?;
+            }
         }
         let listener = UnixListener::bind(path)?;
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
         Ok(listener)
+    }
+
+    /// The short socket folder under /tmp: created 0700, or refused when it exists
+    /// as a link, someone else's, or open to others (it could hold a planted socket).
+    fn private_dir(dir: &Path) -> std::io::Result<()> {
+        use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+        match std::fs::DirBuilder::new().mode(0o700).create(dir) {
+            Ok(()) => return Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(e),
+        }
+        let m = std::fs::symlink_metadata(dir)?;
+        // SAFETY: getuid has no preconditions and cannot fail.
+        let me = unsafe { libc::getuid() };
+        if !m.is_dir() || m.uid() != me || m.mode() & 0o077 != 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                format!("{} isn't a private folder of this user", dir.display()),
+            ));
+        }
+        Ok(())
     }
 
     /// Accepts this user's connections only (the OS reports the peer's uid).
@@ -301,6 +326,29 @@ mod tests {
         let _ =
             tokio::time::timeout(std::time::Duration::from_secs(5), c2.read_to_end(&mut out)).await;
         assert!(String::from_utf8_lossy(&out).contains("too-long"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_shared_tmp_folder_that_isnt_private_is_refused() {
+        use std::os::unix::fs::PermissionsExt;
+        let name = format!("/tmp/fuselane-test-{}-{}", std::process::id(), line!());
+        let dir = Path::new(&name);
+        std::fs::create_dir(dir).unwrap();
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o777)).unwrap();
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let r = rt.block_on(bind(&dir.join("api.sock")));
+        assert_eq!(r.unwrap_err().kind(), std::io::ErrorKind::PermissionDenied);
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(
+            rt.block_on(bind(&dir.join("api.sock"))).is_ok(),
+            "private: fine"
+        );
+        let _ = std::fs::remove_file(dir.join("api.sock"));
+        let _ = std::fs::remove_dir(dir);
     }
 
     #[cfg(unix)]
