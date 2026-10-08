@@ -475,6 +475,7 @@ mod tests {
         assert_eq!(m["allowed_origins"].as_array().unwrap().len(), 2);
     }
 
+    #[cfg(unix)]
     #[test]
     fn an_appimage_points_at_its_file_not_its_temporary_mount() {
         let mount = PathBuf::from("/tmp/.mount_FuselaXyZ/usr/bin/fuselane-desktop");
@@ -488,6 +489,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn copies_that_will_move_or_vanish_are_refused_with_a_reason() {
         assert!(exe_problem(Path::new(EXE)).is_none());
@@ -584,6 +586,14 @@ mod tests {
             "{:?}",
             out[0]
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_normal_windows_install_path_is_accepted() {
+        let exe = Path::new(r"C:\Users\u\AppData\Local\Fuselane\fuselane-desktop.exe");
+        assert!(exe_problem(exe).is_none());
+        assert!(exe_problem(Path::new("fuselane-desktop.exe")).is_some());
     }
 
     #[derive(Default)]
