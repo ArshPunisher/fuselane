@@ -175,6 +175,8 @@ impl Torrent {
     pub fn progress(&self) -> Progress {
         let s = self.handle.stats();
         let phase = match s.state {
+            // A pause asked for during the check: stopped once the check ends.
+            TorrentStatsState::Initializing { paused: true } => Phase::Paused,
             TorrentStatsState::Initializing { .. } => Phase::Checking,
             TorrentStatsState::Paused => Phase::Paused,
             TorrentStatsState::Error => Phase::Failed,
@@ -458,6 +460,14 @@ impl TorrentEngine {
     }
 }
 
+impl TorrentEngine {
+    /// Deletes a released torrent's files with the same safe deleter as `remove`.
+    pub fn delete_files(&self, listing: &Listing) -> Cleanup {
+        let all: Vec<&Planned> = listing.files.iter().collect();
+        paths::remove(&listing.folder, listing.own_folder, &all)
+    }
+}
+
 fn check_selection(files: &[Planned], set: HashSet<usize>) -> Result<HashSet<usize>, TorrentError> {
     if let Some(bad) = set.iter().find(|i| **i >= files.len()) {
         return Err(TorrentError::NoSuchFile(*bad));
@@ -483,6 +493,18 @@ pub struct Listing {
 }
 
 impl Listing {
+    /// The folder the user chose (the torrent's own folder sits inside it).
+    pub fn base(&self) -> &std::path::Path {
+        if self.own_folder {
+            self.folder.parent().unwrap_or(&self.folder)
+        } else {
+            &self.folder
+        }
+    }
+    /// The .torrent itself, to save and add again after a restart.
+    pub fn torrent_bytes(&self) -> &[u8] {
+        &self.torrent
+    }
     pub fn total(&self) -> u64 {
         self.files
             .iter()
