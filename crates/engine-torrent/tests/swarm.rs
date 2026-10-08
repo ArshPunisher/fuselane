@@ -663,15 +663,37 @@ async fn the_apps_speed_limit_holds_for_torrents_and_usage_is_counted() {
         )
         .await
         .unwrap();
-    tokio::time::timeout(Duration::from_secs(60), t.finished())
-        .await
-        .unwrap()
-        .unwrap();
+    // A timeline of progress, printed if the timing is off (read it from CI logs).
+    let mut timeline = Vec::new();
+    tokio::time::timeout(Duration::from_secs(60), async {
+        loop {
+            let p = t.progress();
+            timeline.push(format!(
+                "{:.1}s:{}KiB",
+                started.elapsed().as_secs_f64(),
+                p.done / 1024
+            ));
+            if p.done == p.total && p.total > 0 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("never finished: {}", timeline.join(" ")));
+    t.finished().await.unwrap();
     let took = started.elapsed().as_secs_f64();
+    let timeline = timeline.join(" ");
     // 3 MiB at 1 MiB/s from an empty bucket: about 3 s (a little less if the last
     // read's debt is never slept off).
-    assert!(took > 2.3, "the limit wasn't applied: {took:.2} s");
-    assert!(took < 12.0, "far slower than the limit: {took:.2} s");
+    assert!(
+        took > 2.3,
+        "the limit wasn't applied: {took:.2} s; {timeline}"
+    );
+    assert!(
+        took < 12.0,
+        "far slower than the limit: {took:.2} s; {timeline}"
+    );
     assert!(std::fs::read(leech.path().join("payload.bin")).unwrap() == data);
     let used: u64 = limiter.drain_usage().iter().map(|(_, b)| b).sum();
     assert!(

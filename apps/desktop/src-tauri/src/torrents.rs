@@ -1160,7 +1160,29 @@ mod tests {
             }
         })
         .await
-        .unwrap_or_else(|_| panic!("never reached {status}"))
+        .unwrap_or_else(|_| {
+            // Say where it got stuck, so a CI-only failure can be read from the log.
+            let last = describe_entries(tor);
+            panic!("never reached {status}; last seen: {last}")
+        })
+    }
+
+    fn describe_entries(tor: &Torrents) -> String {
+        let entries = tor.entries.try_lock();
+        match entries {
+            Ok(e) => e
+                .iter()
+                .map(|e| {
+                    let p = e.torrent.as_ref().map(|t| format!("{:?}", t.progress()));
+                    format!(
+                        "{} {}/{} err={:?} live={p:?}",
+                        e.last.status, e.last.done, e.last.total, e.last.error
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("; "),
+            Err(_) => "busy".into(),
+        }
     }
 
     /// Adds the seeder's torrent with the given files, pointing the engine at the seeder.
