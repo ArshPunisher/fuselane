@@ -178,4 +178,7 @@ The full list of 120 engine edge cases, with citations, is in plexo-forensics **
 | ID | Rule | Evidence | Guard |
 |---|---|---|---|
 | L-101 | macOS iCloud Private Relay relays plain-HTTP traffic even from pinned raw sockets. Network probes (public IP, shared upstream) use HTTPS only; detect Private Relay and explain its effect on `http://` downloads. | Spike S2 | Probe tests use https; S2 part 2 result |
+| L-103 | A downloaded file is never hidden: leading dots are trimmed along with trailing dots and **all Unicode whitespace** (a trailing NBSP broke idempotency). | Property test, storage::names | `sanitizing_is_idempotent` |
+| L-104 | Brief 403s (rate limiting) are not an expired link: declare "link expired" only when every live network keeps refusing 4 times in a row with no bytes delivered in between. | Chaos seed 43 | `brief_403s_from_rate_limiting_dont_end_the_download` |
+| L-105 | Byte arithmetic on server-supplied numbers is checked: a hostile `bytes 0-18446744073709551615/*` overflowed `last - first + 1`. | Attack test, engine-http::headers | `range_response_rules` + extreme-value property |
 | L-102 | Tunnel and peer-to-peer interfaces (`utun*`, `awdl*`, `llw*`, `anpi*`, bridges) can make pinned connects *hang* instead of failing; exclude them unless they have a gateway and pass the reachability probe, and always use a connect deadline. | Spike S2 (`utun0` IPv6 hung 4 s) | netif filter fixtures |

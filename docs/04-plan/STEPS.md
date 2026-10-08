@@ -36,7 +36,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 ## P2 Core + CLI (production code, test-first)
 
 **2A testkit first** (so every later step has a harness)
-- [ ] 2.1 `testkit::RangeServer` (axum): serves generated content (seeded PRNG, any size incl. > 4 GiB without storing it) with a fault script: stall at byte N, cap ranges, wrong start, overrun, short body, ignore Range, gzip, ETag rotate, 429/503 with Retry-After (seconds/date), 401/403/410, redirect chains, per-client-IP rules — test: its own unit tests
+- [x] 2.1 `testkit::RangeServer` (axum): serves generated content (seeded PRNG, any size incl. > 4 GiB without storing it) with a fault script: stall at byte N, cap ranges, wrong start, overrun, short body, ignore Range, gzip, ETag rotate, 429/503 with Retry-After (seconds/date), 401/403/410, redirect chains, per-client-IP rules — test: its own unit tests
 - [ ] 2.2 `testkit::FakePinner` + fake interfaces (aliases 127.0.0.2/3) so engine tests run on every OS
 - [ ] 2.3 Invariant checker + SHA-256 helper + handle/socket leak checker usable from any test — L-90, L-91, L-44
 - [ ] 2.4 `tools/netlab` promoted from the spike: `netlab up --links "50mbit/20ms,10mbit/80ms/1%"`, per-link DNS, `netlab down-link N`
@@ -57,26 +57,26 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [ ] 2.15 Link probes: reachability, captive portal, public IP, latency — L-62
 
 **2D storage**
-- [ ] 2.16 Name sanitizer for all OSes + 255-byte truncation + collision suffixes — table tests — L-39, L-40
-- [ ] 2.17 Staging file: exclusive create, preallocate/sparse per OS, FAT32 4 GiB check — L-37, L-41
+- [x] 2.16 Name sanitizer for all OSes + 255-byte truncation + collision suffixes — table tests — L-39, L-40
+- [x] 2.17 Staging file: exclusive create, preallocate/sparse per OS, FAT32 4 GiB check — L-37, L-41
 - [ ] 2.18 Writer pool with coalescing + backpressure signal — slow-disk test — L-13, L-27
-- [ ] 2.19 Publish: complete check, intent record, rename with Windows retries, dir fsync, quarantine/MOTW — L-43, L-45, L-54, L-99
+- [x] 2.19 Publish: complete check, intent record, rename with Windows retries, dir fsync, quarantine/MOTW — L-43, L-45, L-54, L-99
 - [ ] 2.20 Free-space check before and during; ENOSPC → immediate pause — EC-209 — L-46
 
 **2E limits**
-- [ ] 2.21 Token buckets (global, per network, per job) — property tests — L-30
-- [ ] 2.22 Data usage periods (day/week/month, local time, configurable reset), download/upload split — L-35
+- [x] 2.21 Token buckets (global, per network, per job) — property tests — L-30
+- [x] 2.22 Data usage periods (day/week/month, local time, configurable reset), download/upload split — L-35
 
 **2F engine-http**
-- [ ] 2.23 Probe: `bytes=0-0`, redirects within budget, 416 empty, Content-Disposition parser — EC-001…014 — L-01, L-04, L-08, L-10
-- [ ] 2.24 Version model + ETag normalization + sample-confirm — L-05, L-06
-- [ ] 2.25 Planner (pure) — property tests — L-22, L-23
-- [ ] 2.26 Scheduler (pure): primary, avoid-network, hedge, split — property tests (coverage, no deadlock, caps) — L-24, L-25, L-28
-- [ ] 2.27 Concurrency controller (pure): grow, refusal ceiling, recovery, disk cap, per-host memory — simulations — L-18, L-26, L-27
-- [ ] 2.28 Stream worker: request with Range/If-Range/identity, response checks, write, meters — EC-037…044 — L-02, L-03, L-07
-- [ ] 2.29 Retry policy (pure) + its wiring: busy/strike/link-expired/blocked/unreachable — EC-051…060, EC-201, EC-219 — L-14…L-20
+- [x] 2.23 Probe: `bytes=0-0`, redirects within budget, 416 empty, Content-Disposition parser — EC-001…014 — L-01, L-04, L-08, L-10
+- [x] 2.24 Version model + ETag normalization + sample-confirm — L-05, L-06
+- [x] 2.25 Planner (pure) — property tests — L-22, L-23
+- [x] 2.26 Scheduler (pure): primary, avoid-network, hedge, split — property tests (coverage, no deadlock, caps) — L-24, L-25, L-28
+- [x] 2.27 Concurrency controller (pure): grow, refusal ceiling, recovery, disk cap, per-host memory — simulations — L-18, L-26, L-27
+- [x] 2.28 Stream worker: request with Range/If-Range/identity, response checks, write, meters — EC-037…044 — L-02, L-03, L-07
+- [x] 2.29 Retry policy (pure) + its wiring: busy/strike/link-expired/blocked/unreachable — EC-051…060, EC-201, EC-219 — L-14…L-20
 - [ ] 2.30 Slow-stream refresh (< 10% of the network's median for 10 s, max 2 per block) — L-12
-- [ ] 2.31 Meters, AVG/PEAK/ETA — property tests — L-30…L-33
+- [x] 2.31 Meters, AVG/PEAK/ETA — property tests — L-30…L-33
 - [ ] 2.32 Checksum verification at publish (pasted hash, `.sha256`, Digest header)
 
 **2G core**

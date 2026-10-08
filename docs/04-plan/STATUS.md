@@ -4,13 +4,33 @@
 
 ## Now
 
-- **Phase:** P0 Foundations (finishing), then P1 spikes
-- **Done:** 0.1–0.6 (planning set; owner decisions recorded: Apache-2.0, personal GitHub, **zero-cost policy ADR 0009**, design direction in `docs/07-design/`)
-- **Next step:** 0.8 workspace skeleton → 0.9 pnpm workspace → 0.10 CI workflows → 0.11 commit lint + PR template → 0.12 Renovate; then spikes that run on this Mac (S2 macOS pinning, S7 Tauri shell, S9 Lane Weave)
-- **Blocked on:** Q13 (owner: OK to create the **public** GitHub repo `fuselane` on the personal account?). CI can't run until the remote exists.
-- **Environment:** Rust installed with rustup (`~/.cargo/bin`; not on the zsh PATH, so source `~/.cargo/env`), Node 24, pnpm 11, gh logged in as ArshPunisher.
+- **Phase:** P1 spikes (hardware-blocked parts pending) running alongside **P2 Core + CLI** (started).
+- **P2 done (tested, committed):**
+  - storage: names (2.16), staging + publish (2.17, 2.19);
+  - limits (2.21, 2.22);
+  - engine-http: headers (2.23, 2.24), plan (2.25), scheduler (2.26), concurrency (2.27), retry (2.29), measure (2.31), and the multi-network downloader (2.28);
+  - testkit hostile server (2.1).
+  - Tests: 62 in engine-http, including a 15-test end-to-end attack suite plus a chaos test (100/100 seeds byte-exact).
+- **Next steps, in order:**
+  1. `transport`: pinned connector (macOS `IP_BOUND_IF` per S2, Linux `SO_BINDTODEVICE`, Windows `IP_UNICAST_IF`) + rustls TLS.
+  2. `netif`: interface listing.
+  3. CLI `fuselane get <url>` (2.44), so real downloads work from the terminal.
+  4. Then: concurrency controller wired into the downloader, `core` (SQLite, resume), edge-case table (`docs/05-quality/EDGE-CASES.md`).
+- **Waiting on the owner:**
+  - Approve the S9b Fuse Core contact sheets (`docs/04-plan/spikes/S9b-fuse-core.md`).
+  - Q13: OK to create the **public** GitHub repo? (CI can't run until then.)
+  - Q10: test hardware (a phone to tether) for S1/S2-part-2/S3.
+- **Parked:** S5 torrent spike (librqbit + SOCKS5). Only scaffolding existed; restart it in P5 or when time allows.
+- **Environment:** Rust via rustup (`source ~/.cargo/env`), cargo-nextest, cargo-deny, actionlint (Homebrew), Node 24, pnpm 11, Playwright WebKit + Chromium, gh logged in as ArshPunisher.
 
 ## Log
+
+### 2026-10-08 (session 2, continued)
+- Spikes:
+  - S2 macOS pinning part 1 (found that iCloud Private Relay relays plain HTTP);
+  - S7 Tauri shell on macOS (5.76 MiB app, about 75–80 MB of RAM);
+  - S9 Lane Weave, then the owner rejected it as too close to Plexo → **S9b Fuse Core** (original radial design, contact sheets pending approval).
+- P2 engine built test-first with property tests, attack tests and chaos. Our tests found and fixed three real bugs (L-103 hidden or NBSP names, L-104 transient 403 treated as an expired link, L-105 range overflow).
 
 ### 2026-10-08 (session 2)
 - Owner decisions: open source (Apache-2.0), personal GitHub, SignPath, **no paid services** → ADR 0009; domain later.
