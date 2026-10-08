@@ -17,9 +17,13 @@
 - **Run it:**
   - UI in a browser (demo data): `pnpm --filter @fuselane/desktop dev`, then open http://localhost:5190.
   - Real app: `pnpm --filter @fuselane/desktop build`, then `cargo run -p fuselane-desktop --features tauri/custom-protocol` (or `pnpm --filter @fuselane/desktop tauri dev`).
+- **P4 beta:** `v0.1.0-beta.1` tagged 2026-10-08. Release workflow builds macOS universal (ad-hoc signed), Windows x64, Linux x64/arm64 natively, checks contents, self-tests the packaged app, and drafts a pre-release with SHA256SUMS. Publishing a release deploys the signed update feed to https://arshpunisher.github.io/fuselane/updates/latest.json. Updater key: `~/.tauri/fuselane.key` (password in Keychain "Fuselane updater key password"; both are GitHub secrets). Homebrew tap: `ArshPunisher/homebrew-fuselane` (cask from `packaging/homebrew/update-cask.sh <tag>`).
 - **Next steps, in order:**
-  3. Done this round: error panel with fixes (Fix link, Start over), live speed limits (overall + per network), job ids never reused (L-116). Next: data allowances and slow mode (3.9), network rename/recolour (3.8), keyboard shortcuts and window-state memory (3.11, 3.10).
-  5. P2 leftovers: per-network DNS (2.13), Windows/Linux friendly names (2.7, 2.8), free-space check (2.20), sleep/wake (2.39), `--json`.
+  1. Publish beta.1 after checking the draft; then write the cask into the tap.
+  2. 4.7 updater end-to-end (install beta.1, publish beta.2, update, data intact).
+  3. 4.3 SignPath for Windows: the owner applies at signpath.org (free for open source); then wire the signing step.
+  4. 4.8 landing page on Pages (replaces the redirect), with OS detection and checksums.
+  5. P3 leftovers (data allowances, slow mode, rename networks, shortcuts) and P2 leftovers, then P5 torrents.
 - **Repo:** public at https://github.com/ArshPunisher/fuselane (pushed 2026-10-08). First CI run **green on macOS, Windows and Linux**. `main` blocks force-push and deletion. Push only `main` and only when the owner says "push"; spikes stay local.
 - **Waiting on the owner:**
   - Enable Renovate on the repo (install the free Renovate GitHub app); SignPath application once there is a release.

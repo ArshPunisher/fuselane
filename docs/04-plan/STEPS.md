@@ -120,15 +120,15 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 
 ## P4 Signed beta 0.1
 
-- [ ] 4.1 Release workflow: tag → native per-OS builds → package content check — L-73, L-74
-- [ ] 4.2 macOS ad-hoc signing + install script (`install.sh`) + Homebrew tap + illustrated Open Anyway guide — L-72, ADR 0009
+- [x] 4.1 Release workflow: tag → native per-OS builds → package content check — L-73, L-74
+- [ ] 4.2 macOS ad-hoc signing + install script (`install.sh`) + Homebrew tap + illustrated Open Anyway guide — L-72, ADR 0009 (done: ad-hoc signing, tested install script, tap repo + cask generator; to do: illustrated guide)
 - [ ] 4.3 Windows signing of binaries and installer via SignPath (unsigned fallback + SmartScreen guide until approved) — L-72
-- [ ] 4.4 Linux AppImage/deb/rpm + checksums; Flatpak manifest (submission can wait until 1.0)
-- [ ] 4.5 Tauri updater: minisign key (backed up offline), our own `latest.json` feed, real semver tests — L-76, L-77, L-78
-- [ ] 4.6 Packaged smoke (`--self-test`) on signed artifacts per OS — L-75
+- [ ] 4.4 Linux AppImage/deb/rpm + checksums; Flatpak manifest (submission can wait until 1.0) (done: AppImage x64, deb/rpm x64 + arm64, SHA256SUMS; to do: Flatpak manifest)
+- [x] 4.5 Tauri updater: minisign key (backed up offline), our own `latest.json` feed, real semver tests — L-76, L-77, L-78
+- [x] 4.6 Packaged smoke (`--self-test`) on signed artifacts per OS — L-75
 - [ ] 4.7 Updater e2e: install N-1, update to N, data intact
 - [ ] 4.8 Landing page (`apps/site`): OS/arch detection, signed downloads, checksums (use the design skills)
-- [ ] 4.9 Local diagnostics bundle + privacy policy (no crash-reporting service, ADR 0009)
+- [x] 4.9 Local diagnostics bundle + privacy policy (no crash-reporting service, ADR 0009)
 - [ ] 4.10 Real-hardware matrix pass → tag `v0.1.0-beta.1`
 
 ## P5 Torrents (0.2)

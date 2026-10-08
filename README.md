@@ -4,16 +4,27 @@
 
 Fuselane is a cross-platform download **and upload** manager. It spreads one transfer across every internet connection the computer has: home Wi-Fi, a phone tethered over USB, Ethernet, a second ISP. You get their combined speed, with no VPN, relay server or admin rights.
 
-**Status: planning (Phase 0).** No product code exists yet. This repository holds the research, the decisions and the step-by-step build plan. See [`docs/04-plan/STATUS.md`](docs/04-plan/STATUS.md) for where we are right now.
+**Status: public beta (0.1).** Bonded HTTP(S) downloads work on macOS, Windows and Linux, in a desktop app and a CLI. Torrents, bonded uploads and the browser extension come next. See [`docs/04-plan/STATUS.md`](docs/04-plan/STATUS.md).
 
-## What it will do
+## Install the beta
+
+| System | How |
+|---|---|
+| macOS 13.3+ | `curl -fsSL https://raw.githubusercontent.com/ArshPunisher/fuselane/main/packaging/macos/install.sh \| sh`, or `brew install --cask arshpunisher/fuselane/fuselane`, or the `.dmg` |
+| Windows 10/11 x64 | `Fuselane_<version>_windows-x64-setup.exe` |
+| Linux x64 / arm64 | `.AppImage` (x64), `.deb` or `.rpm` |
+| CLI | `fuselane-cli_<version>_<system>` |
+
+All files are on [Releases](https://github.com/ArshPunisher/fuselane/releases) with `SHA256SUMS`. The app updates itself from a signed feed. It sends nothing else: see [PRIVACY.md](docs/PRIVACY.md).
+
+## What it does
 
 | Pillar | What it means |
 |---|---|
 | **Bonded downloads** | HTTP(S) range downloads and torrents split across every network, with resume, integrity checks and per-network limits |
 | **Bonded uploads** | Big files uploaded in parallel parts over every network to cloud storage, ending in a share link (WeTransfer-style, but faster) |
 | **Browser capture** | Chrome, Edge, Brave and Firefox extensions (Safari later) that hand downloads to Fuselane, cookies and referrer included |
-| **Everywhere** | macOS, Windows and Linux from one Rust core, with signed installers, auto-update, a CLI and daemon, and Android later |
+| **Everywhere** | macOS, Windows and Linux from one Rust core, with installers, signed auto-updates and a CLI (no Android app: [ADR 0010](docs/adr/0010-no-android-app.md)) |
 
 ## Documentation map
 
