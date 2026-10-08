@@ -18,8 +18,8 @@ use bytes::Bytes;
 use http_body_util::{BodyExt, Empty};
 use hyper::client::conn::http1::SendRequest;
 use hyper::header::{
-    ACCEPT_ENCODING, CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_RANGE, ETAG, HOST, IF_RANGE,
-    LAST_MODIFIED, RANGE, RETRY_AFTER, USER_AGENT,
+    ACCEPT_ENCODING, CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, ETAG, HOST,
+    HeaderName, HeaderValue, IF_RANGE, LAST_MODIFIED, RANGE, RETRY_AFTER, USER_AGENT,
 };
 use hyper::{Request, Response};
 use hyper_util::rt::TokioIo;
@@ -204,6 +204,62 @@ impl From<Checkpoint> for Option<Resume> {
     }
 }
 
+/// Request headers a logged-in browser session needs (its cookies, a referrer),
+/// already checked by [`Headers::checked`]. Never printed: `Debug` shows the names only.
+#[derive(Clone, Default, PartialEq, Eq)]
+pub struct Headers(Vec<(HeaderName, HeaderValue)>);
+
+impl std::fmt::Debug for Headers {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list()
+            .entries(self.0.iter().map(|(n, _)| n.as_str()))
+            .finish()
+    }
+}
+
+/// The only headers a download may carry from a browser. Everything that shapes the
+/// request itself (Host, Range, encodings, connection handling) stays Fuselane's.
+const ALLOWED: &[&str] = &[
+    "cookie",
+    "authorization",
+    "referer",
+    "user-agent",
+    "accept",
+    "accept-language",
+];
+/// Cookies can be long; anything bigger than this is not a normal session.
+const MAX_HEADER_BYTES: usize = 16 * 1024;
+
+impl Headers {
+    /// Keeps allowed headers with valid values; anything else is an error naming it.
+    pub fn checked(raw: &[(String, String)]) -> Result<Headers, String> {
+        let mut out = Vec::new();
+        let mut total = 0;
+        for (name, value) in raw {
+            let lower = name.trim().to_ascii_lowercase();
+            if !ALLOWED.contains(&lower.as_str()) {
+                return Err(format!("the {name} header can't be passed on"));
+            }
+            total += lower.len() + value.len();
+            if total > MAX_HEADER_BYTES {
+                return Err("the headers are too large (over 16 KB)".into());
+            }
+            let n = HeaderName::from_bytes(lower.as_bytes())
+                .map_err(|_| format!("{name} isn't a valid header name"))?;
+            // HeaderValue refuses CR, LF and NUL, so nothing can be smuggled in.
+            let v = HeaderValue::from_str(value.trim())
+                .map_err(|_| format!("the {name} header has characters that aren't allowed"))?;
+            out.retain(|(o, _): &(HeaderName, HeaderValue)| o != n);
+            out.push((n, v));
+        }
+        Ok(Headers(out))
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
 /// Every tunable in one place (CLAUDE.md coding conventions).
 #[derive(Debug, Clone)]
 pub struct Tuning {
@@ -238,6 +294,8 @@ pub struct Tuning {
     pub limiter: Option<Arc<fuselane_limits::Limiter>>,
     /// The name the person chose, instead of the server's (made safe first).
     pub filename: Option<String>,
+    /// A browser session's cookies and referrer, sent on every request.
+    pub headers: Headers,
 }
 
 impl Default for Tuning {
@@ -263,6 +321,7 @@ impl Default for Tuning {
             snapshot: None,
             snapshot_every: Duration::from_millis(200),
             filename: None,
+            headers: Headers::default(),
             limiter: None,
         }
     }
@@ -322,6 +381,19 @@ pub struct Probe {
     pub raw_etag: Option<String>,
     pub last_modified: Option<String>,
     pub filename: String,
+    /// The server's Content-Type, lowercased, without parameters.
+    pub content_type: Option<String>,
+}
+
+impl Probe {
+    /// A web page rather than a file: what a server answers with when it wants
+    /// someone to sign in first.
+    pub fn is_web_page(&self) -> bool {
+        matches!(
+            self.content_type.as_deref(),
+            Some("text/html" | "application/xhtml+xml")
+        )
+    }
 }
 
 // ---------- one HTTP exchange ----------
@@ -352,8 +424,14 @@ fn request(
 ) -> Request<Empty<Bytes>> {
     let mut b = Request::get(&src.path)
         .header(HOST, &src.host)
-        .header(USER_AGENT, &t.user_agent)
         .header(ACCEPT_ENCODING, "identity");
+    // The browser's own User-Agent, when given, so the server sees the same client.
+    if !t.headers.0.iter().any(|(n, _)| n == USER_AGENT) {
+        b = b.header(USER_AGENT, &t.user_agent);
+    }
+    for (n, v) in &t.headers.0 {
+        b = b.header(n, v);
+    }
     if let Some((first, last)) = range {
         b = b.header(
             RANGE,
@@ -454,6 +532,13 @@ pub async fn probe(src: &Source, networks: &[Network], t: &Tuning) -> Result<Pro
         let filename = disposition
             .or(from_path)
             .unwrap_or_else(|| "download".into());
+        let content_type = header(&res, CONTENT_TYPE).map(|v| {
+            v.split(';')
+                .next()
+                .unwrap_or_default()
+                .trim()
+                .to_ascii_lowercase()
+        });
         let cr = header(&res, CONTENT_RANGE).and_then(|v| headers::parse_content_range(&v));
         let cl = header(&res, CONTENT_LENGTH).and_then(|v| v.parse::<u64>().ok());
         let (total, ranges) = match (status, cr) {
@@ -470,6 +555,7 @@ pub async fn probe(src: &Source, networks: &[Network], t: &Tuning) -> Result<Pro
             raw_etag,
             last_modified,
             filename,
+            content_type,
         });
     }
     Err(JobError::Unreachable(last))

@@ -76,6 +76,9 @@ pub struct RequestLog {
     pub range: Option<String>,
     pub if_range: Option<String>,
     pub accept_encoding: Option<String>,
+    pub cookie: Option<String>,
+    pub user_agent: Option<String>,
+    pub referer: Option<String>,
     pub fault: Option<Fault>,
 }
 
@@ -257,6 +260,9 @@ async fn handle(
             range: header(RANGE),
             if_range: header(hyper::header::IF_RANGE),
             accept_encoding: header(hyper::header::ACCEPT_ENCODING),
+            cookie: header(hyper::header::COOKIE),
+            user_agent: header(hyper::header::USER_AGENT),
+            referer: header(hyper::header::REFERER),
             fault: fault.clone(),
         });
         (s.content, s.etag.clone(), fault)
