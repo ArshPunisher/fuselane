@@ -227,14 +227,18 @@ export function App() {
     }
   }, [setAdding])
 
-  const page =
-    view === 'networks' ? (
-      <NetworksView />
-    ) : view === 'settings' ? (
-      <SettingsView />
-    ) : (
-      <Transfers layout={layout} />
-    )
+  // Pages appear once the backend is connected, so no button can be clicked into
+  // the moment where its action would silently do nothing.
+  const connected = useApp((s) => s.backend !== null)
+  const page = !connected ? (
+    <div className="page" aria-busy="true" aria-label="Starting Fuselane" />
+  ) : view === 'networks' ? (
+    <NetworksView />
+  ) : view === 'settings' ? (
+    <SettingsView />
+  ) : (
+    <Transfers layout={layout} />
+  )
 
   return (
     <div className="app" data-layout={layout}>
