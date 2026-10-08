@@ -26,6 +26,8 @@ pub enum Kind {
 pub struct Interface {
     /// OS device name (`en1`, `wlp2s0`, `Wi-Fi`).
     pub name: String,
+    /// What the OS shows people ("Wi-Fi", "iPhone USB"); the device name when unknown.
+    pub display_name: String,
     /// OS interface index (needed for pinning on macOS and Windows).
     pub index: u32,
     pub kind: Kind,
@@ -140,15 +142,77 @@ pub fn index_of(name: &str) -> u32 {
     index
 }
 
+/// macOS: names and kinds from SystemConfiguration (L-61: never parse localized CLI output).
+#[cfg(target_os = "macos")]
+mod macos {
+    use super::Kind;
+    use std::collections::HashMap;
+    use system_configuration::network_configuration::{
+        SCNetworkInterfaceType as T, get_interfaces,
+    };
+
+    /// Maps a SystemConfiguration type (and display name) to our kind.
+    pub fn kind(t: Option<&T>, display: &str) -> Option<Kind> {
+        let d = display.to_ascii_lowercase();
+        if d.contains("iphone")
+            || d.contains("ipad")
+            || d.contains("android")
+            || d.contains("rndis")
+        {
+            return Some(Kind::Tether);
+        }
+        Some(match t? {
+            T::IEEE80211 => Kind::Wifi,
+            T::Ethernet | T::Bond | T::VLAN | T::FireWire => Kind::Ethernet,
+            T::WWAN | T::Modem => Kind::Cellular,
+            T::Bluetooth => Kind::Tether,
+            T::Bridge => Kind::Virtual,
+            T::PPP | T::PPTP | T::L2TP | T::IPSec | T::SixToFour => Kind::Vpn,
+            T::Serial | T::IrDA | T::IPv4 => Kind::Other,
+        })
+    }
+
+    /// BSD name → (display name, kind) for every interface SystemConfiguration knows.
+    pub fn names() -> HashMap<String, (String, Option<Kind>)> {
+        get_interfaces()
+            .iter()
+            .filter_map(|i| {
+                let bsd = i.bsd_name()?.to_string();
+                let display = i
+                    .display_name()
+                    .map(|d| d.to_string())
+                    .unwrap_or_else(|| bsd.clone());
+                let k = kind(i.interface_type().as_ref(), &display);
+                Some((bsd, (display, k)))
+            })
+            .collect()
+    }
+}
+
 /// All interfaces with at least one address, usable addresses only.
 pub fn list() -> std::io::Result<Vec<Interface>> {
+    #[cfg(target_os = "macos")]
+    let native = macos::names();
     let mut by_name: BTreeMap<String, Interface> = BTreeMap::new();
     for a in if_addrs::get_if_addrs()? {
-        let entry = by_name.entry(a.name.clone()).or_insert_with(|| Interface {
-            index: a.index.unwrap_or_else(|| index_of(&a.name)),
-            kind: classify(&a.name),
-            name: a.name.clone(),
-            addrs: vec![],
+        let entry = by_name.entry(a.name.clone()).or_insert_with(|| {
+            #[allow(unused_mut)]
+            let (mut display, mut kind) = (a.name.clone(), classify(&a.name));
+            #[cfg(target_os = "macos")]
+            if let Some((d, k)) = native.get(&a.name) {
+                display = d.clone();
+                // Tunnels and peer-to-peer links stay filtered whatever SC calls them (L-102).
+                if !matches!(kind, Kind::Vpn | Kind::Virtual | Kind::Loopback) {
+                    kind = k.unwrap_or(kind);
+                }
+            }
+            Interface {
+                index: a.index.unwrap_or_else(|| index_of(&a.name)),
+                kind,
+                name: a.name.clone(),
+                display_name: display,
+                addrs: vec![],
+            }
         });
         let ip = a.ip();
         if is_usable_addr(&ip) && !entry.addrs.contains(&ip) {
@@ -226,6 +290,38 @@ mod tests {
             );
             assert!(!i.addrs.is_empty());
             assert!(i.addrs.iter().all(is_usable_addr));
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_kinds_come_from_system_configuration() {
+        use system_configuration::network_configuration::SCNetworkInterfaceType as T;
+        assert_eq!(macos::kind(Some(&T::IEEE80211), "Wi-Fi"), Some(Kind::Wifi));
+        assert_eq!(
+            macos::kind(Some(&T::Ethernet), "iPhone USB"),
+            Some(Kind::Tether),
+            "iPhone tethering shows as Ethernet"
+        );
+        assert_eq!(
+            macos::kind(Some(&T::Ethernet), "USB 10/100/1000 LAN"),
+            Some(Kind::Ethernet)
+        );
+        assert_eq!(
+            macos::kind(Some(&T::WWAN), "Cellular"),
+            Some(Kind::Cellular)
+        );
+        assert_eq!(
+            macos::kind(Some(&T::Bridge), "Thunderbolt Bridge"),
+            Some(Kind::Virtual)
+        );
+        assert_eq!(macos::kind(None, "Something"), None);
+        // On a real Mac every usable interface gets a display name, and Wi-Fi isn't called Ethernet.
+        for i in usable().unwrap() {
+            assert!(!i.display_name.is_empty());
+            if i.display_name.to_lowercase().contains("wi-fi") {
+                assert_eq!(i.kind, Kind::Wifi, "{i:?}");
+            }
         }
     }
 

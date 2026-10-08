@@ -294,8 +294,9 @@ fn nets(all: bool) -> ExitCode {
             for i in list {
                 let addrs: Vec<String> = i.addrs.iter().map(ToString::to_string).collect();
                 println!(
-                    "{:<10} {:<9} {}",
+                    "{:<8} {:<22} {:<9} {}",
                     i.name,
+                    i.display_name,
                     format!("{:?}", i.kind),
                     addrs.join(", ")
                 );

@@ -155,6 +155,7 @@ pub fn self_test() -> Result<(), TransportError> {
         .find(|i| i.kind == fuselane_netif::Kind::Loopback)
         .unwrap_or_else(|| Interface {
             name: "lo".into(),
+            display_name: "Loopback".into(),
             index: 1,
             kind: fuselane_netif::Kind::Loopback,
             addrs: vec![],
@@ -215,6 +216,7 @@ mod tests {
     fn fake(name: &str, index: u32, addrs: Vec<IpAddr>) -> Interface {
         Interface {
             name: name.into(),
+            display_name: name.into(),
             index,
             kind: fuselane_netif::Kind::Ethernet,
             addrs,
