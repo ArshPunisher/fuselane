@@ -16,6 +16,7 @@ hyper = { version = "1", features = ["client", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 http-body-util = "0.1"
 bytes = "1"
+sha2 = "0.10"
 fuselane-transport.workspace = true
 fuselane-storage.workspace = true
 fuselane-limits.workspace = true

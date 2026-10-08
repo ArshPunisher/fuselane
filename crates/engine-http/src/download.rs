@@ -181,6 +181,10 @@ pub struct Tuning {
     /// fsync + checkpoint at most this often while running (and always on stop).
     pub checkpoint_every: Duration,
     pub cancel: Option<Cancel>,
+    /// When given, the finished file must have this SHA-256 or it isn't published (step 2.32).
+    pub expected_sha256: Option<[u8; 32]>,
+    /// Windows of secured bytes re-checked against the server on resume (lying checkpoints).
+    pub resume_samples: u32,
 }
 
 impl Default for Tuning {
@@ -201,6 +205,8 @@ impl Default for Tuning {
             checkpoint: None,
             checkpoint_every: Duration::from_secs(15),
             cancel: None,
+            expected_sha256: None,
+            resume_samples: 4,
         }
     }
 }
@@ -220,6 +226,11 @@ pub enum JobError {
     Disk(DiskFailure),
     #[error("every network failed; last error: {0}")]
     AllNetworksFailed(String),
+    #[error("the downloaded file doesn't match the expected SHA-256")]
+    ChecksumMismatch {
+        expected: [u8; 32],
+        actual: [u8; 32],
+    },
     #[error("paused; progress is saved")]
     Paused,
     #[error("this download can't be resumed: {0}")]
@@ -709,6 +720,34 @@ fn scaled(ms: u64, t: &Tuning) -> Duration {
     Duration::from_millis((ms as f64 * t.retry_delay_scale.clamp(0.0, 1.0)) as u64)
 }
 
+/// Reads the server's current ETag/Last-Modified with a 1-byte request and makes it
+/// the accepted validator. False when the server can't be asked.
+async fn adopt_current_validator(ctx: &Arc<Ctx>, net: &Network) -> bool {
+    let Ok(mut c) = connect(net, &ctx.src, &ctx.tuning).await else {
+        return false;
+    };
+    let Ok(res) = send(
+        &mut c,
+        request(&ctx.src, &ctx.tuning, Some((0, Some(0))), None),
+        &ctx.tuning,
+    )
+    .await
+    else {
+        return false;
+    };
+    if !matches!(res.status().as_u16(), 200 | 206) {
+        return false;
+    }
+    let raw = header(&res, ETAG)
+        .map(|e| e.trim().to_string())
+        .filter(|e| !e.is_empty());
+    let lm = header(&res, LAST_MODIFIED);
+    let mut s = ctx.lock();
+    s.accepted_etag = raw.as_deref().map(headers::normalize_etag);
+    s.if_range = raw.filter(|e| !is_weak(e)).or(lm);
+    true
+}
+
 /// fsyncs the staging file, then hands the durable progress to the checkpoint sink (L-55).
 async fn emit_checkpoint(ctx: &Arc<Ctx>) {
     let Some(sink) = ctx.tuning.checkpoint.clone() else {
@@ -760,6 +799,86 @@ async fn emit_checkpoint(ctx: &Arc<Ctx>) {
     {
         (sink.0)(&cp);
     }
+}
+
+fn sha256_of(path: &Path) -> std::io::Result<[u8; 32]> {
+    use sha2::Digest;
+    use std::io::Read;
+    let mut f = std::fs::File::open(path)?;
+    let mut h = sha2::Sha256::new();
+    let mut buf = vec![0u8; 1 << 20];
+    loop {
+        let n = f.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        h.update(&buf[..n]);
+    }
+    Ok(h.finalize().into())
+}
+
+/// Compares up to `resume_samples` windows of secured bytes with the server.
+/// Returns false if any differs; true if they match or nothing is secured.
+async fn verify_resumed(ctx: &Arc<Ctx>, net: &Network) -> bool {
+    let windows: Vec<(u64, u64)> = {
+        let s = ctx.lock();
+        let secured: Vec<(u64, u64)> = s
+            .blocks
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| b.secured > 0)
+            .filter_map(|(i, b)| s.plan.block(i as u64).map(|(start, _)| (start, b.secured)))
+            .collect();
+        if secured.is_empty() {
+            return true;
+        }
+        let n = ctx.tuning.resume_samples.max(1) as usize;
+        let step = (secured.len() / n).max(1);
+        secured
+            .iter()
+            .step_by(step)
+            .take(n)
+            .map(|&(start, len)| (start, len.min(ctx.tuning.confirm_sample)))
+            .collect()
+    };
+    let Ok(mut c) = connect(net, &ctx.src, &ctx.tuning).await else {
+        return true;
+    }; // can't check now: the per-response checks still apply
+    for (start, len) in windows {
+        let Ok(res) = send(
+            &mut c,
+            request(
+                &ctx.src,
+                &ctx.tuning,
+                Some((start, Some(start + len - 1))),
+                None,
+            ),
+            &ctx.tuning,
+        )
+        .await
+        else {
+            return true;
+        };
+        if res.status().as_u16() != 206 {
+            return true;
+        }
+        let Ok(body) = res.into_body().collect().await.map(|b| b.to_bytes()) else {
+            return true;
+        };
+        let mut disk = vec![0u8; body.len()];
+        let Ok(file) = ctx.file.try_clone() else {
+            return true;
+        };
+        let read =
+            tokio::task::spawn_blocking(move || read_at(&file, start, &mut disk).map(|()| disk))
+                .await;
+        match read {
+            Ok(Ok(disk)) if disk == body.as_ref() => {}
+            Ok(Ok(_)) => return false,
+            _ => return true,
+        }
+    }
+    true
 }
 
 fn is_weak(etag: &str) -> bool {
@@ -1013,9 +1132,14 @@ async fn confirm_same_bytes(ctx: &Arc<Ctx>, net: &Network) -> bool {
             .map(|(i, b)| (s.plan.block(i as u64).map_or(0, |(st, _)| st), b.secured));
         match found {
             Some((start, secured)) => (start, secured.min(ctx.tuning.confirm_sample)),
-            None => return true, // nothing on disk yet: nothing to mix up, just take the new label
+            None => (0, 0),
         }
     };
+    if len == 0 {
+        // Nothing on disk yet, so nothing can be mixed up: adopt the server's current
+        // validator. (Returning without adopting it made every If-Range mismatch loop.)
+        return adopt_current_validator(ctx, net).await;
+    }
     let Ok(mut c) = connect(net, &ctx.src, &ctx.tuning).await else {
         return false;
     };
@@ -1247,6 +1371,25 @@ pub async fn download_with(
             .map_or(probe.last_modified.clone(), |(_, lm)| lm.clone()),
     });
 
+    // A resumed download re-checks a few windows of what the checkpoint calls secured.
+    // If any differs from the server, the checkpoint lied (corrupt row, edited file):
+    // distrust all of it and fetch everything again (L-53).
+    if resume.is_some() && !verify_resumed(&ctx, &networks[0]).await {
+        let saved = resumed_validators
+            .as_ref()
+            .and_then(|(raw, _)| raw.as_deref().map(headers::normalize_etag));
+        if saved.is_some() && saved != probe.etag {
+            // New label *and* different bytes: the file on the server changed.
+            drop(staging.discard());
+            return Err(JobError::VersionChanged);
+        }
+        // Same label, different bytes: the checkpoint (or the disk) lied. Start over.
+        let mut s = ctx.lock();
+        for b in &mut s.blocks {
+            b.secured = 0;
+        }
+    }
+
     // Interleave stream starts across networks (L-23).
     let mut controller =
         crate::concurrency::Controller::new(if tuning.auto_streams && splittable {
@@ -1377,6 +1520,16 @@ pub async fn download_with(
         return Err(JobError::AllNetworksFailed(last_error));
     }
     let total = probe.total.or(unknown_total).unwrap_or(0);
+    if let Some(expected) = tuning.expected_sha256 {
+        let path = ctx.staging_path.clone();
+        let actual = tokio::task::spawn_blocking(move || sha256_of(&path))
+            .await
+            .map_err(|_| JobError::Disk(DiskFailure::Io))?
+            .map_err(|_| JobError::Disk(DiskFailure::Io))?;
+        if actual != expected {
+            return Err(JobError::ChecksumMismatch { expected, actual }); // staging kept for inspection
+        }
+    }
     let path = staging.publish(total)?;
     Ok(Report {
         path,

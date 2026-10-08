@@ -603,3 +603,22 @@ async fn a_server_that_caps_connections_is_respected_not_hammered() {
         late.len()
     );
 }
+
+#[tokio::test]
+async fn an_etag_change_before_any_byte_is_secured_is_adopted_not_looped() {
+    // Regression: confirming with nothing on disk returned "same" without adopting the
+    // new validator, so every If-Range mismatch repeated forever.
+    let content = Content::new(600 * KB, 61);
+    let server = RangeServer::start(content).await.unwrap();
+    server.swap_at_request(2, content, "\"relabelled-at-once\"");
+    let (dir, mut t) = (tempfile::tempdir().unwrap(), tuning());
+    t.auto_streams = false;
+    t.streams_per_network = 2;
+    let res = tokio::time::timeout(
+        Duration::from_secs(20),
+        download(source(&server), vec![plain(1)], dir.path(), t),
+    )
+    .await
+    .expect("looped instead of adopting the new ETag");
+    assert_exact(&res.unwrap(), content);
+}

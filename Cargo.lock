@@ -359,6 +359,7 @@ dependencies = [
  "hyper-util",
  "percent-encoding",
  "proptest",
+ "sha2",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",

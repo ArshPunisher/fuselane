@@ -196,11 +196,7 @@ async fn a_lying_checkpoint_never_corrupts_the_file() {
         }
         let res = resume(&server, dir.path(), r).await;
         match (lie, res) {
-            // Claiming everything is secured can't be disproved without hashes; the size check
-            // still holds, and checksum verification (STEPS 2.32) catches the rest.
-            (0, Ok(report)) => {
-                assert_eq!(std::fs::metadata(&report.path).unwrap().len(), content.size)
-            }
+            // Claiming everything is secured is caught by sampling secured bytes on resume.
             (_, Ok(report)) => assert_eq!(
                 sha256_file(&report.path).unwrap(),
                 content.sha256(),
@@ -220,4 +216,36 @@ async fn a_deleted_partial_file_is_not_resumable() {
     std::fs::remove_file(&cp.staging_path).unwrap();
     let res = resume(&server, dir.path(), Option::<Resume>::from(cp).unwrap()).await;
     assert!(matches!(res, Err(JobError::NotResumable(_))), "{res:?}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_expected_checksum_is_enforced() {
+    use fuselane_engine_http::download::download;
+    let content = Content::new(300 * KB, 49);
+    let server = RangeServer::start(content).await.unwrap();
+    let good = Tuning {
+        expected_sha256: Some(content.sha256()),
+        retry_delay_scale: 0.05,
+        ..Tuning::default()
+    };
+    let d1 = tempfile::tempdir().unwrap();
+    let report = download(source(&server), vec![plain(1)], d1.path(), good)
+        .await
+        .unwrap();
+    assert_eq!(sha256_file(&report.path).unwrap(), content.sha256());
+    let bad = Tuning {
+        expected_sha256: Some([7u8; 32]),
+        retry_delay_scale: 0.05,
+        ..Tuning::default()
+    };
+    let d2 = tempfile::tempdir().unwrap();
+    let res = download(source(&server), vec![plain(1)], d2.path(), bad).await;
+    assert!(
+        matches!(res, Err(JobError::ChecksumMismatch { .. })),
+        "{res:?}"
+    );
+    assert!(
+        !d2.path().join("file.bin").exists(),
+        "a mismatching file is never published"
+    );
 }
