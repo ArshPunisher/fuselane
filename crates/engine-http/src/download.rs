@@ -65,6 +65,16 @@ pub struct Source {
     pub path: String,
 }
 
+/// Called with (bytes written so far, total if known). Keep it cheap; it runs on the data path.
+#[derive(Clone)]
+pub struct ProgressFn(pub Arc<dyn Fn(u64, Option<u64>) + Send + Sync>);
+
+impl std::fmt::Debug for ProgressFn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ProgressFn")
+    }
+}
+
 /// Every tunable in one place (CLAUDE.md coding conventions).
 #[derive(Debug, Clone)]
 pub struct Tuning {
@@ -80,6 +90,7 @@ pub struct Tuning {
     pub user_agent: String,
     /// Multiplies every retry wait (tests compress time; production uses 1.0).
     pub retry_delay_scale: f64,
+    pub progress: Option<ProgressFn>,
 }
 
 impl Default for Tuning {
@@ -94,6 +105,7 @@ impl Default for Tuning {
             confirm_sample: 16 * 1024,
             user_agent: format!("Fuselane/{}", env!("CARGO_PKG_VERSION")),
             retry_delay_scale: 1.0,
+            progress: None,
         }
     }
 }
@@ -132,7 +144,10 @@ pub struct Report {
 pub struct Probe {
     pub total: Option<u64>,
     pub ranges: bool,
+    /// Normalized, for comparing responses (L-06).
     pub etag: Option<String>,
+    /// Exactly as the server sent it: the only valid If-Range value (RFC 9110 §13.1.5).
+    pub raw_etag: Option<String>,
     pub last_modified: Option<String>,
     pub filename: String,
 }
@@ -230,8 +245,12 @@ pub async fn probe(src: &Source, networks: &[Network], t: &Tuning) -> Result<Pro
             }
         };
         let status = res.status().as_u16();
-        let etag = header(&res, ETAG)
-            .map(|e| headers::normalize_etag(&e))
+        let raw_etag = header(&res, ETAG)
+            .map(|e| e.trim().to_string())
+            .filter(|e| !e.is_empty());
+        let etag = raw_etag
+            .as_deref()
+            .map(headers::normalize_etag)
             .filter(|e| !e.is_empty());
         let last_modified = header(&res, LAST_MODIFIED);
         let disposition = header(&res, CONTENT_DISPOSITION)
@@ -253,6 +272,7 @@ pub async fn probe(src: &Source, networks: &[Network], t: &Tuning) -> Result<Pro
             total,
             ranges,
             etag,
+            raw_etag,
             last_modified,
             filename,
         });
@@ -276,7 +296,11 @@ struct Shared {
     dead_networks: HashSet<NetId>,
     /// Consecutive link refusals per network (status, count), reset by delivered bytes.
     link_refused: HashMap<NetId, (u16, u32)>,
+    /// Normalized ETag that responses must match (updated when a relabel is confirmed).
     accepted_etag: Option<String>,
+    /// If-Range value: the raw strong ETag, else Last-Modified, else none
+    /// (weak ETags can't be used in If-Range; a normalized one makes servers send 200).
+    if_range: Option<String>,
     bytes_by_network: HashMap<NetId, u64>,
     fatal: Option<JobError>,
     last_error: String,
@@ -526,6 +550,10 @@ fn scaled(ms: u64, t: &Tuning) -> Duration {
     Duration::from_millis((ms as f64 * t.retry_delay_scale.clamp(0.0, 1.0)) as u64)
 }
 
+fn is_weak(etag: &str) -> bool {
+    etag.starts_with("W/") || etag.starts_with("w/")
+}
+
 enum Outcome {
     /// Another attempt completed the block; this one stopped early.
     Lost,
@@ -540,10 +568,16 @@ async fn fetch_block(
     work: scheduler::Work,
     conn: &mut Option<Conn>,
 ) -> Result<f64, Outcome> {
-    let (block_start, block_len, total, etag) = {
+    let (block_start, block_len, total, etag, if_range) = {
         let s = ctx.lock();
         let (start, len) = s.plan.block(work.block as u64).unwrap_or((0, 0));
-        (start, len, s.plan.total, s.accepted_etag.clone())
+        (
+            start,
+            len,
+            s.plan.total,
+            s.accepted_etag.clone(),
+            s.if_range.clone(),
+        )
     };
     if conn.is_none() {
         *conn = Some(
@@ -570,7 +604,7 @@ async fn fetch_block(
     };
     let res = send(
         c,
-        request(&ctx.src, &ctx.tuning, range, etag.as_deref()),
+        request(&ctx.src, &ctx.tuning, range, if_range.as_deref()),
         &ctx.tuning,
     )
     .await
@@ -589,6 +623,14 @@ async fn fetch_block(
     let got_etag = header(&res, ETAG)
         .map(|e| headers::normalize_etag(&e))
         .filter(|e| !e.is_empty());
+    // A 200 to a request carrying If-Range means the validator no longer matches
+    // (RFC 9110 §13.1.5): the file may have changed. Size proves it; otherwise sample.
+    if status == 200 && want_first > 0 && if_range.is_some() {
+        let length = header(&res, CONTENT_LENGTH).and_then(|v| v.parse::<u64>().ok());
+        *conn = None;
+        let size_changed = matches!((length, total), (Some(l), Some(t)) if l != t);
+        return Err(Outcome::Failed(Failure::VersionChanged { size_changed }));
+    }
     let accepted = headers::check_range_response(
         want_first,
         want_last,
@@ -712,7 +754,12 @@ fn advance(ctx: &Ctx, block: usize, stream: StreamId, net: NetId, position: u64,
         a.position = a.position.max(position);
     }
     *s.bytes_by_network.entry(net).or_default() += new_bytes;
-    ctx.written_total.fetch_add(new_bytes, Ordering::Relaxed);
+    let total = s.plan.total;
+    drop(s);
+    let written = ctx.written_total.fetch_add(new_bytes, Ordering::Relaxed) + new_bytes;
+    if let Some(p) = &ctx.tuning.progress {
+        (p.0)(written, total);
+    }
 }
 
 async fn write_chunk(ctx: &Arc<Ctx>, offset: u64, data: &Bytes) -> Result<(), Failure> {
@@ -774,7 +821,8 @@ async fn confirm_same_bytes(ctx: &Arc<Ctx>, net: &Network) -> bool {
     if res.status().as_u16() != 206 {
         return false;
     }
-    let new_etag = header(&res, ETAG).map(|e| headers::normalize_etag(&e));
+    let new_raw = header(&res, ETAG).map(|e| e.trim().to_string());
+    let new_etag = new_raw.as_deref().map(headers::normalize_etag);
     let Ok(bytes) = res.into_body().collect().await.map(|b| b.to_bytes()) else {
         return false;
     };
@@ -789,7 +837,11 @@ async fn confirm_same_bytes(ctx: &Arc<Ctx>, net: &Network) -> bool {
     .await;
     match read {
         Ok(Ok(disk)) if disk == bytes.as_ref() && bytes.len() as u64 == len => {
-            ctx.lock().accepted_etag = new_etag;
+            let mut s = ctx.lock();
+            s.accepted_etag = new_etag;
+            s.if_range = new_raw
+                .filter(|e| !is_weak(e))
+                .or(s.if_range.take().filter(|v| !v.starts_with('"')));
             true
         }
         _ => false,
@@ -879,7 +931,12 @@ pub async fn download(
             idle: HashMap::new(),
             dead_networks: HashSet::new(),
             link_refused: HashMap::new(),
-            accepted_etag: probe.etag.clone().or(probe.last_modified.clone()),
+            accepted_etag: probe.etag.clone(),
+            if_range: probe
+                .raw_etag
+                .clone()
+                .filter(|e| !is_weak(e))
+                .or(probe.last_modified.clone()),
             bytes_by_network: HashMap::new(),
             fatal: None,
             last_error: String::new(),
