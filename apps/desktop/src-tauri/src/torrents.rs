@@ -159,6 +159,8 @@ pub struct Torrents {
     dht: bool,
     limiter: Option<Arc<fuselane_limits::Limiter>>,
     seed: Mutex<SeedSettings>,
+    /// When the network list was last re-read (torrents follow plug and unplug).
+    nets_checked: Mutex<Option<Instant>>,
     engine: OnceCell<Arc<TorrentEngine>>,
     entries: tokio::sync::Mutex<Vec<Entry>>,
     pending: Mutex<Vec<Listing>>,
@@ -326,6 +328,7 @@ impl Torrents {
             dht,
             limiter,
             seed: Mutex::new(seed),
+            nets_checked: Mutex::new(None),
             engine: OnceCell::new(),
             entries: tokio::sync::Mutex::new(Vec::new()),
             pending: Mutex::new(Vec::new()),
@@ -808,6 +811,27 @@ impl Torrents {
         active || released
     }
 
+    /// Every 10 s, hands the engine the networks present now, so a phone tethered
+    /// mid-torrent joins in and an unplugged network stops taking peers.
+    fn follow_networks(&self, engine: &TorrentEngine) {
+        {
+            let mut last = self
+                .nets_checked
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if last.is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(10)) {
+                return;
+            }
+            *last = Some(Instant::now());
+        }
+        // A failed or empty listing is ignored: keep what we had rather than nothing.
+        if let Ok(now) = (self.networks)()
+            && !now.is_empty()
+        {
+            engine.set_networks(now);
+        }
+    }
+
     /// True when the limiter blocks every network this torrent uses.
     fn all_networks_used_up(&self, v: &TorrentView) -> bool {
         self.limiter.as_ref().is_some_and(|l| {
@@ -823,9 +847,10 @@ impl Torrents {
     /// Called every second: refreshes, releases finished torrents, and tells the
     /// window when something moved.
     pub async fn tick(&self) {
-        if self.engine.get().is_none() {
+        let Some(engine) = self.engine.get().cloned() else {
             return;
-        }
+        };
+        self.follow_networks(&engine);
         if self.refresh(true).await {
             self.publish().await;
         }
@@ -1533,6 +1558,62 @@ mod tests {
             !s.downloads.join("T").join("b.bin").exists(),
             "unchosen file cleaned up on release"
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn torrents_follow_networks_coming_and_going() {
+        logs();
+        let dir = tempfile::tempdir().unwrap();
+        let store = Arc::new(Store::open(&dir.path().join("fuselane.db")).unwrap());
+        let net = |name: &str| Interface {
+            name: name.into(),
+            display_name: name.into(),
+            index: 1,
+            kind: fuselane_netif::Kind::Ethernet,
+            addrs: vec![IpAddr::V4(Ipv4Addr::LOCALHOST)],
+        };
+        let list = Arc::new(Mutex::new(vec![net("en0")]));
+        let source: NetSource = {
+            let list = list.clone();
+            Arc::new(move || Ok(list.lock().unwrap().clone()))
+        };
+        let tor = Torrents::new(
+            store,
+            dir.path().join("state"),
+            dir.path().to_path_buf(),
+            source,
+            false,
+            None,
+            Arc::new(|_| {}),
+        );
+        let engine = tor.engine().await.unwrap();
+        let names = || {
+            engine
+                .interfaces()
+                .into_iter()
+                .map(|i| i.name)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(names(), vec!["en0"]);
+        *list.lock().unwrap() = vec![net("en0"), net("en7")];
+        tor.tick().await;
+        assert_eq!(names(), vec!["en0", "en7"], "a tethered phone joins");
+        // Not re-read again within 10 s.
+        *list.lock().unwrap() = vec![net("en7")];
+        tor.tick().await;
+        assert_eq!(names(), vec!["en0", "en7"]);
+        *tor.nets_checked.lock().unwrap() = None;
+        tor.tick().await;
+        assert_eq!(
+            names(),
+            vec!["en7"],
+            "an unplugged network stops taking peers"
+        );
+        // An empty listing (a blip) keeps what was there.
+        list.lock().unwrap().clear();
+        *tor.nets_checked.lock().unwrap() = None;
+        tor.tick().await;
+        assert_eq!(names(), vec!["en7"]);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
