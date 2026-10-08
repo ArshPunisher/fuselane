@@ -265,6 +265,9 @@ pub struct RunOptions {
     pub retry_delay_scale: Option<f64>,
     /// Live speed limits shared with other downloads.
     pub limiter: Option<Arc<fuselane_limits::Limiter>>,
+    /// Look the server up through each network (public resolvers) as well as the
+    /// system resolver. Off by default: those resolvers see the server's name.
+    pub per_network_dns: bool,
 }
 
 /// Why a job couldn't start at all (nothing in the store changed state).
@@ -384,26 +387,75 @@ pub fn remove(store: &Store, id: i64) -> Result<(), crate::StoreError> {
 async fn connect_plan(
     link: &str,
     chosen: &[String],
+    per_network_dns: bool,
 ) -> Result<(Source, Vec<Network>, Vec<(u32, String)>), StartError> {
     let (https, host, port, path) = parse_link(link).map_err(StartError::BadInput)?;
     let ifaces = pick_networks(chosen).map_err(StartError::BadInput)?;
-    let addrs: Vec<SocketAddr> = match tokio::time::timeout(
-        Duration::from_secs(10),
-        tokio::net::lookup_host((host.as_str(), port)),
-    )
-    .await
-    {
-        Ok(Ok(a)) => a.collect(),
-        _ => {
-            return Err(StartError::Setup(format!(
-                "couldn't find the server \"{host}\". Check the link and your connection."
-            )));
+    let literal = host.parse::<std::net::IpAddr>().is_ok();
+    // The computer's own resolver, and (when enabled) each network's own lookup.
+    let system = async {
+        tokio::time::timeout(
+            Duration::from_secs(10),
+            tokio::net::lookup_host((host.as_str(), port)),
+        )
+        .await
+        .ok()
+        .and_then(Result::ok)
+        .map(|a| a.collect::<Vec<SocketAddr>>())
+        .unwrap_or_default()
+    };
+    let per_net = async {
+        if !per_network_dns || literal {
+            return vec![Vec::new(); ifaces.len()];
         }
+        // All networks look up at once; each answer keeps its network's position.
+        let mut set = tokio::task::JoinSet::new();
+        for (i, f) in ifaces.iter().enumerate() {
+            let (f, host) = (f.clone(), host.clone());
+            set.spawn(async move {
+                let r = fuselane_transport::dns::resolve_on(
+                    &f,
+                    &host,
+                    &fuselane_transport::dns::PUBLIC_RESOLVERS,
+                    Duration::from_millis(1500),
+                )
+                .await;
+                (i, r)
+            });
+        }
+        let mut out = vec![Vec::new(); ifaces.len()];
+        while let Some(Ok((i, r))) = set.join_next().await {
+            if let (Some(slot), Ok(ips)) = (out.get_mut(i), r) {
+                *slot = ips
+                    .into_iter()
+                    .map(|ip| SocketAddr::new(ip, port))
+                    .collect();
+            }
+        }
+        out
     };
-    let Some(first) = addrs.first().copied() else {
-        return Err(StartError::Setup(format!("\"{host}\" has no addresses.")));
+    let (system, per_net) = tokio::join!(system, per_net);
+    // Each network tries its own answer first, then the system's as a fallback.
+    let per_iface: Vec<Vec<SocketAddr>> = per_net
+        .into_iter()
+        .map(|mut own| {
+            for a in &system {
+                if !own.contains(a) {
+                    own.push(*a);
+                }
+            }
+            own
+        })
+        .collect();
+    let Some(first) = system
+        .first()
+        .copied()
+        .or_else(|| per_iface.iter().flatten().next().copied())
+    else {
+        return Err(StartError::Setup(format!(
+            "couldn't find the server \"{host}\". Check the link and your connection."
+        )));
     };
-    let addrs = Arc::new(addrs);
     let host_arc: Arc<str> = Arc::from(host.as_str());
     let names: Vec<(u32, String)> = ifaces
         .iter()
@@ -412,12 +464,13 @@ async fn connect_plan(
         .collect();
     let networks: Vec<Network> = ifaces
         .into_iter()
+        .zip(per_iface)
         .enumerate()
-        .map(|(i, f)| {
+        .map(|(i, (f, addrs))| {
             network_for(
                 i as u32 + 1,
                 f,
-                addrs.clone(),
+                Arc::new(addrs),
                 https,
                 host_arc.clone(),
                 Duration::from_secs(10),
@@ -448,7 +501,9 @@ pub struct Preview {
 
 /// Asks the server about a link (one tiny ranged request, L-01).
 pub async fn preview(link: &str) -> Result<Preview, String> {
-    let (source, networks, _) = connect_plan(link, &[]).await.map_err(|e| e.to_string())?;
+    let (source, networks, _) = connect_plan(link, &[], false)
+        .await
+        .map_err(|e| e.to_string())?;
     let tuning = Tuning {
         connect_timeout: Duration::from_secs(6),
         first_byte_timeout: Duration::from_secs(6),
@@ -473,7 +528,8 @@ pub async fn run(
     resume: Option<Resume>,
     opts: RunOptions,
 ) -> Result<Outcome, StartError> {
-    let (source, networks, names) = connect_plan(link, &opts.networks).await?;
+    let (source, networks, names) =
+        connect_plan(link, &opts.networks, opts.per_network_dns).await?;
     let sink = {
         let store = store.clone();
         CheckpointFn(Arc::new(move |cp| {
