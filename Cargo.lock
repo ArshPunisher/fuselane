@@ -1215,6 +1215,7 @@ dependencies = [
  "fuselane-limits",
  "fuselane-netif",
  "fuselane-testkit",
+ "fuselane-transport",
  "serde",
  "serde_json",
  "tauri",

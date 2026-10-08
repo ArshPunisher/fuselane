@@ -6,6 +6,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod native;
+mod selftest;
 mod service;
 
 use std::sync::Arc;
@@ -225,6 +226,31 @@ fn open_service() -> Result<Arc<Service>, String> {
 }
 
 fn main() {
+    // Headless checks for the release workflow (L-75); never opens a window.
+    if std::env::args().any(|a| a == "--self-test") {
+        let checks = selftest::run();
+        let report: String = checks
+            .iter()
+            .map(|c| {
+                format!(
+                    "{} {:<9} {}\n",
+                    if c.ok { "ok  " } else { "FAIL" },
+                    c.name,
+                    c.detail
+                )
+            })
+            .collect();
+        print!("{report}");
+        // Windows release builds have no console, so CI can ask for a report file.
+        if let Some(path) = std::env::var_os("FUSELANE_SELFTEST_OUT") {
+            let _ = std::fs::write(path, &report);
+        }
+        std::process::exit(if checks.iter().all(|c| c.ok) { 0 } else { 1 });
+    }
+    if std::env::args().any(|a| a == "--version") {
+        println!("fuselane-desktop {}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
     let svc = match open_service() {
         Ok(s) => s,
         Err(e) => {

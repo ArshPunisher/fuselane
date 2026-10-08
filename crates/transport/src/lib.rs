@@ -173,6 +173,11 @@ pub fn self_test() -> Result<(), TransportError> {
     })
 }
 
+/// Checks that TLS can be set up here (crypto provider and the OS trust store).
+pub fn tls_ready() -> Result<(), String> {
+    tls_config().map(|_| ())
+}
+
 /// One shared client config: ring crypto, safe protocol versions, and the OS trust
 /// store (so corporate CAs work, tech research §2.2). Built once.
 fn tls_config() -> Result<Arc<rustls::ClientConfig>, String> {
