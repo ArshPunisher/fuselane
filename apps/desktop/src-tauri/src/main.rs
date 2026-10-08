@@ -9,7 +9,7 @@ mod service;
 
 use std::sync::Arc;
 
-use service::{JobView, NetView, Service, UiError, UiEvent};
+use service::{JobView, NetView, PreviewView, Service, UiError, UiEvent};
 use tauri::Manager;
 use tauri::ipc::Channel;
 use tauri::menu::{Menu, MenuItem};
@@ -60,6 +60,12 @@ async fn resume(svc: State<'_>, id: i64) -> Result<(), UiError> {
 #[tauri::command]
 async fn remove(svc: State<'_>, id: i64) -> Result<(), UiError> {
     svc.remove(id)
+}
+
+/// Name, size and splittability of a link, before downloading it.
+#[tauri::command]
+async fn preview(url: String) -> Result<PreviewView, UiError> {
+    service::preview(&url).await
 }
 
 /// Shows a finished file in Finder / Explorer / the file manager.
@@ -187,6 +193,7 @@ fn main() {
             resume,
             remove,
             reveal,
+            preview,
             open_file,
             pick_folder,
             subscribe

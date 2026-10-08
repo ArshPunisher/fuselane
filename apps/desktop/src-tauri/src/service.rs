@@ -72,6 +72,30 @@ pub struct Live {
     pub hedges: u64,
 }
 
+/// What a link points at, shown in the New download dialog before starting.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewView {
+    pub filename: String,
+    pub total: Option<u64>,
+    pub splittable: bool,
+}
+
+/// Looks a link up without downloading it. Bad links fail fast with `bad-link`.
+pub async fn preview(url: &str) -> Result<PreviewView, UiError> {
+    let url = url.trim();
+    parse_link(url)
+        .map_err(|m| UiError::new("bad-link", m, Some("Links start with http:// or https://.")))?;
+    let p = runner::preview(url)
+        .await
+        .map_err(|m| UiError::new("preview-failed", m, None))?;
+    Ok(PreviewView {
+        filename: p.filename,
+        total: p.total,
+        splittable: p.splittable,
+    })
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum UiEvent {
@@ -1002,12 +1026,18 @@ mod tests {
             hedges: 0,
         };
         let err = UiError::new("c", "m", None);
+        let pv = PreviewView {
+            filename: "f".into(),
+            total: None,
+            splittable: true,
+        };
         for (name, got) in [
             ("JobView", json_fields(&job)),
             ("NetView", json_fields(&net)),
             ("LiveNet", json_fields(&lnet)),
             ("Live", json_fields(&live)),
             ("UiError", json_fields(&err)),
+            ("PreviewView", json_fields(&pv)),
         ] {
             assert_eq!(
                 got,

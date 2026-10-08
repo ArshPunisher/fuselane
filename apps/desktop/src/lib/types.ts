@@ -59,3 +59,9 @@ export interface AppInfo {
   version: string
   defaultDir: string
 }
+
+export interface PreviewView {
+  filename: string
+  total: number | null
+  splittable: boolean
+}
