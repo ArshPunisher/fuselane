@@ -18,15 +18,14 @@
   - UI in a browser (demo data): `pnpm --filter @fuselane/desktop dev`, then open http://localhost:5190.
   - Real app: `pnpm --filter @fuselane/desktop build`, then `cargo run -p fuselane-desktop --features tauri/custom-protocol` (or `pnpm --filter @fuselane/desktop tauri dev`).
 - **Next steps, in order:**
-  2. 3.4 dialog: drop a link, probe preview (name and size before starting). (Folder picker done.)
-  3. 3.6 complete/error screens with catalogue actions; 3.10 tray progress, notifications. (Open / Show in Finder done.)
+  3. 3.6 complete/error screens with catalogue actions. (Done: Open / Show in Finder, Dock/taskbar progress, finish/stop notifications, tray speed tooltip, link preview, paste/drop a link.)
   5. P2 leftovers: per-network DNS (2.13), Windows/Linux friendly names (2.7, 2.8), free-space check (2.20), sleep/wake (2.39), `--json`.
 - **Repo:** public at https://github.com/ArshPunisher/fuselane (pushed 2026-10-08). First CI run **green on macOS, Windows and Linux**. `main` blocks force-push and deletion. Push only `main` and only when the owner says "push"; spikes stay local.
 - **Waiting on the owner:**
   - Enable Renovate on the repo (install the free Renovate GitHub app); SignPath application once there is a release.
   - Q10: a phone to tether, for S1/S2-part-2/S3.
 - **Parked:** S5 torrent spike (librqbit + SOCKS5).
-- **Environment:** Rust via rustup (`source ~/.cargo/env`), cargo-nextest, cargo-deny, actionlint (Homebrew), Node 24, pnpm 11, Playwright WebKit + Chromium, gh logged in as ArshPunisher. macOS has no `timeout` command. Screen recording is granted (capture a window with `screencapture -l<id>`; find the id with a CGWindowList script); clicking is not (no Accessibility), so drive the real window with `FUSELANE_DEV_ADD=<url>` in debug builds.
+- **Environment:** Rust via rustup (`source ~/.cargo/env`), cargo-nextest, cargo-deny, actionlint (Homebrew), Node 24, pnpm 11, Playwright WebKit + Chromium, gh logged in as ArshPunisher. macOS has no `timeout` command. Screen recording is granted (capture a window with `screencapture -l<id>`; find the id with a CGWindowList script); clicking is not (no Accessibility), so drive the real window with `FUSELANE_DEV_ADD=<url>` in debug builds. macOS notifications only work from a bundle: `pnpm --filter @fuselane/desktop tauri build --debug --bundles app`, then run `target/debug/bundle/macos/Fuselane.app/Contents/MacOS/fuselane-desktop`.
 
 ## Log
 
