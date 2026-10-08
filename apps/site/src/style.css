@@ -112,6 +112,9 @@ a:hover {
 }
 
 .wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   color: var(--ink);
   font-size: 18px;
   font-weight: 650;
@@ -479,5 +482,53 @@ figcaption {
   }
   .platform {
     padding: 18px;
+  }
+}
+
+/* ---------- Logo motion: the lanes draw in, then fuse into one (once, on load) ---------- */
+
+.mark {
+  width: 30px;
+  height: 30px;
+  flex: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mark .lane,
+  .mark .fuse {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: draw 700ms var(--ease-out) forwards;
+  }
+  .mark .l1 {
+    animation-delay: 80ms;
+  }
+  .mark .l2 {
+    animation-delay: 180ms;
+  }
+  .mark .l3 {
+    animation-delay: 280ms;
+  }
+  .mark .fuse {
+    animation-duration: 520ms;
+    animation-delay: 760ms;
+  }
+  .wordmark:hover .mark .fuse {
+    animation: pulse 900ms var(--ease-out);
+  }
+}
+
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes pulse {
+  0% {
+    stroke-dashoffset: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
   }
 }

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://arshpunisher.github.io/fuselane/sitemap.xml

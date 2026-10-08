@@ -6,22 +6,87 @@
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#f9fafc" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0a0c11" media="(prefers-color-scheme: dark)" />
-    <title>Fuselane: one download, every network</title>
+    <title>Fuselane: free download manager that combines Wi-Fi, Ethernet and your phone</title>
     <meta
       name="description"
-      content="Free, open-source download manager that splits each download across your Wi-Fi, Ethernet and phone at once. macOS, Windows and Linux."
+      content="Fuselane splits each download across every network you have (Wi-Fi, Ethernet, a USB-tethered phone) and joins the parts into one verified file. Free and open source for macOS, Windows and Linux."
     />
+    <link rel="canonical" href="https://arshpunisher.github.io/fuselane/" />
+    <meta name="robots" content="index, follow" />
+    <link rel="icon" href="favicon.ico" sizes="32x32" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <link rel="manifest" href="site.webmanifest" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Fuselane" />
+    <meta property="og:url" content="https://arshpunisher.github.io/fuselane/" />
     <meta property="og:title" content="Fuselane: one download, every network" />
     <meta
       property="og:description"
-      content="Splits each download across every network you have, then joins the parts into one verified file."
+      content="Splits each download across Wi-Fi, Ethernet and your phone at once, then joins the parts into one verified file. Free for macOS, Windows and Linux."
     />
-    <meta property="og:image" content="app.png" />
+    <meta property="og:image" content="https://arshpunisher.github.io/fuselane/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Fuselane logo, the headline One download. Every network., and the app downloading over three networks."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Fuselane: one download, every network" />
+    <meta
+      name="twitter:description"
+      content="Free download manager that combines Wi-Fi, Ethernet and your phone into one fast download."
+    />
+    <meta name="twitter:image" content="https://arshpunisher.github.io/fuselane/og.png" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Fuselane",
+        "description": "Free, open-source download manager that splits each download across Wi-Fi, Ethernet and a USB-tethered phone at once, then joins the parts into one verified file.",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "macOS, Windows, Linux",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "url": "https://arshpunisher.github.io/fuselane/",
+        "downloadUrl": "https://github.com/ArshPunisher/fuselane/releases",
+        "image": "https://arshpunisher.github.io/fuselane/og.png",
+        "license": "https://www.apache.org/licenses/LICENSE-2.0",
+        "codeRepository": "https://github.com/ArshPunisher/fuselane",
+        "isAccessibleForFree": true
+      }
+    </script>
   </head>
   <body>
     <a class="skip" href="#main">Skip to content</a>
     <header class="nav">
-      <a class="wordmark" href="./" translate="no">Fuselane</a>
+      <a class="wordmark" href="./" translate="no" aria-label="Fuselane home">
+        <svg class="mark" viewBox="0 0 512 512" aria-hidden="true">
+          <g fill="none" stroke-linecap="round" stroke-width="34">
+            <path
+              class="lane l1"
+              pathLength="1"
+              d="M70 150 C 180 150, 220 256, 300 256"
+              stroke="var(--lane-tide)"
+            />
+            <path class="lane l2" pathLength="1" d="M70 256 L 300 256" stroke="var(--lane-volt)" />
+            <path
+              class="lane l3"
+              pathLength="1"
+              d="M70 362 C 180 362, 220 256, 300 256"
+              stroke="var(--lane-iris)"
+            />
+            <path
+              class="fuse"
+              pathLength="1"
+              d="M300 256 L 442 256"
+              stroke="var(--fuse)"
+              stroke-width="46"
+            />
+          </g>
+        </svg>
+        <span>Fuselane</span>
+      </a>
       <nav aria-label="Site">
         <a href="#download">Download</a>
         <a href="#privacy">Privacy</a>

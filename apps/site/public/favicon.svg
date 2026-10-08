@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Small-size mark: heavier strokes so it reads at 16 px. -->
+  <rect width="64" height="64" rx="14" fill="#0a0c11" />
+  <g fill="none" stroke-linecap="round" stroke-width="6.5">
+    <path d="M10 18 C 23 18, 27 32, 37 32" stroke="#43cae7" />
+    <path d="M10 32 L 37 32" stroke="#ade25f" />
+    <path d="M10 46 C 23 46, 27 32, 37 32" stroke="#959af4" />
+    <path d="M37 32 L 54 32" stroke="#fd8537" stroke-width="8.5" />
+  </g>
+</svg>

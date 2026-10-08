@@ -104,3 +104,61 @@ test('the page mentions SignPath, privacy, and never scrolls sideways on a phone
   ).toBeLessThanOrEqual(0)
   await expect(page.locator('img[alt]')).toHaveCount(1)
 })
+
+test('SEO: title, description, canonical, share card and structured data are right', async ({
+  page,
+  request,
+}) => {
+  await withFeed(page)
+  await page.goto('/')
+  const title = await page.title()
+  expect(title.length).toBeGreaterThan(20)
+  expect(title.length).toBeLessThanOrEqual(80)
+  const desc = (await page.locator('meta[name="description"]').getAttribute('content')) ?? ''
+  expect(desc.length).toBeGreaterThan(70)
+  expect(desc.length).toBeLessThanOrEqual(200)
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+    'href',
+    'https://arshpunisher.github.io/fuselane/',
+  )
+  await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
+    'content',
+    /^https:\/\/.+\/og\.png$/,
+  )
+  await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute(
+    'content',
+    'summary_large_image',
+  )
+  await expect(page.locator('h1')).toHaveCount(1)
+  const ld = JSON.parse(
+    (await page.locator('script[type="application/ld+json"]').textContent()) ?? '{}',
+  )
+  expect(ld['@type']).toBe('SoftwareApplication')
+  expect(ld.offers.price).toBe('0')
+  expect(ld.operatingSystem).toContain('Windows')
+  for (const path of [
+    'robots.txt',
+    'sitemap.xml',
+    'favicon.ico',
+    'favicon.svg',
+    'og.png',
+    'site.webmanifest',
+    'apple-touch-icon.png',
+  ]) {
+    const r = await request.get(`/${path}`)
+    expect(r.status(), path).toBe(200)
+  }
+  expect(await (await request.get('/robots.txt')).text()).toContain(
+    'Sitemap: https://arshpunisher.github.io/fuselane/sitemap.xml',
+  )
+})
+
+test('the header logo animates in and ends fully drawn', async ({ page }) => {
+  await withFeed(page)
+  await page.goto('/')
+  await page.waitForTimeout(1500)
+  const offsets = await page
+    .locator('.mark path')
+    .evaluateAll((ps) => ps.map((p) => getComputedStyle(p).strokeDashoffset))
+  expect(offsets.every((o) => o === '0' || o === '0px')).toBe(true)
+})
