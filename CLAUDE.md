@@ -35,7 +35,8 @@ A cross-platform (macOS, Windows, Linux; Android later) **download and upload ma
 | Errors and messages | `docs/03-architecture/ERRORS.md` |
 | Security | `docs/03-architecture/SECURITY.md` |
 | Per-OS details | `docs/03-architecture/PLATFORMS.md` |
-| Decisions | `docs/adr/` |
+| **Visual design, tokens, motion** | `docs/07-design/DESIGN-SYSTEM.md`, `docs/07-design/MOTION.md` |
+| Decisions | `docs/adr/` (0009 = **zero-cost policy: no paid services**) |
 | Phases, steps, status, open questions | `docs/04-plan/` |
 | Test levels and gates | `docs/05-quality/TESTING.md` |
 | Workflow, commits, releases | `docs/06-process/WORKFLOW.md` |
@@ -74,7 +75,7 @@ Whenever building or changing UI (desktop, extension popup, share page, landing 
 1. Load the **`design-taste-frontend`** skill first and follow it (yes, even for app screens).
 2. After the change, review with the **`web-design-guidelines`** skill and fix what it finds.
 3. Check it in a real browser with **`playwright-cli`** (including the minimum window size and 375px for web pages), and take screenshots.
-4. For visual direction, use a brand reference from `~/.claude/design-md/design-md/<brand>/` (ask the owner or suggest one).
+4. Follow `docs/07-design/DESIGN-SYSTEM.md` and `MOTION.md` (direction approved). Write a motion brief, build the hardest second first, attach a contact sheet to the PR.
 5. Keep it light for WebKitGTK: virtualized lists, no heavy blur.
 
 ## Git

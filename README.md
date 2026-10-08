@@ -26,6 +26,7 @@ Fuselane is a cross-platform download **and upload** manager. It spreads one tra
 | [`docs/04-plan`](docs/04-plan) | Roadmap, detailed steps, live status, open questions |
 | [`docs/05-quality`](docs/05-quality) | Testing strategy, test levels, hardware matrix |
 | [`docs/06-process`](docs/06-process) | How we work: workflow, commits, branches, releases |
+| [`docs/07-design`](docs/07-design) | Design system ("Lanes → Fuse") and motion language |
 | [`docs/adr`](docs/adr) | Architecture Decision Records |
 
 Start with [`docs/00-overview/VISION.md`](docs/00-overview/VISION.md), then [`docs/04-plan/ROADMAP.md`](docs/04-plan/ROADMAP.md).

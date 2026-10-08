@@ -30,6 +30,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [ ] 1.6 S5 librqbit + SOCKS5 balancer
 - [ ] 1.7 S6 R2 multipart from 2 pinned networks
 - [ ] 1.8 S8 native messaging round trip on 3 OSes
+- [ ] 1.8b S9 Lane Weave prototype (lab route, synthetic feed, contact sheet) — MOTION.md §6
 - [ ] 1.9 Update ADRs 0002/0006/0007 (Accepted or superseded) and adjust the design docs to the spike results
 
 ## P2 Core + CLI (production code, test-first)
@@ -100,10 +101,12 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 ## P3 Desktop app (load the design-taste-frontend skill first; review with web-design-guidelines; check with playwright-cli)
 
 - [ ] 3.1 Tauri 2 app shell embedding the core; capabilities and CSP locked down; tauri-specta types generated into `packages/api-types`
-- [ ] 3.2 Design system in `packages/ui` (tokens, light/dark/system, typography, components) — pick the visual direction first
+- [ ] 3.2 Design system in `packages/ui` from [DESIGN-SYSTEM.md](../07-design/DESIGN-SYSTEM.md): tokens, light/dark/system, Geist fonts, Phosphor icons, components with every state
+- [ ] 3.2b Contact-sheet script (Playwright: keyframes × themes × widths → one PNG) used on every UI PR — MOTION.md §6
+- [ ] 3.2c Responsive shell: compact (bottom tabs, sheets), regular (rail), wide (three panes); min window 360 × 560
 - [ ] 3.3 Downloads list: groups, filters, rows, per-network progress, virtualized — L-81, L-84
 - [ ] 3.4 New download dialog: paste/clipboard/drop, probe states, file name, destination, network chips, streams, warnings — L-62
-- [ ] 3.5 Detail screen: hero speed, ×-faster chip, throughput chart, block grid, network table with streams
+- [ ] 3.5 Detail screen: hero speed (NumberFlow), ×-faster chip, Lane Weave, Loom, Strata chart, network table with streams and orbs
 - [ ] 3.6 Complete and error screens with the error catalogue actions; Fix link
 - [ ] 3.7 Selection toolbar with confirmations; Trash; Reveal
 - [ ] 3.8 Networks menu, rename/recolour, health probe and speed test, guided setup (Windows Wi-Fi policy, Android-on-Mac)
@@ -151,7 +154,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [ ] 6.7 Share page (Worker-served): metadata, download via presigned GET, in-browser decrypt (Service Worker streaming)
 - [ ] 6.8 Link options: expiry, download limit, password; hourly expiry cron + lifecycle rules
 - [ ] 6.9 Abuse: report button, takedown runbook, ToS
-- [ ] 6.10 Upload UI in the desktop app (drop zone, progress per network, copy link, history of shares)
+- [ ] 6.10 Upload UI in the desktop app (drop zone, Launch moment, progress per network, copy link, history of shares)
 - [ ] 6.11 Receiver flow: Fuselane opens share links and downloads them bonded
 - [ ] 6.12 netlab e2e: 2 links → real R2 staging bucket; summed throughput recorded
 
