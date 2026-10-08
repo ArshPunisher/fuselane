@@ -222,6 +222,7 @@ async fn kill_9_mid_download_then_resume_is_byte_exact() {
             "-s",
             "4",
         ])
+        .stderr(std::process::Stdio::piped())
         .spawn()
         .unwrap();
     // Wait until a third is durably checkpointed, then kill without warning.
@@ -239,10 +240,20 @@ async fn kill_9_mid_download_then_resume_is_byte_exact() {
             }
         }
     }
-    assert!(
-        secured > content.size / 3,
-        "no checkpoint reached a third (secured {secured})"
-    );
+    if secured <= content.size / 3 {
+        // Say why (flaky on CI once): the CLI's own errors and what the server saw.
+        let _ = child.kill();
+        let mut err = String::new();
+        if let Some(mut e) = child.stderr.take() {
+            use std::io::Read;
+            let _ = e.read_to_string(&mut err);
+        }
+        panic!(
+            "no checkpoint reached a third (secured {secured}); exited {:?}; {} requests; stderr: {err}",
+            child.try_wait().ok().flatten(),
+            server.requests().len()
+        );
+    }
     child.kill().unwrap(); // SIGKILL
     let _ = child.wait();
     assert!(
