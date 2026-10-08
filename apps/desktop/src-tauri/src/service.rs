@@ -81,6 +81,67 @@ pub struct Live {
 pub struct LimitsView {
     pub global: u64,
     pub networks: Vec<NetLimit>,
+    /// Slow mode: a temporary overall cap that leaves `global` untouched.
+    #[serde(default)]
+    pub slow: bool,
+    /// The slow-mode cap (0 = the default, 1 MiB/s).
+    #[serde(default)]
+    pub slow_rate: u64,
+}
+
+/// Slow mode's cap when none is chosen.
+pub const DEFAULT_SLOW: u64 = 1024 * 1024;
+
+/// A network's name and colour as the user chose them (by device name).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct NetPref {
+    pub name: String,
+    pub label: Option<String>,
+    pub lane: Option<String>,
+}
+
+const LANES: [&str; 8] = [
+    "tide", "volt", "iris", "rose", "mint", "sky", "lilac", "steel",
+];
+
+/// Checks a device name from the window: exact, short, no control characters.
+fn valid_device(name: &str) -> bool {
+    !name.is_empty()
+        && name == name.trim()
+        && name.len() <= 64
+        && !name.chars().any(char::is_control)
+}
+
+impl NetPref {
+    fn validated(mut self) -> Result<NetPref, UiError> {
+        let bad = |m: &str| UiError::new("bad-network-name", m, Some("Use up to 40 characters."));
+        if !valid_device(&self.name) {
+            return Err(bad("That isn't a network on this computer."));
+        }
+        self.label = self
+            .label
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty());
+        if let Some(l) = &self.label {
+            if l.chars().count() > 40 {
+                return Err(bad("That name is too long."));
+            }
+            if l.chars().any(char::is_control) {
+                return Err(bad("Names can't contain control characters."));
+            }
+        }
+        if let Some(lane) = &self.lane
+            && !LANES.contains(&lane.as_str())
+        {
+            return Err(UiError::new(
+                "bad-network-color",
+                "That colour isn't one of Fuselane's network colours.",
+                None,
+            ));
+        }
+        Ok(self)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -94,27 +155,24 @@ pub struct NetLimit {
 const MAX_LIMIT: u64 = 100 * 1024 * 1024 * 1024;
 
 impl LimitsView {
+    /// What the limiter enforces: slow mode caps the overall limit without changing it.
     fn to_settings(&self) -> LimitSettings {
+        let slow = if self.slow_rate == 0 {
+            DEFAULT_SLOW
+        } else {
+            self.slow_rate
+        };
+        let global = match (self.slow, self.global) {
+            (false, g) => g,
+            (true, 0) => slow,
+            (true, g) => g.min(slow),
+        };
         LimitSettings {
-            global: self.global,
+            global,
             networks: self
                 .networks
                 .iter()
                 .map(|n| (n.name.clone(), n.rate))
-                .collect(),
-        }
-    }
-
-    fn from_settings(s: &LimitSettings) -> LimitsView {
-        LimitsView {
-            global: s.global,
-            networks: s
-                .networks
-                .iter()
-                .map(|(name, rate)| NetLimit {
-                    name: name.clone(),
-                    rate: *rate,
-                })
                 .collect(),
         }
     }
@@ -130,6 +188,12 @@ impl LimitsView {
         };
         if self.global > MAX_LIMIT {
             return Err(bad("That overall limit is too high to be a real speed."));
+        }
+        if self.slow_rate > MAX_LIMIT {
+            return Err(bad("That slow-mode speed is too high to be a real speed."));
+        }
+        if self.slow_rate == 0 {
+            self.slow_rate = DEFAULT_SLOW;
         }
         if self.networks.len() > 64 {
             return Err(bad("Too many network limits."));
@@ -226,6 +290,9 @@ pub struct Service {
     default_dir: PathBuf,
     max_running: usize,
     limiter: Arc<Limiter>,
+    /// Limits as saved (the limiter holds the effective ones, after slow mode).
+    saved_limits: Mutex<LimitsView>,
+    net_prefs: Mutex<Vec<NetPref>>,
     /// Shrinks engine retry waits; only tests set it.
     retry_scale: Option<f64>,
 }
@@ -353,6 +420,14 @@ impl Service {
         store.recover_interrupted().map_err(store_error)?;
         // Saved limits come back on launch; a damaged value is ignored, not fatal.
         let limiter = Arc::new(Limiter::default());
+        let mut saved_limits = LimitsView::default();
+        let net_prefs: Vec<NetPref> = store
+            .setting("network_prefs")
+            .ok()
+            .flatten()
+            .and_then(|v| serde_json::from_str::<Vec<NetPref>>(&v).ok())
+            .map(|v| v.into_iter().filter_map(|p| p.validated().ok()).collect())
+            .unwrap_or_default();
         if let Some(saved) = store
             .setting("limits")
             .ok()
@@ -361,6 +436,7 @@ impl Service {
             .and_then(|v| v.validated().ok())
         {
             limiter.apply(&saved.to_settings());
+            saved_limits = saved;
         }
         Ok(Arc::new(Service {
             store: Arc::new(store),
@@ -371,6 +447,8 @@ impl Service {
             max_running: MAX_RUNNING,
             retry_scale: None,
             limiter,
+            saved_limits: Mutex::new(saved_limits),
+            net_prefs: Mutex::new(net_prefs),
         }))
     }
 
@@ -600,7 +678,7 @@ impl Service {
     }
 
     pub fn limits(&self) -> LimitsView {
-        LimitsView::from_settings(&self.limiter.settings())
+        lock(&self.saved_limits).clone()
     }
 
     /// Saves new limits and applies them to running downloads at once.
@@ -611,7 +689,43 @@ impl Service {
             .set_setting("limits", &json)
             .map_err(store_error)?;
         self.limiter.apply(&view.to_settings());
+        *lock(&self.saved_limits) = view.clone();
         Ok(view)
+    }
+
+    /// Turns slow mode on or off, keeping every other limit as saved.
+    pub fn set_slow(&self, on: bool) -> Result<LimitsView, UiError> {
+        let mut view = self.limits();
+        view.slow = on;
+        self.set_limits(view)
+    }
+
+    pub fn network_prefs(&self) -> Vec<NetPref> {
+        lock(&self.net_prefs).clone()
+    }
+
+    /// Saves a network's name and colour; clearing both forgets the network.
+    pub fn set_network_pref(&self, pref: NetPref) -> Result<Vec<NetPref>, UiError> {
+        let pref = pref.validated()?;
+        let mut all = lock(&self.net_prefs).clone();
+        all.retain(|p| p.name != pref.name);
+        if pref.label.is_some() || pref.lane.is_some() {
+            all.push(pref);
+        }
+        if all.len() > 64 {
+            return Err(UiError::new(
+                "bad-network-name",
+                "Too many renamed networks.",
+                None,
+            ));
+        }
+        all.sort_by(|a, b| a.name.cmp(&b.name));
+        let json = serde_json::to_string(&all).map_err(store_error)?;
+        self.store
+            .set_setting("network_prefs", &json)
+            .map_err(store_error)?;
+        *lock(&self.net_prefs) = all.clone();
+        Ok(all)
     }
 
     /// Continues a stopped download from a new link to the same file (signed links
@@ -1284,6 +1398,7 @@ mod tests {
         let lim = LimitsView {
             global: 1,
             networks: vec![],
+            ..LimitsView::default()
         };
         let nl = NetLimit {
             name: "en0".into(),
@@ -1303,6 +1418,14 @@ mod tests {
             ("PreviewView", json_fields(&pv)),
             ("LimitsView", json_fields(&lim)),
             ("NetLimit", json_fields(&nl)),
+            (
+                "NetPref",
+                json_fields(&NetPref {
+                    name: "en0".into(),
+                    label: None,
+                    lane: None,
+                }),
+            ),
         ] {
             assert_eq!(
                 got,
@@ -1428,6 +1551,7 @@ mod tests {
                 LimitsView {
                     global: MAX_LIMIT + 1,
                     networks: vec![],
+                    ..LimitsView::default()
                 },
                 LimitsView {
                     global: 0,
@@ -1435,6 +1559,7 @@ mod tests {
                         name: " ".into(),
                         rate: 1,
                     }],
+                    ..LimitsView::default()
                 },
                 LimitsView {
                     global: 0,
@@ -1442,6 +1567,7 @@ mod tests {
                         name: "en0\n".into(),
                         rate: 1,
                     }],
+                    ..LimitsView::default()
                 },
                 LimitsView {
                     global: 0,
@@ -1455,6 +1581,7 @@ mod tests {
                             rate: 2,
                         },
                     ],
+                    ..LimitsView::default()
                 },
             ] {
                 assert_eq!(svc.set_limits(bad).unwrap_err().code, "bad-limit");
@@ -1472,6 +1599,7 @@ mod tests {
                             rate: 64 * KB,
                         },
                     ],
+                    ..LimitsView::default()
                 })
                 .unwrap();
             assert_eq!(
@@ -1532,6 +1660,94 @@ mod tests {
             }
         }
         assert!(report.contains(&format!("#{id} http")));
+    }
+
+    #[test]
+    fn slow_mode_caps_without_forgetting_the_normal_limit() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("fuselane.db");
+        let svc = Service::new(Store::open(&db).unwrap(), dir.path().to_path_buf()).unwrap();
+        svc.set_limits(LimitsView {
+            global: 8 * 1024 * KB,
+            ..LimitsView::default()
+        })
+        .unwrap();
+        let on = svc.set_slow(true).unwrap();
+        assert!(on.slow);
+        assert_eq!(on.global, 8 * 1024 * KB, "the normal limit is kept");
+        assert_eq!(
+            on.to_settings().global,
+            DEFAULT_SLOW,
+            "the slower of the two applies"
+        );
+        // A slow cap above the normal limit doesn't speed anything up.
+        let mut v = svc.limits();
+        v.slow_rate = 64 * 1024 * KB;
+        assert_eq!(
+            svc.set_limits(v).unwrap().to_settings().global,
+            8 * 1024 * KB
+        );
+        let off = svc.set_slow(false).unwrap();
+        assert_eq!(off.to_settings().global, 8 * 1024 * KB);
+        // With no normal limit, slow mode alone applies, and survives a restart.
+        svc.set_limits(LimitsView {
+            global: 0,
+            slow: true,
+            slow_rate: 256 * KB,
+            ..LimitsView::default()
+        })
+        .unwrap();
+        drop(svc);
+        let svc = Service::new(Store::open(&db).unwrap(), dir.path().to_path_buf()).unwrap();
+        assert!(svc.limits().slow);
+        assert_eq!(svc.limits().to_settings().global, 256 * KB);
+        assert_eq!(
+            svc.set_limits(LimitsView {
+                slow: true,
+                slow_rate: MAX_LIMIT + 1,
+                ..LimitsView::default()
+            })
+            .unwrap_err()
+            .code,
+            "bad-limit"
+        );
+    }
+
+    #[test]
+    fn networks_can_be_renamed_and_recoloured_safely() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("fuselane.db");
+        let svc = Service::new(Store::open(&db).unwrap(), dir.path().to_path_buf()).unwrap();
+        let pref = |name: &str, label: Option<&str>, lane: Option<&str>| NetPref {
+            name: name.into(),
+            label: label.map(Into::into),
+            lane: lane.map(Into::into),
+        };
+        let all = svc
+            .set_network_pref(pref("en0", Some("  Home Wi-Fi  "), Some("mint")))
+            .unwrap();
+        assert_eq!(
+            all,
+            vec![pref("en0", Some("Home Wi-Fi"), Some("mint"))],
+            "trimmed"
+        );
+        for (bad, code) in [
+            (pref("", Some("x"), None), "bad-network-name"),
+            (pref("en0\n", Some("x"), None), "bad-network-name"),
+            (pref("en0", Some(&"x".repeat(41)), None), "bad-network-name"),
+            (pref("en0", Some("tab\there"), None), "bad-network-name"),
+            (pref("en0", None, Some("orange")), "bad-network-color"),
+            (pref("en0", None, Some("fuse")), "bad-network-color"),
+        ] {
+            assert_eq!(svc.set_network_pref(bad).unwrap_err().code, code);
+        }
+        // Clearing both forgets the network; others survive a restart.
+        svc.set_network_pref(pref("en5", None, Some("iris")))
+            .unwrap();
+        svc.set_network_pref(pref("en0", Some(" "), None)).unwrap();
+        drop(svc);
+        let svc = Service::new(Store::open(&db).unwrap(), dir.path().to_path_buf()).unwrap();
+        assert_eq!(svc.network_prefs(), vec![pref("en5", None, Some("iris"))]);
     }
 
     #[test]

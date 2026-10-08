@@ -11,7 +11,7 @@ mod service;
 
 use std::sync::Arc;
 
-use service::{JobView, LimitsView, NetView, PreviewView, Service, UiError, UiEvent};
+use service::{JobView, LimitsView, NetPref, NetView, PreviewView, Service, UiError, UiEvent};
 use tauri::Manager;
 use tauri::ipc::Channel;
 use tauri::menu::{Menu, MenuItem};
@@ -89,6 +89,23 @@ async fn diagnostics(svc: State<'_>) -> Result<String, UiError> {
     })
     .await
     .map_err(|e| ui_error("diagnostics", format!("Couldn't build the report: {e}")))
+}
+
+/// Slow mode on or off; other limits stay as saved.
+#[tauri::command]
+fn set_slow(svc: State<'_>, on: bool) -> Result<LimitsView, UiError> {
+    svc.set_slow(on)
+}
+
+#[tauri::command]
+fn network_prefs(svc: State<'_>) -> Vec<NetPref> {
+    svc.network_prefs()
+}
+
+/// Renames or recolours a network (clearing both forgets it).
+#[tauri::command]
+fn set_network_pref(svc: State<'_>, pref: NetPref) -> Result<Vec<NetPref>, UiError> {
+    svc.set_network_pref(pref)
 }
 
 #[tauri::command]
@@ -385,6 +402,9 @@ fn main() {
             reveal,
             preview,
             get_limits,
+            set_slow,
+            network_prefs,
+            set_network_pref,
             diagnostics,
             check_update,
             install_update,

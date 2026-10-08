@@ -72,6 +72,10 @@ export interface PreviewView {
 export interface LimitsView {
   global: number
   networks: NetLimit[]
+  /** Slow mode: a temporary overall cap that leaves `global` untouched. */
+  slow: boolean
+  /** The slow-mode cap in bytes per second. */
+  slowRate: number
 }
 
 export interface NetLimit {
@@ -82,4 +86,11 @@ export interface NetLimit {
 export interface UpdateInfo {
   version: string
   notes: string | null
+}
+
+/** A network's name and colour as the user chose them (by device name). */
+export interface NetPref {
+  name: string
+  label: string | null
+  lane: string | null
 }
