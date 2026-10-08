@@ -201,15 +201,7 @@ fn rm(id: i64) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    if job.status != Status::Completed
-        && let Some(p) = &job.staging_path
-    {
-        // Only ever delete our own staging file (L-69).
-        if p.extension().is_some_and(|e| e == "fuselane") {
-            let _ = std::fs::remove_file(p);
-        }
-    }
-    match store.delete(id) {
+    match runner::remove(&store, job.id) {
         Ok(()) => {
             println!("Removed download {id}.");
             ExitCode::SUCCESS

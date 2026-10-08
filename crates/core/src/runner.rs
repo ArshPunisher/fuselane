@@ -219,6 +219,20 @@ pub fn job_to_resume(store: &Store, id: &str) -> Result<Job, StartError> {
     Ok(job)
 }
 
+/// Removes a job from the list, and its partial file if it never finished.
+pub fn remove(store: &Store, id: i64) -> Result<(), crate::StoreError> {
+    let job = store.get(id)?;
+    if job.status != Status::Completed
+        && let Some(p) = &job.staging_path
+    {
+        // Only ever delete our own staging file (L-69).
+        if p.extension().is_some_and(|e| e == "fuselane") {
+            let _ = std::fs::remove_file(p);
+        }
+    }
+    store.delete(id)
+}
+
 /// Runs (or continues) job `id` and records how it ended in the store.
 pub async fn run(
     store: Arc<Store>,
@@ -299,7 +313,7 @@ pub async fn run(
     Ok(
         match download_with(source, networks, &out, tuning, resume).await {
             Ok(report) => {
-                let _ = store.set_final_path(id, &report.path);
+                let _ = store.set_finished(id, &report.path, report.total);
                 let _ = store.apply(id, Event::Complete, None);
                 Outcome::Completed {
                     report,
@@ -312,7 +326,8 @@ pub async fn run(
             }
             Err(error) => {
                 let resumable = is_resumable(&error);
-                let _ = store.apply(id, Event::Fail { resumable }, Some(&error.to_string()));
+                // The plain-language message, so every front end shows the same words.
+                let _ = store.apply(id, Event::Fail { resumable }, Some(&describe(&error)));
                 Outcome::Failed { error, resumable }
             }
         },

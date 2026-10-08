@@ -245,10 +245,12 @@ impl Store {
         Ok(next)
     }
 
-    pub fn set_final_path(&self, id: i64, path: &Path) -> Result<(), StoreError> {
+    /// Records where the finished file is and its size (a fast download may finish
+    /// before its first checkpoint, so the size isn't known any other way).
+    pub fn set_finished(&self, id: i64, path: &Path, total: u64) -> Result<(), StoreError> {
         self.lock().execute(
-            "UPDATE jobs SET final_path = ?2, staging_path = NULL WHERE id = ?1",
-            params![id, path.to_string_lossy()],
+            "UPDATE jobs SET final_path = ?2, staging_path = NULL, total = ?3 WHERE id = ?1",
+            params![id, path.to_string_lossy(), total as i64],
         )?;
         Ok(())
     }
