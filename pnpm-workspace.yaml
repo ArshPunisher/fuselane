@@ -1,3 +1,9 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+
+# Install scripts allowed (pnpm 11 blocks them by default): native binaries for
+# the bundler and for Cloudflare's local Workers runtime (apps/backend tests).
+allowBuilds:
+  esbuild: true
+  workerd: true

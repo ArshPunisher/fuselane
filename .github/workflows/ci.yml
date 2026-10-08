@@ -54,6 +54,8 @@ jobs:
         run: pnpm typecheck
       - name: Extension capture rules and message schema
         run: pnpm --filter @fuselane/capture test
+      - name: Upload service (Worker tests in workerd, local D1 and R2)
+        run: pnpm --filter @fuselane/backend test
       - name: Extension hand-off logic and builds (Chrome, Firefox)
         run: |
           pnpm --filter @fuselane/extension test
