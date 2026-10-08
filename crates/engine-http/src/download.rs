@@ -1658,6 +1658,11 @@ pub async fn download_with(
         }
     }
     ctx.stop.store(true, Ordering::Release);
+    // One last snapshot so the UI's final picture (who fetched which part, each
+    // network's share) includes the bytes after the last periodic one.
+    if let Some(sink) = &tuning.snapshot {
+        (sink.0)(&make_snapshot(&ctx, &networks));
+    }
 
     let (fatal, complete, report_bytes, retries, hedges, last_error, unknown_total, peak_streams) = {
         let mut s = ctx.lock();

@@ -657,6 +657,19 @@ async fn snapshots_describe_the_job_for_the_ui() {
         assert_eq!(s.total, Some(content.size));
         assert_eq!(s.networks.len(), 2);
     }
+    // The last snapshot is the finished picture: every byte, every tick full and owned.
+    let last = snaps.last().unwrap();
+    assert_eq!(last.written, content.size);
+    assert!(
+        last.ticks
+            .iter()
+            .all(|t| t.fill == 1.0 && t.owner.is_some()),
+        "final ticks incomplete"
+    );
+    assert_eq!(
+        last.networks.iter().map(|n| n.bytes).sum::<u64>(),
+        content.size
+    );
     let mid = &snaps[snaps.len() / 2];
     assert!(
         mid.ticks.iter().any(|t| t.owner.is_some()),
