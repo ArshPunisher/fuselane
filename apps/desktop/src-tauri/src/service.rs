@@ -136,6 +136,8 @@ pub struct Service {
     store: Arc<Store>,
     running: Mutex<HashMap<i64, Running>>,
     emit: Mutex<Emit>,
+    /// Extra listeners that live as long as the app (tray, notifications).
+    listeners: Mutex<Vec<Emit>>,
     default_dir: PathBuf,
     max_running: usize,
 }
@@ -264,6 +266,7 @@ impl Service {
             store: Arc::new(store),
             running: Mutex::new(HashMap::new()),
             emit: Mutex::new(Arc::new(|_| {})),
+            listeners: Mutex::new(Vec::new()),
             default_dir,
             max_running: MAX_RUNNING,
         }))
@@ -292,8 +295,17 @@ impl Service {
         &self.default_dir
     }
 
+    /// Adds a listener that sees every event (the window's channel is separate).
+    pub fn listen(&self, f: Emit) {
+        lock(&self.listeners).push(f);
+    }
+
     fn send(&self, e: UiEvent) {
         let emit = lock(&self.emit).clone();
+        let listeners = lock(&self.listeners).clone();
+        for l in &listeners {
+            l(e.clone());
+        }
         emit(e);
     }
 

@@ -5,6 +5,7 @@
 //! message, hint), never as raw strings (ERRORS.md).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod native;
 mod service;
 
 use std::sync::Arc;
@@ -124,6 +125,67 @@ fn show_main(app: &tauri::AppHandle) {
     }
 }
 
+/// Feeds download events to the OS shell: notifications, icon progress, tray tooltip.
+fn watch_for_shell(app: tauri::AppHandle, svc: &Arc<Service>) {
+    use std::sync::Mutex;
+    use std::time::{Duration, Instant};
+    use tauri::window::{ProgressBarState, ProgressBarStatus};
+    use tauri_plugin_notification::NotificationExt;
+
+    let watcher = Arc::new(Mutex::new(native::Watcher::default()));
+    let last_paint = Arc::new(Mutex::new(Instant::now() - Duration::from_secs(5)));
+    let paint = {
+        let app = app.clone();
+        move |w: &native::Watcher| {
+            if let Some(win) = app.get_webview_window("main") {
+                let state = match w.progress() {
+                    Some(p) => ProgressBarState {
+                        status: Some(ProgressBarStatus::Normal),
+                        progress: Some(p),
+                    },
+                    None => ProgressBarState {
+                        status: Some(ProgressBarStatus::None),
+                        progress: None,
+                    },
+                };
+                let _ = win.set_progress_bar(state);
+            }
+            if let Some(tray) = app.tray_by_id("main") {
+                let _ = tray.set_tooltip(Some(w.tooltip()));
+            }
+        }
+    };
+    svc.listen(Arc::new(move |e| {
+        let mut w = watcher
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        match &e {
+            UiEvent::Jobs { jobs } => {
+                for n in w.jobs(jobs) {
+                    let _ = app
+                        .notification()
+                        .builder()
+                        .title(&n.title)
+                        .body(&n.body)
+                        .show();
+                }
+                paint(&w);
+            }
+            UiEvent::Live(l) => {
+                w.live(l);
+                // The icon and tooltip don't need 5 updates a second.
+                let mut last = last_paint
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                if last.elapsed() >= Duration::from_secs(1) {
+                    *last = Instant::now();
+                    paint(&w);
+                }
+            }
+        }
+    }));
+}
+
 fn open_service() -> Result<Arc<Service>, String> {
     let store = fuselane_core::open_default()?;
     if let Some(aside) = &store.recovered_from {
@@ -148,6 +210,7 @@ fn main() {
         }
     };
     let on_exit = svc.clone();
+    let for_shell = svc.clone();
     // Debug builds only (L-100): start a download at launch for smoke tests and
     // screenshots of the real window. Compiled out of release builds.
     #[cfg(debug_assertions)]
@@ -167,12 +230,15 @@ fn main() {
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(svc)
-        .setup(|app| {
+        .setup(move |app| {
             let show = MenuItem::with_id(app, "show", "Show Fuselane", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &quit])?;
-            let mut tray = TrayIconBuilder::new().menu(&menu).tooltip("Fuselane");
+            let mut tray = TrayIconBuilder::with_id("main")
+                .menu(&menu)
+                .tooltip("Fuselane");
             if let Some(icon) = app.default_window_icon() {
                 tray = tray.icon(icon.clone());
             }
@@ -182,6 +248,7 @@ fn main() {
                 _ => {}
             })
             .build(app)?;
+            watch_for_shell(app.handle().clone(), &for_shell);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
