@@ -778,3 +778,79 @@ async fn a_capped_network_carries_less_while_the_other_takes_up_the_slack() {
         "capped net carried {capped}, free net {free}"
     );
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_network_past_its_allowance_carries_nothing_and_the_rest_finish() {
+    use fuselane_limits::Limiter;
+    let content = Content::new(1024 * KB, 76);
+    let server = RangeServer::start(content).await.unwrap();
+    let limiter = Arc::new(Limiter::default());
+    limiter.set_blocked(["net1".to_string()]);
+    let mut t = tuning();
+    t.limiter = Some(limiter);
+    let dir = tempfile::tempdir().unwrap();
+    let report = download(source(&server), vec![plain(1), plain(2)], dir.path(), t)
+        .await
+        .unwrap();
+    assert_exact(&report, content);
+    assert_eq!(report.bytes_by_network.get(&1).copied().unwrap_or(0), 0);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn blocking_a_network_mid_download_hands_its_work_to_the_others() {
+    use fuselane_limits::Limiter;
+    let content = Content::new(6 * 1024 * KB, 77);
+    let server = RangeServer::start(content).await.unwrap();
+    server.add_rule(Rule {
+        skip: 1,
+        times: u32::MAX,
+        fault: Fault::Throttle(256 * KB),
+    });
+    let limiter = Arc::new(Limiter::default());
+    let mut t = tuning();
+    t.limiter = Some(limiter.clone());
+    let dir = tempfile::tempdir().unwrap();
+    let blocker = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        limiter.set_blocked(["net1".to_string()]);
+    });
+    let report = download(source(&server), vec![plain(1), plain(2)], dir.path(), t)
+        .await
+        .unwrap();
+    blocker.await.unwrap();
+    assert_exact(&report, content);
+    let blocked_share = report.bytes_by_network.get(&1).copied().unwrap_or(0);
+    assert!(
+        blocked_share < content.size / 2,
+        "net1 kept downloading after its block: {blocked_share}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn with_every_network_blocked_the_download_waits_and_can_still_pause() {
+    use fuselane_engine_http::download::{Cancel, download_with};
+    use fuselane_limits::Limiter;
+    let content = Content::new(512 * KB, 78);
+    let server = RangeServer::start(content).await.unwrap();
+    let limiter = Arc::new(Limiter::default());
+    limiter.set_blocked(["net1".to_string(), "net2".to_string()]);
+    let cancel = Cancel::new();
+    let mut t = tuning();
+    t.limiter = Some(limiter);
+    t.cancel = Some(cancel.clone());
+    let dir = tempfile::tempdir().unwrap();
+    let stopper = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(1200)).await;
+        cancel.cancel();
+    });
+    let r = download_with(
+        source(&server),
+        vec![plain(1), plain(2)],
+        dir.path(),
+        t,
+        None,
+    )
+    .await;
+    stopper.await.unwrap();
+    assert!(matches!(r, Err(JobError::Paused)), "{r:?}");
+}

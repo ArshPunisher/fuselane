@@ -600,6 +600,27 @@ async fn run_stream(ctx: Arc<Ctx>, net: Network, stream: StreamId) {
         if ctx.stop.load(Ordering::Acquire) {
             return;
         }
+        // A network past its data allowance stands aside, ready to rejoin when the
+        // allowance resets or is raised.
+        if ctx
+            .tuning
+            .limiter
+            .as_ref()
+            .is_some_and(|l| l.blocked(&net.name))
+        {
+            {
+                let s = ctx.lock();
+                if s.fatal.is_some() || s.all_complete() || s.dead_networks.contains(&net.id) {
+                    return; // nothing left to stand aside for
+                }
+            }
+            conn = None;
+            tokio::select! {
+                _ = ctx.wake.notified() => {}
+                _ = tokio::time::sleep(Duration::from_millis(500)) => {}
+            }
+            continue;
+        }
         // Pick work (synchronously, under the lock: nothing can yield between choosing and registering).
         let work = {
             let mut s = ctx.lock();
@@ -1207,6 +1228,11 @@ async fn fetch_block(
         // Speed limits: wait off the debt before reading more (TCP slows the server).
         if let Some(limiter) = &ctx.tuning.limiter {
             let wait = limiter.take(&net.name, data.len() as u64);
+            // Allowance reached mid-block: hand the rest back to the other networks.
+            if limiter.blocked(&net.name) {
+                *conn = None;
+                return Err(Outcome::Lost);
+            }
             if !wait.is_zero() {
                 tokio::time::sleep(wait).await;
             }

@@ -85,6 +85,10 @@ pub struct Limiter {
 struct LimiterState {
     global: Option<Bucket>,
     nets: std::collections::HashMap<String, Bucket>,
+    /// Bytes per network since the last `drain_usage` (for data allowances).
+    used: std::collections::HashMap<String, u64>,
+    /// Networks that reached their data allowance: their streams stand aside.
+    blocked: std::collections::HashSet<String>,
 }
 
 /// The limits currently set, for showing and saving.
@@ -140,6 +144,22 @@ impl Limiter {
         }
     }
 
+    /// Bytes each network received since the last call; the counters restart.
+    pub fn drain_usage(&self) -> Vec<(String, u64)> {
+        let mut v: Vec<(String, u64)> = self.lock().used.drain().collect();
+        v.sort();
+        v
+    }
+
+    /// Replaces the set of networks that must stand aside (allowance reached).
+    pub fn set_blocked<I: IntoIterator<Item = String>>(&self, nets: I) {
+        self.lock().blocked = nets.into_iter().collect();
+    }
+
+    pub fn blocked(&self, net: &str) -> bool {
+        self.lock().blocked.contains(net)
+    }
+
     pub fn settings(&self) -> LimitSettings {
         let st = self.lock();
         let mut networks: Vec<(String, u64)> =
@@ -159,6 +179,7 @@ impl Limiter {
     pub fn take_at(&self, net: &str, bytes: u64, now_ms: u64) -> u64 {
         let mut st = self.lock();
         let st = &mut *st;
+        *st.used.entry(net.to_string()).or_default() += bytes;
         let g = st.global.as_mut().map_or(0, |b| b.take(bytes, now_ms));
         let n = st.nets.get_mut(net).map_or(0, |b| b.take(bytes, now_ms));
         g.max(n)
@@ -171,6 +192,8 @@ pub enum Period {
     Day,
     Week,
     Month,
+    /// A month that starts on this day (1 to 28), like a phone plan's billing day.
+    MonthFrom(u8),
 }
 
 /// A local calendar date (the caller converts the clock using the user's time zone).
@@ -225,6 +248,24 @@ pub fn period_start(period: Period, d: Date) -> Date {
         Period::Day => d,
         Period::Week => Date::from_days(d.days() - d.weekday()),
         Period::Month => Date { day: 1, ..d },
+        Period::MonthFrom(reset) => {
+            let reset = reset.clamp(1, 28);
+            if d.day >= reset {
+                Date { day: reset, ..d }
+            } else if d.month == 1 {
+                Date {
+                    year: d.year - 1,
+                    month: 12,
+                    day: reset,
+                }
+            } else {
+                Date {
+                    month: d.month - 1,
+                    day: reset,
+                    ..d
+                }
+            }
+        }
     }
 }
 
@@ -233,6 +274,21 @@ pub fn next_reset(period: Period, d: Date) -> Date {
     match period {
         Period::Day => Date::from_days(d.days() + 1),
         Period::Week => Date::from_days(period_start(Period::Week, d).days() + 7),
+        Period::MonthFrom(reset) => {
+            let start = period_start(Period::MonthFrom(reset), d);
+            if start.month == 12 {
+                Date {
+                    year: start.year + 1,
+                    month: 1,
+                    day: start.day,
+                }
+            } else {
+                Date {
+                    month: start.month + 1,
+                    ..start
+                }
+            }
+        }
         Period::Month => {
             if d.month == 12 {
                 Date {
@@ -299,6 +355,53 @@ mod tests {
 
     const fn d(year: i32, month: u8, day: u8) -> Date {
         Date { year, month, day }
+    }
+
+    #[test]
+    fn a_billing_month_starts_on_its_reset_day() {
+        let p = Period::MonthFrom(15);
+        assert_eq!(period_start(p, d(2026, 10, 15)), d(2026, 10, 15));
+        assert_eq!(period_start(p, d(2026, 10, 14)), d(2026, 9, 15));
+        assert_eq!(
+            period_start(p, d(2026, 1, 3)),
+            d(2025, 12, 15),
+            "across the new year"
+        );
+        assert_eq!(next_reset(p, d(2026, 10, 20)), d(2026, 11, 15));
+        assert_eq!(next_reset(p, d(2026, 12, 20)), d(2027, 1, 15));
+        // Days past 28 are clamped so every month has the day.
+        assert_eq!(
+            period_start(Period::MonthFrom(31), d(2026, 2, 28)),
+            d(2026, 2, 28)
+        );
+        assert_eq!(
+            period_start(Period::MonthFrom(0), d(2026, 2, 5)),
+            d(2026, 2, 1)
+        );
+        // Usage rolls over on the reset day, not on the 1st.
+        let mut u = Usage::new(p, d(2026, 10, 20));
+        u.add(500, d(2026, 11, 1));
+        assert_eq!(u.bytes, 500);
+        u.add(1, d(2026, 11, 15));
+        assert_eq!(u.bytes, 1);
+    }
+
+    #[test]
+    fn limiter_counts_usage_per_network_and_blocks_on_request() {
+        let l = Limiter::default();
+        l.take_at("en0", 100, 0);
+        l.take_at("en0", 50, 0);
+        l.take_at("en7", 7, 0);
+        assert_eq!(
+            l.drain_usage(),
+            vec![("en0".into(), 150), ("en7".into(), 7)]
+        );
+        assert!(l.drain_usage().is_empty(), "counters restart");
+        assert!(!l.blocked("en7"));
+        l.set_blocked(["en7".to_string()]);
+        assert!(l.blocked("en7") && !l.blocked("en0"));
+        l.set_blocked(Vec::new());
+        assert!(!l.blocked("en7"));
     }
 
     #[test]
