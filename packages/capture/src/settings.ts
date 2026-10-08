@@ -69,12 +69,15 @@ export function cleanDomain(entry: string): string | null {
   return d
 }
 
-/** "iso", ".ISO" and "*.iso" all mean iso. */
+/** "iso", ".ISO" and "*.iso" all mean iso; "tar.gz" means gz, the part that is matched. */
 export function cleanExtension(entry: string): string | null {
-  const e = entry
-    .trim()
-    .toLowerCase()
-    .replace(/^\*?\./, '')
+  const e =
+    entry
+      .trim()
+      .toLowerCase()
+      .replace(/^\*?\./, '')
+      .split('.')
+      .pop() ?? ''
   return /^[a-z0-9]{1,16}$/.test(e) ? e : null
 }
 

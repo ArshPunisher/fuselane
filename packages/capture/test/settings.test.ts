@@ -72,9 +72,9 @@ test('bad domains are reported as typed, not silently dropped', () => {
 })
 
 test('file types accept dots and wildcards, refuse junk', () => {
-  assert.deepEqual(parseExtensions('iso .ZIP *.tar.gz *.7z mkv'), {
-    values: ['iso', 'zip', '7z', 'mkv'],
-    invalid: ['*.tar.gz'],
+  assert.deepEqual(parseExtensions('iso .ZIP *.tar.gz *.7z mkv tar.xz.'), {
+    values: ['iso', 'zip', 'gz', '7z', 'mkv'],
+    invalid: ['tar.xz.'],
   })
   assert.deepEqual(parseExtensions('. ** a/b x'.concat('y'.repeat(16))).values, [])
 })
