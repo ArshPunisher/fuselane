@@ -248,7 +248,21 @@ async fn ctrl_c_pauses_with_exit_130_and_resume_finishes() {
         .stderr(std::process::Stdio::piped())
         .spawn()
         .unwrap();
-    tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+    // Wait until the download has really started (its partial file exists): the
+    // Ctrl-C handler is installed by then. A fixed sleep raced under heavy load.
+    let started = std::time::Instant::now();
+    while !std::fs::read_dir(dir.path())
+        .unwrap()
+        .filter_map(Result::ok)
+        .any(|e| e.path().extension().is_some_and(|x| x == "fuselane"))
+    {
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(15),
+            "download never started"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     // SAFETY: sending SIGINT to our own child process.
     unsafe { libc::kill(child.id() as i32, libc::SIGINT) };
     let out = tokio::task::spawn_blocking(move || child.wait_with_output())
