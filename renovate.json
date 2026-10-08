@@ -1,0 +1,12 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
+  "schedule": ["before 6am on monday"],
+  "timezone": "Asia/Kolkata",
+  "lockFileMaintenance": { "enabled": true },
+  "packageRules": [
+    { "matchManagers": ["cargo"], "groupName": "Rust crates" },
+    { "matchManagers": ["npm"], "groupName": "npm packages" },
+    { "matchManagers": ["github-actions"], "groupName": "GitHub Actions" }
+  ]
+}
