@@ -85,15 +85,19 @@ Whenever building or changing UI (desktop, extension popup, share page, landing 
 - "commit" = commit only; "commit and push" = commit, then push the current branch. Never force-push. Never push to another branch without asking.
 - Commit after each completed step; don't let work pile up uncommitted.
 
-## Commands (fill in as the workspace grows)
+## Commands
 
 ```bash
+source ~/.cargo/env                     # Rust isn't on the zsh PATH by default on this Mac
+git config core.hooksPath .githooks     # once per clone: commit-msg rules (no AI attribution)
 cargo fmt --all && cargo clippy --workspace --all-targets -- -D warnings
 cargo nextest run --workspace
-pnpm -r lint && pnpm -r test
-sudo tools/netlab/up.sh   # Linux network lab (Phase 1+)
+cargo deny check
+pnpm install && pnpm typecheck && pnpm format:check
+actionlint                              # after editing .github/workflows
+tools/session-context.sh                # what the SessionStart hook shows
 ```
 
 ## Current phase
 
-**P0 Foundations.** Planning docs are done. Next: owner decisions in `docs/04-plan/OPEN-QUESTIONS.md` (licence, GitHub remote, signing budget, domain), then the workspace skeleton and CI (STEPS 0.7–0.13). Always confirm against STATUS.md, which is the source of truth.
+See `docs/04-plan/STATUS.md` (it is printed automatically at session start by the SessionStart hook in `.claude/settings.json`). STATUS.md is the source of truth; this line is not.

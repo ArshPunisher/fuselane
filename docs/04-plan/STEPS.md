@@ -13,11 +13,11 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [x] 0.5 Testing strategy, roadmap, steps, workflow, CLAUDE.md
 - [x] 0.6 Decide the open questions blocking P0/P1 (licence, GitHub org/remote, budget for signing) → [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md)
 - [ ] 0.7 Create the GitHub repo and push; protect `main` (status checks required, no force-push)
-- [ ] 0.8 `rust-toolchain.toml`, a Cargo workspace with empty crates (`netif`, `transport`, `storage`, `limits`, `engine-http`, `core`, `api`, `testkit`) and `apps/cli` printing its version — test: `cargo build` + `cargo nextest run` on 3 OSes
-- [ ] 0.9 pnpm workspace with `packages/ui` and `packages/api-types` placeholders — test: `pnpm -r build`
-- [ ] 0.10 CI: static job (fmt, clippy, cargo-deny, eslint, tsc) + test matrix (macOS, Windows, Linux) — gate: green on an empty workspace
-- [ ] 0.11 Commit-message lint (conventional commits) and a PR template that lists the `L-xx` rules a PR relies on
-- [ ] 0.12 Renovate config (grouped weekly updates, lockfile maintenance)
+- [x] 0.8 `rust-toolchain.toml`, a Cargo workspace with empty crates (`netif`, `transport`, `storage`, `limits`, `engine-http`, `core`, `api`, `testkit`) and `apps/cli` printing its version — test: `cargo build` + `cargo nextest run` on 3 OSes
+- [x] 0.9 pnpm workspace with `packages/ui` and `packages/api-types` placeholders — test: `pnpm -r build`
+- [ ] 0.10 (written and actionlint-clean; tick when green on GitHub) CI: static job (fmt, clippy, cargo-deny, eslint, tsc) + test matrix (macOS, Windows, Linux) — gate: green on an empty workspace
+- [x] 0.11 Commit-message lint (conventional commits) and a PR template that lists the `L-xx` rules a PR relies on
+- [x] 0.12 Renovate config (grouped weekly updates, lockfile maintenance)
 - [ ] 0.13 Free accounts only (ADR 0009): apply to SignPath Foundation once the repo is public; Cloudflare free tier (P6); domain later (owner)
 
 ## P1 Risk spikes (throwaway code on `spike/*` branches; results in `docs/04-plan/spikes/`)
