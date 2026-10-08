@@ -183,6 +183,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         j.written = total
         j.finalPath = `${j.dir}/${j.name}`
         j.inflight = [-1, -1, -1]
+        listener?.({ type: 'live', ...live(j) }) // the final picture, as the engine sends
         emitJobs()
       }
     }
@@ -286,6 +287,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         j.status = 'paused'
         j.resumable = true
         j.inflight = [-1, -1, -1]
+        listener?.({ type: 'live', ...live(j) }) // the final picture, as the engine sends
         emitJobs()
       } else if (j.status !== 'paused') {
         throw err('not-running', "This download isn't running, so there's nothing to pause.", null)

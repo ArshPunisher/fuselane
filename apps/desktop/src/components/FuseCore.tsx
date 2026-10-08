@@ -9,7 +9,8 @@ const TICKS = 180
 /** Snapshot (or, without one, the saved progress) as ring data. */
 function toCore(job: JobView, live: Live | undefined): CoreData {
   const complete = job.status === 'completed'
-  if (live && !complete && live.ticks.length >= 3) {
+  // A finished job keeps its last snapshot's colours: who fetched which part.
+  if (live && live.ticks.length >= 3) {
     const n = Math.floor(live.ticks.length / 3)
     const fill = new Float32Array(TICKS)
     const owner = new Int8Array(TICKS).fill(-1)
@@ -17,9 +18,9 @@ function toCore(job: JobView, live: Live | undefined): CoreData {
     // Map the engine's ticks (≤ 180) onto the ring's 180.
     for (let i = 0; i < TICKS; i++) {
       const k = Math.min(n - 1, Math.floor((i * n) / TICKS))
-      fill[i] = (live.ticks[k * 3] ?? 0) / 100
+      fill[i] = complete ? 1 : (live.ticks[k * 3] ?? 0) / 100
       owner[i] = (live.ticks[k * 3 + 1] ?? 0) - 1
-      inflight[i] = (live.ticks[k * 3 + 2] ?? 0) - 1
+      inflight[i] = complete ? -1 : (live.ticks[k * 3 + 2] ?? 0) - 1
     }
     const lanes = assignLanes(live.networks)
     return {
@@ -28,8 +29,8 @@ function toCore(job: JobView, live: Live | undefined): CoreData {
       inflight,
       nets: live.networks.map((net, i) => ({
         lane: lanes[i] ?? 'steel',
-        rate: net.rate,
-        dead: net.dead,
+        rate: complete ? 0 : net.rate,
+        dead: complete ? false : net.dead,
       })),
       complete,
     }
@@ -77,7 +78,7 @@ export function FuseCore({
   const canvas = useRef<HTMLCanvasElement>(null)
   const box = useRef<HTMLDivElement>(null)
   const core = useRef<ReturnType<typeof createFuseCore> | null>(null)
-  const [size, setSize] = useState({ w: 0, h: 0 })
+  const [size, setSize] = useState({ w: 0, h: 0, room: 0 })
   const reduced = useReducedMotion()
   const data = useMemo(() => toCore(job, live), [job, live])
   const running = job.status === 'running'
@@ -89,9 +90,14 @@ export function FuseCore({
     const ro = new ResizeObserver(() => {
       c.resize()
       const r = canvas.current?.getBoundingClientRect()
-      if (r) setSize({ w: r.width, h: r.height })
+      // Room beside the ring for satellite labels (they sit outside its box).
+      const room =
+        (box.current?.parentElement?.getBoundingClientRect().width ?? 0) - (r?.width ?? 0)
+      if (r) setSize({ w: r.width, h: r.height, room })
     })
     ro.observe(canvas.current)
+    const parent = box.current?.parentElement
+    if (parent) ro.observe(parent)
     // Colours follow the theme.
     const mo = new MutationObserver(() => c.refreshColors())
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
@@ -122,7 +128,7 @@ export function FuseCore({
 
   const nets = live?.networks ?? []
   const g = geometry(size.w, size.h, nets.length)
-  const labels = g.s >= 340 && running
+  const labels = g.s >= 340 && size.room >= 150 && running
 
   return (
     <div className="core" ref={box} data-testid="fuse-core">

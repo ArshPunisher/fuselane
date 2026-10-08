@@ -93,10 +93,12 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
   const history = useApp((s) => s.history[job.id])
   const act = useApp((s) => s.act)
   const live = job.status === 'running' ? liveAll : undefined
+  // After completion the last snapshot still tells who carried what.
+  const finished = job.status === 'completed' ? liveAll : undefined
   const announce = useAnnounce(job, live)
   const written = live?.written ?? job.written
   const total = live?.total ?? job.total
-  const nets = live?.networks ?? []
+  const nets = (live ?? finished)?.networks ?? []
   const lanes = assignLanes(nets)
   const sum = nets.reduce((a, n) => a + n.bytes, 0)
   const maxRate = Math.max(1, ...nets.map((n) => n.rate))
@@ -151,7 +153,7 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
       </p>
 
       <div className="detail-body">
-        <FuseCore job={job} live={live} center={<Center job={job} live={live} />} />
+        <FuseCore job={job} live={live ?? finished} center={<Center job={job} live={live} />} />
         <div className="detail-side">
           <dl className="facts">
             <div>
@@ -198,7 +200,7 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
                     Share
                   </th>
                   <th scope="col" className="r">
-                    Speed
+                    {finished ? 'Carried' : 'Speed'}
                   </th>
                 </tr>
               </thead>
@@ -210,7 +212,7 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
                         <Orb
                           lane={lanes[i] ?? 'steel'}
                           speed={n.rate / maxRate}
-                          state={n.dead ? 'down' : 'live'}
+                          state={finished ? 'idle' : n.dead ? 'down' : 'live'}
                         />
                         <span>
                           <span className="net-name">{netTitle(n)}</span>
@@ -223,7 +225,9 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
                     <td className="r num">
                       {sum > 0 ? `${Math.round((n.bytes / sum) * 100)}%` : ''}
                     </td>
-                    <td className="r num">{n.dead ? 'Offline' : rateText(n.rate)}</td>
+                    <td className="r num">
+                      {finished ? bytes(n.bytes) : n.dead ? 'Offline' : rateText(n.rate)}
+                    </td>
                   </tr>
                 ))}
               </tbody>

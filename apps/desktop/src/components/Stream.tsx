@@ -1,22 +1,12 @@
 // Throughput stream: the last 15 to 60 seconds as a centred silhouette, one layer per
 // network. Thickness is the combined speed. Canvas, crisp 1px edges.
+import { resolveVar, type RGB } from '../lib/color'
 import { useEffect, useRef } from 'react'
 import type { History } from '../lib/store'
 import type { Lane } from '../lib/lanes'
 
 const RATE = 5
-type RGB = [number, number, number]
 
-function resolve(v: string): RGB {
-  const p = document.createElement('canvas')
-  p.width = p.height = 1
-  const c = p.getContext('2d', { willReadFrequently: true })
-  if (!c) return [128, 128, 128]
-  c.fillStyle = getComputedStyle(document.documentElement).getPropertyValue(v).trim() || '#888'
-  c.fillRect(0, 0, 1, 1)
-  const d = c.getImageData(0, 0, 1, 1).data
-  return [d[0] ?? 0, d[1] ?? 0, d[2] ?? 0]
-}
 const rgba = (c: RGB, a: number) => `rgba(${c[0]},${c[1]},${c[2]},${a})`
 
 function smooth(c: CanvasRenderingContext2D, pts: { x: number; y: number }[], move: boolean) {
@@ -63,9 +53,9 @@ export function Stream({ history, lanes }: { history: History | undefined; lanes
       const key = `${document.documentElement.dataset.theme ?? ''}|${matchMedia('(prefers-color-scheme: dark)').matches}|${lanes.join()}`
       if (key !== theme) {
         theme = key
-        colors = lanes.map((l) => resolve(`--lane-${l}`))
-        mute = resolve('--mute')
-        const cv = resolve('--canvas')
+        colors = lanes.map((l) => resolveVar(`--lane-${l}`))
+        mute = resolveVar('--mute')
+        const cv = resolveVar('--canvas')
         dark = cv[0] + cv[1] + cv[2] < 300
       }
       ctx.clearRect(0, 0, w, h)

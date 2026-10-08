@@ -7,7 +7,8 @@
 // - On completion a Fuse sweep "ignites" the ring once.
 // Thin, crisp strokes only. Plain canvas; React only mounts it.
 
-type RGB = [number, number, number]
+import { resolveVar, type RGB } from '../lib/color'
+
 type Pt = { x: number; y: number }
 
 export interface CoreNet {
@@ -50,17 +51,6 @@ export function geometry(w: number, h: number, n: number) {
   return { s, c, ring, tickLen, orbit, sats, small: s < 220 }
 }
 
-function resolve(cssVar: string): RGB {
-  const probe = document.createElement('canvas')
-  probe.width = probe.height = 1
-  const c = probe.getContext('2d', { willReadFrequently: true })
-  const value = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim() || '#888'
-  if (!c) return [136, 136, 136]
-  c.fillStyle = value
-  c.fillRect(0, 0, 1, 1)
-  const d = c.getImageData(0, 0, 1, 1).data
-  return [d[0] ?? 0, d[1] ?? 0, d[2] ?? 0]
-}
 const rgba = (c: RGB, a: number) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`
 const mix = (a: RGB, b: RGB, k: number): RGB => [
   a[0] + (b[0] - a[0]) * k,
@@ -98,13 +88,13 @@ export function createFuseCore(canvas: HTMLCanvasElement, ticks: number) {
 
   function refreshColors() {
     colors = {
-      lanes: lanes.map((l) => resolve(`--lane-${l}`)),
-      fuse: resolve('--fuse'),
-      mute: resolve('--mute'),
-      ink: resolve('--ink'),
+      lanes: lanes.map((l) => resolveVar(`--lane-${l}`)),
+      fuse: resolveVar('--fuse'),
+      mute: resolveVar('--mute'),
+      ink: resolveVar('--ink'),
       white: [255, 255, 255],
     }
-    const cv = resolve('--canvas')
+    const cv = resolveVar('--canvas')
     dark = cv[0] + cv[1] + cv[2] < 300
   }
 
@@ -323,6 +313,10 @@ export function createFuseCore(canvas: HTMLCanvasElement, ticks: number) {
       c.stroke()
     }
   }
+
+  // Read the theme's colours now: a paused or finished job has no networks, so
+  // waiting for the first lane change left the ring drawn in black (L-114).
+  refreshColors()
 
   return {
     resize,

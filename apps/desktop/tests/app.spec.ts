@@ -156,6 +156,8 @@ for (const [w, h, layout] of [
   [375, 812, 'compact'],
   [800, 700, 'regular'],
   [1024, 700, 'wide'],
+  [1180, 760, 'wide'],
+  [1279, 800, 'wide'],
   [1920, 1080, 'wide'],
 ] as const) {
   test(`layout at ${w}x${h} is ${layout} with no sideways scroll`, async ({ page }) => {
@@ -164,8 +166,17 @@ for (const [w, h, layout] of [
     await expect(page.locator('.app')).toHaveAttribute('data-layout', layout)
     await page.getByText('ubuntu-26.04-desktop-amd64.iso').first().click()
     await expect(page.getByTestId('fuse-core')).toBeVisible()
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
-    expect(overflow).toBeLessThanOrEqual(0)
+    await page.waitForTimeout(300)
+    // Neither the page nor any scrolling pane may scroll sideways.
+    const overflow = await page.evaluate(() =>
+      [
+        document.documentElement,
+        ...document.querySelectorAll<HTMLElement>('.main, .pane-list, .pane-detail'),
+      ]
+        .map((e) => ({ el: e.className || 'html', extra: e.scrollWidth - e.clientWidth }))
+        .filter((o) => o.extra > 0),
+    )
+    expect(overflow).toEqual([])
     if (layout !== 'wide') {
       await page.getByRole('button', { name: 'Back to downloads' }).click()
       await expect(page.getByRole('heading', { name: /Active/ })).toBeVisible()
@@ -195,4 +206,88 @@ test('200 downloads with awkward names stay usable and never scroll sideways', a
   await page.getByRole('button', { name: 'Back to downloads' }).click()
   await page.locator('.row-name').filter({ hasText: 'zero-bytes' }).first().click()
   await expect(page.locator('article.detail .facts')).toContainText('0\u00A0B')
+})
+
+test('oklch tokens convert to the sRGB values in DESIGN-SYSTEM.md (canvas fallback)', async ({
+  page,
+}) => {
+  await page.goto('/?empty=1')
+  const out = await page.evaluate(async () => {
+    // Served by Vite at runtime; typed via the real module.
+    const path = '/src/lib/color.ts'
+    const m = (await import(/* @vite-ignore */ path)) as typeof import('../src/lib/color')
+    return {
+      fuse: m.parseOklch('oklch(0.74 0.17 50)'),
+      canvas: m.parseOklch('oklch(0.155 0.01 260)'),
+      tide: m.parseOklch('oklch(0.78 0.12 215)'),
+      withAlpha: m.parseOklch('oklch(1 0 0 / 0.08)'),
+      percent: m.parseOklch('oklch(74% 0.17 50)'),
+      junk: [m.parseOklch('rgb(1,2,3)'), m.parseOklch('oklch(a b c)'), m.parseOklch('')],
+    }
+  })
+  const near = (got: number[] | null, hex: string) => {
+    expect(got).not.toBeNull()
+    const want = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
+    got!.forEach((v, i) => expect(Math.abs(v - want[i]!)).toBeLessThanOrEqual(2))
+  }
+  near(out.fuse, '#fd8537')
+  near(out.canvas, '#0a0c11')
+  near(out.tide, '#43cae7')
+  near(out.withAlpha, '#ffffff')
+  expect(out.percent).toEqual(out.fuse)
+  expect(out.junk).toEqual([null, null, null])
+})
+
+test('a paused job opened first still draws its ring in colour, not black', async ({ page }) => {
+  await page.goto('/?drop=0')
+  await page.getByText('dataset-shard-0042.tar.zst').click()
+  await expect(page.locator('article.detail .speed-sub')).toHaveText('Paused')
+  await page.waitForTimeout(400)
+  const orange = await page.locator('[data-testid="fuse-core"] canvas').evaluate((el) => {
+    const c = el as HTMLCanvasElement
+    const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data
+    let hits = 0
+    for (let i = 0; i < d.length; i += 4) {
+      const [r, g, b, a] = [d[i]!, d[i + 1]!, d[i + 2]!, d[i + 3]!]
+      if (a > 200 && r > 150 && r - g > 60 && g > b) hits++
+    }
+    return hits
+  })
+  expect(orange).toBeGreaterThan(50) // the Fuse progress arc
+})
+
+test('on a Retina screen the canvas never widens the detail pane', async ({ browser }) => {
+  for (const width of [1024, 1180, 1440]) {
+    const ctx = await browser.newContext({ viewport: { width, height: 760 }, deviceScaleFactor: 2 })
+    const page = await ctx.newPage()
+    await page.goto('/?drop=0')
+    await expect(page.getByTestId('fuse-core')).toBeVisible()
+    await page.waitForTimeout(500)
+    const extra = await page.locator('.pane-detail').evaluate((e) => e.scrollWidth - e.clientWidth)
+    expect(extra, `at ${width}px`).toBeLessThanOrEqual(0)
+    await ctx.close()
+  }
+})
+
+test('a finished download keeps its network colours and shows who carried what', async ({
+  page,
+}) => {
+  await page.goto('/?speed=50&drop=0')
+  const detail = page.locator('article.detail')
+  await expect(detail.locator('.speed-sub')).toHaveText('Done', { timeout: 15000 })
+  const table = page.getByRole('table', { name: 'Networks in this download' })
+  await expect(table.getByRole('columnheader', { name: 'Carried' })).toBeVisible()
+  await expect(table).toContainText('Ethernet')
+  await page.waitForTimeout(2200) // let the ignition sweep fade
+  const lanes = await page.locator('[data-testid="fuse-core"] canvas').evaluate((el) => {
+    const c = el as HTMLCanvasElement
+    const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data
+    let cool = 0
+    for (let i = 0; i < d.length; i += 4) {
+      const [r, g, b, a] = [d[i]!, d[i + 1]!, d[i + 2]!, d[i + 3]!]
+      if (a > 200 && b > r + 30) cool++ // blue-ish lane ticks, not the orange of a plain ring
+    }
+    return cool
+  })
+  expect(lanes).toBeGreaterThan(50)
 })
