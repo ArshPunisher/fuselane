@@ -514,7 +514,37 @@ fn open_torrents(svc: &Arc<Service>) -> Arc<torrents::Torrents> {
     )
 }
 
+/// Points every installed browser at this copy of the app (STEPS 7.4). Runs on
+/// each launch, off the main thread: cheap when nothing changed, and a moved or
+/// updated app fixes its own manifests.
+fn register_browser_host() {
+    use fuselane_api::hosts;
+    let (Ok(current), Ok(home)) = (std::env::current_exe(), fuselane_core::home::home()) else {
+        return;
+    };
+    let exe = hosts::host_exe(current, std::env::var_os("APPIMAGE").map(Into::into));
+    match hosts::register(&exe, &home) {
+        Err(problem) => eprintln!("fuselane: browser extension: {problem}"),
+        Ok(outcomes) => {
+            for (browser, outcome) in outcomes {
+                if let hosts::Outcome::Failed(e) = outcome {
+                    eprintln!("fuselane: browser extension: couldn't register with {browser}: {e}");
+                }
+            }
+        }
+    }
+}
+
 fn main() {
+    // Started by a browser for the extension: relay its messages, never open a window.
+    let args: Vec<String> = std::env::args().collect();
+    if fuselane_api::native::is_host_invocation(&args) {
+        let code = match fuselane_core::home::home() {
+            Ok(home) => fuselane_api::native::run_host(&home),
+            Err(_) => 1,
+        };
+        std::process::exit(code);
+    }
     // Headless checks for the release workflow (L-75); never opens a window.
     if std::env::args().any(|a| a == "--self-test") {
         let checks = selftest::run();
@@ -548,6 +578,7 @@ fn main() {
         }
     };
     let on_exit = svc.clone();
+    std::thread::spawn(register_browser_host);
     // Launched to open something (Windows and Linux pass it as an argument).
     for t in opens::from_args(std::env::args()) {
         svc.open_request(t.as_draft());

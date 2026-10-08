@@ -4,6 +4,7 @@
 ;  - "Open with" lists Fuselane for .torrent files (OpenWithProgids), and
 ;  - Settings > Default apps lists it for .torrent and magnet (RegisteredApplications).
 ; Nothing here changes which app is the default.
+; Uninstalling also removes the browser extension's host registration.
 
 !macro NSIS_HOOK_POSTINSTALL
   WriteRegStr SHCTX "Software\Classes\Fuselane.torrent" "" "BitTorrent file"
@@ -29,4 +30,12 @@
   DeleteRegKey SHCTX "Software\Classes\Fuselane.magnet"
   DeleteRegValue SHCTX "Software\RegisteredApplications" "Fuselane"
   DeleteRegKey SHCTX "Software\Fuselane\Capabilities"
+
+  ; The browser extension's helper (the app writes these on every launch, STEPS 7.4).
+  DeleteRegKey HKCU "Software\Google\Chrome\NativeMessagingHosts\app.fuselane.host"
+  DeleteRegKey HKCU "Software\Chromium\NativeMessagingHosts\app.fuselane.host"
+  DeleteRegKey HKCU "Software\Microsoft\Edge\NativeMessagingHosts\app.fuselane.host"
+  DeleteRegKey HKCU "Software\BraveSoftware\Brave-Browser\NativeMessagingHosts\app.fuselane.host"
+  DeleteRegKey HKCU "Software\Mozilla\NativeMessagingHosts\app.fuselane.host"
+  RMDir /r "$APPDATA\Fuselane\NativeMessagingHosts"
 !macroend
