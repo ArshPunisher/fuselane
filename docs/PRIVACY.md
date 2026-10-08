@@ -18,7 +18,9 @@ Nothing else is sent. There is no background reporting of usage, errors or files
 
 ## Browser extension
 
-The Fuselane browser extension only talks to the Fuselane app on your own computer (native messaging). When a download starts, it passes the app the link, the file name, its size and type, and the page it came from, so the app can download it. It reads no pages, cookies or browsing history, and sends nothing to the internet.
+The Fuselane browser extension only talks to the Fuselane app on your own computer (native messaging). When a download starts, it passes the app the link, the file name, its size and type, and the page it came from, so the app can download it. It reads no pages or browsing history, and sends nothing to the internet.
+
+**Signed-in downloads (off unless you turn them on).** If you switch on "Send the site's sign-in with downloads" in the extension's settings, your browser first asks you to allow it. From then on, when a download is handed to Fuselane, the extension reads that site's cookies and your browser's User-Agent and passes them to the Fuselane app on your computer, so the app can fetch files that need you to be signed in. The app keeps them in memory only while that download runs, never writes them to disk or logs, and sends them only to the site the file comes from. Switching it off removes the permission.
 
 ## Diagnostics
 

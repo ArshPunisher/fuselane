@@ -162,7 +162,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 
 - [x] 7.1 WXT project: Chrome MV3 + Firefox MV3 builds; popup (status, on/off). Options page later
 - [x] 7.2 Capture rules engine (size, type, MIME, domain) — unit tests (`packages/capture`). Alt bypass needs a content script and host permission: later
-- [ ] 7.3 Auth forwarding: cookies (incl. partitioned), headers, referrer, UA — never logged
+- [x] 7.3 Auth forwarding: cookies (incl. partitioned), referrer, UA, opt-in from settings; header allow-list in the engine; never logged or stored on disk
 - [x] 7.4 Native-messaging host: the app binary (and the CLI) runs as the host; the app writes manifests and HKCU keys for installed browsers on every launch; `fuselane browsers`; uninstall cleanup on Windows; Linux CI e2e with a real Chromium
 - [ ] 7.5 Localhost WebSocket fallback with pairing code + token + Origin/Host checks — T3, T4
 - [x] 7.6 Message schema v1 validated on both sides (shared vectors); the browser resumes on decline or timeout

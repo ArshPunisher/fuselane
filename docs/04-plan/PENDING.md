@@ -18,7 +18,7 @@ says what is waiting and on whom. Last updated 2026-10-09.
 | What | State |
 |---|---|
 | librqbit PR [#699](https://github.com/ikatson/rqbit/pull/699) (handshake read in pieces) | Open, no reply yet. Fuselane already works around it. |
-| Chrome Web Store review of item `nggljghjikdkigiekdciocigdnnhponl` (submitted 2026-10-09) | Pending; publishes automatically once approved. Ship an app release with the native host before it goes live. |
+| Chrome Web Store review of item `nggljghjikdkigiekdciocigdnnhponl` (submitted 2026-10-09, version 0.1.0) | Pending; publishes automatically once approved. The app side shipped in beta.4. **Once 0.1.0 is live, upload extension 0.2.0** (signed-in downloads: optional `cookies` + `<all_urls>`, opt-in), so the first review isn't restarted. |
 
 ## Next for the agent (no owner action needed)
 
