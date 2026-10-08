@@ -1707,3 +1707,160 @@ kbd {
   background: var(--surface-2);
   color: var(--ink);
 }
+
+/* ---------- Torrents ---------- */
+
+.dialog-foot .foot-start {
+  margin-right: auto;
+}
+
+.pick-head {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pick-name {
+  color: var(--ink);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pick-head .field-help {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pick {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.pick input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: none;
+  accent-color: var(--fuse);
+}
+
+.pick input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--fuse);
+  outline-offset: 2px;
+}
+
+.pick-all,
+.pick-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+.pick-all {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* Torrents can list thousands of files: skip layout for rows out of view. */
+.pick-list > li {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 31px;
+}
+
+.pick-row:hover {
+  background: var(--surface-2);
+}
+
+.pick-sum,
+.pick-size {
+  color: var(--mute);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.pick-list {
+  max-height: min(320px, 45vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.pick-path {
+  color: var(--body);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pick-dir {
+  color: var(--mute);
+}
+
+.pick-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.confirm {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.torrent-body {
+  display: grid;
+  gap: 22px;
+  max-width: 760px;
+  min-width: 0;
+}
+
+.torrent-head {
+  display: grid;
+  gap: 14px;
+}
+
+.torrent-head .speed {
+  justify-content: flex-start;
+}
+
+.torrent-bar {
+  height: 6px;
+}
+
+.torrent-files .group {
+  margin-bottom: 6px;
+}
+
+@media (max-width: 640px) {
+  .dialog-foot {
+    flex-wrap: wrap;
+  }
+
+  .dialog-foot .foot-start {
+    flex-basis: 100%;
+    justify-content: flex-start;
+  }
+
+  .pick-list {
+    max-height: 50vh;
+  }
+}

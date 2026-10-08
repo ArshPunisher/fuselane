@@ -6,6 +6,7 @@
 // seed=N, freeze=SECONDS (advance to that instant, then stop: for screenshots),
 // drop=0 (the phone never drops out).
 import type { Backend } from './backend'
+import { createDemoTorrents } from './demoTorrents'
 import type {
   AllowanceView,
   JobStatus,
@@ -70,6 +71,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
   let nextId = 1
   let clock = 0
   let listener: ((e: UiEvent) => void) | null = null
+  const torrents = createDemoTorrents(params, () => (e) => listener?.(e))
   let limits: LimitsView = { global: 0, networks: [], slow: false, slowRate: 1024 * 1024 }
   let prefs: NetPref[] = []
   let perNetDns = false
@@ -268,6 +270,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
 
   function tick() {
     step(0.2 * speed)
+    if (torrents.step(0.2 * speed)) torrents.send()
     for (const j of jobs) if (j.status === 'running') listener?.({ type: 'live', ...live(j) })
   }
 
@@ -551,11 +554,17 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       )
       emitJobs()
     },
+    ...torrents.methods,
     subscribe: async (onEvent) => {
       listener = onEvent
       emitJobs()
+      torrents.send()
       if (freeze !== null) {
-        for (let t = 0; t < freeze; t += 0.2) step(0.2)
+        for (let t = 0; t < freeze; t += 0.2) {
+          step(0.2)
+          torrents.step(0.2)
+        }
+        torrents.send()
         for (const j of jobs) if (j.status === 'running') onEvent({ type: 'live', ...live(j) })
         return
       }

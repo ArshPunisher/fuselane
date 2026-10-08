@@ -20,7 +20,7 @@ import { STATUS_WORD } from './status'
 import type { JobView, Live } from '../lib/types'
 
 /** The platform's own words for showing a file in its folder. */
-const REVEAL_LABEL = /Mac/i.test(navigator.platform)
+export const REVEAL_LABEL = /Mac/i.test(navigator.platform)
   ? 'Show in Finder'
   : /Win/i.test(navigator.platform)
     ? 'Show in Explorer'

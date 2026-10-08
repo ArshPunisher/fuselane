@@ -49,7 +49,10 @@ export interface Live {
   hedges: number
 }
 
-export type UiEvent = { type: 'jobs'; jobs: JobView[] } | ({ type: 'live' } & Live)
+export type UiEvent =
+  | { type: 'jobs'; jobs: JobView[] }
+  | ({ type: 'live' } & Live)
+  | { type: 'torrents'; torrents: TorrentView[] }
 
 export interface UiError {
   code: string
@@ -113,4 +116,48 @@ export interface AllowanceRequest {
   name: string
   bytes: number
   resetDay: number
+}
+
+export type TorrentStatus = 'checking' | 'downloading' | 'paused' | 'completed' | 'failed'
+
+/** A torrent in the list (apps/desktop/src-tauri/src/torrents.rs). */
+export interface TorrentView {
+  /** The info hash: stable across restarts. */
+  id: string
+  name: string
+  folder: string
+  status: TorrentStatus
+  done: number
+  total: number
+  uploaded: number
+  rate: number
+  error: string | null
+  fileCount: number
+  selectedCount: number
+  networks: TorrentNetView[]
+  addedAt: number
+}
+
+export interface TorrentNetView {
+  name: string
+  peers: number
+  received: number
+  /** Verified bytes credited to this network; all networks sum to `done`. */
+  credited: number
+}
+
+export interface TorrentFileView {
+  index: number
+  path: string
+  size: number
+  selected: boolean
+}
+
+/** What a torrent holds before it starts; the user picks files from this. */
+export interface ListingView {
+  token: string
+  name: string
+  folder: string
+  total: number
+  files: TorrentFileView[]
 }

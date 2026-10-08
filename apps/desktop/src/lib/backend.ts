@@ -6,10 +6,13 @@ import type {
   AllowanceView,
   AppInfo,
   JobView,
+  ListingView,
   LimitsView,
   NetPref,
   NetView,
   PreviewView,
+  TorrentFileView,
+  TorrentView,
   UiError,
   UiEvent,
   UpdateInfo,
@@ -54,6 +57,22 @@ export interface Backend {
   preview(url: string): Promise<PreviewView>
   subscribe(onEvent: (e: UiEvent) => void): Promise<void>
   listJobs(): Promise<JobView[]>
+  /** A .torrent file the user picked, or null if they cancelled. */
+  pickTorrent(): Promise<string | null>
+  /** Reads a magnet's file list (from peers; can take a while). Writes nothing. */
+  inspectMagnet(magnet: string, dir: string | null): Promise<ListingView>
+  inspectTorrentFile(path: string, dir: string | null): Promise<ListingView>
+  /** Starts an inspected torrent with the chosen files; its id. */
+  addTorrent(token: string, files: number[]): Promise<string>
+  listTorrents(): Promise<TorrentView[]>
+  torrentFiles(id: string): Promise<TorrentFileView[]>
+  pauseTorrent(id: string): Promise<void>
+  resumeTorrent(id: string): Promise<void>
+  selectTorrentFiles(id: string, files: number[]): Promise<void>
+  removeTorrent(id: string, deleteFiles: boolean): Promise<void>
+  revealTorrent(id: string): Promise<void>
+  /** A dropped .torrent's contents (the page can't see its path). */
+  inspectTorrentBytes(bytes: Uint8Array, dir: string | null): Promise<ListingView>
 }
 
 /** Turns anything thrown across IPC into a UiError the UI can show. */
@@ -111,6 +130,19 @@ async function tauriBackend(): Promise<Backend> {
     fixLink: (id, url) => call('fix_link', { id, url }),
     startOver: (id) => call('start_over', { id }),
     preview: (url) => call('preview', { url }),
+    pickTorrent: () => call('pick_torrent'),
+    inspectMagnet: (magnet, dir) => call('torrent_inspect_magnet', { magnet, dir }),
+    inspectTorrentFile: (path, dir) => call('torrent_inspect_file', { path, dir }),
+    inspectTorrentBytes: (bytes, dir) =>
+      call('torrent_inspect_bytes', { bytes: Array.from(bytes), dir }),
+    addTorrent: (token, files) => call('torrent_add', { token, files }),
+    listTorrents: () => call('torrent_list'),
+    torrentFiles: (id) => call('torrent_files', { id }),
+    pauseTorrent: (id) => call('torrent_pause', { id }),
+    resumeTorrent: (id) => call('torrent_resume', { id }),
+    selectTorrentFiles: (id, files) => call('torrent_select', { id, files }),
+    removeTorrent: (id, deleteFiles) => call('torrent_remove', { id, deleteFiles }),
+    revealTorrent: (id) => call('torrent_reveal', { id }),
     subscribe: async (onEvent) => {
       const channel = new Channel<UiEvent>()
       channel.onmessage = onEvent

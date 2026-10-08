@@ -3,6 +3,7 @@ import { DownloadSimple, Gear, Plus, ShareNetwork } from '@phosphor-icons/react'
 import { useApp, type View } from './lib/store'
 import { TransferList } from './components/TransferList'
 import { TransferDetail } from './components/TransferDetail'
+import { TorrentDetail } from './components/TorrentDetail'
 import { NewDownload } from './components/NewDownload'
 import { NetworkList, NetworksView } from './components/NetworksView'
 import { SettingsView } from './components/SettingsView'
@@ -99,17 +100,21 @@ function Brand() {
 
 function Transfers({ layout }: { layout: Layout }) {
   const jobs = useApp((s) => s.jobs)
+  const torrents = useApp((s) => s.torrents)
   const selected = useApp((s) => s.selected)
+  const selectedTorrent = useApp((s) => s.selectedTorrent)
   const select = useApp((s) => s.select)
+  const selectTorrent = useApp((s) => s.selectTorrent)
   const job = jobs.find((j) => j.id === selected)
+  const torrent = torrents.find((t) => t.id === selectedTorrent)
 
   // On wide windows keep something in the detail pane.
   useEffect(() => {
-    if (layout === 'wide' && selected === null && jobs.length) {
-      const first = jobs.find((j) => j.status === 'running') ?? jobs[0]
-      if (first) select(first.id)
-    }
-  }, [layout, selected, jobs, select])
+    if (layout !== 'wide' || selected !== null || selectedTorrent !== null) return
+    const first = jobs.find((j) => j.status === 'running') ?? jobs[0]
+    if (first) select(first.id)
+    else if (torrents[0]) selectTorrent(torrents[0].id)
+  }, [layout, selected, selectedTorrent, jobs, torrents, select, selectTorrent])
 
   if (layout === 'wide') {
     return (
@@ -120,6 +125,8 @@ function Transfers({ layout }: { layout: Layout }) {
         <div className="pane-detail">
           {job ? (
             <TransferDetail job={job} onBack={null} />
+          ) : torrent ? (
+            <TorrentDetail t={torrent} onBack={null} />
           ) : (
             <div className="detail-empty muted">Pick a download to see it fuse.</div>
           )}
@@ -128,6 +135,7 @@ function Transfers({ layout }: { layout: Layout }) {
     )
   }
   if (job) return <TransferDetail job={job} onBack={() => select(null)} />
+  if (torrent) return <TorrentDetail t={torrent} onBack={() => selectTorrent(null)} />
   return <TransferList />
 }
 
@@ -194,14 +202,26 @@ export function App() {
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
       const text = e.clipboardData?.getData('text') ?? ''
-      if (/^https?:\/\//i.test(text.trim())) setAdding(true, text.trim())
+      if (/^(https?:\/\/|magnet:\?)/i.test(text.trim())) setAdding(true, text.trim())
     }
     // Dropping a link (from a browser's address bar or a page) starts one too.
     const over = (e: DragEvent) => {
-      if (e.dataTransfer?.types.some((t) => t === 'text/uri-list' || t === 'text/plain'))
+      if (
+        e.dataTransfer?.types.some(
+          (t) => t === 'text/uri-list' || t === 'text/plain' || t === 'Files',
+        )
+      )
         e.preventDefault()
     }
     const drop = (e: DragEvent) => {
+      const file = [...(e.dataTransfer?.files ?? [])].find((f) => /\.torrent$/i.test(f.name))
+      if (file) {
+        e.preventDefault()
+        void useApp.getState().dropTorrent(file)
+        return
+      }
+      // Never let the webview navigate to a dropped file.
+      if (e.dataTransfer?.files.length) e.preventDefault()
       const text = (
         e.dataTransfer?.getData('text/uri-list') ||
         e.dataTransfer?.getData('text/plain') ||
@@ -210,7 +230,7 @@ export function App() {
         .split('\n')
         .map((l) => l.trim())
         .find((l) => l && !l.startsWith('#'))
-      if (text && /^https?:\/\//i.test(text)) {
+      if (text && /^(https?:\/\/|magnet:\?)/i.test(text)) {
         e.preventDefault()
         setAdding(true, text)
       }
@@ -227,9 +247,11 @@ export function App() {
     }
   }, [setAdding])
 
+  const backend = useApp((s) => s.backend)
+
   // Pages appear once the backend is connected, so no button can be clicked into
   // the moment where its action would silently do nothing.
-  const connected = useApp((s) => s.backend !== null)
+  const connected = backend !== null
   const page = !connected ? (
     <div className="page" aria-busy="true" aria-label="Starting Fuselane" />
   ) : view === 'networks' ? (

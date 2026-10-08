@@ -193,7 +193,8 @@ test('reduced motion still shows progress', async ({ page }) => {
 test('200 downloads with awkward names stay usable and never scroll sideways', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 })
   await page.goto('/?many=200')
-  await expect(page.locator('.row')).toHaveCount(205)
+  // 200 + the 5 sample downloads + the sample torrent.
+  await expect(page.locator('.row')).toHaveCount(206)
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
   expect(overflow).toBeLessThanOrEqual(0)
   // The 240-character name is cut with an ellipsis, not wrapped or overflowing.

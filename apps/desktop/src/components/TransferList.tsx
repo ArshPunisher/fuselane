@@ -5,13 +5,15 @@ import {
   Play,
   WarningCircle,
   HourglassMedium,
+  Magnet,
   Plus,
 } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { bytes, percent, rateText } from '../lib/format'
 import { assignLanes } from '../lib/lanes'
-import type { JobView, Live } from '../lib/types'
+import type { JobView, Live, TorrentView } from '../lib/types'
 import { STATUS_WORD } from './status'
+import { TORRENT_WORD, torrentNets } from './TorrentDetail'
 
 function StatusIcon({ job }: { job: JobView }) {
   const p = { size: 18, 'aria-hidden': true } as const
@@ -108,8 +110,83 @@ function Row({ job }: { job: JobView }) {
   )
 }
 
+function torrentMeta(t: TorrentView): string {
+  if (t.status === 'completed') return bytes(t.total)
+  const pct = percent(t.done, t.total)
+  const head = `${pct === null ? 0 : Math.floor(pct)}%, ${bytes(t.done)} of ${bytes(t.total)}`
+  return t.status === 'downloading' ? `${head}, ${rateText(t.rate)}` : head
+}
+
+function TorrentRow({ t }: { t: TorrentView }) {
+  const selected = useApp((s) => s.selectedTorrent === t.id)
+  const select = useApp((s) => s.selectTorrent)
+  const act = useApp((s) => s.act)
+  const known = useApp((s) => s.networks)
+  const nets = torrentNets(t.networks, known)
+  const lanes = assignLanes(nets)
+  const pct = t.status === 'completed' ? 100 : (percent(t.done, t.total) ?? 0)
+  const canPause = t.status === 'downloading' || t.status === 'checking'
+  const canResume = t.status === 'paused' || t.status === 'failed'
+  const status = t.status === 'downloading' ? 'running' : t.status
+  const p = { size: 18, 'aria-hidden': true } as const
+  return (
+    <li className="row" data-selected={selected || undefined} data-status={status}>
+      <button
+        className="row-main"
+        onClick={() => select(t.id)}
+        aria-current={selected ? 'true' : undefined}
+      >
+        {t.status === 'completed' ? (
+          <CheckCircle {...p} className="ic ic-success" weight="fill" />
+        ) : t.status === 'failed' ? (
+          <WarningCircle {...p} className="ic ic-danger" weight="fill" />
+        ) : (
+          <Magnet {...p} className={t.status === 'downloading' ? 'ic ic-fuse' : 'ic'} />
+        )}
+        <span className="row-text">
+          <span className="row-name" title={t.name} translate="no">
+            {t.name}
+          </span>
+          <span className="row-meta">
+            <span className="row-state">{TORRENT_WORD[t.status]}</span>
+            <span className="num">{torrentMeta(t)}</span>
+          </span>
+          <div className="bar" data-status={status}>
+            <div className="bar-fill" style={{ width: `${pct}%` }}>
+              {t.status === 'downloading' &&
+                t.done > 0 &&
+                nets.map((n, i) => (
+                  <span
+                    key={n.name}
+                    style={{
+                      width: `${(n.credited / t.done) * 100}%`,
+                      background: `var(--lane-${lanes[i]})`,
+                    }}
+                  />
+                ))}
+            </div>
+          </div>
+        </span>
+      </button>
+      {canPause || canResume ? (
+        <button
+          className="icon-btn row-action"
+          aria-label={canPause ? `Pause ${t.name}` : `Resume ${t.name}`}
+          title={canPause ? 'Pause' : 'Resume'}
+          onClick={() => act((b) => (canPause ? b.pauseTorrent(t.id) : b.resumeTorrent(t.id)))}
+        >
+          {canPause ? <Pause size={16} aria-hidden /> : <Play size={16} aria-hidden />}
+        </button>
+      ) : (
+        <span className="row-action-slot" aria-hidden="true" />
+      )}
+    </li>
+  )
+}
+
 export function TransferList() {
   const jobs = useApp((s) => s.jobs)
+  const torrents = useApp((s) => s.torrents)
   const ready = useApp((s) => s.ready)
   const setAdding = useApp((s) => s.setAdding)
   if (!ready) {
@@ -127,13 +204,13 @@ export function TransferList() {
       </ul>
     )
   }
-  if (!jobs.length) {
+  if (!jobs.length && !torrents.length) {
     return (
       <div className="empty">
         <p className="empty-title">Nothing downloading yet</p>
         <p className="empty-body">
-          Paste a link and Fuselane splits it across every network you have, then fuses the parts
-          into one file.
+          Paste a link or a magnet, or drop a .torrent file. Fuselane spreads it across every
+          network you have, then fuses the parts into one file.
         </p>
         <button className="btn btn-primary" onClick={() => setAdding(true)}>
           <Plus size={16} aria-hidden /> New download
@@ -153,6 +230,18 @@ export function TransferList() {
           <ul className="list">
             {active.map((j) => (
               <Row key={j.id} job={j} />
+            ))}
+          </ul>
+        </section>
+      )}
+      {torrents.length > 0 && (
+        <section aria-labelledby="g-torrents">
+          <h2 id="g-torrents" className="group">
+            Torrents <span className="num">{torrents.length}</span>
+          </h2>
+          <ul className="list">
+            {torrents.map((t) => (
+              <TorrentRow key={t.id} t={t} />
             ))}
           </ul>
         </section>

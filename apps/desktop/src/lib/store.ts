@@ -7,6 +7,7 @@ import type {
   LimitsView,
   Live,
   NetPref,
+  TorrentView,
   NetView,
   UiError,
   UpdateInfo,
@@ -27,6 +28,9 @@ interface State {
   ready: boolean
   info: AppInfo | null
   jobs: JobView[]
+  torrents: TorrentView[]
+  /** The torrent shown in the detail pane (torrents and downloads share it). */
+  selectedTorrent: string | null
   live: Record<number, Live>
   history: Record<number, History>
   networks: NetView[]
@@ -39,12 +43,17 @@ interface State {
   adding: boolean
   /** A link handed to the dialog by paste or drop. */
   draft: string
+  /** A dropped .torrent's contents, handed to the dialog. */
+  draftTorrent: Uint8Array | null
   toast: (UiError & { at: number }) | null
   theme: Theme
   start(): Promise<void>
   select(id: number | null): void
+  selectTorrent(id: string | null): void
   setView(v: View): void
   setAdding(open: boolean, draft?: string): void
+  /** Opens the dialog with a dropped .torrent file (checked for size first). */
+  dropTorrent(file: File): Promise<void>
   setTheme(t: Theme): void
   dismissToast(): void
   refreshNetworks(): Promise<void>
@@ -79,6 +88,8 @@ export const useApp = create<State>((set, get) => ({
   ready: false,
   info: null,
   jobs: [],
+  torrents: [],
+  selectedTorrent: null,
   live: {},
   history: {},
   networks: [],
@@ -90,6 +101,7 @@ export const useApp = create<State>((set, get) => ({
   view: 'transfers',
   adding: false,
   draft: '',
+  draftTorrent: null,
   toast: null,
   theme: savedTheme(),
 
@@ -109,7 +121,25 @@ export const useApp = create<State>((set, get) => ({
       const netPrefs = await backend.networkPrefs().catch(() => [])
       setNetPrefs(netPrefs)
       set({ info, networks, limits, netPrefs })
+      // The first list fills the page until the first event; it never overwrites a newer event.
+      let heard = false
+      backend
+        .listTorrents()
+        .then((torrents) => {
+          if (!heard) set({ torrents })
+        })
+        .catch(() => {})
       await backend.subscribe((e) => {
+        if (e.type === 'torrents') {
+          heard = true
+          const ids = new Set(e.torrents.map((t) => t.id))
+          set((s) => ({
+            torrents: e.torrents,
+            selectedTorrent:
+              s.selectedTorrent !== null && !ids.has(s.selectedTorrent) ? null : s.selectedTorrent,
+          }))
+          return
+        }
         if (e.type === 'jobs') {
           const ids = new Set(e.jobs.map((j) => j.id))
           set((s) => ({
@@ -136,9 +166,31 @@ export const useApp = create<State>((set, get) => ({
       set({ ready: true, toast: { ...toUiError(e), at: Date.now() } })
     }
   },
-  select: (id) => set({ selected: id }),
+  select: (id) => set({ selected: id, selectedTorrent: null }),
+  selectTorrent: (id) => set({ selectedTorrent: id, selected: null }),
   setView: (view) => set({ view }),
-  setAdding: (adding, draft) => set({ adding, draft: draft ?? '' }),
+  setAdding: (adding, draft) =>
+    set((s) => ({ adding, draft: draft ?? '', draftTorrent: adding ? s.draftTorrent : null })),
+  async dropTorrent(file) {
+    const MAX = 8 * 1024 * 1024
+    if (file.size > MAX) {
+      set({
+        toast: {
+          code: 'torrent-too-big',
+          message: `That file is ${Math.ceil(file.size / 1024 / 1024)} MiB; a .torrent file is at most 8 MiB.`,
+          hint: 'Drop the .torrent file, not the download itself.',
+          at: Date.now(),
+        },
+      })
+      return
+    }
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      set({ draftTorrent: bytes, draft: '', adding: true })
+    } catch (e) {
+      set({ toast: { ...toUiError(e), at: Date.now() } })
+    }
+  },
   setTheme(theme) {
     try {
       localStorage.setItem('fuselane.theme', theme)

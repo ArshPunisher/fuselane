@@ -1,13 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
-import { X } from '@phosphor-icons/react'
+import { ArrowLeft, FileArrowUp, X } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { toUiError } from '../lib/backend'
-import type { PreviewView, UiError } from '../lib/types'
+import type { ListingView, PreviewView, UiError } from '../lib/types'
+import { FilePicker } from './FilePicker'
 import { bytes } from '../lib/format'
 
 /** Quick local check so obvious mistakes show before a round trip; the backend decides. */
 function looksLikeLink(s: string): boolean {
   return /^https?:\/\/\S+$/i.test(s.trim())
+}
+
+function isMagnet(s: string): boolean {
+  return /^magnet:\?/i.test(s.trim())
+}
+
+/** A dropped or opened file path (not a link). */
+function isTorrentPath(s: string): boolean {
+  return /\.torrent$/i.test(s.trim()) && !looksLikeLink(s) && !isMagnet(s)
 }
 
 export function NewDownload() {
@@ -16,6 +26,12 @@ export function NewDownload() {
   const backend = useApp((s) => s.backend)
   const info = useApp((s) => s.info)
   const select = useApp((s) => s.select)
+  const selectTorrent = useApp((s) => s.selectTorrent)
+  const [listing, setListing] = useState<ListingView | null>(null)
+  const [chosen, setChosen] = useState<Set<number>>(new Set())
+  const [finding, setFinding] = useState(false)
+  // Bumped on cancel or close, so a late answer for an abandoned lookup is ignored.
+  const lookup = useRef(0)
   const dialog = useRef<HTMLDialogElement>(null)
   const linkInput = useRef<HTMLInputElement>(null)
   const dirInput = useRef<HTMLInputElement>(null)
@@ -24,6 +40,7 @@ export function NewDownload() {
   const [error, setError] = useState<UiError | null>(null)
   const [busy, setBusy] = useState(false)
   const draft = useApp((s) => s.draft)
+  const draftTorrent = useApp((s) => s.draftTorrent)
   const [preview, setPreview] = useState<
     | { state: 'idle' }
     | { state: 'loading' }
@@ -33,7 +50,7 @@ export function NewDownload() {
 
   // Look the link up shortly after typing stops; stale answers are dropped.
   useEffect(() => {
-    if (!open || !backend || !looksLikeLink(url)) {
+    if (!open || !backend || !looksLikeLink(url) || listing) {
       setPreview({ state: 'idle' })
       return
     }
@@ -49,7 +66,7 @@ export function NewDownload() {
       live = false
       clearTimeout(t)
     }
-  }, [url, open, backend])
+  }, [url, open, backend, listing])
 
   useEffect(() => {
     const d = dialog.current
@@ -60,6 +77,14 @@ export function NewDownload() {
       d.showModal()
       // showModal focuses the first control (Close); the link is what people came for.
       linkInput.current?.focus()
+      if (draftTorrent) {
+        void inspect((b) => b.inspectTorrentBytes(draftTorrent, dir.trim() || null))
+        return
+      }
+      if (draft && isTorrentPath(draft)) {
+        void inspect((b) => b.inspectTorrentFile(draft, dir.trim() || null))
+        return
+      }
       if (draft) {
         setUrl(draft)
         return
@@ -68,16 +93,67 @@ export function NewDownload() {
       navigator.clipboard
         ?.readText?.()
         .then((t) => {
-          if (looksLikeLink(t)) setUrl((u) => u || t.trim())
+          if (looksLikeLink(t) || isMagnet(t)) setUrl((u) => u || t.trim())
         })
         .catch(() => {})
     }
     if (!open && d.open) d.close()
-  }, [open, draft])
+    if (!open) {
+      lookup.current++
+      setListing(null)
+      setFinding(false)
+    }
+  }, [open, draft, draftTorrent])
+
+  /** Reads a torrent's files, then shows the picker. */
+  async function inspect(f: (b: NonNullable<typeof backend>) => Promise<ListingView>) {
+    if (!backend) return
+    const mine = ++lookup.current
+    setFinding(true)
+    setError(null)
+    try {
+      const l = await f(backend)
+      if (mine !== lookup.current) return
+      setListing(l)
+      setChosen(new Set(l.files.map((x) => x.index)))
+    } catch (err) {
+      if (mine === lookup.current) setError(toUiError(err))
+    } finally {
+      if (mine === lookup.current) setFinding(false)
+    }
+  }
+
+  async function openTorrentFile() {
+    const path = await backend?.pickTorrent().catch(() => null)
+    if (path) await inspect((b) => b.inspectTorrentFile(path, dir.trim() || null))
+  }
+
+  async function startTorrent(e: React.FormEvent) {
+    e.preventDefault()
+    if (!backend || busy || !listing) return
+    setBusy(true)
+    setError(null)
+    try {
+      const id = await backend.addTorrent(listing.token, [...chosen])
+      setUrl('')
+      setDir('')
+      setListing(null)
+      setAdding(false)
+      selectTorrent(id)
+    } catch (err) {
+      setError(toUiError(err))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
-    if (!backend || busy) return
+    if (!backend || busy || finding) return
+    if (isMagnet(url)) {
+      await inspect((b) => b.inspectMagnet(url.trim(), dir.trim() || null))
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -96,7 +172,8 @@ export function NewDownload() {
     }
   }
 
-  const urlError = error && error.code === 'bad-link' ? error : null
+  const urlError =
+    error && (error.code === 'bad-link' || error.code === 'not-a-magnet') ? error : null
   const dirError = error && error.code === 'folder-missing' ? error : null
   const otherError = error && !urlError && !dirError ? error : null
 
@@ -110,124 +187,202 @@ export function NewDownload() {
         if (!dialog.current?.open) setAdding(false)
       }}
     >
-      <form onSubmit={submit} noValidate>
-        <header className="dialog-head">
-          <h2 id="nd-title">New download</h2>
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label="Close"
-            onClick={() => setAdding(false)}
-          >
-            <X size={18} aria-hidden />
-          </button>
-        </header>
-        <div className="field">
-          <label htmlFor="nd-url">Link</label>
-          <input
-            id="nd-url"
-            name="url"
-            type="url"
-            inputMode="url"
-            autoComplete="off"
-            spellCheck={false}
-            ref={linkInput}
-            value={url}
-            placeholder="https://example.com/file.iso…"
-            aria-invalid={urlError ? true : undefined}
-            aria-describedby={urlError ? 'nd-url-err' : 'nd-url-help'}
-            onChange={(e) => {
-              setUrl(e.target.value)
-              if (urlError) setError(null)
-            }}
-          />
-          {urlError ? (
-            <p id="nd-url-err" className="field-error" aria-live="polite">
-              {urlError.message} {urlError.hint}
-            </p>
-          ) : (
-            <p
-              id="nd-url-help"
-              className="field-help"
-              aria-live="polite"
-              data-preview={preview.state}
-            >
-              {preview.state === 'loading' && 'Looking up the file…'}
-              {preview.state === 'ok' && (
-                <>
-                  <span className="preview-name" translate="no">
-                    {preview.data.filename}
-                  </span>
-                  {preview.data.total !== null
-                    ? `, ${bytes(preview.data.total)}`
-                    : ', size unknown'}
-                  .{' '}
-                  {preview.data.splittable
-                    ? 'Splits across all your networks.'
-                    : "This server won't split the file, so one network will carry it."}
-                </>
-              )}
-              {preview.state === 'error' && preview.message}
-              {preview.state === 'idle' && 'Fuselane uses every network that can reach the server.'}
-            </p>
-          )}
-        </div>
-        <div className="field">
-          <label htmlFor="nd-dir">Save to</label>
-          <div className="field-row">
-            <input
-              id="nd-dir"
-              name="dir"
-              autoComplete="off"
-              spellCheck={false}
-              value={dir}
-              ref={dirInput}
-              placeholder={`${info?.defaultDir ?? 'Downloads'}…`}
-              aria-invalid={dirError ? true : undefined}
-              aria-describedby={dirError ? 'nd-dir-err' : 'nd-dir-help'}
-              onChange={(e) => {
-                setDir(e.target.value)
-                if (dirError) setError(null)
-              }}
-            />
+      {listing ? (
+        <form onSubmit={startTorrent} noValidate>
+          <header className="dialog-head">
+            <h2 id="nd-title">Choose files</h2>
             <button
               type="button"
-              className="btn btn-ghost field-side"
-              onClick={async () => {
-                const picked = await backend?.pickFolder().catch(() => null)
-                if (picked) {
-                  setDir(picked)
-                  if (dirError) setError(null)
-                }
-              }}
+              className="icon-btn"
+              aria-label="Close"
+              onClick={() => setAdding(false)}
             >
-              Choose…
+              <X size={18} aria-hidden />
             </button>
-          </div>
-          {dirError ? (
-            <p id="nd-dir-err" className="field-error" aria-live="polite">
-              {dirError.message} {dirError.hint}
+          </header>
+          <div className="pick-head">
+            <p className="pick-name" translate="no" title={listing.name}>
+              {listing.name}
             </p>
-          ) : (
-            <p id="nd-dir-help" className="field-help">
-              Leave empty to use {info?.defaultDir ?? 'your Downloads folder'}.
+            <p className="field-help" translate="no" title={listing.folder}>
+              Saves to {listing.folder}
+            </p>
+          </div>
+          <FilePicker
+            files={listing.files}
+            chosen={chosen}
+            onChange={setChosen}
+            idPrefix="nd-file"
+          />
+          {error && (
+            <p className="field-error" role="alert">
+              {error.message} {error.hint}
             </p>
           )}
-        </div>
-        {otherError && (
-          <p className="field-error" role="alert">
-            {otherError.message} {otherError.hint}
-          </p>
-        )}
-        <footer className="dialog-foot">
-          <button type="button" className="btn btn-ghost" onClick={() => setAdding(false)}>
-            Cancel
-          </button>
-          <button type="submit" className="btn btn-primary" disabled={busy}>
-            {busy ? 'Starting…' : 'Download'}
-          </button>
-        </footer>
-      </form>
+          <footer className="dialog-foot">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => {
+                setListing(null)
+                setError(null)
+              }}
+            >
+              <ArrowLeft size={16} aria-hidden /> Back
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={busy || chosen.size === 0}>
+              {busy ? 'Starting…' : 'Download'}
+            </button>
+          </footer>
+        </form>
+      ) : (
+        <form onSubmit={submit} noValidate>
+          <header className="dialog-head">
+            <h2 id="nd-title">New download</h2>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Close"
+              onClick={() => setAdding(false)}
+            >
+              <X size={18} aria-hidden />
+            </button>
+          </header>
+          <div className="field">
+            <label htmlFor="nd-url">Link</label>
+            <input
+              id="nd-url"
+              name="url"
+              type="url"
+              inputMode="url"
+              autoComplete="off"
+              spellCheck={false}
+              ref={linkInput}
+              value={url}
+              placeholder="https://example.com/file.iso or magnet:?…"
+              aria-invalid={urlError ? true : undefined}
+              aria-describedby={urlError ? 'nd-url-err' : 'nd-url-help'}
+              onChange={(e) => {
+                setUrl(e.target.value)
+                if (urlError) setError(null)
+              }}
+            />
+            {urlError ? (
+              <p id="nd-url-err" className="field-error" aria-live="polite">
+                {urlError.message} {urlError.hint}
+              </p>
+            ) : (
+              <p
+                id="nd-url-help"
+                className="field-help"
+                aria-live="polite"
+                data-preview={preview.state}
+              >
+                {preview.state === 'loading' && 'Looking up the file…'}
+                {preview.state === 'ok' && (
+                  <>
+                    <span className="preview-name" translate="no">
+                      {preview.data.filename}
+                    </span>
+                    {preview.data.total !== null
+                      ? `, ${bytes(preview.data.total)}`
+                      : ', size unknown'}
+                    .{' '}
+                    {preview.data.splittable
+                      ? 'Splits across all your networks.'
+                      : "This server won't split the file, so one network will carry it."}
+                  </>
+                )}
+                {preview.state === 'error' && preview.message}
+                {preview.state === 'idle' &&
+                  (finding
+                    ? "Finding the torrent's files. This can take a minute when few people share it."
+                    : isMagnet(url)
+                      ? 'A magnet link. Next you pick which of its files to download.'
+                      : 'Fuselane uses every network that can reach the server.')}
+              </p>
+            )}
+          </div>
+          <div className="field">
+            <label htmlFor="nd-dir">Save to</label>
+            <div className="field-row">
+              <input
+                id="nd-dir"
+                name="dir"
+                autoComplete="off"
+                spellCheck={false}
+                value={dir}
+                ref={dirInput}
+                placeholder={`${info?.defaultDir ?? 'Downloads'}…`}
+                aria-invalid={dirError ? true : undefined}
+                aria-describedby={dirError ? 'nd-dir-err' : 'nd-dir-help'}
+                onChange={(e) => {
+                  setDir(e.target.value)
+                  if (dirError) setError(null)
+                }}
+              />
+              <button
+                type="button"
+                className="btn btn-ghost field-side"
+                onClick={async () => {
+                  const picked = await backend?.pickFolder().catch(() => null)
+                  if (picked) {
+                    setDir(picked)
+                    if (dirError) setError(null)
+                  }
+                }}
+              >
+                Choose…
+              </button>
+            </div>
+            {dirError ? (
+              <p id="nd-dir-err" className="field-error" aria-live="polite">
+                {dirError.message} {dirError.hint}
+              </p>
+            ) : (
+              <p id="nd-dir-help" className="field-help">
+                Leave empty to use {info?.defaultDir ?? 'your Downloads folder'}.
+              </p>
+            )}
+          </div>
+          {otherError && (
+            <p className="field-error" role="alert">
+              {otherError.message} {otherError.hint}
+            </p>
+          )}
+          <footer className="dialog-foot">
+            <button
+              type="button"
+              className="btn btn-ghost foot-start"
+              onClick={() => void openTorrentFile()}
+              disabled={finding}
+            >
+              <FileArrowUp size={16} aria-hidden /> Open .torrent…
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => {
+                if (finding) {
+                  lookup.current++
+                  setFinding(false)
+                } else setAdding(false)
+              }}
+            >
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={busy || finding}>
+              {finding
+                ? 'Finding files…'
+                : busy
+                  ? 'Starting…'
+                  : isMagnet(url)
+                    ? 'Next'
+                    : 'Download'}
+            </button>
+          </footer>
+        </form>
+      )}
     </dialog>
   )
 }

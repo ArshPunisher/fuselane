@@ -271,6 +271,15 @@ async fn torrent_inspect_file(
 }
 
 #[tauri::command]
+async fn torrent_inspect_bytes(
+    tor: Tor<'_>,
+    bytes: Vec<u8>,
+    dir: Option<String>,
+) -> Result<torrents::ListingView, UiError> {
+    tor.inspect_bytes(bytes, dir.as_deref()).await
+}
+
+#[tauri::command]
 async fn torrent_add(tor: Tor<'_>, token: String, files: Vec<usize>) -> Result<String, UiError> {
     tor.add(&token, files).await
 }
@@ -592,6 +601,7 @@ fn main() {
             pick_torrent,
             torrent_inspect_magnet,
             torrent_inspect_file,
+            torrent_inspect_bytes,
             torrent_add,
             torrent_list,
             torrent_files,

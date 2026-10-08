@@ -361,6 +361,18 @@ impl Torrents {
             message: format!("Couldn't read that file: {e}"),
             hint: None,
         })?;
+        self.inspect_bytes(bytes, dir).await
+    }
+
+    /// A .torrent's contents, for files dropped on the window (no path is known).
+    pub async fn inspect_bytes(
+        &self,
+        bytes: Vec<u8>,
+        dir: Option<&str>,
+    ) -> Result<ListingView, UiError> {
+        if bytes.len() > fuselane_engine_torrent::engine::MAX_TORRENT_FILE {
+            return Err(ui(TorrentError::FileTooBig(bytes.len())));
+        }
         let engine = self.engine().await?;
         let listing = engine
             .inspect(Source::File(bytes), Some(self.folder(dir)), vec![])
@@ -700,6 +712,94 @@ mod tests {
         SessionOptions,
     };
 
+    fn ts_fields(src: &str, name: &str) -> Vec<String> {
+        let start = src
+            .find(&format!("export interface {name} {{"))
+            .unwrap_or_else(|| panic!("no {name}"));
+        let body = &src[start..];
+        let body = &body[body.find('{').unwrap() + 1..body.find("\n}").unwrap()];
+        let mut out: Vec<String> = body
+            .lines()
+            .map(str::trim)
+            .filter(|l| {
+                !l.is_empty() && !l.starts_with("//") && !l.starts_with("/*") && !l.starts_with('*')
+            })
+            .filter_map(|l| l.split(':').next())
+            .map(|f| f.trim_end_matches('?').to_string())
+            .collect();
+        out.sort();
+        out
+    }
+
+    fn json_fields(v: &impl Serialize) -> Vec<String> {
+        let mut out: Vec<String> = serde_json::to_value(v)
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect();
+        out.sort();
+        out
+    }
+
+    #[test]
+    fn the_window_types_match_what_the_backend_sends() {
+        let src =
+            std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../src/lib/types.ts"))
+                .unwrap();
+        let net = TorrentNetView {
+            name: "en0".into(),
+            peers: 0,
+            received: 0,
+            credited: 0,
+        };
+        let file = TorrentFileView {
+            index: 0,
+            path: "a".into(),
+            size: 1,
+            selected: true,
+        };
+        let view = TorrentView {
+            id: "a".repeat(40),
+            name: "n".into(),
+            folder: "f".into(),
+            status: "paused".into(),
+            done: 0,
+            total: 0,
+            uploaded: 0,
+            rate: 0,
+            error: None,
+            file_count: 1,
+            selected_count: 1,
+            networks: vec![],
+            added_at: 0,
+        };
+        let listing = ListingView {
+            token: "t".into(),
+            name: "n".into(),
+            folder: "f".into(),
+            total: 1,
+            files: vec![],
+        };
+        for (name, got) in [
+            ("TorrentView", json_fields(&view)),
+            ("TorrentNetView", json_fields(&net)),
+            ("TorrentFileView", json_fields(&file)),
+            ("ListingView", json_fields(&listing)),
+        ] {
+            assert_eq!(
+                ts_fields(&src, name),
+                got,
+                "{name} differs between types.ts and torrents.rs"
+            );
+        }
+        // The status words the window knows are the ones view_of produces.
+        for s in ["checking", "downloading", "paused", "completed", "failed"] {
+            assert!(src.contains(&format!("'{s}'")), "{s}");
+        }
+    }
+
     #[test]
     fn only_real_info_hashes_name_files() {
         assert!(valid_id(&"a".repeat(40)));
@@ -1004,6 +1104,20 @@ mod tests {
         let e = s.tor.inspect_file(&big, None).await.unwrap_err();
         assert_eq!(e.code, "torrent-too-big");
         assert!(e.message.contains("8 MiB"), "{}", e.message);
+        let e = s
+            .tor
+            .inspect_bytes(vec![0; 8 * 1024 * 1024 + 1], None)
+            .await
+            .unwrap_err();
+        assert_eq!(e.code, "torrent-too-big");
+        assert_eq!(
+            s.tor
+                .inspect_bytes(Vec::new(), None)
+                .await
+                .unwrap_err()
+                .code,
+            "invalid-torrent"
+        );
         let junk = dir.path().join("junk.torrent");
         std::fs::write(&junk, b"<html>not a torrent</html>").unwrap();
         assert_eq!(
