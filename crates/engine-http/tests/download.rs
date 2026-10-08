@@ -157,6 +157,13 @@ async fn run(
 }
 
 fn assert_exact(report: &fuselane_engine_http::download::Report, content: Content) {
+    // Each byte is credited to exactly one network, even when hedges race (L-117).
+    assert_eq!(
+        report.bytes_by_network.values().sum::<u64>(),
+        content.size,
+        "per-network bytes must add up to the file: {:?}",
+        report.bytes_by_network
+    );
     assert_eq!(
         std::fs::metadata(&report.path).unwrap().len(),
         content.size,

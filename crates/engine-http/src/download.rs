@@ -500,6 +500,10 @@ struct Shared {
     /// Per-network stream bookkeeping for the concurrency controller.
     nets: HashMap<NetId, NetStats>,
     peak_streams: HashMap<NetId, u32>,
+    /// Bytes downloaded twice because a hedge raced an attempt (diagnostics).
+    wasted_bytes: u64,
+    /// Per block, the furthest offset any attempt has written.
+    written_max: Vec<u64>,
     /// Bytes each network delivered into each block (for the ring's colours).
     block_net_bytes: Vec<Vec<(NetId, u64)>>,
     meters: HashMap<NetId, crate::measure::Meter>,
@@ -1235,12 +1239,28 @@ async fn fetch_block(
 fn advance(ctx: &Ctx, block: usize, stream: StreamId, net: NetId, position: u64, new_bytes: u64) {
     let mut s = ctx.lock();
     let now = ctx.now_ms();
+    // Only bytes past the block's furthest written point are new. A hedge rewrites
+    // what the attempt it races already wrote: that network still did the work (its
+    // own speed counts it) but the file gains nothing, so it isn't credited (L-117).
+    // The furthest point ever written survives failed attempts, whose bytes stay on
+    // disk while a retry rewrites them from the last secured point.
+    let frontier = s
+        .written_max
+        .get(block)
+        .copied()
+        .unwrap_or(0)
+        .max(s.blocks[block].secured);
+    let useful = position.saturating_sub(frontier).min(new_bytes);
+    if let Some(m) = s.written_max.get_mut(block) {
+        *m = (*m).max(position);
+    }
+    s.wasted_bytes += new_bytes - useful;
     s.meters.entry(net).or_default().add(new_bytes, now);
-    s.total_meter.add(new_bytes, now);
+    s.total_meter.add(useful, now);
     if let Some(row) = s.block_net_bytes.get_mut(block) {
         match row.iter_mut().find(|(n, _)| *n == net) {
-            Some((_, b)) => *b += new_bytes,
-            None => row.push((net, new_bytes)),
+            Some((_, b)) => *b += useful,
+            None => row.push((net, useful)),
         }
     }
     let stats = s.nets.entry(net).or_default();
@@ -1253,10 +1273,10 @@ fn advance(ctx: &Ctx, block: usize, stream: StreamId, net: NetId, position: u64,
     {
         a.position = a.position.max(position);
     }
-    *s.bytes_by_network.entry(net).or_default() += new_bytes;
+    *s.bytes_by_network.entry(net).or_default() += useful;
     let total = s.plan.total;
     drop(s);
-    let written = ctx.written_total.fetch_add(new_bytes, Ordering::Relaxed) + new_bytes;
+    let written = ctx.written_total.fetch_add(useful, Ordering::Relaxed) + useful;
     if let Some(p) = &ctx.tuning.progress {
         (p.0)(written, total);
     }
@@ -1523,6 +1543,8 @@ pub async fn download_with(
             unknown_total: None,
             nets: HashMap::new(),
             peak_streams: HashMap::new(),
+            wasted_bytes: 0,
+            written_max: vec![0; n_blocks],
             block_net_bytes: vec![Vec::new(); n_blocks],
             meters: HashMap::new(),
             total_meter: crate::measure::Meter::default(),
