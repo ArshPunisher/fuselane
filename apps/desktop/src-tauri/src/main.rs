@@ -318,6 +318,24 @@ async fn torrent_remove(tor: Tor<'_>, id: String, delete_files: bool) -> Result<
 }
 
 #[tauri::command]
+fn torrent_seed_settings(tor: Tor<'_>) -> torrents::SeedSettings {
+    tor.seed_settings()
+}
+
+#[tauri::command]
+async fn set_torrent_seed_settings(
+    tor: Tor<'_>,
+    settings: torrents::SeedSettings,
+) -> Result<torrents::SeedSettings, UiError> {
+    tor.set_seed_settings(settings).await
+}
+
+#[tauri::command]
+async fn torrent_stop_sharing(tor: Tor<'_>, id: String) -> Result<(), UiError> {
+    tor.stop_sharing(&id).await
+}
+
+#[tauri::command]
 async fn torrent_reveal(app: tauri::AppHandle, tor: Tor<'_>, id: String) -> Result<(), UiError> {
     use tauri_plugin_opener::OpenerExt;
     let path = tor.folder_of(&id).await?;
@@ -629,6 +647,9 @@ fn main() {
             torrent_select,
             torrent_remove,
             torrent_reveal,
+            torrent_seed_settings,
+            set_torrent_seed_settings,
+            torrent_stop_sharing,
             subscribe
         ])
         .build(tauri::generate_context!());

@@ -80,6 +80,49 @@ pub struct ListingView {
     pub files: Vec<TorrentFileView>,
 }
 
+/// Sharing back after a download (P5 5.7). Off by default; when on, it stops at
+/// whichever limit comes first, and never uses metered networks while no torrent
+/// is downloading.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SeedSettings {
+    pub enabled: bool,
+    /// Stop after uploading this many times the download's size.
+    pub ratio: f64,
+    /// Stop after sharing this many minutes.
+    pub minutes: u32,
+}
+
+impl Default for SeedSettings {
+    fn default() -> Self {
+        SeedSettings {
+            enabled: false,
+            ratio: 1.0,
+            minutes: 60,
+        }
+    }
+}
+
+impl SeedSettings {
+    fn validated(self) -> Result<SeedSettings, UiError> {
+        if !self.ratio.is_finite() || !(0.1..=10.0).contains(&self.ratio) {
+            return Err(UiError {
+                code: "bad-ratio",
+                message: "The sharing ratio must be between 0.1 and 10.".into(),
+                hint: Some("1 means upload as much as you downloaded.".into()),
+            });
+        }
+        if !(1..=10_080).contains(&self.minutes) {
+            return Err(UiError {
+                code: "bad-minutes",
+                message: "Sharing time must be between 1 minute and 7 days (10080 minutes).".into(),
+                hint: None,
+            });
+        }
+        Ok(self)
+    }
+}
+
 /// Saved across restarts (setting "torrents"); the .torrent itself is a file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -95,6 +138,8 @@ struct Saved {
 
 struct Entry {
     torrent: Option<Torrent>,
+    /// When the download finished (sharing time counts from here).
+    finished_at: Option<Instant>,
     base: PathBuf,
     added_at: i64,
     last: TorrentView,
@@ -111,6 +156,7 @@ pub struct Torrents {
     networks: NetSource,
     dht: bool,
     limiter: Option<Arc<fuselane_limits::Limiter>>,
+    seed: Mutex<SeedSettings>,
     engine: OnceCell<Arc<TorrentEngine>>,
     entries: tokio::sync::Mutex<Vec<Entry>>,
     pending: Mutex<Vec<Listing>>,
@@ -188,6 +234,33 @@ fn valid_id(id: &str) -> bool {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
+/// Networks to keep new peers off: metered ones (phone tethers, cellular) while
+/// torrents only share. While anything downloads, every network helps.
+fn metered_to_avoid(nets: &[Interface], seeding: bool, downloading: bool) -> Vec<String> {
+    if !seeding || downloading {
+        return Vec::new();
+    }
+    nets.iter()
+        .filter(|i| {
+            matches!(
+                i.kind,
+                fuselane_netif::Kind::Tether | fuselane_netif::Kind::Cellular
+            )
+        })
+        .map(|i| i.name.clone())
+        .collect()
+}
+
+/// A released torrent's final view: done, nothing moving, no peers.
+fn freeze(v: &mut TorrentView) {
+    v.rate = 0;
+    v.status = "completed".into();
+    for n in &mut v.networks {
+        n.peers = 0;
+        n.rate = 0;
+    }
+}
+
 fn view_of(t: &Torrent, added_at: i64, rate: u64) -> TorrentView {
     let p = t.progress();
     let status = match p.phase {
@@ -236,6 +309,13 @@ impl Torrents {
         limiter: Option<Arc<fuselane_limits::Limiter>>,
         emit: Emit,
     ) -> Arc<Torrents> {
+        let seed = store
+            .setting("torrent_seeding")
+            .ok()
+            .flatten()
+            .and_then(|v| serde_json::from_str::<SeedSettings>(&v).ok())
+            .and_then(|s| s.validated().ok())
+            .unwrap_or_default();
         Arc::new(Torrents {
             store,
             state_dir,
@@ -243,6 +323,7 @@ impl Torrents {
             networks,
             dht,
             limiter,
+            seed: Mutex::new(seed),
             engine: OnceCell::new(),
             entries: tokio::sync::Mutex::new(Vec::new()),
             pending: Mutex::new(Vec::new()),
@@ -407,8 +488,12 @@ impl Torrents {
             p.remove(i)
         };
         let base = listing.base().to_path_buf();
-        let engine = self.engine().await?;
         let id = listing.info_hash.clone();
+        // A finished torrent is no longer in the engine but is still in the list.
+        if self.entries.lock().await.iter().any(|e| e.last.id == id) {
+            return Err(ui(TorrentError::AlreadyAdded));
+        }
+        let engine = self.engine().await?;
         std::fs::write(
             self.state_dir.join(format!("{id}.torrent")),
             listing.torrent_bytes(),
@@ -432,6 +517,7 @@ impl Torrents {
         let last = view_of(&t, added_at, 0);
         self.entries.lock().await.push(Entry {
             torrent: Some(t),
+            finished_at: None,
             base,
             added_at,
             last,
@@ -554,6 +640,63 @@ impl Torrents {
         Ok(())
     }
 
+    pub fn seed_settings(&self) -> SeedSettings {
+        self.seed
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    pub async fn set_seed_settings(&self, s: SeedSettings) -> Result<SeedSettings, UiError> {
+        let s = s.validated()?;
+        let json = serde_json::to_string(&s).map_err(|e| UiError {
+            code: "store",
+            message: format!("Couldn't save the setting: {e}"),
+            hint: None,
+        })?;
+        self.store
+            .set_setting("torrent_seeding", &json)
+            .map_err(|e| UiError {
+                code: "store",
+                message: format!("Couldn't save the setting: {e}"),
+                hint: None,
+            })?;
+        *self
+            .seed
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = s.clone();
+        // Turning sharing off releases seeding torrents now, not at the next limit.
+        self.refresh(true).await;
+        self.save().await;
+        self.publish().await;
+        Ok(s)
+    }
+
+    /// Stops sharing a finished torrent now; its files stay.
+    pub async fn stop_sharing(&self, id: &str) -> Result<(), UiError> {
+        let engine = self.engine().await?;
+        let mut entries = self.entries.lock().await;
+        let e = entries
+            .iter_mut()
+            .find(|e| e.last.id == id)
+            .ok_or_else(not_found)?;
+        if e.last.status != "seeding" {
+            return Err(UiError {
+                code: "not-sharing",
+                message: "This torrent isn't sharing.".into(),
+                hint: None,
+            });
+        }
+        if let Some(t) = e.torrent.take() {
+            engine.release(t).await.map_err(ui)?;
+        }
+        freeze(&mut e.last);
+        drop(entries);
+        self.save().await;
+        self.publish().await;
+        Ok(())
+    }
+
     /// Where a torrent's files are, for "Show in Finder".
     pub async fn folder_of(&self, id: &str) -> Result<PathBuf, UiError> {
         let entries = self.entries.lock().await;
@@ -573,9 +716,12 @@ impl Torrents {
     /// Updates every view, releases finished torrents, and returns whether any is active.
     async fn refresh(&self, release_finished: bool) -> bool {
         let engine = self.engine.get().cloned();
+        let seed = self.seed_settings();
         let mut entries = self.entries.lock().await;
         let mut active = false;
         let mut released = false;
+        let mut seeding = false;
+        let mut downloading = false;
         for e in entries.iter_mut() {
             let Some(t) = e.torrent.clone() else { continue };
             let p = t.progress();
@@ -615,25 +761,32 @@ impl Torrents {
                 );
             }
             active |= matches!(p.phase, Phase::Checking | Phase::Downloading);
-            if release_finished
-                && p.phase == Phase::Seeding
-                && p.done == p.total
-                && let Some(engine) = &engine
-            {
-                let mut last = e.last.clone();
-                let _ = engine.release(t).await;
-                last.rate = 0;
-                last.status = "completed".into();
-                // Released: no peers any more; the credit stays as the record.
-                for n in &mut last.networks {
-                    n.peers = 0;
-                    n.rate = 0;
+            let finished = p.phase == Phase::Seeding && p.done == p.total;
+            if finished {
+                let at = *e.finished_at.get_or_insert_with(Instant::now);
+                let share = &seed;
+                let enough = !share.enabled
+                    || p.uploaded as f64 >= share.ratio * p.total as f64
+                    || at.elapsed().as_secs() >= u64::from(share.minutes) * 60;
+                if !enough {
+                    e.last.status = "seeding".into();
+                    seeding = true;
+                } else if release_finished && let Some(engine) = &engine {
+                    let _ = engine.release(t).await;
+                    freeze(&mut e.last);
+                    e.torrent = None;
+                    released = true;
                 }
-                e.last = last;
-                e.torrent = None;
-                released = true;
             }
+            downloading |= matches!(p.phase, Phase::Checking | Phase::Downloading);
         }
+        // Metered guard: while torrents only share, phone tethers and cellular take
+        // no new peers. While something downloads, every network helps (bonding).
+        if let Some(engine) = &engine {
+            let avoid = metered_to_avoid(&engine.interfaces(), seeding, downloading);
+            engine.avoid_networks(avoid);
+        }
+        active = active || seeding;
         drop(entries);
         if released {
             self.save().await;
@@ -708,6 +861,7 @@ impl Torrents {
             if let Some(done) = s.completed {
                 self.entries.lock().await.push(Entry {
                     torrent: None,
+                    finished_at: None,
                     base: s.base,
                     added_at: s.added_at,
                     last: done,
@@ -734,6 +888,7 @@ impl Torrents {
                     let last = view_of(&t, s.added_at, 0);
                     self.entries.lock().await.push(Entry {
                         torrent: Some(t),
+                        finished_at: None,
                         base: s.base,
                         added_at: s.added_at,
                         last,
@@ -1168,6 +1323,163 @@ mod tests {
         s.limiter.apply(&fuselane_limits::LimitSettings::default());
         let done = until(&s.tor, &id, "completed").await;
         assert_eq!(done.error, None);
+    }
+
+    #[test]
+    fn metered_networks_are_avoided_only_while_just_sharing() {
+        let net = |name: &str, kind| Interface {
+            name: name.into(),
+            display_name: name.into(),
+            index: 1,
+            kind,
+            addrs: vec![IpAddr::V4(Ipv4Addr::LOCALHOST)],
+        };
+        let nets = [
+            net("en0", fuselane_netif::Kind::Wifi),
+            net("en7", fuselane_netif::Kind::Tether),
+            net("pdp0", fuselane_netif::Kind::Cellular),
+        ];
+        assert_eq!(metered_to_avoid(&nets, true, false), vec!["en7", "pdp0"]);
+        assert!(
+            metered_to_avoid(&nets, true, true).is_empty(),
+            "downloading: bond everything"
+        );
+        assert!(metered_to_avoid(&nets, false, false).is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn sharing_settings_are_checked_and_remembered() {
+        let s = setup();
+        assert_eq!(s.tor.seed_settings(), SeedSettings::default());
+        assert!(!s.tor.seed_settings().enabled, "off by default");
+        for (ratio, minutes, code) in [
+            (0.0, 60, "bad-ratio"),
+            (10.5, 60, "bad-ratio"),
+            (f64::NAN, 60, "bad-ratio"),
+            (1.0, 0, "bad-minutes"),
+            (1.0, 10_081, "bad-minutes"),
+        ] {
+            let e = s
+                .tor
+                .set_seed_settings(SeedSettings {
+                    enabled: true,
+                    ratio,
+                    minutes,
+                })
+                .await
+                .unwrap_err();
+            assert_eq!(e.code, code, "{ratio} {minutes}");
+        }
+        assert_eq!(
+            s.tor.seed_settings(),
+            SeedSettings::default(),
+            "a refused value changes nothing"
+        );
+        let want = SeedSettings {
+            enabled: true,
+            ratio: 2.5,
+            minutes: 90,
+        };
+        assert_eq!(s.tor.set_seed_settings(want.clone()).await.unwrap(), want);
+        let again = reopen(
+            s.store.clone(),
+            s.state.clone(),
+            s.downloads.clone(),
+            tempfile::tempdir().unwrap(),
+        );
+        assert_eq!(again.tor.seed_settings(), want);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn with_sharing_on_a_finished_torrent_seeds_until_a_limit_or_stop() {
+        let seed = tempfile::tempdir().unwrap();
+        let (_seeder, addr, file) = seeder(seed.path()).await;
+        let s = setup();
+        s.tor
+            .set_seed_settings(SeedSettings {
+                enabled: true,
+                ratio: 1.0,
+                minutes: 30,
+            })
+            .await
+            .unwrap();
+        let id = add(&s, &file, addr, &["a.bin", "b.bin", "c.bin"]).await;
+        let v = until(&s.tor, &id, "seeding").await;
+        assert_eq!(v.done, v.total);
+        assert!(
+            s.tor.list().await[0].status == "seeding",
+            "not released while sharing"
+        );
+        assert_eq!(s.tor.pause("x").await.unwrap_err().code, "not-found");
+
+        // The time limit passes: released, files kept.
+        {
+            let mut entries = s.tor.entries.lock().await;
+            entries[0].finished_at = Some(Instant::now() - std::time::Duration::from_secs(31 * 60));
+        }
+        let done = until(&s.tor, &id, "completed").await;
+        assert!(done.networks.iter().all(|n| n.peers == 0 && n.rate == 0));
+        assert!(s.downloads.join("T").join("a.bin").exists());
+        assert_eq!(
+            s.tor.stop_sharing(&id).await.unwrap_err().code,
+            "not-sharing"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn stop_sharing_releases_at_once_and_a_finished_torrent_cant_be_added_twice() {
+        let seed = tempfile::tempdir().unwrap();
+        let (_seeder, addr, file) = seeder(seed.path()).await;
+        let s = setup();
+        s.tor
+            .set_seed_settings(SeedSettings {
+                enabled: true,
+                ratio: 5.0,
+                minutes: 600,
+            })
+            .await
+            .unwrap();
+        let id = add(&s, &file, addr, &["a.bin"]).await;
+        until(&s.tor, &id, "seeding").await;
+        s.tor.stop_sharing(&id).await.unwrap();
+        assert_eq!(s.tor.list().await[0].status, "completed");
+
+        // The same torrent again, after it was released: refused, never a second row.
+        let listing = s.tor.inspect_file(&file, None).await.unwrap();
+        let again = s.tor.add(&listing.token, vec![0]).await.unwrap_err();
+        assert_eq!(again.code, "already-added");
+        assert_eq!(s.tor.list().await.len(), 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn turning_sharing_off_releases_seeding_torrents_at_once() {
+        let seed = tempfile::tempdir().unwrap();
+        let (_seeder, addr, file) = seeder(seed.path()).await;
+        let s = setup();
+        s.tor
+            .set_seed_settings(SeedSettings {
+                enabled: true,
+                ratio: 5.0,
+                minutes: 600,
+            })
+            .await
+            .unwrap();
+        let id = add(&s, &file, addr, &["a.bin", "c.bin"]).await;
+        until(&s.tor, &id, "seeding").await;
+        s.tor
+            .set_seed_settings(SeedSettings {
+                enabled: false,
+                ratio: 5.0,
+                minutes: 600,
+            })
+            .await
+            .unwrap();
+        let v = s.tor.list().await;
+        assert_eq!(v[0].status, "completed", "{v:?}");
+        assert!(
+            !s.downloads.join("T").join("b.bin").exists(),
+            "unchosen file cleaned up on release"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
