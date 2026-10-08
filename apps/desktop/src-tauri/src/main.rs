@@ -11,7 +11,10 @@ mod service;
 
 use std::sync::Arc;
 
-use service::{JobView, LimitsView, NetPref, NetView, PreviewView, Service, UiError, UiEvent};
+use service::{
+    AllowanceRequest, AllowanceView, JobView, LimitsView, NetPref, NetView, PreviewView, Service,
+    UiError, UiEvent,
+};
 use tauri::Manager;
 use tauri::ipc::Channel;
 use tauri::menu::{Menu, MenuItem};
@@ -126,6 +129,18 @@ fn network_prefs(svc: State<'_>) -> Vec<NetPref> {
 #[tauri::command]
 fn set_network_pref(svc: State<'_>, pref: NetPref) -> Result<Vec<NetPref>, UiError> {
     svc.set_network_pref(pref)
+}
+
+/// Each network's monthly allowance and how much of it is used.
+#[tauri::command]
+fn allowances(svc: State<'_>) -> Vec<AllowanceView> {
+    svc.allowances(service::local_today())
+}
+
+/// Sets (bytes > 0) or removes (bytes = 0) a network's monthly allowance.
+#[tauri::command]
+fn set_allowance(svc: State<'_>, req: AllowanceRequest) -> Result<Vec<AllowanceView>, UiError> {
+    svc.set_allowance(req, service::local_today())
 }
 
 #[tauri::command]
@@ -369,6 +384,17 @@ fn main() {
         }
     };
     let on_exit = svc.clone();
+    // Data allowances: count usage and apply allowances every few seconds.
+    {
+        let weak = Arc::downgrade(&svc);
+        std::thread::spawn(move || {
+            while let Some(svc) = weak.upgrade() {
+                svc.tick_usage(service::local_today());
+                drop(svc);
+                std::thread::sleep(std::time::Duration::from_secs(5));
+            }
+        });
+    }
     let for_shell = svc.clone();
     // Debug builds only (L-100): start a download at launch for smoke tests and
     // screenshots of the real window. Compiled out of release builds.
@@ -424,6 +450,8 @@ fn main() {
             reveal,
             preview,
             get_limits,
+            allowances,
+            set_allowance,
             set_slow,
             network_prefs,
             set_network_pref,

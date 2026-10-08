@@ -28,6 +28,7 @@ serde_json = "1"
 thiserror = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "net", "io-util"] }
 dirs = "6"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 fuselane-core.workspace = true
 fuselane-engine-http.workspace = true
 fuselane-netif.workspace = true

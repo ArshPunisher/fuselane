@@ -10,7 +10,7 @@ use fuselane_core::runner::{self, parse_link, pick_networks};
 use fuselane_core::{Event, Job, Outcome, RunOptions, StartError, Status, Store};
 use fuselane_engine_http::download::{Cancel, Snapshot, SnapshotFn};
 use fuselane_engine_http::headers::filename_from_path;
-use fuselane_limits::{LimitSettings, Limiter};
+use fuselane_limits::{Date, LimitSettings, Limiter, Period, Usage, next_reset};
 use serde::{Deserialize, Serialize};
 
 /// Downloads that run at once; the rest wait their turn (L-53).
@@ -221,6 +221,74 @@ impl LimitsView {
     }
 }
 
+/// A network's monthly data allowance as saved (by device name).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct Allowance {
+    pub name: String,
+    /// Bytes per period.
+    pub bytes: u64,
+    /// The day each month the count starts again (1 to 28).
+    pub reset_day: u8,
+}
+
+/// A network's allowance and how much of it is used, for the window.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AllowanceView {
+    pub name: String,
+    pub allowance: Option<u64>,
+    pub reset_day: u8,
+    pub used: u64,
+    /// The next reset, as YYYY-MM-DD.
+    pub resets_on: String,
+    pub reached: bool,
+}
+
+/// What the window sends to set (bytes > 0) or remove (bytes = 0) an allowance.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AllowanceRequest {
+    pub name: String,
+    pub bytes: u64,
+    pub reset_day: u8,
+}
+
+/// Largest allowance accepted (100 TB): anything bigger is a typo.
+const MAX_ALLOWANCE: u64 = 100 * 1024_u64.pow(4);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SavedUsage {
+    name: String,
+    start: String,
+    bytes: u64,
+}
+
+fn date_text(d: Date) -> String {
+    format!("{:04}-{:02}-{:02}", d.year, d.month, d.day)
+}
+
+fn parse_date(s: &str) -> Option<Date> {
+    let mut it = s.split('-');
+    let d = Date {
+        year: it.next()?.parse().ok()?,
+        month: it.next()?.parse().ok()?,
+        day: it.next()?.parse().ok()?,
+    };
+    d.is_valid().then_some(d)
+}
+
+/// Today in the computer's own time zone (allowances reset at local midnight).
+pub fn local_today() -> Date {
+    use chrono::Datelike;
+    let now = chrono::Local::now().date_naive();
+    Date {
+        year: now.year(),
+        month: now.month() as u8,
+        day: now.day() as u8,
+    }
+}
+
 /// What a link points at, shown in the New download dialog before starting.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -293,6 +361,10 @@ pub struct Service {
     /// Limits as saved (the limiter holds the effective ones, after slow mode).
     saved_limits: Mutex<LimitsView>,
     net_prefs: Mutex<Vec<NetPref>>,
+    allowances: Mutex<Vec<Allowance>>,
+    usage: Mutex<HashMap<String, Usage>>,
+    /// Running jobs paused because every network reached its allowance.
+    allowance_paused: Mutex<std::collections::HashSet<i64>>,
     /// The version that ran before this one, when this launch follows an update.
     updated_from: Option<String>,
     /// Shrinks engine retry waits; only tests set it.
@@ -432,6 +504,34 @@ impl Service {
         let previous = store.setting("last_version").ok().flatten();
         let updated_from = previous.filter(|p| p != current);
         let _ = store.set_setting("last_version", current);
+        let allowances: Vec<Allowance> = store
+            .setting("allowances")
+            .ok()
+            .flatten()
+            .and_then(|v| serde_json::from_str::<Vec<Allowance>>(&v).ok())
+            .unwrap_or_default();
+        let usage: HashMap<String, Usage> = store
+            .setting("usage")
+            .ok()
+            .flatten()
+            .and_then(|v| serde_json::from_str::<Vec<SavedUsage>>(&v).ok())
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|u| {
+                let reset = allowances
+                    .iter()
+                    .find(|a| a.name == u.name)
+                    .map_or(1, |a| a.reset_day);
+                Some((
+                    u.name,
+                    Usage {
+                        period: Period::MonthFrom(reset),
+                        start: parse_date(&u.start)?,
+                        bytes: u.bytes,
+                    },
+                ))
+            })
+            .collect();
         let net_prefs: Vec<NetPref> = store
             .setting("network_prefs")
             .ok()
@@ -460,6 +560,9 @@ impl Service {
             limiter,
             saved_limits: Mutex::new(saved_limits),
             net_prefs: Mutex::new(net_prefs),
+            allowances: Mutex::new(allowances),
+            usage: Mutex::new(usage),
+            allowance_paused: Mutex::default(),
             updated_from,
         }))
     }
@@ -689,6 +792,158 @@ impl Service {
         Ok(())
     }
 
+    /// Allowances and usage for every usable network (plus any with an allowance).
+    pub fn allowances(&self, today: Date) -> Vec<AllowanceView> {
+        let saved = lock(&self.allowances).clone();
+        let mut names: Vec<String> = fuselane_netif::list()
+            .map(|l| {
+                l.into_iter()
+                    .filter(|i| i.usable())
+                    .map(|i| i.name)
+                    .collect()
+            })
+            .unwrap_or_default();
+        for a in &saved {
+            if !names.contains(&a.name) {
+                names.push(a.name.clone());
+            }
+        }
+        let usage = lock(&self.usage);
+        names
+            .into_iter()
+            .map(|name| {
+                let a = saved.iter().find(|a| a.name == name);
+                let reset_day = a.map_or(1, |a| a.reset_day);
+                let period = Period::MonthFrom(reset_day);
+                let mut u = usage
+                    .get(&name)
+                    .copied()
+                    .unwrap_or_else(|| Usage::new(period, today));
+                u.period = period;
+                u.roll(today);
+                AllowanceView {
+                    reached: u.reached(a.map(|a| a.bytes)),
+                    allowance: a.map(|a| a.bytes),
+                    reset_day,
+                    used: u.bytes,
+                    resets_on: date_text(next_reset(period, today)),
+                    name,
+                }
+            })
+            .collect()
+    }
+
+    /// Sets (bytes > 0) or removes (bytes = 0) a network's monthly allowance.
+    pub fn set_allowance(
+        self: &Arc<Self>,
+        req: AllowanceRequest,
+        today: Date,
+    ) -> Result<Vec<AllowanceView>, UiError> {
+        let bad = |m: &str| {
+            UiError::new(
+                "bad-allowance",
+                m,
+                Some("Use an amount like 5 GB and a reset day from 1 to 28."),
+            )
+        };
+        if !valid_device(&req.name) {
+            return Err(bad("That isn't a network on this computer."));
+        }
+        if !(1..=28).contains(&req.reset_day) {
+            return Err(bad("The reset day must be from 1 to 28."));
+        }
+        if req.bytes > MAX_ALLOWANCE {
+            return Err(bad("That allowance is too big to be real."));
+        }
+        let mut all = lock(&self.allowances).clone();
+        all.retain(|a| a.name != req.name);
+        if req.bytes > 0 {
+            all.push(Allowance {
+                name: req.name.clone(),
+                bytes: req.bytes,
+                reset_day: req.reset_day,
+            });
+        }
+        if all.len() > 64 {
+            return Err(bad("Too many allowances."));
+        }
+        all.sort_by(|a, b| a.name.cmp(&b.name));
+        let json = serde_json::to_string(&all).map_err(store_error)?;
+        self.store
+            .set_setting("allowances", &json)
+            .map_err(store_error)?;
+        *lock(&self.allowances) = all;
+        self.tick_usage(today);
+        Ok(self.allowances(today))
+    }
+
+    /// Adds the bytes downloaded since the last tick to each network's usage, saves
+    /// it, and makes networks past their allowance stand aside. When every usable
+    /// network is past its allowance, running downloads pause with a reason.
+    pub fn tick_usage(self: &Arc<Self>, today: Date) {
+        let drained = self.limiter.drain_usage();
+        let saved = lock(&self.allowances).clone();
+        let reset_of = |name: &str| {
+            saved
+                .iter()
+                .find(|a| a.name == name)
+                .map_or(1, |a| a.reset_day)
+        };
+        let (blocked, snapshot) = {
+            let mut usage = lock(&self.usage);
+            for (name, bytes) in &drained {
+                let period = Period::MonthFrom(reset_of(name));
+                let u = usage
+                    .entry(name.clone())
+                    .or_insert_with(|| Usage::new(period, today));
+                u.period = period;
+                u.add(*bytes, today);
+            }
+            for (name, u) in usage.iter_mut() {
+                u.period = Period::MonthFrom(reset_of(name));
+                u.roll(today);
+            }
+            let blocked: Vec<String> = saved
+                .iter()
+                .filter(|a| usage.get(&a.name).is_some_and(|u| u.reached(Some(a.bytes))))
+                .map(|a| a.name.clone())
+                .collect();
+            let snapshot: Vec<SavedUsage> = usage
+                .iter()
+                .map(|(n, u)| SavedUsage {
+                    name: n.clone(),
+                    start: date_text(u.start),
+                    bytes: u.bytes,
+                })
+                .collect();
+            (blocked, snapshot)
+        };
+        if !drained.is_empty()
+            && let Ok(json) = serde_json::to_string(&snapshot)
+        {
+            let _ = self.store.set_setting("usage", &json);
+        }
+        self.limiter.set_blocked(blocked.iter().cloned());
+        // Every usable network past its allowance: pause instead of waiting silently.
+        let usable: Vec<String> = fuselane_netif::list()
+            .map(|l| {
+                l.into_iter()
+                    .filter(|i| i.usable())
+                    .map(|i| i.name)
+                    .collect()
+            })
+            .unwrap_or_default();
+        if !usable.is_empty() && usable.iter().all(|n| blocked.contains(n)) {
+            let running = lock(&self.running);
+            let mut paused = lock(&self.allowance_paused);
+            for (id, r) in running.iter() {
+                if paused.insert(*id) {
+                    r.cancel.cancel();
+                }
+            }
+        }
+    }
+
     /// The previous version, if this is the first launch after an update.
     pub fn updated_from(&self) -> Option<&str> {
         self.updated_from.as_deref()
@@ -913,6 +1168,13 @@ impl Service {
                 let _ = self.store.set_error_code(id, "retry");
             }
             Ok(Outcome::Completed { .. } | Outcome::Paused | Outcome::Failed { .. }) => {}
+        }
+        if lock(&self.allowance_paused).remove(&id) {
+            let _ = self.store.set_error(
+                id,
+                "Paused: every network reached its data allowance. It continues after the allowance resets, or raise it in Networks.",
+                "allowance",
+            );
         }
         let removed = lock(&self.running)
             .remove(&id)
@@ -1436,6 +1698,17 @@ mod tests {
             ("LimitsView", json_fields(&lim)),
             ("NetLimit", json_fields(&nl)),
             (
+                "AllowanceView",
+                json_fields(&AllowanceView {
+                    name: "en0".into(),
+                    allowance: None,
+                    reset_day: 1,
+                    used: 0,
+                    resets_on: "2026-11-01".into(),
+                    reached: false,
+                }),
+            ),
+            (
                 "NetPref",
                 json_fields(&NetPref {
                     name: "en0".into(),
@@ -1789,6 +2062,168 @@ mod tests {
         assert_eq!(open().updated_from(), None, "only once");
         // Slow mode has its default speed without anything saved.
         assert_eq!(open().limits().slow_rate, DEFAULT_SLOW);
+    }
+
+    fn day(y: i32, m: u8, d: u8) -> Date {
+        Date {
+            year: y,
+            month: m,
+            day: d,
+        }
+    }
+
+    #[test]
+    fn allowance_requests_are_validated() {
+        let h = harness(3);
+        let today = day(2026, 10, 8);
+        let req = |name: &str, bytes: u64, reset_day: u8| AllowanceRequest {
+            name: name.into(),
+            bytes,
+            reset_day,
+        };
+        for bad in [
+            req("", 1, 1),
+            req("en0\n", 1, 1),
+            req("en0", 1, 0),
+            req("en0", 1, 29),
+            req("en0", MAX_ALLOWANCE + 1, 1),
+        ] {
+            assert_eq!(
+                h.svc.set_allowance(bad, today).unwrap_err().code,
+                "bad-allowance"
+            );
+        }
+        let views = h
+            .svc
+            .set_allowance(req("en77", 5 * 1024 * 1024 * KB, 15), today)
+            .unwrap();
+        let v = views.iter().find(|v| v.name == "en77").unwrap();
+        assert_eq!(v.allowance, Some(5 * 1024 * 1024 * KB));
+        assert_eq!(v.resets_on, "2026-10-15");
+        assert!(!v.reached);
+        // Zero removes it.
+        let views = h.svc.set_allowance(req("en77", 0, 15), today).unwrap();
+        assert!(views.iter().all(|v| v.name != "en77"));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn when_every_network_hits_its_allowance_downloads_pause_until_the_reset() {
+        let usable: Vec<String> = fuselane_netif::list()
+            .unwrap()
+            .into_iter()
+            .filter(|i| i.usable())
+            .map(|i| i.name)
+            .collect();
+        assert!(!usable.is_empty(), "test needs a network");
+        let content = Content::new(4 * 1024 * KB, 108);
+        let server = RangeServer::start(content).await.unwrap();
+        server.add_rule(Rule {
+            skip: 1,
+            times: u32::MAX,
+            fault: Fault::Throttle(256 * KB),
+        });
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("fuselane.db");
+        let svc = Service::with_max_running(Store::open(&db).unwrap(), dir.path().to_path_buf(), 3)
+            .unwrap();
+        let october = day(2026, 10, 8);
+        for n in &usable {
+            svc.set_allowance(
+                AllowanceRequest {
+                    name: n.clone(),
+                    bytes: 128 * KB,
+                    reset_day: 1,
+                },
+                october,
+            )
+            .unwrap();
+        }
+        let id = svc.add(&link(&server), None).unwrap();
+        let start = Instant::now();
+        loop {
+            svc.tick_usage(october);
+            let job = svc
+                .jobs()
+                .unwrap()
+                .into_iter()
+                .find(|j| j.id == id)
+                .unwrap();
+            if job.status == "paused" && svc.running() == 0 {
+                assert_eq!(job.error_action.as_deref(), Some("allowance"));
+                assert!(job.error.unwrap_or_default().contains("data allowance"));
+                break;
+            }
+            assert!(
+                start.elapsed() < Duration::from_secs(20),
+                "never paused: {job:?}"
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        let views = svc.allowances(october);
+        assert!(
+            views
+                .iter()
+                .filter(|v| usable.contains(&v.name))
+                .all(|v| v.reached)
+        );
+        // Usage survives a restart.
+        let used: u64 = views.iter().map(|v| v.used).sum();
+        drop(svc);
+        let svc = Service::with_max_running(Store::open(&db).unwrap(), dir.path().to_path_buf(), 3)
+            .unwrap();
+        assert_eq!(
+            svc.allowances(october).iter().map(|v| v.used).sum::<u64>(),
+            used
+        );
+        // A new month resets the count; resuming finishes the file.
+        let november = day(2026, 11, 1);
+        svc.tick_usage(november);
+        assert!(
+            svc.allowances(november)
+                .iter()
+                .all(|v| !v.reached && v.used == 0)
+        );
+        for n in &usable {
+            svc.set_allowance(
+                AllowanceRequest {
+                    name: n.clone(),
+                    bytes: 0,
+                    reset_day: 1,
+                },
+                november,
+            )
+            .unwrap();
+        }
+        svc.resume(id).unwrap();
+        let start = Instant::now();
+        while svc
+            .jobs()
+            .unwrap()
+            .iter()
+            .find(|j| j.id == id)
+            .unwrap()
+            .status
+            != "completed"
+        {
+            svc.tick_usage(november);
+            assert!(
+                start.elapsed() < Duration::from_secs(30),
+                "didn't finish after the reset"
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        let path = svc
+            .jobs()
+            .unwrap()
+            .into_iter()
+            .find(|j| j.id == id)
+            .unwrap()
+            .final_path
+            .unwrap();
+        assert_eq!(
+            fuselane_testkit::sha256_file(Path::new(&path)).unwrap(),
+            content.sha256()
+        );
     }
 
     #[test]
