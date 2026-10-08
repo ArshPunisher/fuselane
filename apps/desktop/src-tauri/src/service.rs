@@ -44,6 +44,8 @@ pub struct NetView {
     pub kind: String,
     pub usable: bool,
     pub addrs: Vec<String>,
+    /// online | portal | offline, once checked (2.15); None before the first check.
+    pub reach: Option<&'static str>,
 }
 
 /// One network's part of a live update.
@@ -327,6 +329,10 @@ pub enum UiEvent {
     Open {
         target: String,
     },
+    /// The network list or a network's check changed.
+    Networks {
+        networks: Vec<NetView>,
+    },
 }
 
 /// An error the window can show as is: a stable code, what happened, what to do.
@@ -384,6 +390,8 @@ pub struct Service {
     /// launching the app); sent once it does.
     pending_opens: Mutex<Vec<String>>,
     subscribed: std::sync::atomic::AtomicBool,
+    /// Last sign-in-page check per network (2.15).
+    reach: Mutex<HashMap<String, fuselane_transport::probe::Reach>>,
 }
 
 impl std::fmt::Debug for Service {
@@ -396,6 +404,33 @@ impl std::fmt::Debug for Service {
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+fn reach_word(r: &fuselane_transport::probe::Reach) -> &'static str {
+    use fuselane_transport::probe::Reach;
+    match r {
+        Reach::Online => "online",
+        Reach::Portal { .. } => "portal",
+        Reach::Offline(_) => "offline",
+    }
+}
+
+/// Leaves out networks behind a sign-in page, unless that would leave none.
+fn without_portals(
+    all: Vec<fuselane_netif::Interface>,
+    reach: &HashMap<String, fuselane_transport::probe::Reach>,
+) -> Vec<fuselane_netif::Interface> {
+    let open: Vec<_> = all
+        .iter()
+        .filter(|i| {
+            !matches!(
+                reach.get(&i.name),
+                Some(fuselane_transport::probe::Reach::Portal { .. })
+            )
+        })
+        .cloned()
+        .collect();
+    if open.is_empty() { all } else { open }
 }
 
 fn kind_word(k: fuselane_netif::Kind) -> String {
@@ -583,6 +618,7 @@ impl Service {
             updated_from,
             pending_opens: Mutex::default(),
             subscribed: std::sync::atomic::AtomicBool::new(false),
+            reach: Mutex::default(),
         }))
     }
 
@@ -747,8 +783,63 @@ impl Service {
                 kind: kind_word(i.kind),
                 usable: i.usable(),
                 addrs: i.addrs.iter().map(ToString::to_string).collect(),
+                reach: lock(&self.reach).get(&i.name).map(reach_word),
             })
             .collect())
+    }
+
+    /// Usable networks, leaving out ones stuck behind a sign-in page; if that
+    /// leaves none, all of them (the download then says what went wrong).
+    pub fn download_networks(&self) -> Result<Vec<fuselane_netif::Interface>, String> {
+        let all = pick_networks(&[])?;
+        Ok(without_portals(all, &lock(&self.reach)))
+    }
+
+    /// Checks every usable network for a sign-in page; true if anything changed.
+    pub async fn check_reach(&self) -> bool {
+        let Ok(nets) = fuselane_netif::usable() else {
+            return false;
+        };
+        let mut set = tokio::task::JoinSet::new();
+        for iface in nets {
+            set.spawn(async move {
+                let r = fuselane_transport::probe::check(&iface, std::time::Duration::from_secs(6))
+                    .await;
+                (iface.name, r)
+            });
+        }
+        let mut found = HashMap::new();
+        while let Some(Ok((name, r))) = set.join_next().await {
+            found.insert(name, r);
+        }
+        let mut reach = lock(&self.reach);
+        let changed = *reach != found;
+        *reach = found;
+        changed
+    }
+
+    /// Keeps the checks current: every 60 s, and within 5 s of a network appearing
+    /// or going. The window hears about changes as a networks event.
+    pub async fn watch_reach(self: Arc<Self>) {
+        let mut last_names: Vec<String> = Vec::new();
+        let mut last_check: Option<std::time::Instant> = None;
+        loop {
+            let mut names: Vec<String> = fuselane_netif::usable()
+                .map(|v| v.into_iter().map(|i| i.name).collect())
+                .unwrap_or_default();
+            names.sort();
+            let due = last_check.is_none_or(|t| t.elapsed() >= std::time::Duration::from_secs(60));
+            if names != last_names || due {
+                last_names = names;
+                last_check = Some(std::time::Instant::now());
+                if self.check_reach().await
+                    && let Ok(networks) = self.networks()
+                {
+                    self.send(UiEvent::Networks { networks });
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        }
     }
 
     /// Adds a download and starts it when a slot is free.
@@ -1190,7 +1281,8 @@ impl Service {
 
     async fn run(self: Arc<Self>, job: Job, cancel: Cancel) {
         let id = job.id;
-        let picked = pick_networks(&[]).unwrap_or_default();
+        // Networks behind a sign-in page are left out (they'd serve the login page).
+        let picked = self.download_networks().unwrap_or_default();
         let nets: Vec<(String, String, String)> = picked
             .iter()
             .map(|i| (i.name.clone(), i.display_name.clone(), kind_word(i.kind)))
@@ -1718,6 +1810,7 @@ mod tests {
             kind: "wifi".into(),
             usable: true,
             addrs: vec![],
+            reach: Some("online"),
         };
         let lnet = LiveNet {
             name: "en0".into(),
@@ -2330,6 +2423,36 @@ mod tests {
         assert_eq!(opens[0], "magnet:?xt=urn:btih:a");
         assert_eq!(opens[1], "/tmp/b.torrent");
         assert_eq!(opens[16], "magnet:?xt=urn:btih:c");
+    }
+
+    #[test]
+    fn networks_behind_a_sign_in_page_are_left_out_unless_none_remain() {
+        use fuselane_transport::probe::Reach;
+        let net = |name: &str| fuselane_netif::Interface {
+            name: name.into(),
+            display_name: name.into(),
+            index: 1,
+            kind: fuselane_netif::Kind::Wifi,
+            addrs: vec!["10.0.0.2".parse().unwrap()],
+        };
+        let mut reach = HashMap::new();
+        reach.insert("en1".to_string(), Reach::Portal { location: None });
+        reach.insert("en0".to_string(), Reach::Online);
+        let names =
+            |v: Vec<fuselane_netif::Interface>| v.into_iter().map(|i| i.name).collect::<Vec<_>>();
+        assert_eq!(
+            names(without_portals(
+                vec![net("en0"), net("en1"), net("en7")],
+                &reach
+            )),
+            vec!["en0", "en7"]
+        );
+        assert_eq!(
+            names(without_portals(vec![net("en1")], &reach)),
+            vec!["en1"],
+            "all stuck: try anyway"
+        );
+        assert_eq!(reach_word(&Reach::Offline("x".into())), "offline");
     }
 
     #[test]

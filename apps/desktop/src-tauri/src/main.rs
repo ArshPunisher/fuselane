@@ -345,6 +345,21 @@ async fn torrent_reveal(app: tauri::AppHandle, tor: Tor<'_>, id: String) -> Resu
         .map_err(|e| ui_error("open-failed", format!("Couldn't show the files: {e}")))
 }
 
+/// Opens a page in the browser so a hotel or café network shows its sign-in page.
+#[tauri::command]
+fn open_sign_in(app: tauri::AppHandle) -> Result<(), UiError> {
+    use tauri_plugin_opener::OpenerExt;
+    // Fuselane's own site over plain HTTP: a sign-in page intercepts it.
+    let url = format!(
+        "http://{}{}",
+        fuselane_transport::probe::HOST,
+        fuselane_transport::probe::PATH
+    );
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|e| ui_error("open-failed", format!("Couldn't open the browser: {e}")))
+}
+
 /// Asks for a .torrent file; `None` if they cancel.
 #[tauri::command]
 async fn pick_torrent(app: tauri::AppHandle) -> Option<String> {
@@ -440,7 +455,7 @@ fn watch_for_shell(app: tauri::AppHandle, svc: &Arc<Service>) {
                 }
                 paint(&w);
             }
-            UiEvent::Torrents { .. } | UiEvent::Open { .. } => {}
+            UiEvent::Torrents { .. } | UiEvent::Open { .. } | UiEvent::Networks { .. } => {}
             UiEvent::Live(l) => {
                 w.live(l);
                 // The icon and tooltip don't need 5 updates a second.
@@ -480,7 +495,14 @@ fn open_torrents(svc: &Arc<Service>) -> Arc<torrents::Torrents> {
         svc.store(),
         state,
         svc.default_dir().to_path_buf(),
-        Arc::new(|| fuselane_core::runner::pick_networks(&[])),
+        {
+            // Torrents skip networks behind a sign-in page too.
+            let weak = Arc::downgrade(svc);
+            Arc::new(move || match weak.upgrade() {
+                Some(svc) => svc.download_networks(),
+                None => fuselane_core::runner::pick_networks(&[]),
+            })
+        },
         true,
         Some(svc.limiter()),
         Arc::new(move |e| {
@@ -609,6 +631,8 @@ fn main() {
             })
             .build(app)?;
             watch_for_shell(app.handle().clone(), &for_shell);
+            // Sign-in page checks (2.15): at launch, every minute, and on network changes.
+            tauri::async_runtime::spawn(for_shell.clone().watch_reach());
             // Saved torrents come back (rechecked from disk), then a tick every second.
             let tor = tor.clone();
             tauri::async_runtime::spawn(async move {
@@ -648,6 +672,7 @@ fn main() {
             open_file,
             pick_folder,
             pick_torrent,
+            open_sign_in,
             torrent_inspect_magnet,
             torrent_inspect_file,
             torrent_inspect_bytes,
