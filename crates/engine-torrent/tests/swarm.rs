@@ -374,3 +374,98 @@ async fn removing_with_files_deletes_the_torrent_folder() {
     assert_eq!(r.removed, 2, "{r:?}");
     assert!(!leech.path().join("T").exists());
 }
+
+/// Another seeder for an existing torrent whose single file is already in `dir`.
+async fn seed_again(
+    dir: &std::path::Path,
+    torrent: &[u8],
+) -> (std::sync::Arc<Session>, SocketAddr) {
+    let session = Session::new_with_opts(
+        dir.to_path_buf(),
+        SessionOptions {
+            dht: None,
+            persistence: None,
+            fastresume: false,
+            disable_local_service_discovery: true,
+            listen: Some(ListenerOptions {
+                listen_addr: (Ipv4Addr::LOCALHOST, 0).into(),
+                enable_upnp_port_forwarding: false,
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    let handle = session
+        .add_torrent(
+            AddTorrent::TorrentFileBytes(torrent.to_vec().into()),
+            Some(AddTorrentOptions {
+                output_folder: Some(dir.to_string_lossy().into_owned()),
+                overwrite: true,
+                ..Default::default()
+            }),
+        )
+        .await
+        .unwrap()
+        .into_handle()
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(30), handle.wait_until_completed())
+        .await
+        .unwrap()
+        .unwrap();
+    let addr = session.listen_addr().unwrap();
+    (session, addr)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn two_networks_share_a_torrent_and_credit_sums_to_the_file() {
+    let (s1, s2, leech) = (
+        tempfile::tempdir().unwrap(),
+        tempfile::tempdir().unwrap(),
+        tempfile::tempdir().unwrap(),
+    );
+    let data = payload(4 * 1024 * 1024 + 777);
+    let (_a, addr1, torrent) = seeder(s1.path(), &data).await;
+    std::fs::write(s2.path().join("payload.bin"), &data).unwrap();
+    let (_b, addr2) = seed_again(s2.path(), &torrent).await;
+
+    let mut second = loopback();
+    second.name = "lo0-b".into();
+    let engine = TorrentEngine::start(EngineOptions {
+        download_dir: leech.path().to_path_buf(),
+        networks: vec![loopback(), second],
+        dht: false,
+        listen: None,
+    })
+    .await
+    .unwrap();
+    let t = engine
+        .add(Source::File(torrent), None, vec![addr1, addr2], None)
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(60), t.finished())
+        .await
+        .expect("timed out")
+        .unwrap();
+    assert!(std::fs::read(leech.path().join("payload.bin")).unwrap() == data);
+
+    let shares = t.networks();
+    assert_eq!(shares.len(), 2);
+    assert_eq!(
+        shares.iter().map(|s| s.credited).sum::<u64>(),
+        data.len() as u64,
+        "{shares:?}"
+    );
+    assert!(
+        shares.iter().all(|s| s.received > 0),
+        "both networks carried part of it: {shares:?}"
+    );
+    assert!(shares.iter().map(|s| s.received).sum::<u64>() >= data.len() as u64);
+    // The session-wide view agrees with the per-torrent one.
+    let all = engine.networks();
+    assert!(
+        all.iter().zip(&shares).all(|(n, s)| n.down >= s.received),
+        "{all:?} {shares:?}"
+    );
+}

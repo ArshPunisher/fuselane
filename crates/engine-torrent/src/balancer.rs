@@ -2,6 +2,7 @@
 //! (TORRENT.md "Choosing a network"). v1: the network with the fewest live peers
 //! that has an address in the peer's family; ties go to the earlier network.
 
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -32,6 +33,38 @@ pub struct Balancer {
     nets: Vec<(Interface, Arc<NetCounters>)>,
     /// Round-robin cursor so equal networks share new peers.
     next: Mutex<usize>,
+    /// Per torrent (info hash, lowercase hex) and network name, learned from the
+    /// BitTorrent handshake each peer connection starts with.
+    torrents: Mutex<HashMap<(String, String), Arc<NetCounters>>>,
+}
+
+/// One network's part in one torrent: raw bytes moved and the verified bytes it
+/// is credited with (raw share of the torrent's verified bytes).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NetShare {
+    pub name: String,
+    pub peers: usize,
+    pub received: u64,
+    pub sent: u64,
+    pub credited: u64,
+}
+
+/// Splits `verified` bytes by each network's raw share. Shares always sum to
+/// `verified` exactly (L-117); the remainder goes to the biggest contributor.
+pub fn credit(received: &[u64], verified: u64) -> Vec<u64> {
+    let total: u128 = received.iter().map(|r| u128::from(*r)).sum();
+    if total == 0 {
+        return vec![0; received.len()];
+    }
+    let mut out: Vec<u64> = received
+        .iter()
+        .map(|r| u64::try_from(u128::from(*r) * u128::from(verified) / total).unwrap_or(u64::MAX))
+        .collect();
+    let given: u64 = out.iter().sum();
+    if let Some(big) = (0..received.len()).max_by_key(|i| received[*i]) {
+        out[big] += verified.saturating_sub(given);
+    }
+    out
 }
 
 impl Balancer {
@@ -42,6 +75,7 @@ impl Balancer {
                 .map(|i| (i, Arc::new(NetCounters::default())))
                 .collect(),
             next: Mutex::new(0),
+            torrents: Mutex::new(HashMap::new()),
         }
     }
 
@@ -74,6 +108,61 @@ impl Balancer {
             .into_iter()
             .map(|(_, n)| (n.0.clone(), n.1.clone()))
             .collect()
+    }
+
+    /// Counters for one torrent on one network (created on first use).
+    pub fn torrent_counters(&self, info_hash: &str, net: &str) -> Arc<NetCounters> {
+        let mut m = self
+            .torrents
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        m.entry((info_hash.to_owned(), net.to_owned()))
+            .or_default()
+            .clone()
+    }
+
+    /// Every network's part in this torrent, in network order, credited against
+    /// `verified` bytes.
+    pub fn torrent_shares(&self, info_hash: &str, verified: u64) -> Vec<NetShare> {
+        let m = self
+            .torrents
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let rows: Vec<(String, usize, u64, u64)> = self
+            .nets
+            .iter()
+            .map(
+                |(i, _)| match m.get(&(info_hash.to_owned(), i.name.clone())) {
+                    Some(c) => (
+                        i.name.clone(),
+                        c.peers.load(Ordering::Relaxed),
+                        c.down.load(Ordering::Relaxed),
+                        c.up.load(Ordering::Relaxed),
+                    ),
+                    None => (i.name.clone(), 0, 0, 0),
+                },
+            )
+            .collect();
+        let credited = credit(&rows.iter().map(|r| r.2).collect::<Vec<_>>(), verified);
+        rows.into_iter()
+            .zip(credited)
+            .map(|((name, peers, received, sent), credited)| NetShare {
+                name,
+                peers,
+                received,
+                sent,
+                credited,
+            })
+            .collect()
+    }
+
+    /// Drops a removed torrent's counters.
+    pub fn forget(&self, info_hash: &str) {
+        let mut m = self
+            .torrents
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        m.retain(|(h, _), _| h != info_hash);
     }
 
     pub fn snapshot(&self) -> Vec<NetStat> {
@@ -122,6 +211,58 @@ mod tests {
         assert_eq!(b.order_for(v4)[0].0.name, "en1");
         b.nets[1].1.peers.store(5, Ordering::Relaxed);
         assert_eq!(b.order_for(v4)[0].0.name, "en0");
+    }
+
+    #[test]
+    fn credit_always_sums_to_the_verified_bytes() {
+        assert_eq!(credit(&[], 10), Vec::<u64>::new());
+        assert_eq!(credit(&[0, 0], 10), vec![0, 0]);
+        assert_eq!(credit(&[300, 100], 200), vec![150, 50]);
+        // Raw bytes include protocol overhead and wasted pieces: credit never exceeds verified.
+        for (raw, verified) in [
+            (vec![1u64, 1, 1], 100u64),
+            (vec![7, 0, 3], 1_000_003),
+            (vec![u64::MAX, u64::MAX], u64::MAX),
+        ] {
+            let c = credit(&raw, verified);
+            assert_eq!(
+                c.iter().map(|x| u128::from(*x)).sum::<u128>(),
+                u128::from(verified),
+                "{raw:?}"
+            );
+        }
+        assert_eq!(
+            credit(&[0, 5], 9)[0],
+            0,
+            "a network that moved nothing gets nothing"
+        );
+    }
+
+    #[test]
+    fn torrent_shares_list_every_network_and_forget_cleans_up() {
+        let b = Balancer::new(vec![
+            iface("en0", &["10.0.0.2"]),
+            iface("en1", &["192.168.1.2"]),
+        ]);
+        b.torrent_counters("aa", "en1")
+            .down
+            .store(80, Ordering::Relaxed);
+        b.torrent_counters("aa", "en0")
+            .down
+            .store(20, Ordering::Relaxed);
+        b.torrent_counters("bb", "en0")
+            .down
+            .store(999, Ordering::Relaxed);
+        let s = b.torrent_shares("aa", 50);
+        assert_eq!(
+            s.iter()
+                .map(|x| (x.name.as_str(), x.credited))
+                .collect::<Vec<_>>(),
+            vec![("en0", 10), ("en1", 40)]
+        );
+        b.forget("aa");
+        assert!(b.torrent_shares("aa", 50).iter().all(|x| x.received == 0));
+        assert_eq!(b.torrent_shares("bb", 1)[0].received, 999);
     }
 
     #[test]

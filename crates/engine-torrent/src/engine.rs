@@ -13,7 +13,7 @@ use librqbit::{
     ListenerOptions, ManagedTorrent, Session, SessionOptions, TorrentStatsState,
 };
 
-use crate::balancer::{Balancer, NetStat};
+use crate::balancer::{Balancer, NetShare, NetStat};
 use crate::paths::{self, Cleanup, Planned, Rules};
 use crate::socks::{self, SocksServer};
 use fuselane_netif::Interface;
@@ -135,6 +135,7 @@ pub struct Progress {
 pub struct Torrent {
     handle: Arc<ManagedTorrent>,
     layout: Arc<Layout>,
+    balancer: Arc<Balancer>,
 }
 
 impl std::fmt::Debug for Torrent {
@@ -172,6 +173,11 @@ impl Torrent {
             uploaded: s.uploaded_bytes,
             error: s.error,
         }
+    }
+    /// Each network's part in this torrent, credited with verified bytes only.
+    pub fn networks(&self) -> Vec<NetShare> {
+        self.balancer
+            .torrent_shares(&self.info_hash(), self.progress().done)
     }
     pub fn listing(&self) -> &Listing {
         &self.layout.listing
@@ -364,6 +370,7 @@ impl TorrentEngine {
                     listing,
                     selected: Mutex::new(selected),
                 }),
+                balancer: self.balancer.clone(),
             }),
             AddTorrentResponse::AlreadyManaged(..) => Err(TorrentError::AlreadyAdded),
             AddTorrentResponse::ListOnly(_) => Err(engine("download did not start")),

@@ -7,6 +7,7 @@ pub mod engine;
 pub mod paths;
 pub mod socks;
 
+pub use balancer::{NetShare, NetStat};
 pub use engine::{
     EngineOptions, Listing, Phase, Progress, Source, Torrent, TorrentEngine, TorrentError,
 };

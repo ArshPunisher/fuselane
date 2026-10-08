@@ -6,7 +6,7 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::pin::Pin;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::Ordering;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
@@ -209,14 +209,27 @@ async fn serve(
                 continue;
             };
             reply(&mut client, OK).await?;
-            counters.peers.fetch_add(1, Ordering::Relaxed);
+            // Which torrent is this? Peer connections open with a handshake naming it.
+            let first = read_opening(&mut client).await;
+            let mut sinks = vec![counters];
+            if let Some(hash) = handshake_info_hash(&first) {
+                sinks.push(balancer.torrent_counters(&hash, &iface.name));
+            }
+            sinks.iter().for_each(|c| {
+                c.peers.fetch_add(1, Ordering::Relaxed);
+            });
             let mut peer = Counted {
                 inner: peer,
-                down: &counters.down,
-                up: &counters.up,
+                sinks: &sinks,
             };
-            let res = tokio::io::copy_bidirectional(&mut client, &mut peer).await;
-            counters.peers.fetch_sub(1, Ordering::Relaxed);
+            let res = async {
+                peer.write_all(&first).await?;
+                tokio::io::copy_bidirectional(&mut client, &mut peer).await
+            }
+            .await;
+            sinks.iter().for_each(|c| {
+                c.peers.fetch_sub(1, Ordering::Relaxed);
+            });
             return res.map(|_| ());
         }
     }
@@ -242,11 +255,43 @@ async fn close(mut client: TcpStream) -> std::io::Result<()> {
     Ok(())
 }
 
+/// The first bytes the client sends: enough for a BitTorrent handshake's info
+/// hash (48 bytes), or whatever arrives before the client stops or goes quiet.
+async fn read_opening(client: &mut TcpStream) -> Vec<u8> {
+    const WANT: usize = 48;
+    let mut buf = vec![0u8; WANT];
+    let mut n = 0;
+    let _ = tokio::time::timeout(HANDSHAKE, async {
+        while n < WANT {
+            match client.read(&mut buf[n..]).await {
+                Ok(0) | Err(_) => break,
+                Ok(k) => n += k,
+            }
+            // Not a BitTorrent handshake (a tracker's HTTP request): stop waiting.
+            if !PROTOCOL[..n.min(PROTOCOL.len())].eq(&buf[..n.min(PROTOCOL.len())]) {
+                break;
+            }
+        }
+    })
+    .await;
+    buf.truncate(n);
+    buf
+}
+
+const PROTOCOL: &[u8] = b"\x13BitTorrent protocol";
+
+/// BEP 3 handshake: pstrlen 19, "BitTorrent protocol", 8 reserved, info hash.
+fn handshake_info_hash(b: &[u8]) -> Option<String> {
+    if b.len() < 48 || !b.starts_with(PROTOCOL) {
+        return None;
+    }
+    Some(b[28..48].iter().map(|x| format!("{x:02x}")).collect())
+}
+
 /// The peer side of a proxied connection, counting bytes each way for its network.
 struct Counted<'a> {
     inner: TcpStream,
-    down: &'a AtomicU64,
-    up: &'a AtomicU64,
+    sinks: &'a [Arc<crate::balancer::NetCounters>],
 }
 
 impl AsyncRead for Counted<'_> {
@@ -257,8 +302,10 @@ impl AsyncRead for Counted<'_> {
     ) -> Poll<std::io::Result<()>> {
         let before = buf.filled().len();
         let r = Pin::new(&mut self.inner).poll_read(cx, buf);
-        let n = buf.filled().len() - before;
-        self.down.fetch_add(n as u64, Ordering::Relaxed);
+        let n = (buf.filled().len() - before) as u64;
+        self.sinks.iter().for_each(|c| {
+            c.down.fetch_add(n, Ordering::Relaxed);
+        });
         r
     }
 }
@@ -271,7 +318,9 @@ impl AsyncWrite for Counted<'_> {
     ) -> Poll<std::io::Result<usize>> {
         let r = Pin::new(&mut self.inner).poll_write(cx, data);
         if let Poll::Ready(Ok(n)) = &r {
-            self.up.fetch_add(*n as u64, Ordering::Relaxed);
+            self.sinks.iter().for_each(|c| {
+                c.up.fetch_add(*n as u64, Ordering::Relaxed);
+            });
         }
         r
     }
@@ -413,6 +462,26 @@ mod tests {
         )
         .await;
         assert!(r.is_err());
+    }
+
+    #[test]
+    fn handshakes_name_their_torrent_and_anything_else_does_not() {
+        let mut hs = PROTOCOL.to_vec();
+        hs.extend([0u8; 8]);
+        hs.extend((0u8..20).collect::<Vec<_>>());
+        hs.extend([9u8; 20]);
+        assert_eq!(
+            handshake_info_hash(&hs).as_deref(),
+            Some("000102030405060708090a0b0c0d0e0f10111213")
+        );
+        assert_eq!(handshake_info_hash(&hs[..47]), None, "truncated");
+        assert_eq!(
+            handshake_info_hash(b"GET /announce?info_hash=... HTTP/1.1\r\n\r\n"),
+            None
+        );
+        let mut wrong = hs.clone();
+        wrong[0] = 18;
+        assert_eq!(handshake_info_hash(&wrong), None);
     }
 
     #[test]
