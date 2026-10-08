@@ -66,3 +66,10 @@ jobs:
           path: site
       - id: deploy
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+      - name: 'Tell search engines the page changed (IndexNow: Bing, Yandex and others)'
+        continue-on-error: true
+        run: |
+          curl -fsS -X POST https://api.indexnow.org/indexnow \
+            -H 'Content-Type: application/json; charset=utf-8' \
+            -d '{"host":"arshpunisher.github.io","key":"ecf82e17baf091ac8a4c27c96d02085b","keyLocation":"https://arshpunisher.github.io/fuselane/ecf82e17baf091ac8a4c27c96d02085b.txt","urlList":["https://arshpunisher.github.io/fuselane/"]}' \
+            -w 'IndexNow: HTTP %{http_code}\n' -o /dev/null
