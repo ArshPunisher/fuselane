@@ -337,11 +337,9 @@ dependencies = [
  "fuselane-engine-http",
  "fuselane-netif",
  "fuselane-testkit",
- "fuselane-transport",
  "libc",
  "tempfile",
  "tokio",
- "url",
 ]
 
 [[package]]
@@ -349,10 +347,14 @@ name = "fuselane-core"
 version = "0.0.0"
 dependencies = [
  "fuselane-engine-http",
+ "fuselane-netif",
+ "fuselane-transport",
  "proptest",
  "rusqlite",
  "tempfile",
  "thiserror 2.0.21",
+ "tokio",
+ "url",
 ]
 
 [[package]]

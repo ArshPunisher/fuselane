@@ -15,9 +15,7 @@ path = "src/main.rs"
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "signal"] }
-url = "2"
 fuselane-netif.workspace = true
-fuselane-transport.workspace = true
 fuselane-engine-http.workspace = true
 fuselane-core.workspace = true
 dirs = "6"

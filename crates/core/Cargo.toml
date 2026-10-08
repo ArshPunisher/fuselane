@@ -12,6 +12,10 @@ publish.workspace = true
 rusqlite = { version = "0.37", features = ["bundled"] }
 thiserror = "2"
 fuselane-engine-http.workspace = true
+fuselane-netif.workspace = true
+fuselane-transport.workspace = true
+tokio = { version = "1", features = ["net", "time"] }
+url = "2"
 
 [lints]
 workspace = true

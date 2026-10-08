@@ -6,19 +6,15 @@
 //! `fuselane nets` shows the networks Fuselane can see.
 
 use std::io::Write;
-use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use clap::{Parser, Subcommand};
-use fuselane_core::{Event, Job, Status, Store};
-use fuselane_engine_http::download::{
-    BoxIo, Cancel, CheckpointFn, Connect, JobError, Network, ProgressFn, Resume, Source, Tuning,
-    download_with,
-};
-use fuselane_netif::Interface;
+use fuselane_core::runner::{self, describe, parse_link, parse_sha256, pick_networks};
+use fuselane_core::{Outcome, RunOptions, StartError, Status, Store};
+use fuselane_engine_http::download::{Cancel, ProgressFn, Resume};
 
 /// Fuse every connection into one fast lane.
 #[derive(Debug, Parser)]
@@ -233,36 +229,10 @@ async fn resume(id: &str, names: &[String], streams: Option<u32>, quiet: bool) -
             return ExitCode::FAILURE;
         }
     };
-    let job: Option<Job> = if id == "last" {
-        store
-            .list()
-            .ok()
-            .and_then(|j| j.into_iter().find(|j| !j.status.finished()))
-    } else {
-        id.parse::<i64>().ok().and_then(|n| store.get(n).ok())
+    let job = match runner::job_to_resume(&store, id) {
+        Ok(j) => j,
+        Err(e) => return start_failed(&e),
     };
-    let Some(job) = job else {
-        eprintln!(
-            "fuselane: there's no download \"{id}\" to resume. Run `fuselane ls` to see them."
-        );
-        return ExitCode::from(2);
-    };
-    if job.status == Status::Running {
-        // Left "running" by a process that crashed or was killed: it's interrupted.
-        let _ = store.apply(job.id, Event::Pause, None);
-    }
-    let job = store.get(job.id).unwrap_or(job);
-    if matches!(
-        job.status,
-        Status::Completed | Status::Cancelled | Status::Failed { resumable: false }
-    ) {
-        eprintln!(
-            "fuselane: download {} is {} and can't be resumed. Start it again with `fuselane get`.",
-            job.id,
-            status_word(job.status)
-        );
-        return ExitCode::from(2);
-    }
     let r = job.resume();
     run(
         store,
@@ -276,6 +246,14 @@ async fn resume(id: &str, names: &[String], streams: Option<u32>, quiet: bool) -
         None,
     )
     .await
+}
+
+fn start_failed(e: &StartError) -> ExitCode {
+    eprintln!("fuselane: {e}");
+    match e {
+        StartError::BadInput(_) => ExitCode::from(2),
+        StartError::Setup(_) => ExitCode::FAILURE,
+    }
 }
 
 fn nets(all: bool) -> ExitCode {
@@ -310,97 +288,6 @@ fn nets(all: bool) -> ExitCode {
     }
 }
 
-/// Only http and https (L-97). Returns (https?, host, port, path+query).
-fn parse_link(link: &str) -> Result<(bool, String, u16, String), String> {
-    let url =
-        url::Url::parse(link.trim()).map_err(|_| format!("\"{link}\" isn't a valid link."))?;
-    let https = match url.scheme() {
-        "https" => true,
-        "http" => false,
-        other => {
-            return Err(format!(
-                "{other}: links aren't supported. Use an http:// or https:// link."
-            ));
-        }
-    };
-    let host = url
-        .host_str()
-        .filter(|h| !h.is_empty())
-        .ok_or("The link has no host name.")?
-        .trim_matches(['[', ']'])
-        .to_string();
-    let port = url
-        .port_or_known_default()
-        .unwrap_or(if https { 443 } else { 80 });
-    let mut path = url.path().to_string();
-    if let Some(q) = url.query() {
-        path.push('?');
-        path.push_str(q);
-    }
-    Ok((https, host, port, path))
-}
-
-fn pick_networks(names: &[String]) -> Result<Vec<Interface>, String> {
-    let all = fuselane_netif::list().map_err(|e| format!("couldn't list networks: {e}"))?;
-    if names.is_empty() {
-        let usable: Vec<Interface> = all.into_iter().filter(Interface::usable).collect();
-        if usable.is_empty() {
-            return Err("No usable networks. Join a Wi-Fi network, plug in Ethernet, or tether a phone over USB.".into());
-        }
-        return Ok(usable);
-    }
-    names
-        .iter()
-        .map(|n| {
-            all.iter().find(|i| &i.name == n).cloned().ok_or_else(|| {
-                format!("No network called \"{n}\". Run `fuselane nets` to see them.")
-            })
-        })
-        .collect()
-}
-
-fn network_for(
-    id: u32,
-    iface: Interface,
-    addrs: Arc<Vec<SocketAddr>>,
-    https: bool,
-    host: Arc<str>,
-    timeout: Duration,
-) -> Network {
-    let name = iface.name.clone();
-    let iface = Arc::new(iface);
-    let connect: Connect = Arc::new(move |_| {
-        let (iface, addrs, host) = (iface.clone(), addrs.clone(), host.clone());
-        Box::pin(async move {
-            // Use the first resolved address this network can reach (matching family).
-            let dest = addrs
-                .iter()
-                .find(|a| {
-                    a.ip().is_loopback() || iface.addrs.iter().any(|l| l.is_ipv4() == a.is_ipv4())
-                })
-                .copied()
-                .ok_or_else(|| {
-                    std::io::Error::new(
-                        std::io::ErrorKind::AddrNotAvailable,
-                        "no address in a family this network has",
-                    )
-                })?;
-            let tcp = fuselane_transport::connect_pinned(&iface, dest, timeout)
-                .await
-                .map_err(std::io::Error::other)?;
-            if https {
-                let tls = fuselane_transport::tls(tcp, &host)
-                    .await
-                    .map_err(std::io::Error::other)?;
-                Ok(Box::new(tls) as BoxIo)
-            } else {
-                Ok(Box::new(tcp) as BoxIo)
-            }
-        })
-    });
-    Network { id, name, connect }
-}
-
 fn human(bytes: f64) -> String {
     const U: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
     let mut v = bytes;
@@ -414,40 +301,6 @@ fn human(bytes: f64) -> String {
     } else {
         format!("{v:.1} {}", U[i])
     }
-}
-
-fn crate_default_streams() -> u32 {
-    Tuning::default().streams_per_network
-}
-
-/// The plain-language message for each failure (ERRORS.md §2).
-fn describe(e: &JobError) -> String {
-    match e {
-        JobError::Unreachable(_) => "Couldn't reach the server on any selected network. Check your connection and the link.".into(),
-        JobError::ProbeStatus(404) => "The server says this file doesn't exist (404). Check the link.".into(),
-        JobError::ProbeStatus(401 | 403) => "The server refused access to this file. The link may need you to be signed in.".into(),
-        JobError::ProbeStatus(s) => format!("The server answered with status {s}, so the download couldn't start."),
-        JobError::LinkExpired(s) => format!("This link stopped working (the server said {s}). Get a fresh link to the same file and try again."),
-        JobError::VersionChanged => "The file on the server changed during the download, so it was stopped to avoid a mixed file. Start it again.".into(),
-        JobError::Disk(d) => format!("Saving failed ({d:?}). Check free space and that the folder is writable."),
-        JobError::AllNetworksFailed(last) => format!("Every network failed. Last problem: {last}"),
-        JobError::ChecksumMismatch { .. } => "The downloaded file doesn't match the SHA-256 you gave, so it wasn't saved under its name. The partial file is kept for inspection.".into(),
-        JobError::Paused => "Paused. Progress is saved.".into(),
-        JobError::NotResumable(why) => format!("This download can't be resumed ({why}). Start it again."),
-        JobError::Staging(e) => format!("Couldn't save the file: {e}"),
-    }
-}
-
-fn parse_sha256(s: &str) -> Result<[u8; 32], String> {
-    let s = s.trim();
-    if s.len() != 64 || !s.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Err("a SHA-256 is 64 hexadecimal characters".into());
-    }
-    let mut out = [0u8; 32];
-    for (i, byte) in out.iter_mut().enumerate() {
-        *byte = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).map_err(|e| e.to_string())?;
-    }
-    Ok(out)
 }
 
 async fn get(
@@ -484,7 +337,7 @@ async fn get(
     run(store, id, link, out, names, streams, quiet, None, sha256).await
 }
 
-/// Runs (or continues) download `id`, keeping the store in step with the engine.
+/// Runs (or continues) download `id` and prints how it went.
 #[allow(clippy::too_many_arguments)]
 async fn run(
     store: Arc<Store>,
@@ -497,60 +350,6 @@ async fn run(
     resume: Option<Resume>,
     sha256: Option<[u8; 32]>,
 ) -> ExitCode {
-    let (https, host, port, path) = match parse_link(link) {
-        Ok(p) => p,
-        Err(msg) => {
-            eprintln!("fuselane: {msg}");
-            return ExitCode::from(2);
-        }
-    };
-    let ifaces = match pick_networks(names) {
-        Ok(v) => v,
-        Err(msg) => {
-            eprintln!("fuselane: {msg}");
-            return ExitCode::from(2);
-        }
-    };
-    let addrs: Vec<SocketAddr> = match tokio::time::timeout(
-        Duration::from_secs(10),
-        tokio::net::lookup_host((host.as_str(), port)),
-    )
-    .await
-    {
-        Ok(Ok(a)) => a.collect(),
-        _ => {
-            eprintln!(
-                "fuselane: couldn't find the server \"{host}\". Check the link and your connection."
-            );
-            return ExitCode::FAILURE;
-        }
-    };
-    let Some(first) = addrs.first().copied() else {
-        eprintln!("fuselane: \"{host}\" has no addresses.");
-        return ExitCode::FAILURE;
-    };
-    let addrs = Arc::new(addrs);
-    let host_arc: Arc<str> = Arc::from(host.as_str());
-    let names_for_report: Vec<(u32, String)> = ifaces
-        .iter()
-        .enumerate()
-        .map(|(i, f)| (i as u32 + 1, f.name.clone()))
-        .collect();
-    let networks: Vec<Network> = ifaces
-        .into_iter()
-        .enumerate()
-        .map(|(i, f)| {
-            network_for(
-                i as u32 + 1,
-                f,
-                addrs.clone(),
-                https,
-                host_arc.clone(),
-                Duration::from_secs(10),
-            )
-        })
-        .collect();
-
     let started = Instant::now();
     let last_draw = Arc::new(Mutex::new(Instant::now() - Duration::from_secs(1)));
     let progress = (!quiet).then(|| {
@@ -577,7 +376,7 @@ async fn run(
             let _ = std::io::stderr().flush();
         }))
     });
-    // Checkpoints go to the store; Ctrl-C pauses cleanly.
+    // Ctrl-C pauses cleanly.
     let cancel = Cancel::new();
     tokio::spawn({
         let cancel = cancel.clone();
@@ -587,44 +386,25 @@ async fn run(
             }
         }
     });
-    let sink = {
-        let store = store.clone();
-        CheckpointFn(Arc::new(move |cp| {
-            let _ = store.save_checkpoint(id, cp);
-        }))
-    };
-    let checkpoint_every = std::env::var("FUSELANE_CHECKPOINT_MS")
-        .ok()
-        .and_then(|v| v.parse::<u64>().ok())
-        .map_or(Tuning::default().checkpoint_every, Duration::from_millis);
-    let tuning = Tuning {
-        auto_streams: streams.is_none(),
-        streams_per_network: streams.unwrap_or(crate_default_streams()),
+    let opts = RunOptions {
+        networks: names.to_vec(),
+        streams,
+        sha256,
         progress,
-        checkpoint: Some(sink),
-        checkpoint_every,
         cancel: Some(cancel),
-        expected_sha256: sha256,
-        ..Tuning::default()
+        checkpoint_every: std::env::var("FUSELANE_CHECKPOINT_MS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .map(Duration::from_millis),
+        ..RunOptions::default()
     };
-    let _ = store.apply(id, Event::Start, None);
-    let host_header = if (https && port == 443) || (!https && port == 80) {
-        host.clone()
-    } else {
-        format!("{host}:{port}")
-    };
-    let source = Source {
-        addr: first,
-        host: host_header,
-        path,
-    };
-
-    let result = download_with(source, networks, &out, tuning, resume).await;
+    let outcome = runner::run(store, id, link, out, resume, opts).await;
     if !quiet {
         eprintln!();
     }
-    match result {
-        Ok(report) => {
+    match outcome {
+        Err(e) => start_failed(&e),
+        Ok(Outcome::Completed { report, networks }) => {
             let secs = started.elapsed().as_secs_f64().max(0.001);
             println!(
                 "Saved {} ({}) in {:.1} s, {}/s",
@@ -633,29 +413,19 @@ async fn run(
                 secs,
                 human(report.total as f64 / secs)
             );
-            let _ = store.set_final_path(id, &report.path);
-            let _ = store.apply(id, Event::Complete, None);
             let sum: u64 = report.bytes_by_network.values().sum::<u64>().max(1);
-            for (id, name) in &names_for_report {
+            for (id, name) in &networks {
                 let b = report.bytes_by_network.get(id).copied().unwrap_or(0);
                 println!("  {name:<10} {:>9}  {:>3}%", human(b as f64), b * 100 / sum);
             }
             ExitCode::SUCCESS
         }
-        Err(JobError::Paused) => {
-            let _ = store.apply(id, Event::Pause, None);
+        Ok(Outcome::Paused) => {
             eprintln!("fuselane: paused. Progress is saved; continue with `fuselane resume {id}`.");
             ExitCode::from(130)
         }
-        Err(e) => {
-            let resumable = !matches!(
-                e,
-                JobError::VersionChanged
-                    | JobError::NotResumable(_)
-                    | JobError::ChecksumMismatch { .. }
-            );
-            let _ = store.apply(id, Event::Fail { resumable }, Some(&e.to_string()));
-            eprintln!("fuselane: {}", describe(&e));
+        Ok(Outcome::Failed { error, resumable }) => {
+            eprintln!("fuselane: {}", describe(&error));
             if resumable {
                 eprintln!("          Progress is saved; try again with `fuselane resume {id}`.");
             }
@@ -680,38 +450,6 @@ mod tests {
             Cli::command().get_version(),
             Some(env!("CARGO_PKG_VERSION"))
         );
-    }
-
-    #[test]
-    fn only_http_and_https_links_are_accepted() {
-        assert_eq!(
-            parse_link("https://example.com/a/b.iso?x=1").unwrap(),
-            (true, "example.com".into(), 443, "/a/b.iso?x=1".into())
-        );
-        assert_eq!(
-            parse_link("http://example.com:8080/f").unwrap(),
-            (false, "example.com".into(), 8080, "/f".into())
-        );
-        assert_eq!(parse_link("http://[::1]:9/f").unwrap().1, "::1");
-        for bad in [
-            "ftp://example.com/f",
-            "file:///etc/passwd",
-            "javascript:alert(1)",
-            "not a link",
-            "",
-            "https://",
-            "magnet:?xt=urn:btih:abc",
-        ] {
-            assert!(parse_link(bad).is_err(), "{bad:?} accepted");
-        }
-    }
-
-    #[test]
-    fn sha256_flag_is_validated() {
-        assert!(parse_sha256(&"ab".repeat(32)).is_ok());
-        for bad in ["", "abc", &"zz".repeat(32), &"ab".repeat(33)] {
-            assert!(parse_sha256(bad).is_err(), "{bad:?}");
-        }
     }
 
     #[test]
