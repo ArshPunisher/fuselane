@@ -9,7 +9,20 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+socket2 = { version = "0.6", features = ["all"] }
+tokio = { version = "1", features = ["net", "time", "rt"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-platform-verifier = "0.6"
+libc = "0.2"
+thiserror = "2"
 fuselane-netif.workspace = true
 
 [lints]
 workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Networking_WinSock"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
