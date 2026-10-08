@@ -1272,7 +1272,14 @@ h2 {
 
 /* ---------- Responsive ---------- */
 
-@media (max-width: 1279px) {
+/* The detail's two columns need about 920px of its own width, whatever the window:
+   at a 1280px window the three-pane layout leaves it ~670px, and the side column was
+   cut off. So it asks its own size (a container query), not the window's. */
+.detail {
+  container-type: inline-size;
+}
+
+@container (max-width: 919px) {
   .detail-body {
     /* minmax(0, …): a canvas's pixel size must never widen the column (L-115). */
     grid-template-columns: minmax(0, 1fr);

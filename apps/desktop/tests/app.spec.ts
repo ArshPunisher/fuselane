@@ -645,3 +645,25 @@ test('a network behind a sign-in page says so and offers the page', async ({ pag
   // Only that network: the others read normally.
   await expect(page.getByRole('main').getByText('Sign in needed')).toHaveCount(1)
 })
+
+for (const [w, h] of [
+  [1024, 700],
+  [1280, 800],
+  [1440, 900],
+  [1920, 1080],
+] as [number, number][]) {
+  test(`nothing in the detail pane is cut off at ${w}x${h}`, async ({ page }) => {
+    await page.setViewportSize({ width: w, height: h })
+    await page.goto('/?freeze=4')
+    await expect(page.getByTestId('fuse-core')).toBeVisible()
+    const clipped = await page.evaluate(() => {
+      const d = document.querySelector('.detail') as HTMLElement
+      const pane = d.getBoundingClientRect()
+      const out = [...d.querySelectorAll('.facts, .nets, .stream, .core')].filter(
+        (el) => el.getBoundingClientRect().right > pane.right + 1,
+      )
+      return { overflow: d.scrollWidth - d.clientWidth, clipped: out.map((e) => e.className) }
+    })
+    expect(clipped).toEqual({ overflow: 0, clipped: [] })
+  })
+}
