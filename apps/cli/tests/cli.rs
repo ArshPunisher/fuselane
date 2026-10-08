@@ -203,7 +203,10 @@ async fn kill_9_mid_download_then_resume_is_byte_exact() {
     server.add_rule(Rule {
         skip: 1,
         times: u32::MAX,
-        fault: Fault::Throttle(700_000),
+        // Slow enough that the download takes several seconds: at 700 KB/s per
+        // stream a fast CI runner finished all 3 MB between two 50 ms checks, and a
+        // finished download keeps no progress, so the test never saw a third.
+        fault: Fault::Throttle(150_000),
     });
     let home = tempfile::tempdir().unwrap();
     let dir = tempfile::tempdir().unwrap();
