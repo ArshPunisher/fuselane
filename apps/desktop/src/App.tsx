@@ -7,6 +7,7 @@ import { NewDownload } from './components/NewDownload'
 import { NetworkList, NetworksView } from './components/NetworksView'
 import { SettingsView } from './components/SettingsView'
 import { Toast } from './components/Toast'
+import { UpdateBanner } from './components/UpdateBanner'
 
 type Layout = 'compact' | 'regular' | 'wide'
 
@@ -215,6 +216,7 @@ export function App() {
           </header>
         )}
         <main className="main" id="main" tabIndex={-1}>
+          <UpdateBanner />
           {page}
         </main>
         {layout === 'compact' && <Nav kind="tabs" />}

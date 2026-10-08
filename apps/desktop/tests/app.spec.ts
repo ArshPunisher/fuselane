@@ -464,3 +464,35 @@ test('Copy diagnostics shows exactly what is copied, with nothing personal', asy
   expect(text).not.toMatch(/\d+\.\d+\.\d+\.\d+/)
   expect(text).not.toContain('ubuntu-26.04')
 })
+
+test('an available update is offered once and can be put off', async ({ page }) => {
+  await page.goto('/?empty=1&update=1')
+  const banner = page.locator('.update-banner')
+  await expect(banner).toContainText('Fuselane 0.1.0-beta.2 is available')
+  await banner.getByRole('button', { name: 'Later' }).click()
+  await expect(banner).toHaveCount(0)
+})
+
+test('a bad update signature is refused with a plain message', async ({ page }) => {
+  await page.goto('/?empty=1&update=bad')
+  const banner = page.locator('.update-banner')
+  await banner.getByRole('button', { name: 'Update and restart' }).click()
+  await expect(page.getByRole('alert').filter({ hasText: "signature doesn't match" })).toBeVisible()
+  // Nothing was installed: the offer is still there to retry later.
+  await expect(banner.getByRole('button', { name: 'Update and restart' })).toBeEnabled()
+})
+
+test('update checks: quiet when offline at launch, clear when asked', async ({ page }) => {
+  await page.goto('/?empty=1&update=offline')
+  await page.waitForTimeout(800) // the launch check has run
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await page.getByRole('button', { name: 'Check for updates' }).click()
+  await expect(
+    page.getByRole('alert').filter({ hasText: "Couldn't check for updates" }),
+  ).toBeVisible()
+  await page.goto('/?empty=1')
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await page.getByRole('button', { name: 'Check for updates' }).click()
+  await expect(page.getByRole('status').filter({ hasText: "You're up to date." })).toBeVisible()
+})

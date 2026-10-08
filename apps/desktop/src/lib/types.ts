@@ -78,3 +78,8 @@ export interface NetLimit {
   name: string
   rate: number
 }
+
+export interface UpdateInfo {
+  version: string
+  notes: string | null
+}

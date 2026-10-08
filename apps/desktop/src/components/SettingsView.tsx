@@ -89,6 +89,40 @@ function SpeedLimitSetting() {
   )
 }
 
+function UpdateSetting() {
+  const check = useApp((s) => s.checkUpdate)
+  const update = useApp((s) => s.update)
+  const [status, setStatus] = useState('')
+  const [busy, setBusy] = useState(false)
+  return (
+    <div className="setting">
+      <div>
+        <p className="setting-name">Updates</p>
+        <p className="muted">Fuselane checks a signed update feed. Nothing about you is sent.</p>
+        <p className="muted" role="status">
+          {status}
+        </p>
+      </div>
+      <button
+        type="button"
+        className="btn"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true)
+          setStatus('')
+          const r = await check(false)
+          setBusy(false)
+          if (r === 'current') setStatus("You're up to date.")
+          if (r === 'available')
+            setStatus(`Version ${useApp.getState().update?.version ?? ''} is ready to install.`)
+        }}
+      >
+        {busy ? 'Checking…' : update ? 'Check again' : 'Check for updates'}
+      </button>
+    </div>
+  )
+}
+
 function DiagnosticsSetting() {
   const backend = useApp((s) => s.backend)
   const [report, setReport] = useState('')
@@ -166,6 +200,7 @@ export function SettingsView() {
           <p className="muted num">{info?.defaultDir ?? ''}</p>
         </div>
       </div>
+      <UpdateSetting />
       <DiagnosticsSetting />
       <div className="setting">
         <div>

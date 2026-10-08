@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { connect, toUiError, type Backend } from './backend'
-import type { AppInfo, JobView, LimitsView, Live, NetView, UiError } from './types'
+import type { AppInfo, JobView, LimitsView, Live, NetView, UiError, UpdateInfo } from './types'
 
 /** Rate history for the Stream graph: newest last, about five samples a second. */
 export interface History {
@@ -21,6 +21,8 @@ interface State {
   history: Record<number, History>
   networks: NetView[]
   limits: LimitsView
+  update: UpdateInfo | null
+  updateDismissed: boolean
   selected: number | null
   view: View
   adding: boolean
@@ -37,6 +39,9 @@ interface State {
   refreshNetworks(): Promise<void>
   /** Saves limits; true when the backend accepted them. */
   saveLimits(next: LimitsView): Promise<boolean>
+  /** Checks the feed; quiet=true never shows errors (the launch check). */
+  checkUpdate(quiet: boolean): Promise<'available' | 'current' | 'error'>
+  dismissUpdate(): void
   /** Runs an action; failures become a toast. Returns false on failure. */
   act(f: (b: Backend) => Promise<unknown>): Promise<boolean>
 }
@@ -64,6 +69,8 @@ export const useApp = create<State>((set, get) => ({
   history: {},
   networks: [],
   limits: { global: 0, networks: [] },
+  update: null,
+  updateDismissed: false,
   selected: null,
   view: 'transfers',
   adding: false,
@@ -123,6 +130,19 @@ export const useApp = create<State>((set, get) => ({
     set({ theme })
   },
   dismissToast: () => set({ toast: null }),
+  async checkUpdate(quiet) {
+    const b = get().backend
+    if (!b) return 'error'
+    try {
+      const update = await b.checkUpdate()
+      set({ update, updateDismissed: false })
+      return update ? 'available' : 'current'
+    } catch (e) {
+      if (!quiet) set({ toast: { ...toUiError(e), at: Date.now() } })
+      return 'error'
+    }
+  },
+  dismissUpdate: () => set({ updateDismissed: true }),
   async saveLimits(next) {
     const b = get().backend
     if (!b) return false

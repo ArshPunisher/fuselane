@@ -1424,3 +1424,26 @@ h2 {
   outline: 2px solid var(--fuse);
   outline-offset: 1px;
 }
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 16px 0;
+  padding: 10px 10px 10px 14px;
+  border: 1px solid color-mix(in oklch, var(--fuse) 35%, transparent);
+  border-radius: var(--radius-panel);
+  background: var(--fuse-soft);
+  color: var(--ink);
+}
+
+.update-banner p {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 639px) {
+  .update-banner {
+    flex-wrap: wrap;
+  }
+}

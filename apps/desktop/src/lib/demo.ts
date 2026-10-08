@@ -376,6 +376,21 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       }
     },
     pickFolder: async () => (params.get('pick') === 'cancel' ? null : '/Users/demo/Movies'),
+    checkUpdate: async () => {
+      if (params.get('update') === 'offline')
+        throw err('update-check', "Couldn't check for updates: you're offline.", null)
+      return ['1', 'bad'].includes(params.get('update') ?? '')
+        ? { version: '0.1.0-beta.2', notes: 'Faster resume.' }
+        : null
+    },
+    installUpdate: async () => {
+      if (params.get('update') === 'bad')
+        throw err(
+          'update-failed',
+          "The update couldn't be installed: the signature doesn't match.",
+          null,
+        )
+    },
     getLimits: async () => structuredClone(limits),
     diagnostics: async () =>
       [
