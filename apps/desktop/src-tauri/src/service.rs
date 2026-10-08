@@ -519,6 +519,8 @@ pub struct Service {
     busy_elsewhere: Mutex<Option<BusyFn>>,
     /// Seconds before a when-done action runs (tests shorten it).
     countdown: std::sync::atomic::AtomicU32,
+    /// Closing the window hides it; downloads carry on from the tray.
+    close_to_tray: std::sync::atomic::AtomicBool,
 }
 
 /// Seconds people get to cancel a sleep or shut-down.
@@ -697,6 +699,8 @@ impl Service {
             .and_then(|v| serde_json::from_str(&v).ok())
             .and_then(|a: crate::automation::Automation| a.validated().ok())
             .unwrap_or_default();
+        let close_to_tray =
+            store.setting("close_to_tray").ok().flatten().as_deref() == Some("true");
         let max_running = store
             .setting("max_running")
             .ok()
@@ -778,6 +782,7 @@ impl Service {
             power: Mutex::new(Arc::new(run_power_action)),
             busy_elsewhere: Mutex::new(None),
             countdown: std::sync::atomic::AtomicU32::new(COUNTDOWN),
+            close_to_tray: std::sync::atomic::AtomicBool::new(close_to_tray),
         }))
     }
 
@@ -1373,6 +1378,20 @@ impl Service {
         if std::fs::rename(path, &target).is_ok() {
             let _ = self.store.set_finished(id, &target, total);
         }
+    }
+
+    pub fn close_to_tray(&self) -> bool {
+        self.close_to_tray
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub fn set_close_to_tray(&self, on: bool) -> Result<bool, UiError> {
+        self.store
+            .set_setting("close_to_tray", if on { "true" } else { "false" })
+            .map_err(store_error)?;
+        self.close_to_tray
+            .store(on, std::sync::atomic::Ordering::Relaxed);
+        Ok(on)
     }
 
     pub fn max_running(&self) -> usize {
@@ -2533,7 +2552,13 @@ mod tests {
             .svc
             .add_with(&link(&server), None, &named("trip.mp4"))
             .unwrap();
-        h.wait("a done", |h| h.job(a).status == "completed").await;
+        // "Completed" is recorded a moment before the file moves, so wait for the move.
+        let in_video = |h: &Harness, id| {
+            h.job(id)
+                .final_path
+                .is_some_and(|p| Path::new(&p).parent().is_some_and(|d| d.ends_with("Video")))
+        };
+        h.wait("a sorted", |h| in_video(h, a)).await;
         let pa = PathBuf::from(h.job(a).final_path.unwrap());
         let root = std::fs::canonicalize(h.dir.path()).unwrap();
         assert_eq!(pa, root.join("Video").join("trip.mp4"));
@@ -2562,7 +2587,7 @@ mod tests {
             .svc
             .add_with(&link(&server), None, &named("trip.mp4"))
             .unwrap();
-        h.wait("c done", |h| h.job(c).status == "completed").await;
+        h.wait("c sorted", |h| in_video(h, c)).await;
         let pc = PathBuf::from(h.job(c).final_path.unwrap());
         assert_eq!(pc.parent().unwrap(), root.join("Video"));
         assert_ne!(pc, pa);

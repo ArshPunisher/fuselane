@@ -117,6 +117,42 @@ fn cancel_when_done(svc: State<'_>) {
     svc.cancel_when_done();
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WindowPrefs {
+    start_at_login: bool,
+    close_to_tray: bool,
+}
+
+#[tauri::command]
+fn window_prefs(app: tauri::AppHandle, svc: State<'_>) -> WindowPrefs {
+    use tauri_plugin_autostart::ManagerExt;
+    WindowPrefs {
+        start_at_login: app.autolaunch().is_enabled().unwrap_or(false),
+        close_to_tray: svc.close_to_tray(),
+    }
+}
+
+#[tauri::command]
+fn set_start_at_login(app: tauri::AppHandle, on: bool) -> Result<bool, UiError> {
+    use tauri_plugin_autostart::ManagerExt;
+    let a = app.autolaunch();
+    let r = if on { a.enable() } else { a.disable() };
+    r.map_err(|e| {
+        UiError::new_public(
+            "autostart",
+            format!("Your system didn't accept the change ({e})."),
+            Some("Try again, or add Fuselane to your login items yourself."),
+        )
+    })?;
+    Ok(a.is_enabled().unwrap_or(on))
+}
+
+#[tauri::command]
+fn set_close_to_tray(svc: State<'_>, on: bool) -> Result<bool, UiError> {
+    svc.set_close_to_tray(on)
+}
+
 #[tauri::command]
 fn max_running(svc: State<'_>) -> usize {
     svc.max_running()
@@ -728,6 +764,21 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         // Remembers the window's size and position between launches.
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        // Start at login (off until chosen in Settings); then it opens in the tray.
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--minimized"]),
+        ))
+        .on_window_event(|window, event| {
+            // With "keep running" on, closing hides the window; downloads carry on.
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event
+                && window.label() == "main"
+                && window.app_handle().state::<Arc<Service>>().close_to_tray()
+            {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .manage(svc)
         .manage(tor.clone())
         .setup(move |app| {
@@ -747,6 +798,12 @@ fn main() {
             })
             .build(app)?;
             watch_for_shell(app.handle().clone(), &for_shell);
+            // Started at login: stay in the tray until someone opens the window.
+            if std::env::args().any(|a| a == "--minimized")
+                && let Some(w) = app.get_webview_window("main")
+            {
+                let _ = w.hide();
+            }
             {
                 // "Quit Fuselane" goes through the normal exit (downloads pause and save).
                 let handle = app.handle().clone();
@@ -788,6 +845,9 @@ fn main() {
             list_networks,
             add_download,
             add_batch,
+            window_prefs,
+            set_start_at_login,
+            set_close_to_tray,
             automation,
             set_automation,
             cancel_when_done,
@@ -846,6 +906,11 @@ fn main() {
                         for_open.open_request(t.as_draft());
                     }
                 }
+            }
+            // Clicking the Dock icon brings a hidden window back.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = &event {
+                show_main(app);
             }
             #[cfg(not(any(target_os = "macos", target_os = "ios")))]
             let _ = (app, &for_open);
