@@ -760,6 +760,118 @@ mod tests {
         assert!(h.job(id).final_path.is_none());
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_same_link_twice_at_once_gives_two_whole_files() {
+        let content = Content::new(2 * 1024 * KB, 97);
+        let server = RangeServer::start(content).await.unwrap();
+        let h = harness(3);
+        let a = h.svc.add(&link(&server), None).unwrap();
+        let b = h.svc.add(&link(&server), None).unwrap();
+        h.wait("both done", |h| {
+            h.job(a).status == "completed" && h.job(b).status == "completed"
+        })
+        .await;
+        let (pa, pb) = (h.job(a).final_path.unwrap(), h.job(b).final_path.unwrap());
+        assert_ne!(pa, pb, "the second must not overwrite the first");
+        for p in [pa, pb] {
+            assert_eq!(
+                fuselane_testkit::sha256_file(Path::new(&p)).unwrap(),
+                content.sha256()
+            );
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn empty_files_and_servers_without_ranges_still_finish() {
+        let empty = Content::new(0, 98);
+        let se = RangeServer::start(empty).await.unwrap();
+        let whole = Content::new(700 * KB, 99);
+        let sw = RangeServer::start(whole).await.unwrap();
+        sw.add_rule(Rule {
+            skip: 0,
+            times: u32::MAX,
+            fault: Fault::IgnoreRange,
+        });
+        let h = harness(3);
+        let ie = h.svc.add(&link(&se), None).unwrap();
+        let iw = h.svc.add(&link(&sw), None).unwrap();
+        h.wait("both done", |h| {
+            let (e, w) = (h.job(ie), h.job(iw));
+            (e.status == "completed" || e.status.starts_with("failed"))
+                && (w.status == "completed" || w.status.starts_with("failed"))
+        })
+        .await;
+        let e = h.job(ie);
+        assert_eq!(e.status, "completed", "{:?}", e.error);
+        assert_eq!(std::fs::metadata(e.final_path.unwrap()).unwrap().len(), 0);
+        let w = h.job(iw);
+        assert_eq!(w.status, "completed", "{:?}", w.error);
+        assert_eq!(
+            fuselane_testkit::sha256_file(Path::new(&w.final_path.unwrap())).unwrap(),
+            whole.sha256()
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_flood_of_downloads_never_runs_more_than_the_queue_allows() {
+        let content = Content::new(256 * KB, 100);
+        let server = RangeServer::start(content).await.unwrap();
+        server.add_rule(Rule {
+            skip: 0,
+            times: u32::MAX,
+            fault: Fault::Throttle(2048 * KB),
+        });
+        let h = harness(3);
+        let ids: Vec<i64> = (0..30)
+            .map(|_| h.svc.add(&link(&server), None).unwrap())
+            .collect();
+        let mut peak = 0;
+        let start = Instant::now();
+        loop {
+            let jobs = h.svc.jobs().unwrap();
+            let running = jobs.iter().filter(|j| j.status == "running").count();
+            peak = peak.max(running).max(h.svc.running());
+            if jobs.iter().all(|j| j.status == "completed") {
+                break;
+            }
+            assert!(
+                start.elapsed() < Duration::from_secs(60),
+                "flood didn't finish"
+            );
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(peak <= 3, "ran {peak} at once");
+        assert_eq!(ids.len(), 30);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn waiting_jobs_can_be_paused_removed_and_resumed() {
+        let content = Content::new(2 * 1024 * KB, 101);
+        let server = RangeServer::start(content).await.unwrap();
+        server.add_rule(Rule {
+            skip: 1,
+            times: u32::MAX,
+            fault: Fault::Throttle(1024 * KB),
+        });
+        let h = harness(1);
+        let first = h.svc.add(&link(&server), None).unwrap();
+        let waiting = h.svc.add(&link(&server), None).unwrap();
+        let doomed = h.svc.add(&link(&server), None).unwrap();
+        h.wait("first running", |h| h.job(first).status == "running")
+            .await;
+        h.svc.pause(waiting).unwrap();
+        assert_eq!(h.job(waiting).status, "paused");
+        h.svc.remove(doomed).unwrap();
+        assert!(h.svc.jobs().unwrap().iter().all(|j| j.id != doomed));
+        // Resuming a running job is a harmless no-op.
+        h.svc.resume(first).unwrap();
+        h.svc.resume(waiting).unwrap();
+        h.wait("all done", |h| {
+            h.job(first).status == "completed" && h.job(waiting).status == "completed"
+        })
+        .await;
+    }
+
     #[test]
     fn crashed_jobs_come_back_paused() {
         let dir = tempfile::tempdir().unwrap();
