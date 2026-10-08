@@ -5,3 +5,4 @@
 //! runtime. Design: `docs/03-architecture/ARCHITECTURE.md` §2. Rules: L-97, L-98.
 
 pub mod offer;
+pub mod server;
