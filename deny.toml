@@ -9,7 +9,11 @@ yanked = "deny"
 [licenses]
 version = 2
 # Permissive licences compatible with Apache-2.0 distribution.
-allow = ["Apache-2.0", "MIT", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Unicode-3.0", "Zlib", "CC0-1.0", "MPL-2.0"]
+allow = [
+  "Apache-2.0", "MIT", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Unicode-3.0", "Zlib", "CC0-1.0", "MPL-2.0",
+  # Mozilla root-certificate data (webpki-root-certs, via rustls-platform-verifier): permissive data licence.
+  "CDLA-Permissive-2.0",
+]
 confidence-threshold = 0.9
 
 [bans]
