@@ -9,6 +9,8 @@ import type { Backend } from './backend'
 import { createDemoTorrents } from './demoTorrents'
 import type {
   AllowanceView,
+  Automation,
+  AutomationView,
   BatchResult,
   JobStatus,
   JobView,
@@ -325,6 +327,27 @@ export function createDemoBackend(params: URLSearchParams): Backend {
   }
 
   let maxRunning = 3
+  let automation: Automation = {
+    schedule: {
+      enabled: false,
+      start: 60,
+      stop: 420,
+      days: [true, true, true, true, true, true, true],
+    },
+    whenDone: 'nothing',
+    keepAwake: true,
+    sortByType: false,
+  }
+  const automationView = (): AutomationView => {
+    const s = automation.schedule
+    const hhmm = (m: number) =>
+      `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+    return {
+      settings: automation,
+      allowedNow: !s.enabled,
+      next: s.enabled ? `Starts at ${hhmm(s.start)}.` : null,
+    }
+  }
   const backend: Backend = {
     demo: true,
     appInfo: async () => ({
@@ -441,6 +464,25 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         }
       }
       return result
+    },
+    automation: async () => automationView(),
+    setAutomation: async (settings) => {
+      const s = settings.schedule
+      if (s.start < 0 || s.start >= 1440 || s.stop < 0 || s.stop >= 1440)
+        throw err('bad-value', 'Times must be between 00:00 and 23:59.', null)
+      if (s.enabled && s.start === s.stop)
+        throw err(
+          'bad-value',
+          'The schedule starts and stops at the same time. Pick a stop time after the start.',
+          null,
+        )
+      if (s.enabled && !s.days.some(Boolean))
+        throw err('bad-value', 'Pick at least one day for the schedule.', null)
+      automation = settings
+      return automationView()
+    },
+    cancelWhenDone: async () => {
+      listener?.({ type: 'whenDoneCancelled' })
     },
     maxRunning: async () => maxRunning,
     setMaxRunning: async (n) => {

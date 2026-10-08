@@ -6,8 +6,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod api_bridge;
+mod automation;
 mod native;
 mod opens;
+mod power;
 mod selftest;
 mod service;
 mod torrents;
@@ -95,6 +97,24 @@ async fn add_batch(
         ));
     }
     svc.add_batch(&text, dir.as_deref())
+}
+
+#[tauri::command]
+fn automation(svc: State<'_>) -> service::AutomationView {
+    svc.automation_view()
+}
+
+#[tauri::command]
+async fn set_automation(
+    svc: State<'_>,
+    settings: automation::Automation,
+) -> Result<service::AutomationView, UiError> {
+    svc.set_automation(settings)
+}
+
+#[tauri::command]
+fn cancel_when_done(svc: State<'_>) {
+    svc.cancel_when_done();
 }
 
 #[tauri::command]
@@ -492,7 +512,28 @@ fn watch_for_shell(app: tauri::AppHandle, svc: &Arc<Service>) {
                 }
                 paint(&w);
             }
-            UiEvent::Torrents { .. } | UiEvent::Open { .. } | UiEvent::Networks { .. } => {}
+            UiEvent::WhenDone { action, seconds } => {
+                // The window may be hidden: say what is about to happen and how to stop it.
+                let what = match action {
+                    automation::WhenDone::Sleep => "go to sleep",
+                    automation::WhenDone::ShutDown => "shut down",
+                    automation::WhenDone::Quit => "quit Fuselane",
+                    automation::WhenDone::Nothing => return,
+                };
+                let _ = app
+                    .notification()
+                    .builder()
+                    .title("Downloads finished")
+                    .body(format!(
+                        "Your computer will {what} in {seconds} seconds. Open Fuselane to cancel."
+                    ))
+                    .show();
+            }
+            UiEvent::Torrents { .. }
+            | UiEvent::Open { .. }
+            | UiEvent::Networks { .. }
+            | UiEvent::WhenDoneCancelled
+            | UiEvent::Automation { .. } => {}
             UiEvent::Live(l) => {
                 w.live(l);
                 // The icon and tooltip don't need 5 updates a second.
@@ -626,12 +667,19 @@ fn main() {
         std::thread::spawn(move || {
             while let Some(svc) = weak.upgrade() {
                 svc.tick_usage(service::local_today());
+                svc.tick_schedule();
+                svc.update_awake();
                 drop(svc);
                 std::thread::sleep(std::time::Duration::from_secs(5));
             }
         });
     }
     let tor = open_torrents(&svc);
+    {
+        // Torrents count as work: no sleep or shut-down while one is downloading.
+        let tor = Arc::downgrade(&tor);
+        svc.set_busy_elsewhere(Arc::new(move || tor.upgrade().is_some_and(|t| t.busy())));
+    }
     // Debug builds only (like FUSELANE_DEV_ADD): add a .torrent file with all its
     // files at launch, for checking the real window without clicking.
     #[cfg(debug_assertions)]
@@ -699,6 +747,14 @@ fn main() {
             })
             .build(app)?;
             watch_for_shell(app.handle().clone(), &for_shell);
+            {
+                // "Quit Fuselane" goes through the normal exit (downloads pause and save).
+                let handle = app.handle().clone();
+                for_shell.set_power_action(Arc::new(move |action| match action {
+                    automation::WhenDone::Quit => handle.exit(0),
+                    other => service::run_power_action(other),
+                }));
+            }
             // The local API (2.43) for the CLI and the browser extension's host.
             {
                 let svc = for_shell.clone();
@@ -732,6 +788,9 @@ fn main() {
             list_networks,
             add_download,
             add_batch,
+            automation,
+            set_automation,
+            cancel_when_done,
             max_running,
             set_max_running,
             reorder,

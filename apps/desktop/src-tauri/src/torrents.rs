@@ -165,6 +165,9 @@ pub struct Torrents {
     entries: tokio::sync::Mutex<Vec<Entry>>,
     pending: Mutex<Vec<Listing>>,
     emit: Emit,
+    /// Something is checking or downloading (keeps the computer awake, holds off
+    /// "when done" actions). Updated every tick.
+    busy: std::sync::atomic::AtomicBool,
 }
 
 impl std::fmt::Debug for Torrents {
@@ -333,6 +336,7 @@ impl Torrents {
             entries: tokio::sync::Mutex::new(Vec::new()),
             pending: Mutex::new(Vec::new()),
             emit,
+            busy: std::sync::atomic::AtomicBool::new(false),
         })
     }
 
@@ -854,6 +858,18 @@ impl Torrents {
         if self.refresh(true).await {
             self.publish().await;
         }
+        let busy = self
+            .entries
+            .lock()
+            .await
+            .iter()
+            .any(|e| matches!(e.last.status.as_str(), "checking" | "downloading"));
+        self.busy.store(busy, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Whether any torrent is checking or downloading (as of the last tick).
+    pub fn busy(&self) -> bool {
+        self.busy.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     async fn save(&self) {

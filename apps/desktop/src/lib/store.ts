@@ -3,6 +3,8 @@ import { connect, toUiError, type Backend } from './backend'
 import { setNetPrefs } from './lanes'
 import type {
   AppInfo,
+  Automation,
+  AutomationView,
   JobView,
   LimitsView,
   Live,
@@ -11,6 +13,7 @@ import type {
   NetView,
   UiError,
   UpdateInfo,
+  WhenDone,
 } from './types'
 
 /** Rate history for the Stream graph: newest last, about five samples a second. */
@@ -49,6 +52,12 @@ interface State {
   draftSeq: number
   toast: (UiError & { at: number }) | null
   theme: Theme
+  /** Schedule, when-done action, keep awake, sorting; loaded at start. */
+  automation: AutomationView | null
+  /** A sleep / shut-down / quit counting down, until when (ms since epoch). */
+  whenDone: { action: WhenDone; endsAt: number } | null
+  setAutomation(a: Automation): Promise<boolean>
+  cancelWhenDone(): Promise<void>
   start(): Promise<void>
   select(id: number | null): void
   selectTorrent(id: string | null): void
@@ -102,6 +111,8 @@ export const useApp = create<State>((set, get) => ({
   selected: null,
   view: 'transfers',
   adding: false,
+  automation: null,
+  whenDone: null,
   draft: '',
   draftTorrent: null,
   draftSeq: 0,
@@ -155,6 +166,23 @@ export const useApp = create<State>((set, get) => ({
     set({ theme })
   },
   dismissToast: () => set({ toast: null }),
+  setAutomation: async (a) => {
+    const b = get().backend
+    if (!b) return false
+    try {
+      set({ automation: await b.setAutomation(a) })
+      return true
+    } catch (e) {
+      set({ toast: { ...toUiError(e), at: Date.now() } })
+      return false
+    }
+  },
+  cancelWhenDone: async () => {
+    set({ whenDone: null })
+    await get()
+      .backend?.cancelWhenDone()
+      .catch(() => {})
+  },
   async checkUpdate(quiet) {
     const b = get().backend
     if (!b) return 'error'
@@ -243,6 +271,10 @@ async function startOnce(): Promise<void> {
     const netPrefs = await backend.networkPrefs().catch(() => [])
     setNetPrefs(netPrefs)
     set({ info, networks, limits, netPrefs })
+    backend
+      .automation()
+      .then((automation) => set({ automation }))
+      .catch(() => {})
     // The first list fills the page until the first event; it never overwrites a newer event.
     let heard = false
     backend
@@ -275,6 +307,18 @@ async function startOnce(): Promise<void> {
           selectedTorrent:
             s.selectedTorrent !== null && !ids.has(s.selectedTorrent) ? null : s.selectedTorrent,
         }))
+        return
+      }
+      if (e.type === 'whenDone') {
+        set({ whenDone: { action: e.action, endsAt: Date.now() + e.seconds * 1000 } })
+        return
+      }
+      if (e.type === 'whenDoneCancelled') {
+        set({ whenDone: null })
+        return
+      }
+      if (e.type === 'automation') {
+        set({ automation: e.view })
         return
       }
       if (e.type === 'jobs') {

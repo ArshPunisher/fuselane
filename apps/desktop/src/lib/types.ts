@@ -59,6 +59,34 @@ export type UiEvent =
   | { type: 'torrents'; torrents: TorrentView[] }
   | { type: 'open'; target: string }
   | { type: 'networks'; networks: NetView[] }
+  | { type: 'whenDone'; action: WhenDone; seconds: number }
+  | { type: 'whenDoneCancelled' }
+  | { type: 'automation'; view: AutomationView }
+
+export type WhenDone = 'nothing' | 'sleep' | 'shut-down' | 'quit'
+
+export interface Schedule {
+  enabled: boolean
+  /** Minutes after midnight. */
+  start: number
+  stop: number
+  /** Monday first. */
+  days: boolean[]
+}
+
+export interface Automation {
+  schedule: Schedule
+  whenDone: WhenDone
+  keepAwake: boolean
+  sortByType: boolean
+}
+
+export interface AutomationView {
+  settings: Automation
+  allowedNow: boolean
+  /** "Starts at 01:00" / "Pauses at 07:00" when a schedule is on. */
+  next: string | null
+}
 
 export interface UiError {
   code: string

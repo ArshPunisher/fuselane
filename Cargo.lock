@@ -1727,6 +1727,7 @@ dependencies = [
  "fuselane-engine-torrent",
  "fuselane-limits",
  "fuselane-netif",
+ "fuselane-storage",
  "fuselane-testkit",
  "fuselane-transport",
  "librqbit",
@@ -1744,6 +1745,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tracing-subscriber",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

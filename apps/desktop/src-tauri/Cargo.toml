@@ -36,6 +36,10 @@ fuselane-api.workspace = true
 fuselane-netif.workspace = true
 fuselane-limits.workspace = true
 fuselane-transport.workspace = true
+fuselane-storage.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Power"] }
 
 [dev-dependencies]
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "ansi"] }

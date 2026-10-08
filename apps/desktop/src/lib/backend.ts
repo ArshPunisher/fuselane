@@ -6,6 +6,8 @@ import type {
   AllowanceRequest,
   AllowanceView,
   AppInfo,
+  Automation,
+  AutomationView,
   BatchResult,
   JobView,
   ListingView,
@@ -33,6 +35,10 @@ export interface Backend {
   setMaxRunning(n: number): Promise<number>
   /** Puts these downloads first in the queue, in this order. */
   reorder(ids: number[]): Promise<void>
+  automation(): Promise<AutomationView>
+  setAutomation(settings: Automation): Promise<AutomationView>
+  /** Stops a pending sleep, shut-down or quit. */
+  cancelWhenDone(): Promise<void>
   pause(id: number): Promise<void>
   resume(id: number): Promise<void>
   remove(id: number): Promise<void>
@@ -129,6 +135,9 @@ async function tauriBackend(): Promise<Backend> {
     maxRunning: () => call('max_running'),
     setMaxRunning: (n) => call('set_max_running', { n }),
     reorder: (ids) => call('reorder', { ids }),
+    automation: () => call('automation'),
+    setAutomation: (settings) => call('set_automation', { settings }),
+    cancelWhenDone: () => call('cancel_when_done'),
     pause: (id) => call('pause', { id }),
     resume: (id) => call('resume', { id }),
     remove: (id) => call('remove', { id }),
