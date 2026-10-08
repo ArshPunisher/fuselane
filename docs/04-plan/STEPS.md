@@ -30,7 +30,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [ ] 1.6 S5 librqbit + SOCKS5 balancer
 - [ ] 1.7 S6 R2 multipart from 2 pinned networks
 - [ ] 1.8 S8 native messaging round trip on 3 OSes
-- [ ] 1.8b S9 Lane Weave prototype (lab route, synthetic feed, contact sheet) — MOTION.md §6
+- [ ] 1.8b S9 Lane Weave prototype (lab route, synthetic feed, contact sheet) — MOTION.md §6 (**built and measured**: [result](spikes/S9-lane-weave.md); tick after the owner approves the contact sheet)
 - [ ] 1.9 Update ADRs 0002/0006/0007 (Accepted or superseded) and adjust the design docs to the spike results
 
 ## P2 Core + CLI (production code, test-first)
