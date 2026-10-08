@@ -131,6 +131,37 @@ function SlowModeSetting() {
   )
 }
 
+const MOD = /Mac/i.test(navigator.platform) ? '⌘' : 'Ctrl'
+const SHORTCUTS: [string[], string][] = [
+  [[MOD, 'N'], 'New download (or paste a link anywhere)'],
+  [[MOD, '1'], 'Downloads'],
+  [[MOD, '2'], 'Networks'],
+  [[MOD, '3'], 'Settings'],
+  [['↑', '↓'], 'Move through downloads'],
+  [['Space'], 'Pause or resume the selected download'],
+  [['Esc'], 'Back to the list, or close a dialog'],
+]
+
+function ShortcutsSetting() {
+  return (
+    <div className="setting setting-stack">
+      <p className="setting-name">Keyboard shortcuts</p>
+      <dl className="shortcuts">
+        {SHORTCUTS.map(([keys, what]) => (
+          <div key={what}>
+            <dt>
+              {keys.map((k) => (
+                <kbd key={k}>{k}</kbd>
+              ))}
+            </dt>
+            <dd>{what}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  )
+}
+
 function UpdateSetting() {
   const check = useApp((s) => s.checkUpdate)
   const update = useApp((s) => s.update)
@@ -244,6 +275,7 @@ export function SettingsView() {
       </div>
       <SlowModeSetting />
       <UpdateSetting />
+      <ShortcutsSetting />
       <DiagnosticsSetting />
       <div className="setting">
         <div>

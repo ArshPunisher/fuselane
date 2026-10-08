@@ -136,9 +136,50 @@ export function App() {
   // Shortcuts: Cmd/Ctrl+N opens the dialog; pasting a link anywhere starts one.
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'n') {
+      const mod = e.metaKey || e.ctrlKey
+      const k = e.key.toLowerCase()
+      if (mod && k === 'n') {
         e.preventDefault()
         setAdding(true)
+        return
+      }
+      if (mod && (k === ',' || k === '1' || k === '2' || k === '3')) {
+        e.preventDefault()
+        useApp.getState().setView(k === '2' ? 'networks' : k === '1' ? 'transfers' : 'settings')
+        return
+      }
+      // The rest only apply outside text fields and dialogs.
+      const t = e.target as HTMLElement | null
+      if (mod || e.altKey) return
+      if (
+        t &&
+        (t.tagName === 'INPUT' ||
+          t.tagName === 'TEXTAREA' ||
+          t.tagName === 'SELECT' ||
+          t.isContentEditable)
+      )
+        return
+      if (document.querySelector('dialog[open]')) return
+      const s = useApp.getState()
+      if (s.view !== 'transfers') return
+      const ids = s.jobs.map((j) => j.id)
+      const at = s.selected === null ? -1 : ids.indexOf(s.selected)
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        const next = e.key === 'ArrowDown' ? Math.min(ids.length - 1, at + 1) : Math.max(0, at - 1)
+        if (ids[next] !== undefined) s.select(ids[next])
+      } else if (e.key === 'Escape' && s.selected !== null && innerWidth < 1024) {
+        s.select(null)
+      } else if (
+        e.key === ' ' &&
+        s.selected !== null &&
+        (!t || t === document.body || t.id === 'main')
+      ) {
+        const job = s.jobs.find((j) => j.id === s.selected)
+        if (!job) return
+        e.preventDefault()
+        if (job.status === 'running' || job.status === 'queued') void s.act((b) => b.pause(job.id))
+        else if (job.resumable) void s.act((b) => b.resume(job.id))
       }
     }
     const paste = (e: ClipboardEvent) => {

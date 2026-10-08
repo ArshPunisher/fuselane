@@ -540,3 +540,39 @@ test('slow mode switches on and off and its speed can be changed', async ({ page
   await toggle.click()
   await expect(toggle).toHaveAttribute('aria-checked', 'false')
 })
+
+test('keyboard: views, list movement, Space to pause and resume', async ({ page }) => {
+  await page.goto('/?drop=0')
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'ubuntu-26.04-desktop-amd64.iso' }),
+  ).toBeVisible()
+  await page.locator('body').click({ position: { x: 600, y: 890 } })
+  await page.keyboard.press('Control+2')
+  await expect(page.getByRole('heading', { level: 1, name: 'Networks' })).toBeVisible()
+  await page.keyboard.press('Control+3')
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
+  await expect(page.getByText('Pause or resume the selected download')).toBeVisible()
+  await page.keyboard.press('Control+1')
+  // Down moves to the next download.
+  await page.keyboard.press('ArrowDown')
+  await expect(page.locator('article.detail h1')).not.toHaveText('ubuntu-26.04-desktop-amd64.iso')
+  await page.keyboard.press('ArrowUp')
+  await expect(page.locator('article.detail h1')).toHaveText('ubuntu-26.04-desktop-amd64.iso')
+  // Space pauses, then resumes, the selected download.
+  await page.keyboard.press(' ')
+  await expect(page.locator('article.detail .speed-sub')).toHaveText('Paused')
+  await page.keyboard.press(' ')
+  await expect(page.locator('article.detail .speed')).toContainText('MB/s', { timeout: 5000 })
+})
+
+test('keyboard shortcuts never fire while typing in a field', async ({ page }) => {
+  await page.goto('/?drop=0')
+  await page.getByRole('button', { name: 'Settings' }).click()
+  const field = page.getByLabel('Speed limit for all networks', { exact: true })
+  await field.click()
+  await page.keyboard.press(' ')
+  await page.keyboard.press('ArrowDown')
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
+  await page.getByRole('button', { name: 'Downloads' }).click()
+  await expect(page.locator('article.detail .speed')).toContainText('MB/s', { timeout: 5000 })
+})
