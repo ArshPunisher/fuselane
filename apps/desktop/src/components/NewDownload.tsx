@@ -118,21 +118,36 @@ export function NewDownload() {
         </div>
         <div className="field">
           <label htmlFor="nd-dir">Save to</label>
-          <input
-            id="nd-dir"
-            name="dir"
-            autoComplete="off"
-            spellCheck={false}
-            value={dir}
-            ref={dirInput}
-            placeholder={`${info?.defaultDir ?? 'Downloads'}…`}
-            aria-invalid={dirError ? true : undefined}
-            aria-describedby={dirError ? 'nd-dir-err' : 'nd-dir-help'}
-            onChange={(e) => {
-              setDir(e.target.value)
-              if (dirError) setError(null)
-            }}
-          />
+          <div className="field-row">
+            <input
+              id="nd-dir"
+              name="dir"
+              autoComplete="off"
+              spellCheck={false}
+              value={dir}
+              ref={dirInput}
+              placeholder={`${info?.defaultDir ?? 'Downloads'}…`}
+              aria-invalid={dirError ? true : undefined}
+              aria-describedby={dirError ? 'nd-dir-err' : 'nd-dir-help'}
+              onChange={(e) => {
+                setDir(e.target.value)
+                if (dirError) setError(null)
+              }}
+            />
+            <button
+              type="button"
+              className="btn btn-ghost field-side"
+              onClick={async () => {
+                const picked = await backend?.pickFolder().catch(() => null)
+                if (picked) {
+                  setDir(picked)
+                  if (dirError) setError(null)
+                }
+              }}
+            >
+              Choose…
+            </button>
+          </div>
           {dirError ? (
             <p id="nd-dir-err" className="field-error" aria-live="polite">
               {dirError.message} {dirError.hint}

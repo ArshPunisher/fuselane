@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, ArrowClockwise, Pause, Play, Trash, WarningCircle } from '@phosphor-icons/react'
+import {
+  ArrowLeft,
+  ArrowClockwise,
+  ArrowSquareOut,
+  FolderOpen,
+  Pause,
+  Play,
+  Trash,
+  WarningCircle,
+} from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { bytes, eta, percent, rate, rateText } from '../lib/format'
 import { assignLanes, kindLabel, netTitle } from '../lib/lanes'
@@ -8,6 +17,13 @@ import { Stream } from './Stream'
 import { Orb } from './Orb'
 import { STATUS_WORD } from './status'
 import type { JobView, Live } from '../lib/types'
+
+/** The platform's own words for showing a file in its folder. */
+const REVEAL_LABEL = /Mac/i.test(navigator.platform)
+  ? 'Show in Finder'
+  : /Win/i.test(navigator.platform)
+    ? 'Show in Explorer'
+    : 'Show in folder'
 
 function Center({ job, live }: { job: JobView; live: Live | undefined }) {
   if (job.status === 'running' && live) {
@@ -136,6 +152,16 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
               )}
               {job.status === 'failed' ? 'Try again' : 'Resume'}
             </button>
+          )}
+          {job.status === 'completed' && (
+            <>
+              <button className="btn btn-primary" onClick={() => act((b) => b.openFile(job.id))}>
+                <ArrowSquareOut size={16} aria-hidden /> Open
+              </button>
+              <button className="btn" onClick={() => act((b) => b.reveal(job.id))}>
+                <FolderOpen size={16} aria-hidden /> {REVEAL_LABEL}
+              </button>
+            </>
           )}
           <RemoveButton job={job} />
         </div>

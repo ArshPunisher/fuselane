@@ -11,6 +11,11 @@ export interface Backend {
   pause(id: number): Promise<void>
   resume(id: number): Promise<void>
   remove(id: number): Promise<void>
+  /** Shows a finished file in the file manager. */
+  reveal(id: number): Promise<void>
+  openFile(id: number): Promise<void>
+  /** A folder the user picked, or null if they cancelled. */
+  pickFolder(): Promise<string | null>
   subscribe(onEvent: (e: UiEvent) => void): Promise<void>
   listJobs(): Promise<JobView[]>
 }
@@ -51,6 +56,9 @@ async function tauriBackend(): Promise<Backend> {
     pause: (id) => call('pause', { id }),
     resume: (id) => call('resume', { id }),
     remove: (id) => call('remove', { id }),
+    reveal: (id) => call('reveal', { id }),
+    openFile: (id) => call('open_file', { id }),
+    pickFolder: () => call('pick_folder'),
     subscribe: async (onEvent) => {
       const channel = new Channel<UiEvent>()
       channel.onmessage = onEvent

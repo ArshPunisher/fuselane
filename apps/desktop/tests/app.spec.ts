@@ -291,3 +291,33 @@ test('a finished download keeps its network colours and shows who carried what',
   })
   expect(lanes).toBeGreaterThan(50)
 })
+
+test('finished files can be opened or shown; a moved file explains itself', async ({ page }) => {
+  await page.goto('/?missing=1')
+  await page.getByText('Blender-5.1-macos-arm64.dmg').click()
+  const detail = page.locator('article.detail')
+  await expect(detail.getByRole('button', { name: 'Open' })).toBeVisible()
+  const show = detail.getByRole('button', { name: /^Show in (Finder|Explorer|folder)$/ })
+  await show.click()
+  await expect(page.getByRole('alert').filter({ hasText: 'no longer at' })).toContainText(
+    'moved, renamed or deleted',
+  )
+  // Unfinished downloads offer neither.
+  await page.getByText('dataset-shard-0042.tar.zst').click()
+  await expect(detail.getByRole('button', { name: 'Open' })).toHaveCount(0)
+})
+
+test('Choose… fills the folder from the native picker, and cancelling leaves it alone', async ({
+  page,
+}) => {
+  await page.goto('/?empty=1')
+  await page.getByRole('button', { name: 'New download' }).first().click()
+  const dialog = page.getByRole('dialog', { name: 'New download' })
+  await dialog.getByRole('button', { name: 'Choose…' }).click()
+  await expect(dialog.getByLabel('Save to')).toHaveValue('/Users/demo/Movies')
+  await page.goto('/?empty=1&pick=cancel')
+  await page.getByRole('button', { name: 'New download' }).first().click()
+  await dialog.getByLabel('Save to').fill('/keep/me')
+  await dialog.getByRole('button', { name: 'Choose…' }).click()
+  await expect(dialog.getByLabel('Save to')).toHaveValue('/keep/me')
+})

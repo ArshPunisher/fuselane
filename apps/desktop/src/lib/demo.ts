@@ -234,6 +234,25 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     return j
   }
 
+  /** Same rules as the service: finished, and (in the demo) never deleted. */
+  function finishedFile(id: number) {
+    const j = find(id)
+    if (j.status !== 'completed') {
+      throw err(
+        'not-finished',
+        "This download hasn't finished yet, so there's no file to show.",
+        null,
+      )
+    }
+    if (params.get('missing') === '1') {
+      throw err(
+        'file-missing',
+        `The file is no longer at ${j.finalPath}.`,
+        'It may have been moved, renamed or deleted.',
+      )
+    }
+  }
+
   return {
     demo: true,
     appInfo: async () => ({ version: '0.0.0', defaultDir: '~/Downloads' }),
@@ -307,6 +326,9 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       j.resumable = false
       emitJobs()
     },
+    reveal: async (id) => finishedFile(id),
+    openFile: async (id) => finishedFile(id),
+    pickFolder: async () => (params.get('pick') === 'cancel' ? null : '/Users/demo/Movies'),
     remove: async (id) => {
       find(id)
       jobs.splice(
