@@ -122,10 +122,18 @@ impl Job {
     }
 }
 
+/// Held while a download runs; the OS releases it when this drops or the process ends.
+#[derive(Debug)]
+pub struct JobLock {
+    _file: Option<std::fs::File>,
+}
+
 /// The job database. Safe to share across threads.
 #[derive(Debug)]
 pub struct Store {
     conn: Mutex<Connection>,
+    /// The folder holding the database (per-download locks live beside it).
+    dir: Option<PathBuf>,
     /// Set when the previous database couldn't be read and was moved here.
     pub recovered_from: Option<PathBuf>,
 }
@@ -155,6 +163,27 @@ fn decode(blob: Option<Vec<u8>>) -> Vec<u64> {
 
 impl Store {
     /// Opens (or creates) the database at `path`.
+    /// Claims download `id` for this process until the guard drops, so the
+    /// command line and the app never run the same download at once (2.42).
+    /// None when another process (or another run here) already has it.
+    pub fn lock_job(&self, id: i64) -> std::io::Result<Option<JobLock>> {
+        let Some(dir) = &self.dir else {
+            return Ok(Some(JobLock { _file: None }));
+        };
+        let locks = dir.join("locks");
+        std::fs::create_dir_all(&locks)?;
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(locks.join(format!("job-{id}.lock")))?;
+        match file.try_lock() {
+            Ok(()) => Ok(Some(JobLock { _file: Some(file) })),
+            Err(std::fs::TryLockError::WouldBlock) => Ok(None),
+            Err(std::fs::TryLockError::Error(e)) => Err(e),
+        }
+    }
+
     pub fn open(path: &Path) -> Result<Store, StoreError> {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
@@ -162,6 +191,7 @@ impl Store {
         match Self::open_inner(path) {
             Ok(conn) => Ok(Store {
                 conn: Mutex::new(conn),
+                dir: path.parent().map(Path::to_path_buf),
                 recovered_from: None,
             }),
             Err(StoreError::TooNew { found, known }) => Err(StoreError::TooNew { found, known }),
@@ -175,6 +205,7 @@ impl Store {
                 let conn = Self::open_inner(path)?;
                 Ok(Store {
                     conn: Mutex::new(conn),
+                    dir: path.parent().map(Path::to_path_buf),
                     recovered_from: Some(aside),
                 })
             }
@@ -409,6 +440,20 @@ mod tests {
             raw_etag: Some("\"v1\"".into()),
             last_modified: None,
         }
+    }
+
+    #[test]
+    fn a_download_can_be_claimed_by_one_owner_at_a_time() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = Store::open(&dir.path().join("jobs.db")).unwrap();
+        // A second Store on the same file stands in for the other front end.
+        let b = Store::open(&dir.path().join("jobs.db")).unwrap();
+        let held = a.lock_job(7).unwrap().expect("first claim");
+        assert!(b.lock_job(7).unwrap().is_none(), "already claimed");
+        assert!(a.lock_job(7).unwrap().is_none(), "even by the same store");
+        assert!(b.lock_job(8).unwrap().is_some(), "other downloads are free");
+        drop(held);
+        assert!(b.lock_job(7).unwrap().is_some(), "free again once released");
     }
 
     #[test]

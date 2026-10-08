@@ -555,6 +555,16 @@ pub async fn run(
     resume: Option<Resume>,
     opts: RunOptions,
 ) -> Result<Outcome, StartError> {
+    // One owner per download: the app and the command line share the list.
+    let _claim = store
+        .lock_job(id)
+        .map_err(|e| StartError::Setup(format!("couldn't claim the download: {e}")))?
+        .ok_or_else(|| {
+            StartError::Setup(
+                "This download is already running in Fuselane or in another terminal. Pause it there first."
+                    .into(),
+            )
+        })?;
     let (source, networks, names) =
         connect_plan(link, &opts.networks, opts.per_network_dns).await?;
     let sink = {
@@ -652,6 +662,31 @@ mod tests {
     fn unknown_networks_are_bad_input() {
         let e = pick_networks(&["definitely-not-a-nic0".into()]).unwrap_err();
         assert!(e.contains("fuselane nets"), "{e}");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_download_running_elsewhere_is_refused_and_left_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Arc::new(Store::open(&dir.path().join("jobs.db")).unwrap());
+        let id = store.create("http://127.0.0.1:9/f", dir.path()).unwrap();
+        // The other front end holds it (a second Store on the same file).
+        let other = Store::open(&dir.path().join("jobs.db")).unwrap();
+        let claim = other.lock_job(id).unwrap().unwrap();
+        let r = run(
+            store.clone(),
+            id,
+            "http://127.0.0.1:9/f",
+            dir.path().join("f"),
+            None,
+            RunOptions::default(),
+        )
+        .await;
+        match r {
+            Err(StartError::Setup(m)) => assert!(m.contains("already running"), "{m}"),
+            other => panic!("expected a refusal, got {other:?}"),
+        }
+        assert_eq!(store.get(id).unwrap().status, Status::Queued, "untouched");
+        drop(claim);
     }
 
     #[test]
