@@ -1,0 +1,15 @@
+[package]
+name = "fuselane-api"
+description = "Local JSON-RPC API and native-messaging relay"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+fuselane-core.workspace = true
+
+[lints]
+workspace = true

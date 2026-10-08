@@ -1,0 +1,36 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "apps/cli"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.99"
+license = "Apache-2.0"
+repository = "https://github.com/ArshPunisher/fuselane"
+publish = false
+
+[workspace.dependencies]
+fuselane-netif = { path = "crates/netif" }
+fuselane-transport = { path = "crates/transport" }
+fuselane-storage = { path = "crates/storage" }
+fuselane-limits = { path = "crates/limits" }
+fuselane-engine-http = { path = "crates/engine-http" }
+fuselane-core = { path = "crates/core" }
+fuselane-api = { path = "crates/api" }
+fuselane-testkit = { path = "crates/testkit" }
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "warn"
+dbg_macro = "deny"
+todo = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
