@@ -406,6 +406,7 @@ pub fn register(exe: &Path, data: &Path) -> Result<Vec<(&'static str, Outcome)>,
 }
 
 #[cfg(windows)]
+#[derive(Debug)]
 pub struct WindowsRegistry;
 
 #[cfg(windows)]
