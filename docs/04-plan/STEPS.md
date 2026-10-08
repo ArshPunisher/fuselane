@@ -42,7 +42,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [ ] 2.4 `tools/netlab` promoted from the spike: `netlab up --links "50mbit/20ms,10mbit/80ms/1%"`, per-link DNS, `netlab down-link N`
 
 **2B netif**
-- [ ] 2.5 Interface model + filter (link-local, no gateway, virtual adapters) — fixtures per OS — L-60
+- [x] 2.5 Interface model + filter (link-local, no gateway, virtual adapters) — fixtures per OS — L-60
 - [ ] 2.6 macOS friendly names + kind via SystemConfiguration — L-61
 - [ ] 2.7 Windows friendly names + IfType via GetAdaptersAddresses
 - [ ] 2.8 Linux sysfs + NetworkManager names and kind
@@ -50,7 +50,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [ ] 2.10 Change watcher per OS (rtnetlink / SCDynamicStore / NotifyIpInterfaceChange) with debounce + polling fallback — netlab: address change detected < 2 s — L-63
 
 **2C transport**
-- [ ] 2.11 `Pinner` trait + per-OS implementations from the spikes + `self_test()` — L-56, L-57, L-58
+- [x] 2.11 `Pinner` trait + per-OS implementations from the spikes + `self_test()` — L-56, L-57, L-58 (Windows path awaits a native CI run)
 - [ ] 2.12 Pinned connector for hyper-util + rustls, keep-alive pool per (network, origin), stale-socket retry — L-66
 - [ ] 2.13 Per-network DNS resolver per OS with a fallback — EC-208 — L-65
 - [ ] 2.14 Happy Eyeballs (250 ms, last-good first) and layered deadlines — EC-0xx (dead AAAA) — L-09, L-11
@@ -93,7 +93,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 
 **2H api + CLI**
 - [ ] 2.43 Local JSON-RPC server (UDS / named pipe) + per-user access + schema validation — EC-215 — L-97, L-98
-- [ ] 2.44 `fuselane get <url> [--networks] [--streams] [--sha256]`, `ls`, `pause`, `resume`, `rm`, `nets`, `--json`
+- [ ] 2.44 `fuselane get <url> [--networks] [--streams] [--sha256]`, `ls`, `pause`, `resume`, `rm`, `nets`, `--json` (**get + nets done** and tested; the rest needs `core`)
 - [ ] 2.45 `fuselaned` headless daemon mode
 - [ ] 2.46 Chaos suite (L6) with 50 seeds nightly; benchmarks (L7) nightly
 - [ ] 2.47 **Gate review:** edge-case coverage table ≥ 90%, netlab ≥ 85% summed speed, real hardware on 3 OSes (CLI)

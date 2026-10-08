@@ -11,11 +11,20 @@
   - engine-http: headers (2.23, 2.24), plan (2.25), scheduler (2.26), concurrency (2.27), retry (2.29), measure (2.31), and the multi-network downloader (2.28);
   - testkit hostile server (2.1).
   - Tests: 62 in engine-http, including a 15-test end-to-end attack suite plus a chaos test (100/100 seeds byte-exact).
+- **Also done:**
+  - netif (2.5);
+  - transport: pinning on macOS, Linux and Windows + rustls TLS (2.11);
+  - CLI `fuselane get` / `fuselane nets` (part of 2.44).
+  - **A real HTTPS download over a pinned socket is byte-identical to curl.**
+  - Workspace: **109 tests pass**.
 - **Next steps, in order:**
-  1. `transport`: pinned connector (macOS `IP_BOUND_IF` per S2, Linux `SO_BINDTODEVICE`, Windows `IP_UNICAST_IF`) + rustls TLS.
-  2. `netif`: interface listing.
-  3. CLI `fuselane get <url>` (2.44), so real downloads work from the terminal.
-  4. Then: concurrency controller wired into the downloader, `core` (SQLite, resume), edge-case table (`docs/05-quality/EDGE-CASES.md`).
+  1. Wire the concurrency controller into the downloader (Auto 8 → 32, refusals, disk).
+  2. `core` with SQLite: job state machine, persistence, **resume after quit/crash** (2.33–2.39).
+  3. CLI `ls/pause/resume`.
+  4. Per-network DNS (2.13) + Happy Eyeballs (2.14).
+  5. macOS friendly names (2.6: en1 shows as "Ethernet" but is Wi-Fi).
+  6. Edge-case table.
+  7. Then the P3 desktop app, with the Fuse Core.
 - **Waiting on the owner:**
   - Approve the S9b Fuse Core contact sheets (`docs/04-plan/spikes/S9b-fuse-core.md`).
   - Q13: OK to create the **public** GitHub repo? (CI can't run until then.)
@@ -24,6 +33,10 @@
 - **Environment:** Rust via rustup (`source ~/.cargo/env`), cargo-nextest, cargo-deny, actionlint (Homebrew), Node 24, pnpm 11, Playwright WebKit + Chromium, gh logged in as ArshPunisher.
 
 ## Log
+
+### 2026-10-08 (session 2, later)
+- Built netif, transport (pinning + TLS) and the CLI.
+- A real download from proof.ovh.net exposed an If-Range bug: we sent a normalized ETag, so servers returned 200. Fixed, the test server now enforces RFC 9110, and the lesson is L-106.
 
 ### 2026-10-08 (session 2, continued)
 - Spikes:
