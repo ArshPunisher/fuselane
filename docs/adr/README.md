@@ -24,3 +24,4 @@ Template:
 | [0007](0007-upload-backend.md) | Cloudflare Workers + R2 + D1 for uploads | Proposed (spike S6) |
 | [0008](0008-sqlite-persistence.md) | SQLite for all app state | Accepted |
 | [0009](0009-zero-cost-policy.md) | Zero-cost policy: open source, free services only | Accepted |
+| [0010](0010-no-android-app.md) | No Android app (Android phones remain supported as tethered networks) | Accepted |

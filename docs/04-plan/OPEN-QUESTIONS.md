@@ -15,5 +15,5 @@ When one is decided, record the answer here (with the date), then update the aff
 | Q9 | **Minimum OS versions?** | Proposed: macOS 13.3, Windows 10 21H2, Linux kernel 5.7 / Ubuntu 22.04 (see PLATFORMS.md) | 0.8 | – |
 | Q10 | **Test hardware available?** | Which machines and phones do we have for the L8 matrix (Mac model, Windows PC, Linux box, iPhone, Android, 5G SIM)? | P1 | – |
 | Q11 | **Visual direction for the UI?** | – | P3 | **2026-10-08: "fully responsive UI with amazing colour, aesthetic, graphics and motion"** → [`docs/07-design/DESIGN-SYSTEM.md`](../07-design/DESIGN-SYSTEM.md). **Fuse Core design approved by the owner after seeing the real window ("design good").** |
-| Q12 | **Chrome Web Store ($5 one-time) / Google Play ($25 one-time)?** | The only paid items left; needed for one-click installs on Chrome and Play | P7 / P10 | – |
+| Q12 | **Chrome Web Store ($5 one-time)?** | The only paid item left; needed for one-click installs on Chrome. (Google Play is moot: no Android app, ADR 0010.) | P7 | – |
 | Q13 | **Make the GitHub repo public now?** | Needed for free CI on macOS/Windows/Linux and for SignPath | 0.7 | **2026-10-08: yes.** Public at https://github.com/ArshPunisher/fuselane |

@@ -190,9 +190,6 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [ ] 9.4 Launch plan (Product Hunt, Reddit, HN, YouTube/Instagram demos, Indian tech communities)
 - [ ] 9.5 Tag `v1.0.0`
 
-## P10 Android
+## P10 Android: dropped
 
-- [ ] 10.1 `crates/ffi` with uniffi; build with cargo-ndk
-- [ ] 10.2 Network handles from ConnectivityManager → `android_setsocknetwork` pinning
-- [ ] 10.3 Kotlin/Compose UI; foreground service; data-saver respect
-- [ ] 10.4 F-Droid release (Google Play's $25 fee only with the owner's OK)
+Not planned ([ADR 0010](../adr/0010-no-android-app.md)). Android phones remain supported as USB-tethered networks for the desktop app.

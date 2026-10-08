@@ -5,7 +5,7 @@ Order: **risky things first, a shippable thing early, the differentiators next, 
 ```text
 P0 Foundations ─► P1 Risk spikes ─► P2 Core + CLI ─► P3 Desktop app ─► P4 Signed beta (0.1)
                                                                             │
-     P10 Android ◄─ P9 1.0 launch ◄─ P8 Power features ◄─ P7 Extension ◄─ P6 Bonded uploads ◄─ P5 Torrents
+     P9 1.0 launch ◄─ P8 Power features ◄─ P7 Extension ◄─ P6 Bonded uploads ◄─ P5 Torrents
 ```
 
 | Phase | Goal | Delivers | Exit gate |
@@ -20,7 +20,7 @@ P0 Foundations ─► P1 Risk spikes ─► P2 Core + CLI ─► P3 Desktop app 
 | **P7 Browser extension (0.4)** | Downloads captured from the browser | WXT extension, native-messaging host + installer registration, pairing fallback | Extension gates; store submissions |
 | **P8 Power features (0.5–0.9)** | Daily-use parity with IDM, beyond Plexo | Scheduler, checksums, mirrors, proxy, categories, search, throttle detection, remote API, i18n | Per-feature gates |
 | **P9 1.0 launch** | Stable, documented, distributed | Soak, performance pass, docs, winget/Homebrew/Flathub, store listings, launch | All gates; 2 weeks with no P0/P1 bugs |
-| **P10 Android** | Bonding on phones | uniffi core, Kotlin UI, foreground service | Android gates |
+| ~~P10 Android~~ | Dropped ([ADR 0010](../adr/0010-no-android-app.md)) | – | – |
 
 Extension (P7) and uploads (P6) can swap, or run in parallel once P4 has shipped: both depend only on the core API.
 
