@@ -176,14 +176,22 @@ async fn serve(
     balancer: &Balancer,
     creds: &(String, String),
 ) -> std::io::Result<()> {
-    let target = tokio::time::timeout(HANDSHAKE, handshake(&mut client, creds))
-        .await
-        .map_err(|_| {
-            std::io::Error::new(std::io::ErrorKind::TimedOut, "SOCKS handshake too slow")
-        })??;
-    let Some((host, port)) = target else {
-        return Ok(());
+    let target = match tokio::time::timeout(HANDSHAKE, handshake(&mut client, creds)).await {
+        Ok(Ok(Some(t))) => t,
+        // Refused or broken: close politely so any reply already sent isn't lost to a reset.
+        Ok(Ok(None)) => return close(client).await,
+        Ok(Err(e)) => {
+            close(client).await?;
+            return Err(e);
+        }
+        Err(_) => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "SOCKS handshake too slow",
+            ));
+        }
     };
+    let (host, port) = target;
     let dests: Vec<SocketAddr> = match host.parse::<IpAddr>() {
         Ok(ip) => vec![SocketAddr::new(ip, port)],
         // Tracker hostnames: resolved by the system, then dialled per network.
@@ -212,7 +220,25 @@ async fn serve(
             return res.map(|_| ());
         }
     }
-    let _ = reply(&mut client, HOST_UNREACHABLE).await;
+    reply(&mut client, HOST_UNREACHABLE).await?;
+    close(client).await
+}
+
+/// Sends FIN, then drains a little of whatever the client still sends. Closing a
+/// socket with unread data makes the OS send a reset, which can discard our reply.
+async fn close(mut client: TcpStream) -> std::io::Result<()> {
+    client.shutdown().await?;
+    let mut sink = [0u8; 512];
+    let _ = tokio::time::timeout(Duration::from_millis(500), async {
+        let mut left = 4096usize;
+        while left > 0 {
+            match client.read(&mut sink).await {
+                Ok(0) | Err(_) => break,
+                Ok(n) => left = left.saturating_sub(n),
+            }
+        }
+    })
+    .await;
     Ok(())
 }
 

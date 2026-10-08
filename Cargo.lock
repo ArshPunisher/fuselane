@@ -1652,10 +1652,12 @@ dependencies = [
 name = "fuselane-engine-torrent"
 version = "0.1.0-beta.3"
 dependencies = [
+ "anyhow",
  "fuselane-netif",
  "fuselane-transport",
  "librqbit",
  "tempfile",
+ "thiserror 2.0.21",
  "tokio",
  "tokio-socks",
 ]

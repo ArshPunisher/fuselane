@@ -3,4 +3,7 @@
 //! pins it to a network chosen by the balancer.
 
 pub mod balancer;
+pub mod engine;
 pub mod socks;
+
+pub use engine::{EngineOptions, Phase, Progress, Source, Torrent, TorrentEngine, TorrentError};

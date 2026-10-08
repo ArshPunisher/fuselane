@@ -12,6 +12,8 @@ publish.workspace = true
 librqbit = { version = "9", default-features = false, features = ["rust-tls"] }
 tokio = { version = "1", features = ["full"] }
 fuselane-netif.workspace = true
+thiserror = "2"
+anyhow = "1"
 fuselane-transport.workspace = true
 
 [dev-dependencies]
