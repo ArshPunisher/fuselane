@@ -384,13 +384,40 @@ pub fn remove(store: &Store, id: i64) -> Result<(), crate::StoreError> {
 
 /// Everything needed to reach the server: the request target and one `Network`
 /// per chosen interface (ids from 1, with their device names for reports).
+fn is_local_host(host: &str) -> bool {
+    host.eq_ignore_ascii_case("localhost")
+        || host
+            .trim_matches(|c| c == '[' || c == ']')
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback())
+}
+
+/// The loopback "network", for servers on this computer when no real network is up.
+fn this_computer() -> Interface {
+    Interface {
+        name: "lo".into(),
+        display_name: "This computer".into(),
+        index: 0,
+        kind: fuselane_netif::Kind::Loopback,
+        addrs: vec![
+            std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+            std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST),
+        ],
+    }
+}
+
 async fn connect_plan(
     link: &str,
     chosen: &[String],
     per_network_dns: bool,
 ) -> Result<(Source, Vec<Network>, Vec<(u32, String)>), StartError> {
     let (https, host, port, path) = parse_link(link).map_err(StartError::BadInput)?;
-    let ifaces = pick_networks(chosen).map_err(StartError::BadInput)?;
+    let ifaces = match pick_networks(chosen) {
+        Ok(v) => v,
+        // A server on this computer needs no network: loopback is never pinned.
+        Err(_) if chosen.is_empty() && is_local_host(&host) => vec![this_computer()],
+        Err(e) => return Err(StartError::BadInput(e)),
+    };
     let literal = host.parse::<std::net::IpAddr>().is_ok();
     // The computer's own resolver, and (when enabled) each network's own lookup.
     let system = async {
@@ -755,6 +782,34 @@ mod tests {
             happy_connect::<(), _, _>(&[], Duration::from_secs(1), |_| async { Ok(()) })
                 .await
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn only_this_computer_counts_as_local() {
+        for h in [
+            "localhost",
+            "LOCALHOST",
+            "127.0.0.1",
+            "127.8.9.1",
+            "::1",
+            "[::1]",
+        ] {
+            assert!(is_local_host(h), "{h}");
+        }
+        for h in [
+            "example.com",
+            "10.0.0.1",
+            "localhost.example.com",
+            "128.0.0.1",
+        ] {
+            assert!(!is_local_host(h), "{h}");
+        }
+        assert!(
+            this_computer()
+                .addrs
+                .iter()
+                .all(std::net::IpAddr::is_loopback)
         );
     }
 
