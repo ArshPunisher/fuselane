@@ -1,7 +1,7 @@
 // The one door to the backend. In the Tauri window it calls Rust commands; in a
 // plain browser (pnpm dev, Playwright) it uses the demo engine in ./demo.ts,
 // and the UI says so.
-import type { AppInfo, JobView, NetView, UiError, UiEvent } from './types'
+import type { AppInfo, JobView, NetView, PreviewView, UiError, UiEvent } from './types'
 
 export interface Backend {
   readonly demo: boolean
@@ -16,6 +16,8 @@ export interface Backend {
   openFile(id: number): Promise<void>
   /** A folder the user picked, or null if they cancelled. */
   pickFolder(): Promise<string | null>
+  /** Name and size of what a link points at, without downloading it. */
+  preview(url: string): Promise<PreviewView>
   subscribe(onEvent: (e: UiEvent) => void): Promise<void>
   listJobs(): Promise<JobView[]>
 }
@@ -59,6 +61,7 @@ async function tauriBackend(): Promise<Backend> {
     reveal: (id) => call('reveal', { id }),
     openFile: (id) => call('open_file', { id }),
     pickFolder: () => call('pick_folder'),
+    preview: (url) => call('preview', { url }),
     subscribe: async (onEvent) => {
       const channel = new Channel<UiEvent>()
       channel.onmessage = onEvent

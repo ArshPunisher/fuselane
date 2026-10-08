@@ -1159,6 +1159,16 @@ h2 {
   font-size: 12px;
 }
 
+.field-help[data-preview='ok'] .preview-name {
+  color: var(--ink);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.field-help[data-preview='error'] {
+  color: var(--warning);
+}
+
 .field-error {
   color: var(--danger);
   font-size: 12px;

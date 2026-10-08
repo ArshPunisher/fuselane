@@ -143,13 +143,36 @@ export function App() {
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
       const text = e.clipboardData?.getData('text') ?? ''
-      if (/^https?:\/\//i.test(text.trim())) setAdding(true)
+      if (/^https?:\/\//i.test(text.trim())) setAdding(true, text.trim())
+    }
+    // Dropping a link (from a browser's address bar or a page) starts one too.
+    const over = (e: DragEvent) => {
+      if (e.dataTransfer?.types.some((t) => t === 'text/uri-list' || t === 'text/plain'))
+        e.preventDefault()
+    }
+    const drop = (e: DragEvent) => {
+      const text = (
+        e.dataTransfer?.getData('text/uri-list') ||
+        e.dataTransfer?.getData('text/plain') ||
+        ''
+      )
+        .split('\n')
+        .map((l) => l.trim())
+        .find((l) => l && !l.startsWith('#'))
+      if (text && /^https?:\/\//i.test(text)) {
+        e.preventDefault()
+        setAdding(true, text)
+      }
     }
     addEventListener('keydown', key)
     addEventListener('paste', paste)
+    addEventListener('dragover', over)
+    addEventListener('drop', drop)
     return () => {
       removeEventListener('keydown', key)
       removeEventListener('paste', paste)
+      removeEventListener('dragover', over)
+      removeEventListener('drop', drop)
     }
   }, [setAdding])
 

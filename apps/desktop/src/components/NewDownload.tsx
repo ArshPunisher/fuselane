@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { X } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { toUiError } from '../lib/backend'
-import type { UiError } from '../lib/types'
+import type { PreviewView, UiError } from '../lib/types'
+import { bytes } from '../lib/format'
 
 /** Quick local check so obvious mistakes show before a round trip; the backend decides. */
 function looksLikeLink(s: string): boolean {
@@ -22,6 +23,33 @@ export function NewDownload() {
   const [dir, setDir] = useState('')
   const [error, setError] = useState<UiError | null>(null)
   const [busy, setBusy] = useState(false)
+  const draft = useApp((s) => s.draft)
+  const [preview, setPreview] = useState<
+    | { state: 'idle' }
+    | { state: 'loading' }
+    | { state: 'ok'; data: PreviewView }
+    | { state: 'error'; message: string }
+  >({ state: 'idle' })
+
+  // Look the link up shortly after typing stops; stale answers are dropped.
+  useEffect(() => {
+    if (!open || !backend || !looksLikeLink(url)) {
+      setPreview({ state: 'idle' })
+      return
+    }
+    let live = true
+    setPreview({ state: 'loading' })
+    const t = setTimeout(() => {
+      backend
+        .preview(url.trim())
+        .then((data) => live && setPreview({ state: 'ok', data }))
+        .catch((e) => live && setPreview({ state: 'error', message: toUiError(e).message }))
+    }, 450)
+    return () => {
+      live = false
+      clearTimeout(t)
+    }
+  }, [url, open, backend])
 
   useEffect(() => {
     const d = dialog.current
@@ -32,6 +60,10 @@ export function NewDownload() {
       d.showModal()
       // showModal focuses the first control (Close); the link is what people came for.
       linkInput.current?.focus()
+      if (draft) {
+        setUrl(draft)
+        return
+      }
       // Offer a link already on the clipboard (only when the user opened the dialog).
       navigator.clipboard
         ?.readText?.()
@@ -41,7 +73,7 @@ export function NewDownload() {
         .catch(() => {})
     }
     if (!open && d.open) d.close()
-  }, [open])
+  }, [open, draft])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -73,7 +105,10 @@ export function NewDownload() {
       ref={dialog}
       className="dialog"
       aria-labelledby="nd-title"
-      onClose={() => setAdding(false)}
+      onClose={() => {
+        // A late close event must not shut a dialog that was just reopened.
+        if (!dialog.current?.open) setAdding(false)
+      }}
     >
       <form onSubmit={submit} noValidate>
         <header className="dialog-head">
@@ -111,8 +146,29 @@ export function NewDownload() {
               {urlError.message} {urlError.hint}
             </p>
           ) : (
-            <p id="nd-url-help" className="field-help">
-              Fuselane uses every network that can reach the server.
+            <p
+              id="nd-url-help"
+              className="field-help"
+              aria-live="polite"
+              data-preview={preview.state}
+            >
+              {preview.state === 'loading' && 'Looking up the file…'}
+              {preview.state === 'ok' && (
+                <>
+                  <span className="preview-name" translate="no">
+                    {preview.data.filename}
+                  </span>
+                  {preview.data.total !== null
+                    ? `, ${bytes(preview.data.total)}`
+                    : ', size unknown'}
+                  .{' '}
+                  {preview.data.splittable
+                    ? 'Splits across all your networks.'
+                    : "This server won't split the file, so one network will carry it."}
+                </>
+              )}
+              {preview.state === 'error' && preview.message}
+              {preview.state === 'idle' && 'Fuselane uses every network that can reach the server.'}
             </p>
           )}
         </div>

@@ -23,12 +23,14 @@ interface State {
   selected: number | null
   view: View
   adding: boolean
+  /** A link handed to the dialog by paste or drop. */
+  draft: string
   toast: (UiError & { at: number }) | null
   theme: Theme
   start(): Promise<void>
   select(id: number | null): void
   setView(v: View): void
-  setAdding(open: boolean): void
+  setAdding(open: boolean, draft?: string): void
   setTheme(t: Theme): void
   dismissToast(): void
   refreshNetworks(): Promise<void>
@@ -61,6 +63,7 @@ export const useApp = create<State>((set, get) => ({
   selected: null,
   view: 'transfers',
   adding: false,
+  draft: '',
   toast: null,
   theme: savedTheme(),
 
@@ -104,7 +107,7 @@ export const useApp = create<State>((set, get) => ({
   },
   select: (id) => set({ selected: id }),
   setView: (view) => set({ view }),
-  setAdding: (adding) => set({ adding }),
+  setAdding: (adding, draft) => set({ adding, draft: draft ?? '' }),
   setTheme(theme) {
     try {
       localStorage.setItem('fuselane.theme', theme)

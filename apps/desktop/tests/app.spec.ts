@@ -321,3 +321,54 @@ test('Choose… fills the folder from the native picker, and cancelling leaves i
   await dialog.getByRole('button', { name: 'Choose…' }).click()
   await expect(dialog.getByLabel('Save to')).toHaveValue('/keep/me')
 })
+
+test('the dialog previews a link before downloading it', async ({ page }) => {
+  await page.goto('/?empty=1')
+  await page.getByRole('button', { name: 'New download' }).first().click()
+  const dialog = page.getByRole('dialog', { name: 'New download' })
+  const link = dialog.getByLabel('Link')
+  const help = dialog.locator('#nd-url-help')
+  await link.fill('https://mirror.example.org/isos/fedora-43.iso')
+  await expect(help).toContainText('fedora-43.iso, 700 MB. Splits across all your networks.')
+  await link.fill('https://noranges.example.org/blob.bin')
+  await expect(help).toContainText("won't split the file")
+  await link.fill('https://unknown.example.org/stream.bin')
+  await expect(help).toContainText('size unknown')
+  await link.fill('https://example.org/missing.bin')
+  await expect(help).toContainText("doesn't exist (404)")
+  // A preview failure warns but doesn't block: the backend decides on Download.
+  await expect(dialog.getByRole('button', { name: 'Download' })).toBeEnabled()
+})
+
+test('pasting or dropping a link anywhere opens the dialog with it', async ({ page }) => {
+  await page.goto('/?empty=1')
+  await expect(page.getByText('Nothing downloading yet')).toBeVisible() // app is listening
+  await page.evaluate(() => {
+    const data = new DataTransfer()
+    data.setData('text/plain', 'https://example.org/pasted.zip')
+    document.body.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true }))
+  })
+  const dialog = page.getByRole('dialog', { name: 'New download' })
+  await expect(dialog.getByLabel('Link')).toHaveValue('https://example.org/pasted.zip')
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await page.evaluate(() => {
+    const data = new DataTransfer()
+    data.setData('text/uri-list', '# a comment line\nhttps://example.org/dropped.iso\n')
+    document.body.dispatchEvent(
+      new DragEvent('drop', { dataTransfer: data, bubbles: true, cancelable: true }),
+    )
+  })
+  await expect(dialog.getByLabel('Link')).toHaveValue('https://example.org/dropped.iso')
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  // Dropping something that isn't a link does nothing.
+  await page.evaluate(() => {
+    const data = new DataTransfer()
+    data.setData('text/plain', 'javascript:alert(1)')
+    document.body.dispatchEvent(
+      new DragEvent('drop', { dataTransfer: data, bubbles: true, cancelable: true }),
+    )
+  })
+  await expect(dialog).toBeHidden()
+})

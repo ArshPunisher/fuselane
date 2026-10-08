@@ -6,7 +6,16 @@
 // seed=N, freeze=SECONDS (advance to that instant, then stop: for screenshots),
 // drop=0 (the phone never drops out).
 import type { Backend } from './backend'
-import type { JobStatus, JobView, Live, LiveNet, NetView, UiError, UiEvent } from './types'
+import type {
+  JobStatus,
+  JobView,
+  Live,
+  LiveNet,
+  NetView,
+  PreviewView,
+  UiError,
+  UiEvent,
+} from './types'
 
 const MB = 1024 * 1024
 const TICKS = 180
@@ -328,6 +337,31 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     },
     reveal: async (id) => finishedFile(id),
     openFile: async (id) => finishedFile(id),
+    preview: async (raw): Promise<PreviewView> => {
+      await new Promise((r) => setTimeout(r, 150))
+      let url: URL
+      try {
+        url = new URL(raw.trim())
+      } catch {
+        throw err(
+          'bad-link',
+          `"${raw.trim().slice(0, 80)}" isn't a valid link.`,
+          'Links start with http:// or https://.',
+        )
+      }
+      if (url.pathname.includes('missing')) {
+        throw err(
+          'preview-failed',
+          "The server says this file doesn't exist (404). Check the link.",
+          null,
+        )
+      }
+      return {
+        filename: nameFromUrl(url),
+        total: url.hostname.includes('unknown') ? null : 734003200,
+        splittable: !url.hostname.includes('noranges'),
+      }
+    },
     pickFolder: async () => (params.get('pick') === 'cancel' ? null : '/Users/demo/Movies'),
     remove: async (id) => {
       find(id)
