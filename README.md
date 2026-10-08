@@ -12,7 +12,7 @@ Fuselane is a cross-platform download **and upload** manager. It spreads one tra
 
 | System | How |
 |---|---|
-| macOS 13.3+ | `curl -fsSL https://raw.githubusercontent.com/ArshPunisher/fuselane/main/packaging/macos/install.sh \| sh`, or `brew install --cask arshpunisher/fuselane/fuselane`, or the `.dmg` |
+| macOS 13.3+ | `curl -fsSL https://raw.githubusercontent.com/ArshPunisher/fuselane/main/packaging/macos/install.sh \| sh`, or `brew install --cask arshpunisher/tap/fuselane`, or the `.dmg` |
 | Windows 10/11 x64 | `Fuselane_<version>_windows-x64-setup.exe` |
 | Linux x64 / arm64 | `.AppImage` (x64), `.deb` or `.rpm` |
 | CLI | `fuselane-cli_<version>_<system>` |

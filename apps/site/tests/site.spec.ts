@@ -84,7 +84,7 @@ test('copy buttons copy the exact command', async ({ page, context, browserName 
   await page.locator('button[data-copy="cmd-brew"]').click()
   await expect(page.locator('button[data-copy="cmd-brew"]')).toHaveText('Copied')
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-    'brew install --cask arshpunisher/fuselane/fuselane',
+    'brew install --cask arshpunisher/tap/fuselane',
   )
 })
 

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Writes Casks/fuselane.rb for a *published* release, with the dmg's real SHA-256
 # taken from the release's SHA256SUMS, and prints it. Usage:
-#   update-cask.sh v0.1.0-beta.1 > Casks/fuselane.rb   (in the homebrew-fuselane repo)
+#   update-cask.sh v0.1.0-beta.1 > Casks/fuselane.rb   (in the ArshPunisher/homebrew-tap repo)
 set -eu
 tag=${1:?usage: update-cask.sh vX.Y.Z[-pre]}
 version=${tag#v}
@@ -21,17 +21,15 @@ cask "fuselane" do
   desc "Download one file over every network you have at once"
   homepage "https://github.com/$repo"
 
-  depends_on macos: ">= :ventura"
+  depends_on macos: :ventura
 
   app "Fuselane.app"
 
   # Open source and ad-hoc signed, not notarized (no paid Apple account, by policy).
-  postflight do
-    system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{appdir}/Fuselane.app"]
+  postflight_steps do
+    run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{appdir}}/Fuselane.app"]
   end
 
-  zap trash: [
-    "~/Library/Application Support/app.fuselane",
-  ]
+  zap trash: "~/Library/Application Support/app.fuselane"
 end
 CASK
