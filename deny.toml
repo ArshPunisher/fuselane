@@ -29,7 +29,7 @@ wildcards = "deny"
 allow-wildcard-paths = true
 # Layering (ARCHITECTURE.md §3): no UI shell inside the engine crates.
 deny = [
-  { name = "tauri", wrappers = ["fuselane-desktop", "tauri-plugin-single-instance", "tauri-plugin-opener", "tauri-plugin-dialog", "tauri-plugin-notification", "tauri-plugin-updater", "tauri-plugin-fs"] },
+  { name = "tauri", wrappers = ["fuselane-desktop", "tauri-plugin-single-instance", "tauri-plugin-opener", "tauri-plugin-dialog", "tauri-plugin-notification", "tauri-plugin-updater", "tauri-plugin-window-state", "tauri-plugin-fs"] },
 ]
 
 [sources]

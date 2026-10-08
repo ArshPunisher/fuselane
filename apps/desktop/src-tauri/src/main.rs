@@ -371,6 +371,8 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // Remembers the window's size and position between launches.
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(svc)
         .setup(move |app| {
             let show = MenuItem::with_id(app, "show", "Show Fuselane", true, None::<&str>)?;
