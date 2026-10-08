@@ -7,4 +7,5 @@
 pub mod concurrency;
 pub mod headers;
 pub mod plan;
+pub mod retry;
 pub mod scheduler;
