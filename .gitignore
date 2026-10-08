@@ -35,3 +35,8 @@ test-results/
 
 # Logs
 *.log
+
+# Desktop UI
+apps/desktop/dist/
+apps/desktop/test-results/
+apps/desktop/playwright-report/
