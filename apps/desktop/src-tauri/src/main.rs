@@ -72,8 +72,44 @@ fn list_networks(svc: State<'_>) -> Result<Vec<NetView>, UiError> {
 }
 
 #[tauri::command]
-async fn add_download(svc: State<'_>, url: String, dir: Option<String>) -> Result<i64, UiError> {
-    svc.add(&url, dir.as_deref())
+async fn add_download(
+    svc: State<'_>,
+    url: String,
+    dir: Option<String>,
+    options: Option<service::AddRequest>,
+) -> Result<i64, UiError> {
+    svc.add_with(&url, dir.as_deref(), &options.unwrap_or_default())
+}
+
+#[tauri::command]
+async fn add_batch(
+    svc: State<'_>,
+    text: String,
+    dir: Option<String>,
+) -> Result<service::BatchResult, UiError> {
+    if text.len() > 1024 * 1024 {
+        return Err(UiError::new_public(
+            "too-many",
+            "That's too much text to read links from (over 1 MB).",
+            Some("Paste the links in smaller groups."),
+        ));
+    }
+    svc.add_batch(&text, dir.as_deref())
+}
+
+#[tauri::command]
+fn max_running(svc: State<'_>) -> usize {
+    svc.max_running()
+}
+
+#[tauri::command]
+async fn set_max_running(svc: State<'_>, n: usize) -> Result<usize, UiError> {
+    svc.set_max_running(n)
+}
+
+#[tauri::command]
+async fn reorder(svc: State<'_>, ids: Vec<i64>) -> Result<(), UiError> {
+    svc.reorder(&ids)
 }
 
 #[tauri::command]
@@ -695,6 +731,10 @@ fn main() {
             list_jobs,
             list_networks,
             add_download,
+            add_batch,
+            max_running,
+            set_max_running,
+            reorder,
             pause,
             resume,
             remove,

@@ -15,6 +15,8 @@ use serde::{Deserialize, Serialize};
 
 /// Downloads that run at once; the rest wait their turn (L-53).
 pub const MAX_RUNNING: usize = 3;
+/// The most downloads at once a person can choose (each already uses many streams).
+pub const MAX_RUNNING_LIMIT: usize = 8;
 
 /// One row in the transfers list.
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -33,6 +35,10 @@ pub struct JobView {
     pub error_action: Option<String>,
     pub final_path: Option<String>,
     pub created_at: i64,
+    /// Queue order: lower starts first.
+    pub position: i64,
+    /// A SHA-256 will be checked when it finishes.
+    pub verify: bool,
 }
 
 /// One network the app can see.
@@ -346,6 +352,15 @@ pub struct UiError {
 }
 
 impl UiError {
+    /// For commands outside this module.
+    pub fn new_public(
+        code: &'static str,
+        message: impl Into<String>,
+        hint: Option<&str>,
+    ) -> UiError {
+        UiError::new(code, message, hint)
+    }
+
     fn new(code: &'static str, message: impl Into<String>, hint: Option<&str>) -> UiError {
         UiError {
             code,
@@ -363,6 +378,30 @@ struct Running {
     remove_after: bool,
 }
 
+/// What the New download dialog can choose besides the link and folder.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AddRequest {
+    pub name: Option<String>,
+    pub sha256: Option<String>,
+    pub allow_duplicate: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Skipped {
+    pub url: String,
+    pub reason: String,
+}
+
+/// What a batch add did.
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchResult {
+    pub added: Vec<i64>,
+    pub skipped: Vec<Skipped>,
+}
+
 /// The app's backend. Cheap to share: methods take `&Arc<Self>`.
 pub struct Service {
     store: Arc<Store>,
@@ -371,7 +410,7 @@ pub struct Service {
     /// Extra listeners that live as long as the app (tray, notifications).
     listeners: Mutex<Vec<Emit>>,
     default_dir: PathBuf,
-    max_running: usize,
+    max_running: std::sync::atomic::AtomicUsize,
     limiter: Arc<Limiter>,
     /// Limits as saved (the limiter holds the effective ones, after slow mode).
     saved_limits: Mutex<LimitsView>,
@@ -444,6 +483,9 @@ fn job_name(job: &Job) -> String {
     if let Some(f) = &job.filename {
         return f.clone();
     }
+    if let Some(f) = &job.chosen_name {
+        return f.clone();
+    }
     match parse_link(&job.url) {
         Ok((_, host, _, path)) => {
             let path = path.split('?').next().unwrap_or_default();
@@ -477,6 +519,8 @@ fn view(job: &Job) -> JobView {
             .as_ref()
             .map(|p| p.to_string_lossy().into_owned()),
         created_at: job.created_at,
+        position: job.position,
+        verify: job.expected_sha256.is_some(),
     }
 }
 
@@ -555,6 +599,13 @@ impl Service {
         let updated_from = previous.filter(|p| p != current);
         let _ = store.set_setting("last_version", current);
         let store_flag = store.setting("per_network_dns").ok().flatten().as_deref() == Some("true");
+        let max_running = store
+            .setting("max_running")
+            .ok()
+            .flatten()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|n| (1..=MAX_RUNNING_LIMIT).contains(n))
+            .unwrap_or(MAX_RUNNING);
         let allowances: Vec<Allowance> = store
             .setting("allowances")
             .ok()
@@ -606,7 +657,7 @@ impl Service {
             emit: Mutex::new(Arc::new(|_| {})),
             listeners: Mutex::new(Vec::new()),
             default_dir,
-            max_running: MAX_RUNNING,
+            max_running: std::sync::atomic::AtomicUsize::new(max_running),
             retry_scale: None,
             limiter,
             saved_limits: Mutex::new(saved_limits),
@@ -631,7 +682,7 @@ impl Service {
     ) -> Result<Arc<Service>, UiError> {
         let s = Service::new(store, dir)?;
         let mut s = Arc::try_unwrap(s).map_err(|_| store_error("busy"))?;
-        s.max_running = max.max(1);
+        s.max_running = std::sync::atomic::AtomicUsize::new(max.max(1));
         s.retry_scale = Some(0.05);
         Ok(Arc::new(s))
     }
@@ -844,6 +895,17 @@ impl Service {
 
     /// Adds a download and starts it when a slot is free.
     pub fn add(self: &Arc<Self>, url: &str, dir: Option<&str>) -> Result<i64, UiError> {
+        self.add_with(url, dir, &AddRequest::default())
+    }
+
+    /// Adds a download with the person's choices. Refuses a link already in the
+    /// list unless `allow_duplicate` (the window then offers "Download again").
+    pub fn add_with(
+        self: &Arc<Self>,
+        url: &str,
+        dir: Option<&str>,
+        req: &AddRequest,
+    ) -> Result<i64, UiError> {
         let url = url.trim();
         if url.is_empty() {
             return Err(UiError::new(
@@ -874,10 +936,144 @@ impl Service {
             ));
         }
         let dir = std::fs::canonicalize(&dir).unwrap_or(dir);
-        let id = self.store.create(url, &dir).map_err(store_error)?;
+        let name = req
+            .name
+            .as_deref()
+            .map(str::trim)
+            .filter(|n| !n.is_empty())
+            .map(String::from);
+        if name.as_ref().is_some_and(|n| n.len() > 255) {
+            return Err(UiError::new(
+                "bad-name",
+                "That file name is too long (over 255 bytes).",
+                Some("Pick a shorter name."),
+            ));
+        }
+        let sha256 = match req
+            .sha256
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            None => None,
+            Some(s) => {
+                runner::parse_sha256(s).map_err(|m| {
+                    UiError::new(
+                        "bad-checksum",
+                        m,
+                        Some("Paste the SHA-256 from the download page: 64 letters and digits."),
+                    )
+                })?;
+                Some(s.to_ascii_lowercase())
+            }
+        };
+        if !req.allow_duplicate
+            && let Some(existing) = self
+                .store
+                .list()
+                .map_err(store_error)?
+                .into_iter()
+                .find(|j| j.url == url)
+        {
+            return Err(UiError::new(
+                "duplicate",
+                format!("You already added this link ({}).", job_name(&existing)),
+                Some("Download it again anyway, or open the one in your list."),
+            ));
+        }
+        let id = self
+            .store
+            .create_with(url, &dir, &fuselane_core::NewJob { name, sha256 })
+            .map_err(store_error)?;
         self.publish_jobs();
         self.pump();
         Ok(id)
+    }
+
+    /// Adds every link in `text` (one per line, or mixed with other words), each
+    /// pattern like `file[01-20].zip` expanded. Links already in the list and bad
+    /// ones are skipped with a reason, never added twice.
+    pub fn add_batch(
+        self: &Arc<Self>,
+        text: &str,
+        dir: Option<&str>,
+    ) -> Result<BatchResult, UiError> {
+        let mut links = Vec::new();
+        for found in fuselane_core::batch::links_in(text) {
+            let expanded = fuselane_core::batch::expand(&found)
+                .map_err(|m| UiError::new("too-many", m, None))?;
+            for l in expanded {
+                if !links.contains(&l) {
+                    links.push(l);
+                }
+            }
+            if links.len() > fuselane_core::batch::MAX_LINKS {
+                return Err(UiError::new(
+                    "too-many",
+                    format!(
+                        "That's more than {} links at once.",
+                        fuselane_core::batch::MAX_LINKS
+                    ),
+                    Some("Add them in smaller groups."),
+                ));
+            }
+        }
+        if links.is_empty() {
+            return Err(UiError::new(
+                "bad-link",
+                "There are no http:// or https:// links in that text.",
+                Some(
+                    "Paste one link per line, or a pattern like https://example.com/part[01-10].zip.",
+                ),
+            ));
+        }
+        let mut result = BatchResult::default();
+        for link in links {
+            match self.add_with(&link, dir, &AddRequest::default()) {
+                Ok(id) => result.added.push(id),
+                Err(e) => result.skipped.push(Skipped {
+                    url: link,
+                    reason: e.message,
+                }),
+            }
+        }
+        Ok(result)
+    }
+
+    pub fn max_running(&self) -> usize {
+        self.max_running.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// How many downloads run at once (1–8); more start right away if allowed.
+    pub fn set_max_running(self: &Arc<Self>, n: usize) -> Result<usize, UiError> {
+        if !(1..=MAX_RUNNING_LIMIT).contains(&n) {
+            return Err(UiError::new(
+                "bad-value",
+                format!("Pick between 1 and {MAX_RUNNING_LIMIT} downloads at once."),
+                None,
+            ));
+        }
+        self.store
+            .set_setting("max_running", &n.to_string())
+            .map_err(store_error)?;
+        self.max_running
+            .store(n, std::sync::atomic::Ordering::Relaxed);
+        self.pump();
+        Ok(n)
+    }
+
+    /// Puts these downloads first in the queue, in this order.
+    pub fn reorder(self: &Arc<Self>, ids: &[i64]) -> Result<(), UiError> {
+        if ids.len() > 10_000 {
+            return Err(UiError::new(
+                "bad-value",
+                "Too many downloads to reorder.",
+                None,
+            ));
+        }
+        self.store.reorder(ids).map_err(store_error)?;
+        self.publish_jobs();
+        Ok(())
     }
 
     pub fn pause(self: &Arc<Self>, id: i64) -> Result<(), UiError> {
@@ -1257,10 +1453,10 @@ impl Service {
         let Ok(mut jobs) = self.store.list() else {
             return;
         };
-        jobs.sort_by_key(|j| (j.created_at, j.id));
+        jobs.sort_by_key(|j| (j.position, j.id));
         let mut running = lock(&self.running);
         for job in jobs.into_iter().filter(|j| j.status == Status::Queued) {
-            if running.len() >= self.max_running {
+            if running.len() >= self.max_running() {
                 break;
             }
             if running.contains_key(&job.id) {
@@ -1302,6 +1498,11 @@ impl Service {
             per_network_dns: self
                 .per_network_dns
                 .load(std::sync::atomic::Ordering::Relaxed),
+            filename: job.chosen_name.clone(),
+            sha256: job
+                .expected_sha256
+                .as_deref()
+                .and_then(|s| runner::parse_sha256(s).ok()),
             ..RunOptions::default()
         };
         let resume = job.resume();
@@ -1618,7 +1819,11 @@ mod tests {
         let server = RangeServer::start(content).await.unwrap();
         let h = harness(3);
         let a = h.svc.add(&link(&server), None).unwrap();
-        let b = h.svc.add(&link(&server), None).unwrap();
+        let again = AddRequest {
+            allow_duplicate: true,
+            ..AddRequest::default()
+        };
+        let b = h.svc.add_with(&link(&server), None, &again).unwrap();
         h.wait("both done", |h| {
             h.job(a).status == "completed" && h.job(b).status == "completed"
         })
@@ -1631,6 +1836,171 @@ mod tests {
                 content.sha256()
             );
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_link_already_in_the_list_is_refused_unless_asked_for_again() {
+        let content = Content::new(64 * KB, 120);
+        let server = RangeServer::start(content).await.unwrap();
+        let h = harness(3);
+        let a = h.svc.add(&link(&server), None).unwrap();
+        let err = h
+            .svc
+            .add(&format!("  {}  ", link(&server)), None)
+            .unwrap_err();
+        assert_eq!(err.code, "duplicate");
+        assert!(err.message.contains("already added"), "{}", err.message);
+        assert!(err.hint.as_deref().unwrap_or("").contains("again"));
+        assert_eq!(h.svc.jobs().unwrap().len(), 1, "nothing was added");
+        let again = AddRequest {
+            allow_duplicate: true,
+            ..AddRequest::default()
+        };
+        let b = h.svc.add_with(&link(&server), None, &again).unwrap();
+        assert_ne!(a, b);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_chosen_name_and_checksum_are_used() {
+        let content = Content::new(300 * KB, 121);
+        let server = RangeServer::start(content).await.unwrap();
+        let h = harness(3);
+        let good = AddRequest {
+            name: Some("  report final.bin ".into()),
+            sha256: Some(
+                content
+                    .sha256()
+                    .iter()
+                    .map(|b| format!("{b:02X}"))
+                    .collect(),
+            ),
+            allow_duplicate: false,
+        };
+        let id = h.svc.add_with(&link(&server), None, &good).unwrap();
+        assert_eq!(h.job(id).name, "report final.bin", "shown before it starts");
+        assert!(h.job(id).verify);
+        h.wait("completion", |h| h.job(id).status == "completed")
+            .await;
+        let path = PathBuf::from(h.job(id).final_path.unwrap());
+        assert_eq!(path.file_name().unwrap(), "report final.bin");
+
+        // The wrong checksum: the file is refused and never published.
+        let bad = AddRequest {
+            sha256: Some("0".repeat(64)),
+            allow_duplicate: true,
+            ..AddRequest::default()
+        };
+        let id2 = h.svc.add_with(&link(&server), None, &bad).unwrap();
+        h.wait("failure", |h| h.job(id2).status.starts_with("failed"))
+            .await;
+        let err = h.job(id2).error.unwrap_or_default();
+        assert!(err.contains("SHA-256"), "{err}");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn bad_names_and_checksums_are_refused_before_saving() {
+        let h = harness(3);
+        let link = "http://127.0.0.1:9/f.bin";
+        for (req, code) in [
+            (
+                AddRequest {
+                    sha256: Some("abc".into()),
+                    ..AddRequest::default()
+                },
+                "bad-checksum",
+            ),
+            (
+                AddRequest {
+                    sha256: Some("g".repeat(64)),
+                    ..AddRequest::default()
+                },
+                "bad-checksum",
+            ),
+            (
+                AddRequest {
+                    name: Some("x".repeat(300)),
+                    ..AddRequest::default()
+                },
+                "bad-name",
+            ),
+        ] {
+            assert_eq!(h.svc.add_with(link, None, &req).unwrap_err().code, code);
+        }
+        assert!(h.svc.jobs().unwrap().is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn pasted_text_and_patterns_add_many_downloads_at_once() {
+        let h = harness(1);
+        let text = "Parts:\nhttp://127.0.0.1:9/part[1-3].bin\nhttp://127.0.0.1:9/extra.bin, http://127.0.0.1:9/part2.bin";
+        let r = h.svc.add_batch(text, None).unwrap();
+        assert_eq!(r.added.len(), 4, "{r:?}");
+        assert!(
+            r.skipped.is_empty(),
+            "the repeat of part2 was merged: {r:?}"
+        );
+        // Again: everything is already in the list.
+        let again = h.svc.add_batch(text, None).unwrap();
+        assert!(again.added.is_empty());
+        assert_eq!(again.skipped.len(), 4);
+        assert!(again.skipped.iter().all(|s| s.reason.contains("already")));
+        assert_eq!(
+            h.svc.add_batch("no links", None).unwrap_err().code,
+            "bad-link"
+        );
+        assert_eq!(
+            h.svc
+                .add_batch("http://127.0.0.1:9/[1-5000]", None)
+                .unwrap_err()
+                .code,
+            "too-many"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn downloads_at_once_is_a_saved_setting_within_limits() {
+        let h = harness(3);
+        assert_eq!(h.svc.set_max_running(5).unwrap(), 5);
+        assert_eq!(h.svc.max_running(), 5);
+        for bad in [0, 9, 100] {
+            assert_eq!(h.svc.set_max_running(bad).unwrap_err().code, "bad-value");
+        }
+        assert_eq!(h.svc.max_running(), 5, "a refused value changes nothing");
+        // A fresh service on the same database starts with the saved value.
+        let store = Store::open(&h.dir.path().join("fuselane.db")).unwrap();
+        let again = Service::new(store, h.dir.path().to_path_buf()).unwrap();
+        assert_eq!(again.max_running(), 5);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_queue_starts_jobs_in_the_order_chosen() {
+        let content = Content::new(64 * KB, 122);
+        let server = RangeServer::start(content).await.unwrap();
+        // One at a time, and the first one held so the rest stay queued.
+        server.add_rule(Rule {
+            skip: 0,
+            times: u32::MAX,
+            fault: Fault::Throttle(16 * KB),
+        });
+        let h = harness(1);
+        let ids: Vec<i64> = (0..3)
+            .map(|i| {
+                h.svc
+                    .add(&format!("{}?n={i}", link(&server)), None)
+                    .unwrap()
+            })
+            .collect();
+        h.wait("first running", |h| h.job(ids[0]).status == "running")
+            .await;
+        h.svc.reorder(&[ids[2]]).unwrap();
+        let pos: Vec<i64> = ids.iter().map(|&id| h.job(id).position).collect();
+        assert!(pos[2] < pos[1], "moved ahead: {pos:?}");
+        h.svc.pause(ids[0]).unwrap();
+        h.wait("the moved one starts next", |h| {
+            h.job(ids[2]).status == "running"
+        })
+        .await;
+        assert_eq!(h.job(ids[1]).status, "queued");
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1675,7 +2045,11 @@ mod tests {
         });
         let h = harness(3);
         let ids: Vec<i64> = (0..30)
-            .map(|_| h.svc.add(&link(&server), None).unwrap())
+            .map(|i| {
+                h.svc
+                    .add(&format!("{}?n={i}", link(&server)), None)
+                    .unwrap()
+            })
             .collect();
         let mut peak = 0;
         let start = Instant::now();
@@ -1707,8 +2081,8 @@ mod tests {
         });
         let h = harness(1);
         let first = h.svc.add(&link(&server), None).unwrap();
-        let waiting = h.svc.add(&link(&server), None).unwrap();
-        let doomed = h.svc.add(&link(&server), None).unwrap();
+        let waiting = h.svc.add(&format!("{}?w", link(&server)), None).unwrap();
+        let doomed = h.svc.add(&format!("{}?d", link(&server)), None).unwrap();
         h.wait("first running", |h| h.job(first).status == "running")
             .await;
         h.svc.pause(waiting).unwrap();
@@ -1803,6 +2177,8 @@ mod tests {
             error_action: None,
             final_path: None,
             created_at: 0,
+            position: 0,
+            verify: false,
         };
         let net = NetView {
             name: "en0".into(),

@@ -17,6 +17,8 @@ export interface JobView {
   errorAction: 'fix-link' | 'retry' | 'start-over' | 'free-space' | 'allowance' | null
   finalPath: string | null
   createdAt: number
+  position: number
+  verify: boolean
 }
 
 export interface NetView {
@@ -62,6 +64,19 @@ export interface UiError {
   code: string
   message: string
   hint: string | null
+}
+
+/** Choices in the New download dialog besides the link and folder. */
+export interface AddOptions {
+  name?: string | null
+  sha256?: string | null
+  /** Add a link that is already in the list (after the person confirms). */
+  allowDuplicate?: boolean
+}
+
+export interface BatchResult {
+  added: number[]
+  skipped: { url: string; reason: string }[]
 }
 
 export interface AppInfo {

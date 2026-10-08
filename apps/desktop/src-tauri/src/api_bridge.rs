@@ -41,7 +41,15 @@ impl Handler for ApiBridge {
                 _ => return Err(Decline::Unsupported),
             }
             self.svc
-                .add(link, None)
+                // Asked for in the browser just now: a repeat is deliberate.
+                .add_with(
+                    link,
+                    None,
+                    &crate::service::AddRequest {
+                        allow_duplicate: true,
+                        ..Default::default()
+                    },
+                )
                 .map(|id| id.to_string())
                 .map_err(|_| Decline::Unsupported)
         })

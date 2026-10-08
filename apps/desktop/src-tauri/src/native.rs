@@ -126,6 +126,8 @@ mod tests {
             error_action: None,
             final_path: None,
             created_at: 0,
+            position: 0,
+            verify: false,
         }
     }
 

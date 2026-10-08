@@ -9,6 +9,7 @@ import type { Backend } from './backend'
 import { createDemoTorrents } from './demoTorrents'
 import type {
   AllowanceView,
+  BatchResult,
   JobStatus,
   JobView,
   LimitsView,
@@ -133,6 +134,8 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       errorAction,
       finalPath: status === 'completed' ? `~/Downloads/${name}` : null,
       createdAt: now() - (100 - nextId) * 60,
+      position: nextId,
+      verify: false,
       fill,
       owner,
       inflight: [-1, -1, -1],
@@ -321,7 +324,8 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     }
   }
 
-  return {
+  let maxRunning = 3
+  const backend: Backend = {
     demo: true,
     appInfo: async () => ({
       version: '0.0.0',
@@ -336,7 +340,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         reach: n.name === params.get('portal') ? ('portal' as const) : n.reach,
       })),
     openSignIn: async () => {},
-    add: async (raw, dir) => {
+    add: async (raw, dir, options) => {
       const text = raw.trim()
       if (!text)
         throw err('bad-link', 'Paste a link to download.', 'Links start with http:// or https://.')
@@ -372,11 +376,86 @@ export function createDemoBackend(params: URLSearchParams): Backend {
           'Pick another folder to save into.',
         )
       }
-      const j = make(nameFromUrl(url), (180 + random() * 700) * MB, 'running')
+      const sha = options?.sha256?.trim()
+      if (sha && !/^[0-9a-fA-F]{64}$/.test(sha))
+        throw err(
+          'bad-checksum',
+          'A SHA-256 is 64 hex digits (0-9, a-f).',
+          'Paste the SHA-256 from the download page: 64 letters and digits.',
+        )
+      const name = options?.name?.trim()
+      if (name && name.length > 255)
+        throw err(
+          'bad-name',
+          'That file name is too long (over 255 bytes).',
+          'Pick a shorter name.',
+        )
+      const existing = jobs.find((x) => x.url === url.href)
+      if (existing && !options?.allowDuplicate)
+        throw err(
+          'duplicate',
+          `You already added this link (${existing.name}).`,
+          'Download it again anyway, or open the one in your list.',
+        )
+      const j = make(name || nameFromUrl(url), (180 + random() * 700) * MB, 'running')
       j.url = url.href
+      j.verify = Boolean(sha)
       if (dir?.trim()) j.dir = dir.trim()
       emitJobs()
       return j.id
+    },
+    addBatch: async (text, dir) => {
+      const found = [...new Set(text.match(/https?:\/\/[^\s"<>]+/gi) ?? [])].map((l) =>
+        l.replace(/[.,;)']+$/, ''),
+      )
+      const links: string[] = []
+      for (const l of found) {
+        const m = /\[(\d+)-(\d+)\]/.exec(l)
+        if (!m) {
+          links.push(l)
+          continue
+        }
+        const [a, b] = [Number(m[1]), Number(m[2])]
+        if (Math.abs(b - a) >= 1000)
+          throw err(
+            'too-many',
+            'That pattern makes more than 1000 links. Use a smaller range.',
+            null,
+          )
+        const width = m[1]!.startsWith('0') ? m[1]!.length : 0
+        for (let n = Math.min(a, b); n <= Math.max(a, b); n++)
+          links.push(l.replace(m[0], String(n).padStart(width, '0')))
+      }
+      if (!links.length)
+        throw err(
+          'bad-link',
+          'There are no http:// or https:// links in that text.',
+          'Paste one link per line, or a pattern like https://example.com/part[01-10].zip.',
+        )
+      const result: BatchResult = { added: [], skipped: [] }
+      for (const l of [...new Set(links)]) {
+        try {
+          result.added.push(await backend.add(l, dir))
+        } catch (e) {
+          result.skipped.push({ url: l, reason: (e as UiError).message })
+        }
+      }
+      return result
+    },
+    maxRunning: async () => maxRunning,
+    setMaxRunning: async (n) => {
+      if (!Number.isInteger(n) || n < 1 || n > 8)
+        throw err('bad-value', 'Pick between 1 and 8 downloads at once.', null)
+      maxRunning = n
+      return n
+    },
+    reorder: async (ids) => {
+      const rest = jobs.filter((j) => !ids.includes(j.id)).sort((a, b) => a.position - b.position)
+      const order = [...ids.map((id) => jobs.find((j) => j.id === id)).filter(Boolean), ...rest]
+      order.forEach((j, i) => {
+        if (j) j.position = i + 1
+      })
+      emitJobs()
     },
     pause: async (id) => {
       const j = find(id)
@@ -600,4 +679,5 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       setInterval(tick, 200)
     },
   }
+  return backend
 }

@@ -2,9 +2,11 @@
 // plain browser (pnpm dev, Playwright) it uses the demo engine in ./demo.ts,
 // and the UI says so.
 import type {
+  AddOptions,
   AllowanceRequest,
   AllowanceView,
   AppInfo,
+  BatchResult,
   JobView,
   ListingView,
   LimitsView,
@@ -23,7 +25,14 @@ export interface Backend {
   readonly demo: boolean
   appInfo(): Promise<AppInfo>
   listNetworks(): Promise<NetView[]>
-  add(url: string, dir: string | null): Promise<number>
+  add(url: string, dir: string | null, options?: AddOptions): Promise<number>
+  /** Adds every link in pasted text (patterns like file[01-20].zip expanded). */
+  addBatch(text: string, dir: string | null): Promise<BatchResult>
+  /** How many downloads run at once (1–8). */
+  maxRunning(): Promise<number>
+  setMaxRunning(n: number): Promise<number>
+  /** Puts these downloads first in the queue, in this order. */
+  reorder(ids: number[]): Promise<void>
   pause(id: number): Promise<void>
   resume(id: number): Promise<void>
   remove(id: number): Promise<void>
@@ -115,7 +124,11 @@ async function tauriBackend(): Promise<Backend> {
     appInfo: () => call('app_info'),
     listJobs: () => call('list_jobs'),
     listNetworks: () => call('list_networks'),
-    add: (url, dir) => call('add_download', { url, dir }),
+    add: (url, dir, options) => call('add_download', { url, dir, options: options ?? null }),
+    addBatch: (text, dir) => call('add_batch', { text, dir }),
+    maxRunning: () => call('max_running'),
+    setMaxRunning: (n) => call('set_max_running', { n }),
+    reorder: (ids) => call('reorder', { ids }),
     pause: (id) => call('pause', { id }),
     resume: (id) => call('resume', { id }),
     remove: (id) => call('remove', { id }),
