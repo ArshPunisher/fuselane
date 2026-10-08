@@ -1,6 +1,8 @@
+<p><img src="packaging/brand/mark.svg" width="72" height="72" alt="Fuselane logo: three coloured lanes fusing into one orange line"></p>
+
 # Fuselane
 
-> Fuse every connection into one fast lane.
+> Fuse every connection into one fast lane. **[Download](https://arshpunisher.github.io/fuselane/)**
 
 Fuselane is a cross-platform download **and upload** manager. It spreads one transfer across every internet connection the computer has: home Wi-Fi, a phone tethered over USB, Ethernet, a second ISP. You get their combined speed, with no VPN, relay server or admin rights.
 
