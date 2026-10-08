@@ -193,7 +193,7 @@ test('reduced motion still shows progress', async ({ page }) => {
 test('200 downloads with awkward names stay usable and never scroll sideways', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 })
   await page.goto('/?many=200')
-  await expect(page.locator('.row')).toHaveCount(204)
+  await expect(page.locator('.row')).toHaveCount(205)
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
   expect(overflow).toBeLessThanOrEqual(0)
   // The 240-character name is cut with an ellipsis, not wrapped or overflowing.
@@ -371,4 +371,33 @@ test('pasting or dropping a link anywhere opens the dialog with it', async ({ pa
     )
   })
   await expect(dialog).toBeHidden()
+})
+
+test('an expired link is fixed in place and the download continues', async ({ page }) => {
+  await page.goto('/?drop=0')
+  await page.getByText('nightly-build-2026-10-07.zip').click()
+  const field = page.getByLabel('New link to the same file')
+  const go = page.getByRole('button', { name: 'Continue' })
+  // A bad link is refused right there, with the cursor still in the field.
+  await field.fill('ftp://mirror.example.org/nightly.zip')
+  await go.click()
+  await expect(page.locator('.fix-link .field-error')).toContainText("ftp: links aren't supported")
+  await expect(field).toHaveAttribute('aria-invalid', 'true')
+  await field.fill('https://cdn2.example.org/nightly-build-2026-10-07.zip?sig=fresh')
+  await go.click()
+  await expect(page.locator('article.detail .speed')).toContainText('MB/s', { timeout: 5000 })
+  await expect(page.getByLabel('New link to the same file')).toHaveCount(0)
+})
+
+test('a file that changed on the server can be started over', async ({ page }) => {
+  await page.goto('/?drop=0')
+  await page.getByText('mirror-snapshot-2026-10.tar').click()
+  const detail = page.locator('article.detail')
+  await expect(detail.getByRole('alert')).toContainText('changed during the download')
+  // It can't resume or take a new link: only a fresh start.
+  await expect(detail.getByRole('button', { name: 'Resume' })).toHaveCount(0)
+  await expect(page.getByLabel('New link to the same file')).toHaveCount(0)
+  await detail.getByRole('button', { name: 'Start over' }).click()
+  await expect(detail.locator('.speed')).toContainText('MB/s', { timeout: 5000 })
+  await expect(page.locator('.row-name', { hasText: 'mirror-snapshot' })).toHaveCount(1)
 })

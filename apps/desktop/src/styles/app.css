@@ -708,6 +708,49 @@ h2 {
   color: var(--ink);
 }
 
+.notice-body {
+  display: grid;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.fix-link {
+  display: grid;
+  gap: 6px;
+}
+
+.fix-link label {
+  color: var(--ink);
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.fix-link input {
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  min-width: 0;
+}
+
+.fix-link input:focus-visible {
+  outline: 2px solid var(--fuse);
+  outline-offset: 1px;
+}
+
+.fix-link input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.notice > .notice-body > .btn {
+  justify-self: start;
+}
+
 .notice svg {
   flex: none;
   margin-top: 2px;

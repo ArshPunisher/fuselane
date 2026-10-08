@@ -10,6 +10,7 @@ import {
   WarningCircle,
 } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
+import { toUiError } from '../lib/backend'
 import { bytes, eta, percent, rate, rateText } from '../lib/format'
 import { assignLanes, kindLabel, netTitle } from '../lib/lanes'
 import { FuseCore } from './FuseCore'
@@ -83,6 +84,93 @@ function useAnnounce(job: JobView, live: Live | undefined) {
   return text
 }
 
+/** The failure in plain words plus the one fix that fits it (ERRORS.md §2). */
+function ErrorPanel({ job }: { job: JobView }) {
+  const backend = useApp((s) => s.backend)
+  const act = useApp((s) => s.act)
+  const select = useApp((s) => s.select)
+  const [link, setLink] = useState('')
+  const [problem, setProblem] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const action = job.errorAction
+
+  async function fix(e: React.FormEvent) {
+    e.preventDefault()
+    if (!backend || busy) return
+    setBusy(true)
+    setProblem(null)
+    try {
+      await backend.fixLink(job.id, link)
+      setLink('')
+    } catch (err) {
+      const u = toUiError(err)
+      setProblem([u.message, u.hint].filter(Boolean).join(' '))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="notice" role="alert">
+      <WarningCircle size={18} weight="fill" aria-hidden className="ic-danger" />
+      <div className="notice-body">
+        <p>{job.error}</p>
+        {action === 'fix-link' && job.resumable && (
+          <form className="fix-link" onSubmit={fix} noValidate>
+            <label htmlFor={`fix-${job.id}`}>New link to the same file</label>
+            <div className="field-row">
+              <input
+                id={`fix-${job.id}`}
+                type="url"
+                inputMode="url"
+                autoComplete="off"
+                spellCheck={false}
+                value={link}
+                placeholder="https://…"
+                aria-invalid={problem ? true : undefined}
+                aria-describedby={problem ? `fix-${job.id}-err` : `fix-${job.id}-help`}
+                onChange={(e) => {
+                  setLink(e.target.value)
+                  setProblem(null)
+                }}
+              />
+              <button type="submit" className="btn btn-primary" disabled={busy}>
+                {busy ? 'Checking…' : 'Continue'}
+              </button>
+            </div>
+            {problem ? (
+              <p id={`fix-${job.id}-err`} className="field-error" aria-live="polite">
+                {problem}
+              </p>
+            ) : (
+              <p id={`fix-${job.id}-help`} className="field-help">
+                Saved progress is kept if it's the same file. A different file is never mixed in.
+              </p>
+            )}
+          </form>
+        )}
+        {action === 'start-over' && (
+          <button
+            className="btn"
+            onClick={() =>
+              act(async (b) => {
+                select(await b.startOver(job.id))
+              })
+            }
+          >
+            <ArrowClockwise size={16} aria-hidden /> Start over
+          </button>
+        )}
+        {action === 'free-space' && (
+          <p className="field-help">
+            Free up space on that disk, or choose another folder, then try again.
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function RemoveButton({ job }: { job: JobView }) {
   const act = useApp((s) => s.act)
   const [confirm, setConfirm] = useState(false)
@@ -144,7 +232,11 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
             </button>
           )}
           {job.resumable && (
-            <button className="btn btn-primary" onClick={() => act((b) => b.resume(job.id))}>
+            <button
+              // One primary action at a time: a fresh link is the real fix for an expired one.
+              className={job.errorAction === 'fix-link' ? 'btn' : 'btn btn-primary'}
+              onClick={() => act((b) => b.resume(job.id))}
+            >
               {job.status === 'failed' ? (
                 <ArrowClockwise size={16} aria-hidden />
               ) : (
@@ -167,12 +259,7 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
         </div>
       </header>
 
-      {job.error && job.status !== 'running' && (
-        <div className="notice" role="alert">
-          <WarningCircle size={18} weight="fill" aria-hidden className="ic-danger" />
-          <p>{job.error}</p>
-        </div>
-      )}
+      {job.error && job.status !== 'running' && <ErrorPanel job={job} />}
 
       <p className="sr-only" aria-live="polite">
         {announce}

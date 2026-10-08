@@ -16,6 +16,10 @@ export interface Backend {
   openFile(id: number): Promise<void>
   /** A folder the user picked, or null if they cancelled. */
   pickFolder(): Promise<string | null>
+  /** Continues a stopped download from a new link to the same file. */
+  fixLink(id: number, url: string): Promise<void>
+  /** Discards a download that can't continue and starts it fresh; the new id. */
+  startOver(id: number): Promise<number>
   /** Name and size of what a link points at, without downloading it. */
   preview(url: string): Promise<PreviewView>
   subscribe(onEvent: (e: UiEvent) => void): Promise<void>
@@ -61,6 +65,8 @@ async function tauriBackend(): Promise<Backend> {
     reveal: (id) => call('reveal', { id }),
     openFile: (id) => call('open_file', { id }),
     pickFolder: () => call('pick_folder'),
+    fixLink: (id, url) => call('fix_link', { id, url }),
+    startOver: (id) => call('start_over', { id }),
     preview: (url) => call('preview', { url }),
     subscribe: async (onEvent) => {
       const channel = new Channel<UiEvent>()

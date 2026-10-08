@@ -76,6 +76,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     status: JobStatus,
     done = 0,
     error: string | null = null,
+    errorAction: JobView['errorAction'] = null,
   ): SimJob {
     const fill = new Float32Array(TICKS)
     const full = Math.floor(done * TICKS)
@@ -92,6 +93,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       written: Math.round(total * done),
       total,
       error,
+      errorAction,
       finalPath: status === 'completed' ? `~/Downloads/${name}` : null,
       createdAt: now() - (100 - nextId) * 60,
       fill,
@@ -133,6 +135,15 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       'failed',
       0.21,
       'This link stopped working (the server said 403). Get a fresh link to the same file and try again.',
+      'fix-link',
+    )
+    make(
+      'mirror-snapshot-2026-10.tar',
+      640 * MB,
+      'failed-final',
+      0.55,
+      'The file on the server changed during the download, so it was stopped to avoid a mixed file. Start it again.',
+      'start-over',
     )
     make('dataset-shard-0042.tar.zst', 2.4 * 1024 * MB, 'paused', 0.38)
     make('ubuntu-26.04-desktop-amd64.iso', 1.1 * 1024 * MB, 'running', 0)
@@ -363,6 +374,46 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       }
     },
     pickFolder: async () => (params.get('pick') === 'cancel' ? null : '/Users/demo/Movies'),
+    fixLink: async (id, raw) => {
+      let url: URL
+      try {
+        url = new URL(raw.trim())
+      } catch {
+        throw err(
+          'bad-link',
+          `"${raw.trim().slice(0, 80)}" isn't a valid link.`,
+          'Links start with http:// or https://.',
+        )
+      }
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        throw err(
+          'bad-link',
+          `${url.protocol.replace(':', '')}: links aren't supported. Use an http:// or https:// link.`,
+          'Links start with http:// or https://.',
+        )
+      }
+      const j = find(id)
+      if (!j.resumable)
+        throw err(
+          'not-resumable',
+          "This download can't continue from a new link.",
+          'Start it again instead.',
+        )
+      j.url = url.href
+      j.status = 'running'
+      j.error = null
+      j.errorAction = null
+      j.resumable = false
+      emitJobs()
+    },
+    startOver: async (id) => {
+      const j = find(id)
+      jobs.splice(jobs.indexOf(j), 1)
+      const fresh = make(j.name, j.total ?? 100 * MB, 'running')
+      fresh.url = j.url
+      emitJobs()
+      return fresh.id
+    },
     remove: async (id) => {
       find(id)
       jobs.splice(
