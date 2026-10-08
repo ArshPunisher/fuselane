@@ -37,5 +37,5 @@ Each spike is a throwaway branch `spike/sN-*` with a written result in `docs/04-
 | **S5** | librqbit through the SOCKS5 balancer pins every peer; performance on a public swarm | Peer connections per network logged; throughput within 10% of no-proxy |
 | **S6** | R2 multipart from 2 pinned networks in parallel; presigned URLs from different IPs; per-part checksums | 2 GB upload, throughput sums, object SHA-256 matches |
 | **S7** | Tauri 2 window on 3 OSes (including Linux NVIDIA/Wayland), `Channel` IPC at 10 Hz with 10k blocks, tray, single instance | Smooth UI, memory measured, workarounds documented |
-| **S9** | The "hardest second": the Lane Weave canvas visual in a `lab` route with a synthetic feed (2–3 lanes, a drop, a hedge race), in both themes | Within the MOTION.md budget on macOS and WebKitGTK; contact sheet approved by the owner |
+| **S9** | The "hardest second": the signature visual (now the Fuse Core, S9b) in a `lab` route with a synthetic feed (2–3 lanes, a drop, a hedge race), in both themes | Within the MOTION.md budget on macOS and WebKitGTK; contact sheet approved by the owner |
 | **S8** | Native messaging round trip (Chrome + Firefox) to a Rust host on 3 OSes; localhost pairing fallback | Message received with cookies; host manifest install script per OS |

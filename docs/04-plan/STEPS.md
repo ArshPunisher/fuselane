@@ -30,7 +30,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [ ] 1.6 S5 librqbit + SOCKS5 balancer
 - [ ] 1.7 S6 R2 multipart from 2 pinned networks
 - [ ] 1.8 S8 native messaging round trip on 3 OSes
-- [ ] 1.8b S9 Lane Weave prototype (lab route, synthetic feed, contact sheet) — MOTION.md §6 (**built and measured**: [result](spikes/S9-lane-weave.md); tick after the owner approves the contact sheet)
+- [ ] 1.8b S9 Lane Weave prototype (lab route, synthetic feed, contact sheet) — MOTION.md §6 (v1 Weave [superseded](spikes/S9-lane-weave.md); **v2 Fuse Core built**: [result](spikes/S9b-fuse-core.md); tick after the owner approves)
 - [ ] 1.9 Update ADRs 0002/0006/0007 (Accepted or superseded) and adjust the design docs to the spike results
 
 ## P2 Core + CLI (production code, test-first)
@@ -106,7 +106,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [ ] 3.2c Responsive shell: compact (bottom tabs, sheets), regular (rail), wide (three panes); min window 360 × 560
 - [ ] 3.3 Downloads list: groups, filters, rows, per-network progress, virtualized — L-81, L-84
 - [ ] 3.4 New download dialog: paste/clipboard/drop, probe states, file name, destination, network chips, streams, warnings — L-62
-- [ ] 3.5 Detail screen: hero speed (NumberFlow), ×-faster chip, Lane Weave, Loom, Strata chart, network table with streams and orbs
+- [ ] 3.5 Detail screen: hero speed (NumberFlow), ×-faster chip, Fuse Core, Stream graph, network table with streams and orbs
 - [ ] 3.6 Complete and error screens with the error catalogue actions; Fix link
 - [ ] 3.7 Selection toolbar with confirmations; Trash; Reveal
 - [ ] 3.8 Networks menu, rename/recolour, health probe and speed test, guided setup (Windows Wi-Fi policy, Android-on-Mac)

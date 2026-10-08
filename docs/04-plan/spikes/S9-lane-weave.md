@@ -1,7 +1,7 @@
 # Spike S9: Lane Weave, the "hardest second first"
 
 - Date: 2026-10-08 · Code: branch `spike/s9-lane-weave` (`spikes/s9-lane-weave`, never merged) · Run: `pnpm install --ignore-workspace && pnpm dev` → http://localhost:5179 (`?t=7&theme=light&reduced=1&debug=1`)
-- Status: **built and measured; waiting for the owner's approval of the contact sheet** (the exit criterion in ROADMAP).
+- Status: **superseded by [S9b Fuse Core](S9b-fuse-core.md)** (2026-10-08). The owner found this composition too close to Plexo's combine diagram. Kept as history; its rendering and measurement lessons still apply.
 
 ## What was built
 

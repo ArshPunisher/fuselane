@@ -5,7 +5,7 @@ Companion to [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md). Inspired by the owner's "Clau
 ## 1. Principles
 
 1. **Motion is information.** Every animation must answer: what changed, what caused it, or what is live. If it can't be explained in one sentence, it goes.
-2. **Live data moves; idle things are still.** The Weave flows only while bytes flow. A paused transfer is visibly frozen. No decorative infinite loops.
+2. **Live data moves; idle things are still.** The Fuse Core moves only while bytes flow. A paused transfer is visibly frozen. No decorative infinite loops.
 3. **Physical, not mechanical.** Springs for anything the user touches; expo-out curves for entrances; nothing linear except progress tied to real bytes.
 4. **Calm by default, expressive at moments.** Two "moments" are allowed to be big: Ignition (complete) and Launch (upload start). Everything else is quick and quiet.
 5. **Respect the machine.** Off the main thread where possible, paused when hidden, cheaper on Linux and on battery.
@@ -36,14 +36,14 @@ Only `transform` and `opacity` are animated in the DOM (plus canvas drawing). Ne
 | New download dialog | Scale 0.97 → 1 + fade (`spring-panel`); probe states cross-fade; network chips light up as each network passes its probe | Fade only |
 | Row → detail | Shared element: the row's icon and name morph into the detail header (`layoutId`) | Cross-fade 120 ms |
 | Live speed | NumberFlow digit roll at most 2 Hz with `spring-number`; ETA counts down smoothly between estimates | Numbers update without rolling |
-| Weave | Canvas: ribbons ease to the new thickness each tick; particle speed proportional to each lane's real rate | Static ribbons with widths, no particles |
-| Lane drops | Ribbon frays (particles scatter, alpha → 0 over 600 ms); the network row orb drifts apart | Ribbon greys out |
-| Lane returns | Ribbon re-weaves from the source end | Instant |
-| Hedge race | Two sparks on two lanes; the loser's spark fizzles | Badge "Backup" only |
-| Block done | Loom cell settles (one 300 ms shimmer pass per completed row, not per cell) | None |
+| Fuse Core | Canvas: ticks grow radially as blocks fill; comets' rate and speed follow each network's real rate; orbs spin at throughput | Ticks and arc only, no comets or spin |
+| Network drops | Its comets fizzle; its orb breaks apart and greys out over 300 ms; its in-flight tick is released (secured bytes stay) | Orb greys out |
+| Network returns | Orb reassembles and spins up; comets resume | Instant |
+| Hedge race | Two ringed sparks head for one tick; the loser fizzles | Badge "Backup" only |
+| Block done | Its tick flashes white-to-colour and grows 35% for 450 ms | None |
 | Pause | Everything decelerates to a stop over 300 ms (not a cut) | Instant stop |
 | Error | One horizontal "nudge" (6px, 2 oscillations) on the failing element + danger colour | Colour only |
-| Ignition (complete) | Lanes converge → warm flash travels into the file icon → check mark draws (≤ 900 ms) | Check mark appears |
+| Ignition (complete) | Fuse sweep around the ring (600 ms), "Done", fade (1.2 s) | "Done" appears |
 | Launch (upload) | File tile splits into part-tiles that stream off along lanes; share-link card morphs out of the tile | Fade to the share card |
 | Network orb | Probing / connecting / live / unreachable states (see DESIGN-SYSTEM §7) | Static icon + label |
 | Theme switch | 200 ms cross-fade of tokens (View Transitions where supported) | Instant |
@@ -51,7 +51,7 @@ Only `transform` and `opacity` are animated in the DOM (plus canvas drawing). Ne
 ## 4. Implementation
 
 - **UI motion:** `motion` (`motion/react`) with motion values, never React state for continuous values. Components that animate are isolated leaves.
-- **Weave, Loom, Orb:** **Canvas 2D**, drawn from a ring buffer of engine snapshots in a `requestAnimationFrame` loop that **never touches React state**. Device-pixel-ratio aware. Optional OffscreenCanvas in a worker where the webview supports it (WebView2, newer WebKit), with a main-thread fallback.
+- **Fuse Core, Stream, Orb:** **Canvas 2D**, drawn from a ring buffer of engine snapshots in a `requestAnimationFrame` loop that **never touches React state**. Device-pixel-ratio aware. Optional OffscreenCanvas in a worker where the webview supports it (WebView2, newer WebKit), with a main-thread fallback.
 - **Setup diagrams:** Rough.js (MIT, tiny), rendered once (no loop).
 - **Landing site only:** CSS scroll-driven animations (`animation-timeline: view()`) for "lanes fuse as you scroll", with an IntersectionObserver fallback. No `window` scroll listeners. Optional playful physics (Matter.js) only if it serves a real section and passes the performance budget.
 - Libraries considered from the motion-tips list and **not** used in the app: PixiJS (too heavy for a background utility), Anime.js (Motion covers choreography), p5.brush (Rough.js is lighter for the same feel).
@@ -60,7 +60,7 @@ Only `transform` and `opacity` are animated in the DOM (plus canvas drawing). Ne
 
 | Metric | Budget |
 |---|---|
-| Weave + Loom draw time | ≤ 2 ms/frame on Apple Silicon, ≤ 4 ms on WebKitGTK |
+| Fuse Core + Stream draw time | ≤ 2 ms/frame on Apple Silicon, ≤ 4 ms on WebKitGTK |
 | Frame rate | 60 fps; automatically 30 fps on Linux, on battery saver, or when the user picks "Low power visuals" |
 | Hidden / minimised / tray | Drawing **stops** (`visibilitychange` + Tauri window events); the engine keeps running |
 | Idle CPU of the app with nothing transferring | ≈ 0% (no loops running) |
@@ -82,5 +82,5 @@ Only `transform` and `opacity` are animated in the DOM (plus canvas drawing). Ne
 </motion_brief>
 ```
 
-2. **Build the hardest second first.** Before any screen, prototype the Weave alone in a `lab` route with a synthetic feed (2–3 lanes, one drop, one hedge race). Judge texture and movement there; only then wire it into screens. This becomes **spike S9** in Phase 1.
+2. **Build the hardest second first.** Before any screen, prototype the signature visual alone in a `lab` route with a synthetic feed (2–3 lanes, one drop, one hedge race). Judge texture and movement there; only then wire it into screens. This becomes **spike S9** in Phase 1.
 3. **Review keyframes as a contact sheet before merging.** A Playwright script captures each animated moment at 0 / 25 / 50 / 75 / 100% (motion values driven by a test clock), in dark and light, at compact and wide widths, and tiles them into one PNG attached to the PR. A short screen recording follows for pacing.

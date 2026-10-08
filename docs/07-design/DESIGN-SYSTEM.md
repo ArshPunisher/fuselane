@@ -1,5 +1,7 @@
 # Design system: "Lanes → Fuse"
 
+> 2026-10-08: the signature visual is now the **Fuse Core** (radial ring + satellites + comets), replacing the Lane Weave after the owner's review found the Weave too close to Plexo's diagram. See [spike S9b](../04-plan/spikes/S9b-fuse-core.md).
+
 Status: **direction approved by the owner (2026-10-08): "fully responsive UI with amazing colour, aesthetic, graphics and motion"**. This is the source of truth for every surface: the desktop app, extension popup, share page, landing site. Motion has its own doc: [MOTION.md](MOTION.md). Implementation lands in `packages/ui` during P3.
 
 Rules from the owner's global setup apply to every UI change: load the **design-taste-frontend** skill first, review with **web-design-guidelines** afterwards, and check in a real browser with **playwright-cli** (including the smallest window size and 375px for web pages).
@@ -19,7 +21,7 @@ References (inspiration, not copies): Raycast (surface ladder, hairlines, restra
 
 ## 2. The concept
 
-**Each network is a lane of moving light. Where the lanes meet, they fuse into one warm current.**
+**Each network is a satellite of moving light. Its comets fuse into one file, drawn as a ring of blocks; the combined result glows warm.**
 
 - Lanes are **cool** colours (cyan, chartreuse, periwinkle…): many separate sources.
 - The fused result is the single **warm brand accent, "Fuse"** (molten orange): one fast stream.
@@ -96,35 +98,36 @@ Semantic colours always come with an icon and words; never a bare coloured dot.
 ## 6. Icons and imagery
 
 - **Phosphor Icons** (`@phosphor-icons/react`), "regular" weight, one family only. Network kinds: `WifiHigh`, `DeviceMobile`, `HardDrives`/`Plugs`, `CellSignalFull`, `Globe`.
-- **No hand-drawn SVG icons.** The signature graphics (Lane Weave, Loom, orbs) are **data visualisations rendered from real data**, not decoration.
+- **No hand-drawn SVG icons.** The signature graphics (Fuse Core, Stream, orbs) are **data visualisations rendered from real data**, not decoration.
 - **Setup guides** (tethering, the Windows Wi-Fi policy, macOS Open Anyway) use **Rough.js** sketch-style diagrams generated from data, so instructions feel friendly and distinct from live UI (inspired by the open-source effects list in the owner's motion tips).
-- Landing and share page photography: generated or real product screenshots only; no div-built fake screenshots. The landing hero is the **real Lane Weave component** running a demo feed.
+- Landing and share page photography: generated or real product screenshots only; no div-built fake screenshots. The landing hero is the **real Fuse Core component** running a demo feed.
 
 ## 7. Signature graphics (all driven by real engine data)
 
+**Originality rule:** a signature visual must not share its composition with Plexo's UI (left-to-right merge diagram, square block grid, bottom-stacked throughput area). Check before building, and again in review.
+
 | Graphic | Where | What it shows |
 |---|---|---|
-| **Lane Weave** | Transfer detail hero, landing hero | One ribbon per network; ribbon **thickness = live throughput**; particles = blocks in flight at true relative speed; lanes braid into the warm Fuse current that flows into the file. A lane that drops **frays and fades**; a hedge race shows **two sparks** racing on different lanes; a lane at its data limit dims with a lock glyph. |
-| **Loom** (block field) | Below the Weave | The file as a woven strip: each cell is a block, filled as a thread in the colour of the lane that fetched it; in-flight cells shimmer subtly; completed rows settle once. Hover shows block details. Virtualised. |
-| **Strata chart** | Detail and complete screens | Last-60 s stacked areas per lane (soft gradient fills, dash pattern per lane) with the fused total as a crisp Fuse-coloured line. |
-| **Network orb** | Network rows and onboarding | Dotted orb inspired by "thinking orbs": *probing* = scattered dots searching, *connecting* = dots converging, *live* = a steady ring whose breathing rate follows throughput, *unreachable* = dots drift apart and grey out. |
-| **Ignition** | Completion | Lanes converge, one warm flash travels into the file icon, then everything goes calm (≤ 900 ms, once). |
-| **Launch** | Upload start | The file tile splits into part-tiles that stream off along each lane; the share-link card morphs out of the file tile when done. |
+| **Fuse Core** | Transfer detail hero, landing hero | The file as a **ring of block ticks** filling in scheduler order, each tick painted in the colour of the network that fetched it (grows radially while in flight, brief flash when done). **Satellites** (one per network) sit on a fine dotted orbit, each with a 12-dot orb spinning at its throughput. **Comets** spiral along the orbit and dive into the exact tick being fetched (polar paths, never crossing the centre). The combined speed sits in the centre. A dropped network's orb breaks apart and greys out. A hedge race shows two ringed sparks heading for one tick. |
+| **Stream** | Detail and complete screens | Last 15–60 s as a centred silhouette streamgraph: thickness = combined speed, layers = networks, crisp 1px edges. |
+| **Network orb** | Network rows, onboarding | The same dotted orb at small size: *probing* = dots searching, *connecting* = converging, *live* = spinning with throughput, *unreachable* = dots drift apart and grey. |
+| **Ignition** | Completion | A Fuse sweep around the ring, "Done", then calm (≤ 900 ms sweep + fade). |
+| **Launch** | Upload start | The file tile splits into part-tiles that become comets heading outwards to their networks (the Core in reverse); the share-link card morphs out of the tile. |
 
 ## 8. Responsive layout (the app is a resizable window, so it's designed like a responsive site)
 
 | Width | Layout |
 |---|---|
-| **Compact < 640px** (min window 360 × 560) | Single column. Bottom tab bar: Transfers · Send · Networks · Settings. Detail opens as a full-height sheet. The Weave collapses to a slim 64px band. |
+| **Compact < 640px** (min window 360 × 560) | Single column. Bottom tab bar: Transfers · Send · Networks · Settings. Detail opens as a full-height sheet. The Fuse Core is centred (≤ 300px) with satellite labels hidden; the list carries the names. |
 | **Regular 640–1023px** | Left icon rail + list; detail replaces the list with a shared-element transition (row → detail header). |
 | **Wide ≥ 1024px** | Three panes: sidebar (filters, networks with live mini-lanes), list, detail. Panes resizable, sizes remembered. |
-| **≥ 1440px** | Detail gets the full Weave + Strata side by side. |
+| **≥ 1440px** | Detail gets the full Fuse Core + Stream side by side. |
 
 Web surfaces (share page, landing): 375 → 1536px, `min-h-[100dvh]`, CSS Grid, explicit single-column collapse below 768px.
 
 ## 9. Components (in `packages/ui`, built on Base UI primitives, fully restyled)
 
-Button (primary = Fuse fill; secondary = surface-3; ghost; destructive), IconButton, Input (label above, error below), Select, Switch, Segmented control, Checkbox (tri-state), Chip/LanePill, Tooltip, Popover, Dialog, Sheet (compact), Toast, Menu, Tabs, ProgressBar (segmented by lane), Skeleton (shaped like the real content), EmptyState, Kbd, NumberFlow (animated tabular number), Orb, Weave, Loom, Strata.
+Button (primary = Fuse fill; secondary = surface-3; ghost; destructive), IconButton, Input (label above, error below), Select, Switch, Segmented control, Checkbox (tri-state), Chip/LanePill, Tooltip, Popover, Dialog, Sheet (compact), Toast, Menu, Tabs, ProgressBar (segmented by lane), Skeleton (shaped like the real content), EmptyState, Kbd, NumberFlow (animated tabular number), Orb, FuseCore, Stream.
 
 Every interactive component ships with **hover, focus-visible (2px Fuse ring with offset), active (scale 0.98), disabled (aria-disabled when it has a tooltip, L-83), loading, error** states.
 
