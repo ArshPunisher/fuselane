@@ -30,8 +30,6 @@ playwright-report/
 test-results/
 
 # Cloudflare
-.wrangler/
-.dev.vars
 
 # Logs
 *.log
