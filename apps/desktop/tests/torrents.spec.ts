@@ -186,3 +186,10 @@ test('a finished torrent keeps its credit but offers no file choice', async ({ p
     page.getByRole('article').getByRole('button', { name: 'Pause', exact: true }),
   ).toBeHidden()
 })
+
+test("the sidebar counts torrent traffic in each network's speed", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/?empty=1&torrents=1')
+  const side = page.locator('.sidebar-nets')
+  await expect(side.getByText(/MB\/s/).first()).toBeVisible({ timeout: 5000 })
+})

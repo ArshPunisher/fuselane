@@ -12,11 +12,17 @@ import { LimitField } from './LimitField'
 function useLiveRates(): Record<string, number> {
   const live = useApp((s) => s.live)
   const jobs = useApp((s) => s.jobs)
+  const torrents = useApp((s) => s.torrents)
   const running = new Set(jobs.filter((j) => j.status === 'running').map((j) => j.id))
   const out: Record<string, number> = {}
   for (const l of Object.values(live)) {
     if (!running.has(l.id)) continue
     for (const n of l.networks) out[n.name] = (out[n.name] ?? 0) + (n.dead ? 0 : n.rate)
+  }
+  // Torrent traffic counts too.
+  for (const t of torrents) {
+    if (t.status !== 'downloading') continue
+    for (const n of t.networks) out[n.name] = (out[n.name] ?? 0) + n.rate
   }
   return out
 }

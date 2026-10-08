@@ -142,6 +142,8 @@ export interface TorrentNetView {
   name: string
   peers: number
   received: number
+  /** Bytes per second received on this network just now. */
+  rate: number
   /** Verified bytes credited to this network; all networks sum to `done`. */
   credited: number
 }

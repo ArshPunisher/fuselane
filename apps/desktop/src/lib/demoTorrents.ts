@@ -1,6 +1,7 @@
 // Simulated torrents for the browser demo, mirroring torrents.rs: inspect first,
 // pick files, then download with each network credited for verified bytes.
-// URL parameters: torrents=0 (none at start), magnet=slow (inspect never ends).
+// URL parameters: torrents=0 (none at start), torrents=1 (the sample even with empty=1),
+// magnet=slow (inspect never ends).
 import type { ListingView, TorrentFileView, TorrentView, UiError, UiEvent } from './types'
 
 const MB = 1024 * 1024
@@ -107,13 +108,15 @@ export function createDemoTorrents(params: URLSearchParams, emit: () => (e: UiEv
         name,
         peers: live ? ([4, 1, 6][i] ?? 0) : 0,
         received: Math.round(c * 1.03),
+        rate: live ? Math.round(rate * (SHARE[i] ?? 0)) : 0,
         credited: c,
       }
     })
     t.view.rate = rate
   }
 
-  if (params.get('torrents') !== '0' && params.get('empty') !== '1') {
+  const want = params.get('torrents')
+  if (want === '1' || (want !== '0' && params.get('empty') !== '1')) {
     const movie = listing('movie', null)
     start(movie, [0, 2], 'downloading', 0.41)
     pending.clear()

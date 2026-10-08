@@ -52,6 +52,9 @@ pub struct TorrentNetView {
     pub name: String,
     pub peers: usize,
     pub received: u64,
+    /// Bytes per second received on this network over the last tick.
+    #[serde(default)]
+    pub rate: u64,
     /// Verified bytes credited to this network; all networks sum to `done`.
     pub credited: u64,
 }
@@ -107,6 +110,7 @@ pub struct Torrents {
     default_dir: PathBuf,
     networks: NetSource,
     dht: bool,
+    limiter: Option<Arc<fuselane_limits::Limiter>>,
     engine: OnceCell<Arc<TorrentEngine>>,
     entries: tokio::sync::Mutex<Vec<Entry>>,
     pending: Mutex<Vec<Listing>>,
@@ -214,6 +218,7 @@ fn view_of(t: &Torrent, added_at: i64, rate: u64) -> TorrentView {
                 name: n.name,
                 peers: n.peers,
                 received: n.received,
+                rate: 0,
                 credited: n.credited,
             })
             .collect(),
@@ -228,6 +233,7 @@ impl Torrents {
         default_dir: PathBuf,
         networks: NetSource,
         dht: bool,
+        limiter: Option<Arc<fuselane_limits::Limiter>>,
         emit: Emit,
     ) -> Arc<Torrents> {
         Arc::new(Torrents {
@@ -236,6 +242,7 @@ impl Torrents {
             default_dir,
             networks,
             dht,
+            limiter,
             engine: OnceCell::new(),
             entries: tokio::sync::Mutex::new(Vec::new()),
             pending: Mutex::new(Vec::new()),
@@ -262,6 +269,7 @@ impl Torrents {
                     dht: self.dht,
                     listen: None,
                     state_dir: Some(self.state_dir.clone()),
+                    limiter: self.limiter.clone(),
                 })
                 .await
                 .map(Arc::new)
@@ -579,7 +587,33 @@ impl Torrents {
             )]
             let rate = (p.done.saturating_sub(e.prev.0) as f64 / elapsed) as u64;
             e.prev = (p.done, Instant::now());
+            let before: Vec<(String, u64)> = e
+                .last
+                .networks
+                .iter()
+                .map(|n| (n.name.clone(), n.received))
+                .collect();
             e.last = view_of(&t, e.added_at, rate);
+            for n in &mut e.last.networks {
+                let was = before
+                    .iter()
+                    .find(|(name, _)| *name == n.name)
+                    .map_or(n.received, |(_, r)| *r);
+                #[allow(
+                    clippy::cast_possible_truncation,
+                    clippy::cast_sign_loss,
+                    clippy::cast_precision_loss
+                )]
+                {
+                    n.rate = (n.received.saturating_sub(was) as f64 / elapsed) as u64;
+                }
+            }
+            if p.phase == Phase::Downloading && self.all_networks_used_up(&e.last) {
+                e.last.error = Some(
+                    "Every network has reached its data allowance, so this torrent is waiting. Raise an allowance on the Networks page, or wait for it to reset."
+                        .into(),
+                );
+            }
             active |= matches!(p.phase, Phase::Checking | Phase::Downloading);
             if release_finished
                 && p.phase == Phase::Seeding
@@ -593,6 +627,7 @@ impl Torrents {
                 // Released: no peers any more; the credit stays as the record.
                 for n in &mut last.networks {
                     n.peers = 0;
+                    n.rate = 0;
                 }
                 e.last = last;
                 e.torrent = None;
@@ -604,6 +639,13 @@ impl Torrents {
             self.save().await;
         }
         active || released
+    }
+
+    /// True when the limiter blocks every network this torrent uses.
+    fn all_networks_used_up(&self, v: &TorrentView) -> bool {
+        self.limiter.as_ref().is_some_and(|l| {
+            !v.networks.is_empty() && v.networks.iter().all(|n| l.blocked(&n.name))
+        })
     }
 
     async fn publish(&self) {
@@ -757,6 +799,7 @@ mod tests {
             name: "en0".into(),
             peers: 0,
             received: 0,
+            rate: 0,
             credited: 0,
         };
         let file = TorrentFileView {
@@ -888,6 +931,7 @@ mod tests {
 
     struct Setup {
         tor: Arc<Torrents>,
+        limiter: Arc<fuselane_limits::Limiter>,
         events: Arc<Mutex<Vec<UiEvent>>>,
         store: Arc<Store>,
         state: PathBuf,
@@ -922,6 +966,7 @@ mod tests {
         downloads: PathBuf,
         dir: tempfile::TempDir,
     ) -> Setup {
+        let limiter = Arc::new(fuselane_limits::Limiter::default());
         let events: Arc<Mutex<Vec<UiEvent>>> = Arc::default();
         let sink = events.clone();
         let tor = Torrents::new(
@@ -930,10 +975,12 @@ mod tests {
             downloads.clone(),
             loopback(),
             false,
+            Some(limiter.clone()),
             Arc::new(move |e| sink.lock().unwrap().push(e)),
         );
         Setup {
             tor,
+            limiter,
             events,
             store,
             state,
@@ -1093,6 +1140,34 @@ mod tests {
                 .count(),
             3
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn used_up_allowances_pause_torrents_with_a_reason() {
+        let seed = tempfile::tempdir().unwrap();
+        let (_seeder, addr, file) = seeder(seed.path()).await;
+        let s = setup();
+        // Slow, so the torrent is still downloading when the allowance runs out.
+        s.limiter.apply(&fuselane_limits::LimitSettings {
+            global: 32 * 1024,
+            networks: vec![],
+        });
+        let id = add(&s, &file, addr, &["a.bin", "b.bin", "c.bin"]).await;
+        until(&s.tor, &id, "downloading").await;
+        s.limiter.set_blocked(["lo0".to_string()]);
+        s.tor.tick().await;
+        let v = s.tor.list().await.into_iter().find(|v| v.id == id).unwrap();
+        assert!(
+            v.error
+                .as_deref()
+                .is_some_and(|e| e.contains("data allowance")),
+            "{v:?}"
+        );
+        // Lifted: the reason goes away and it finishes.
+        s.limiter.set_blocked(Vec::new());
+        s.limiter.apply(&fuselane_limits::LimitSettings::default());
+        let done = until(&s.tor, &id, "completed").await;
+        assert_eq!(done.error, None);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

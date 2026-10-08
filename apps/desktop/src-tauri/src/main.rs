@@ -463,6 +463,7 @@ fn open_torrents(svc: &Arc<Service>) -> Arc<torrents::Torrents> {
         svc.default_dir().to_path_buf(),
         Arc::new(|| fuselane_core::runner::pick_networks(&[])),
         true,
+        Some(svc.limiter()),
         Arc::new(move |e| {
             if let Some(svc) = weak.upgrade() {
                 svc.send(e);

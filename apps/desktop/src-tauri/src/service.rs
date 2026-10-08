@@ -596,6 +596,11 @@ impl Service {
         self.publish_jobs();
     }
 
+    /// Speed limits and allowances, shared with torrents.
+    pub fn limiter(&self) -> Arc<Limiter> {
+        self.limiter.clone()
+    }
+
     /// The shared store (torrents keep their list in it too).
     pub fn store(&self) -> Arc<Store> {
         self.store.clone()
