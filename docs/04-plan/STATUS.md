@@ -12,12 +12,13 @@
   - `apps/desktop`: React UI with the live Fuse Core, Stream, list, New download dialog, Networks and Settings; compact/regular/wide layouts; light/dark/system. In a plain browser it runs a labelled demo engine (`src/lib/demo.ts`, URL params documented at the top).
   - **32 Playwright UI tests** (WebKit + Chromium) are part of `tools/check.sh` and CI.
   - Real-world bugs found and fixed this session: IPv6 source binding hung downloads (L-109); 429 on the probe ended downloads (L-110); CLI and app used different databases (L-111); "0 B" for fast completed downloads (L-112); dialog focus (L-113).
-  - Workspace: **156 Rust tests + 32 UI tests, all green**.
+  - Verified in the real window: a 300 MB download over **Ethernet (en0) + Wi-Fi (en1)** at ~50 MB/s, byte-exact; finished screen shows Ethernet 73%, Wi-Fi 27%.
+  - Workspace: **156 Rust tests + 44 UI tests, all green**.
 - **Run it:**
   - UI in a browser (demo data): `pnpm --filter @fuselane/desktop dev`, then open http://localhost:5190.
   - Real app: `pnpm --filter @fuselane/desktop build`, then `cargo run -p fuselane-desktop --features tauri/custom-protocol` (or `pnpm --filter @fuselane/desktop tauri dev`).
 - **Next steps, in order:**
-  1. Owner looks at the real window (I can't capture the screen on this Mac) and gives design feedback.
+  1. Owner design feedback on the real window (screenshots: a live Ethernet + Wi-Fi download at ~50 MB/s and the finished screen).
   2. 3.4 dialog: native folder picker (tauri-plugin-dialog), drop a link, probe preview (name and size before starting).
   3. 3.6 complete/error screens with catalogue actions; 3.7 Reveal in Finder/Explorer; 3.10 tray progress, notifications.
   4. tauri-specta (or a schema test) so `types.ts` can't drift from `service.rs`.
@@ -27,9 +28,12 @@
   - Q13: OK to create the **public** GitHub repo? CI can't run until then.
   - Q10: a phone to tether, for S1/S2-part-2/S3.
 - **Parked:** S5 torrent spike (librqbit + SOCKS5).
-- **Environment:** Rust via rustup (`source ~/.cargo/env`), cargo-nextest, cargo-deny, actionlint (Homebrew), Node 24, pnpm 11, Playwright WebKit + Chromium, gh logged in as ArshPunisher. macOS has no `timeout` command; screen capture is not permitted for the agent.
+- **Environment:** Rust via rustup (`source ~/.cargo/env`), cargo-nextest, cargo-deny, actionlint (Homebrew), Node 24, pnpm 11, Playwright WebKit + Chromium, gh logged in as ArshPunisher. macOS has no `timeout` command. Screen recording is granted (capture a window with `screencapture -l<id>`; find the id with a CGWindowList script); clicking is not (no Accessibility), so drive the real window with `FUSELANE_DEV_ADD=<url>` in debug builds.
 
 ## Log
+
+### 2026-10-08 (session 3, later)
+- Owner granted screen recording and plugged in Ethernet. Native screenshots found L-114 (black ring) and L-115 (Retina pane overflow); both fixed with tests. Real bonded Ethernet + Wi-Fi download verified in the app.
 
 ### 2026-10-08 (session 3)
 - P3 started: snapshots, shared runner, Tauri service, React UI with the Fuse Core, 32 UI tests in the gate.
