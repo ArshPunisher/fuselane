@@ -10,7 +10,8 @@ use fuselane_core::runner::{self, parse_link, pick_networks};
 use fuselane_core::{Event, Job, Outcome, RunOptions, StartError, Status, Store};
 use fuselane_engine_http::download::{Cancel, Snapshot, SnapshotFn};
 use fuselane_engine_http::headers::filename_from_path;
-use serde::Serialize;
+use fuselane_limits::{LimitSettings, Limiter};
+use serde::{Deserialize, Serialize};
 
 /// Downloads that run at once; the rest wait their turn (L-53).
 pub const MAX_RUNNING: usize = 3;
@@ -72,6 +73,88 @@ pub struct Live {
     pub ticks: Vec<u16>,
     pub retries: u64,
     pub hedges: u64,
+}
+
+/// Speed limits as the window shows and edits them (bytes per second; 0 = none).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LimitsView {
+    pub global: u64,
+    pub networks: Vec<NetLimit>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct NetLimit {
+    pub name: String,
+    pub rate: u64,
+}
+
+/// Highest limit accepted: anything above is a typo, not a speed (100 GB/s).
+const MAX_LIMIT: u64 = 100 * 1024 * 1024 * 1024;
+
+impl LimitsView {
+    fn to_settings(&self) -> LimitSettings {
+        LimitSettings {
+            global: self.global,
+            networks: self
+                .networks
+                .iter()
+                .map(|n| (n.name.clone(), n.rate))
+                .collect(),
+        }
+    }
+
+    fn from_settings(s: &LimitSettings) -> LimitsView {
+        LimitsView {
+            global: s.global,
+            networks: s
+                .networks
+                .iter()
+                .map(|(name, rate)| NetLimit {
+                    name: name.clone(),
+                    rate: *rate,
+                })
+                .collect(),
+        }
+    }
+
+    /// Checks a request from the window (L-97: validate every IPC payload).
+    fn validated(mut self) -> Result<LimitsView, UiError> {
+        let bad = |m: &str| {
+            UiError::new(
+                "bad-limit",
+                m,
+                Some("Use a speed in KB/s or MB/s, or leave it empty for no limit."),
+            )
+        };
+        if self.global > MAX_LIMIT {
+            return Err(bad("That overall limit is too high to be a real speed."));
+        }
+        if self.networks.len() > 64 {
+            return Err(bad("Too many network limits."));
+        }
+        let mut seen = std::collections::HashSet::new();
+        for n in &self.networks {
+            let name = n.name.trim();
+            // Device names are exact: no control characters or stray spaces.
+            if name.is_empty()
+                || name != n.name
+                || name.len() > 64
+                || n.name.chars().any(char::is_control)
+            {
+                return Err(bad("A network limit has no valid network name."));
+            }
+            if n.rate > MAX_LIMIT {
+                return Err(bad("That network limit is too high to be a real speed."));
+            }
+            if !seen.insert(name.to_string()) {
+                return Err(bad("A network is listed twice."));
+            }
+        }
+        self.networks.retain(|n| n.rate > 0);
+        Ok(self)
+    }
 }
 
 /// What a link points at, shown in the New download dialog before starting.
@@ -142,6 +225,7 @@ pub struct Service {
     listeners: Mutex<Vec<Emit>>,
     default_dir: PathBuf,
     max_running: usize,
+    limiter: Arc<Limiter>,
     /// Shrinks engine retry waits; only tests set it.
     retry_scale: Option<f64>,
 }
@@ -267,6 +351,17 @@ impl Service {
     /// Opens the service. Jobs a crash left running come back paused (L-53).
     pub fn new(store: Store, default_dir: PathBuf) -> Result<Arc<Service>, UiError> {
         store.recover_interrupted().map_err(store_error)?;
+        // Saved limits come back on launch; a damaged value is ignored, not fatal.
+        let limiter = Arc::new(Limiter::default());
+        if let Some(saved) = store
+            .setting("limits")
+            .ok()
+            .flatten()
+            .and_then(|v| serde_json::from_str::<LimitsView>(&v).ok())
+            .and_then(|v| v.validated().ok())
+        {
+            limiter.apply(&saved.to_settings());
+        }
         Ok(Arc::new(Service {
             store: Arc::new(store),
             running: Mutex::new(HashMap::new()),
@@ -275,6 +370,7 @@ impl Service {
             default_dir,
             max_running: MAX_RUNNING,
             retry_scale: None,
+            limiter,
         }))
     }
 
@@ -440,6 +536,21 @@ impl Service {
         Ok(())
     }
 
+    pub fn limits(&self) -> LimitsView {
+        LimitsView::from_settings(&self.limiter.settings())
+    }
+
+    /// Saves new limits and applies them to running downloads at once.
+    pub fn set_limits(&self, view: LimitsView) -> Result<LimitsView, UiError> {
+        let view = view.validated()?;
+        let json = serde_json::to_string(&view).map_err(store_error)?;
+        self.store
+            .set_setting("limits", &json)
+            .map_err(store_error)?;
+        self.limiter.apply(&view.to_settings());
+        Ok(view)
+    }
+
     /// Continues a stopped download from a new link to the same file (signed links
     /// expire). The engine proves it's the same file before keeping any bytes; a
     /// different file fails with `start-over` instead of being mixed in (L-108).
@@ -584,6 +695,7 @@ impl Service {
             snapshot: Some(snapshot),
             cancel: Some(cancel),
             retry_delay_scale: self.retry_scale,
+            limiter: Some(self.limiter.clone()),
             ..RunOptions::default()
         };
         let resume = job.resume();
@@ -1106,6 +1218,14 @@ mod tests {
             hedges: 0,
         };
         let err = UiError::new("c", "m", None);
+        let lim = LimitsView {
+            global: 1,
+            networks: vec![],
+        };
+        let nl = NetLimit {
+            name: "en0".into(),
+            rate: 1,
+        };
         let pv = PreviewView {
             filename: "f".into(),
             total: None,
@@ -1118,6 +1238,8 @@ mod tests {
             ("Live", json_fields(&live)),
             ("UiError", json_fields(&err)),
             ("PreviewView", json_fields(&pv)),
+            ("LimitsView", json_fields(&lim)),
+            ("NetLimit", json_fields(&nl)),
         ] {
             assert_eq!(
                 got,
@@ -1228,6 +1350,94 @@ mod tests {
             fuselane_testkit::sha256_file(Path::new(&h.job(fresh).final_path.unwrap())).unwrap(),
             other.sha256()
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn limits_are_validated_saved_applied_and_restored() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("fuselane.db");
+        let content = Content::new(1024 * KB, 106);
+        let server = RangeServer::start(content).await.unwrap();
+        {
+            let svc = Service::new(Store::open(&db).unwrap(), dir.path().to_path_buf()).unwrap();
+            assert_eq!(svc.limits(), LimitsView::default());
+            for bad in [
+                LimitsView {
+                    global: MAX_LIMIT + 1,
+                    networks: vec![],
+                },
+                LimitsView {
+                    global: 0,
+                    networks: vec![NetLimit {
+                        name: " ".into(),
+                        rate: 1,
+                    }],
+                },
+                LimitsView {
+                    global: 0,
+                    networks: vec![NetLimit {
+                        name: "en0\n".into(),
+                        rate: 1,
+                    }],
+                },
+                LimitsView {
+                    global: 0,
+                    networks: vec![
+                        NetLimit {
+                            name: "en0".into(),
+                            rate: 1,
+                        },
+                        NetLimit {
+                            name: "en0".into(),
+                            rate: 2,
+                        },
+                    ],
+                },
+            ] {
+                assert_eq!(svc.set_limits(bad).unwrap_err().code, "bad-limit");
+            }
+            let saved = svc
+                .set_limits(LimitsView {
+                    global: 512 * KB,
+                    networks: vec![
+                        NetLimit {
+                            name: "en9".into(),
+                            rate: 0,
+                        },
+                        NetLimit {
+                            name: "en0".into(),
+                            rate: 64 * KB,
+                        },
+                    ],
+                })
+                .unwrap();
+            assert_eq!(
+                saved.networks,
+                vec![NetLimit {
+                    name: "en0".into(),
+                    rate: 64 * KB
+                }],
+                "0 means no limit"
+            );
+            // A running download obeys the overall limit: 1 MiB at 512 KiB/s.
+            let start = Instant::now();
+            let id = svc.add(&link(&server), None).unwrap();
+            while svc.jobs().unwrap()[0].status != "completed" {
+                assert!(
+                    start.elapsed() < Duration::from_secs(20),
+                    "{:?}",
+                    svc.jobs().unwrap()[0]
+                );
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            let secs = start.elapsed().as_secs_f64();
+            assert!(secs > 1.4, "limit ignored: {secs:.2} s");
+            let _ = id;
+        }
+        // Restarting brings the limits back.
+        let svc = Service::new(Store::open(&db).unwrap(), dir.path().to_path_buf()).unwrap();
+        assert_eq!(svc.limits().global, 512 * KB);
+        assert_eq!(svc.limits().networks.len(), 1);
     }
 
     #[test]

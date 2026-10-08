@@ -29,6 +29,7 @@ dirs = "6"
 fuselane-core.workspace = true
 fuselane-engine-http.workspace = true
 fuselane-netif.workspace = true
+fuselane-limits.workspace = true
 
 [dev-dependencies]
 fuselane-testkit.workspace = true

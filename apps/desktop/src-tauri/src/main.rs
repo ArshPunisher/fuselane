@@ -10,7 +10,7 @@ mod service;
 
 use std::sync::Arc;
 
-use service::{JobView, NetView, PreviewView, Service, UiError, UiEvent};
+use service::{JobView, LimitsView, NetView, PreviewView, Service, UiError, UiEvent};
 use tauri::Manager;
 use tauri::ipc::Channel;
 use tauri::menu::{Menu, MenuItem};
@@ -73,6 +73,17 @@ async fn fix_link(svc: State<'_>, id: i64, url: String) -> Result<(), UiError> {
 #[tauri::command]
 async fn start_over(svc: State<'_>, id: i64) -> Result<i64, UiError> {
     svc.start_over(id)
+}
+
+#[tauri::command]
+fn get_limits(svc: State<'_>) -> LimitsView {
+    svc.limits()
+}
+
+/// Saves speed limits; running downloads follow them at once.
+#[tauri::command]
+fn set_limits(svc: State<'_>, limits: LimitsView) -> Result<LimitsView, UiError> {
+    svc.set_limits(limits)
 }
 
 /// Name, size and splittability of a link, before downloading it.
@@ -273,6 +284,8 @@ fn main() {
             remove,
             reveal,
             preview,
+            get_limits,
+            set_limits,
             fix_link,
             start_over,
             open_file,

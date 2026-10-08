@@ -67,3 +67,14 @@ export interface PreviewView {
   total: number | null
   splittable: boolean
 }
+
+/** Speed limits in bytes per second; 0 means no limit. */
+export interface LimitsView {
+  global: number
+  networks: NetLimit[]
+}
+
+export interface NetLimit {
+  name: string
+  rate: number
+}
