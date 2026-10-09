@@ -7,7 +7,6 @@ says what is waiting and on whom. Last updated 2026-10-09.
 
 | What | Why it's needed | How |
 |---|---|---|
-| **Release beta.5** (new since beta.4: Fuse Send, the redirects fix, per-download limits, Download later, export/import, copied links, automatic retries, Move to Trash). Extension 0.2.0 now also asks for `activeTab` + `scripting` (popup media list); STORE.md has the justifications | Ships the overnight work; the site deploy follows the release | Say "publish beta.5": bump versions, tag, check the draft, publish, update the Homebrew cask |
 | Firefox Add-ons and Edge Add-ons listings (free) | Same, for Firefox and Edge users | Same zip flow; Firefox gets its own build (`build:firefox`) |
 | Google Search Console verification (postponed) | Search indexing of the download page | Owner adds the site in Search Console and sends the verification tag |
 | SignPath approval (applied 2026-10-08) | Signed Windows installers | Wait for their email, then add the secrets |
