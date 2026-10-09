@@ -305,6 +305,12 @@ impl Torrent {
     pub fn listing(&self) -> &Listing {
         &self.layout.listing
     }
+    /// Bytes of each file that have arrived and passed their check, in listing
+    /// order (empty until the torrent is known).
+    pub fn file_progress(&self) -> Vec<u64> {
+        self.handle.stats().file_progress
+    }
+
     /// Indices of the files being downloaded.
     pub fn selected(&self) -> HashSet<usize> {
         self.layout
@@ -608,6 +614,21 @@ impl TorrentEngine {
         Ok(())
     }
 
+    /// Reads one file in order as it arrives, for playing while downloading
+    /// (B8.10). librqbit fetches the pieces just ahead of the reader first; the
+    /// file must be selected.
+    pub async fn stream(
+        &self,
+        t: &Torrent,
+        file: usize,
+    ) -> Result<Box<dyn FileReader>, TorrentError> {
+        if t.layout.listing.files.get(file).is_none_or(|f| f.padding) {
+            return Err(TorrentError::NoSuchFile(file));
+        }
+        let s = t.handle.clone().stream(file).await.map_err(engine)?;
+        Ok(Box::new(s))
+    }
+
     pub async fn pause(&self, t: &Torrent) -> Result<(), TorrentError> {
         t.held.store(true, std::sync::atomic::Ordering::SeqCst);
         self.session.pause(&t.handle).await.map_err(engine)?;
@@ -721,6 +742,11 @@ fn check_selection(files: &[Planned], set: HashSet<usize>) -> Result<HashSet<usi
     }
     Ok(set)
 }
+
+/// A torrent file read in order as it arrives (librqbit's stream type isn't
+/// exported, so callers get it behind this).
+pub trait FileReader: tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin + Send {}
+impl<T: tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin + Send> FileReader for T {}
 
 /// What a torrent contains and where it will be saved; from [`TorrentEngine::inspect`].
 #[derive(Debug, Clone)]
