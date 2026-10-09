@@ -22,6 +22,7 @@ import type {
   NetPref,
   NetView,
   PreviewView,
+  ReportView,
   UiError,
   UiEvent,
 } from './types'
@@ -73,6 +74,8 @@ interface SimJob extends JobView {
   owner: Int8Array
   inflight: number[]
   bytes: number[]
+  /** Seconds spent running, for the "what each network saved" report. */
+  ran: number
 }
 
 function err(code: string, message: string, hint: string | null): UiError {
@@ -85,6 +88,19 @@ function nameFromUrl(url: URL): string {
     return seg ? decodeURIComponent(seg) : url.hostname
   } catch {
     return seg ?? url.hostname
+  }
+}
+
+/** The same estimate as savings.rs: without network k, T × bytes_k / (total − bytes_k) more. */
+function savings(secs: number, nets: [string, number][]): ReportView {
+  const total = nets.reduce((a, [, b]) => a + b, 0)
+  return {
+    secs,
+    nets: nets.map(([label, bytes]) => ({
+      label,
+      bytes,
+      savedSecs: secs >= 3 && total > bytes ? (secs * bytes) / (total - bytes) : null,
+    })),
   }
 }
 
@@ -151,10 +167,12 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       focused: false,
       checksumFrom: null,
       verified: false,
+      report: null,
       fill,
       owner,
       inflight: [-1, -1, -1],
       bytes: [0, 0, 0],
+      ran: 0,
     }
     jobs.unshift(job)
     return job
@@ -187,6 +205,12 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       verify: true,
       verified: true,
       checksumFrom: 'SHA256SUMS',
+      // 30 s over three networks: what each one saved, as the app works it out.
+      report: savings(30, [
+        ['Wi-Fi', 152 * MB],
+        ['iPhone USB', 66 * MB],
+        ['Ethernet', 194 * MB],
+      ]),
     })
     make(
       'nightly-build-2026-10-07.zip',
@@ -229,7 +253,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
   }
 
   const view = (j: SimJob): JobView => {
-    const { fill: _f, owner: _o, inflight: _i, bytes: _b, ...rest } = j
+    const { fill: _f, owner: _o, inflight: _i, bytes: _b, ran: _r, ...rest } = j
     return { ...rest }
   }
   const emitJobs = () => listener?.({ type: 'jobs', jobs: jobs.map(view) })
@@ -258,6 +282,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       const perTick = total / TICKS
       const share = 1 / Math.max(1, running.length)
       const cap = capFor(j, share)
+      j.ran += dt
       BASE_RATE.forEach((base, lane) => {
         if (!laneUp(lane, clock)) {
           j.inflight[lane] = -1
@@ -283,6 +308,10 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         j.written = total
         j.finalPath = `${j.dir}/${j.name}`
         j.inflight = [-1, -1, -1]
+        j.report = savings(
+          j.ran,
+          j.bytes.map((b, i) => [NETWORKS[i]!.label, b] as [string, number]),
+        )
         listener?.({ type: 'live', ...live(j) }) // the final picture, as the engine sends
         if (j.focused) endFocus(j)
         emitJobs()

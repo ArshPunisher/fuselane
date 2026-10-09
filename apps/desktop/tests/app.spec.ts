@@ -1007,6 +1007,24 @@ test('a file already downloaded is pointed out before downloading it again', asy
   await expect(note).toHaveCount(0)
 })
 
+test('a finished download says what each network saved', async ({ page }) => {
+  await page.goto('/?drop=0')
+  await page
+    .getByRole('button', { name: /Blender-5\.1/ })
+    .first()
+    .click()
+  const panel = page.getByRole('region', { name: 'What each network saved' })
+  await expect(panel).toContainText('Finished in 30 s')
+  await expect(panel.getByRole('listitem')).toHaveCount(3)
+  await expect(panel.getByRole('listitem').filter({ hasText: 'Ethernet' })).toContainText('saved')
+  // A download still running has nothing to report yet.
+  await page
+    .getByRole('button', { name: /ubuntu-26\.04/ })
+    .first()
+    .click()
+  await expect(page.getByRole('region', { name: 'What each network saved' })).toHaveCount(0)
+})
+
 test('Download later adds it paused, ready to start', async ({ page }) => {
   await page.goto('/?empty=1')
   const dialog = await openDialog(page)

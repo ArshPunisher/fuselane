@@ -78,6 +78,8 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE jobs ADD COLUMN mirrors TEXT NOT NULL DEFAULT '';",
     // v10: where a checksum found by itself came from ('' = looked, none found).
     "ALTER TABLE jobs ADD COLUMN sha256_from TEXT;",
+    // v11: what the finishing run did per network (JSON), for "what each network saved".
+    "ALTER TABLE jobs ADD COLUMN report TEXT;",
 ];
 
 /// What a person can set when adding a download, beyond the link and folder.
@@ -140,6 +142,8 @@ pub struct Job {
     /// Where Fuselane found its checksum by itself ("SHA256SUMS"); Some("") when
     /// it looked and found none; None when it hasn't looked (B9.7).
     pub sha256_from: Option<String>,
+    /// What the finishing run did per network, as JSON written by the app (B9.6).
+    pub report: Option<String>,
 }
 
 impl Job {
@@ -469,6 +473,15 @@ impl Store {
         Ok(())
     }
 
+    /// Keeps what the finishing run did (opaque JSON from the app).
+    pub fn set_report(&self, id: i64, report: &str) -> Result<(), StoreError> {
+        self.lock().execute(
+            "UPDATE jobs SET report = ?2 WHERE id = ?1",
+            params![id, report],
+        )?;
+        Ok(())
+    }
+
     /// Records a checksum looked up next to the file, or that none was found
     /// (`None`), so the lookup isn't repeated on every resume.
     pub fn set_found_sha256(&self, id: i64, found: Option<(&str, &str)>) -> Result<(), StoreError> {
@@ -595,6 +608,7 @@ fn row_to_job(r: &rusqlite::Row<'_>) -> rusqlite::Result<Job> {
             .map(str::to_string)
             .collect(),
         sha256_from: r.get("sha256_from")?,
+        report: r.get("report")?,
     })
 }
 

@@ -34,7 +34,15 @@ impl Watcher {
             match j.status {
                 "completed" => out.push(Notice {
                     title: "Download finished".into(),
-                    body: j.name.clone(),
+                    // "Blender.dmg. iPhone USB saved 4 min." when a network made a real difference.
+                    body: match j
+                        .report
+                        .as_ref()
+                        .and_then(crate::service::savings::headline)
+                    {
+                        Some(h) => format!("{}. {h}.", j.name),
+                        None => j.name.clone(),
+                    },
                 }),
                 "failed" | "failed-final" => out.push(Notice {
                     title: format!("{} stopped", j.name),
@@ -135,6 +143,30 @@ mod tests {
             mirror_notes: vec![],
             ..JobView::default()
         }
+    }
+
+    #[test]
+    fn a_finished_notice_says_what_a_network_saved() {
+        let mut w = Watcher::default();
+        w.jobs(&[job(1, "running")]);
+        let mut done = job(1, "completed");
+        done.report = Some(crate::service::savings::ReportView {
+            secs: 120.0,
+            nets: vec![
+                crate::service::savings::NetSaving {
+                    label: "Wi-Fi".into(),
+                    bytes: 100,
+                    saved_secs: Some(60.0),
+                },
+                crate::service::savings::NetSaving {
+                    label: "iPhone USB".into(),
+                    bytes: 200,
+                    saved_secs: Some(240.0),
+                },
+            ],
+        });
+        let n = w.jobs(&[done]);
+        assert_eq!(n[0].body, "file1.iso. iPhone USB saved 4 min.");
     }
 
     fn live(id: i64, written: u64, total: Option<u64>, rate: f64) -> Live {

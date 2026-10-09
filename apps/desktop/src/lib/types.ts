@@ -46,6 +46,14 @@ export interface JobView {
   checksumFrom: string | null
   /** Finished and matched its SHA-256. */
   verified: boolean
+  /** What each network carried and saved in the finishing run. */
+  report: ReportView | null
+}
+
+export interface ReportView {
+  /** How long the finishing run took. */
+  secs: number
+  nets: { label: string; bytes: number; savedSecs: number | null }[]
 }
 
 export interface NetView {

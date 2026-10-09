@@ -23,7 +23,7 @@ import { STATUS_WORD } from './status'
 import { LimitField } from './LimitField'
 import { LiveRate } from './LiveRate'
 import { BIN, RemoveDialog } from './RemoveDialog'
-import type { JobView, Live } from '../lib/types'
+import type { JobView, Live, ReportView } from '../lib/types'
 
 /** The platform's own words for showing a file in its folder. */
 export const REVEAL_LABEL = /Mac/i.test(navigator.platform)
@@ -261,6 +261,58 @@ function RemoveButton({ job }: { job: JobView }) {
   )
 }
 
+/** "45 s", "4 min", "1 h 5 min": the same words as the notification. */
+function took(secs: number): string {
+  const s = Math.max(0, Math.round(secs))
+  if (s < 60) return `${s} s`
+  const m = Math.round(s / 60)
+  if (m < 60) return `${m} min`
+  return m % 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m / 60} h`
+}
+
+/** After a download: what each network carried, and how long it would have taken without it. */
+function Savings({ report }: { report: ReportView }) {
+  const total = report.nets.reduce((a, n) => a + n.bytes, 0)
+  const best = report.nets.reduce<ReportView['nets'][number] | null>(
+    (a, n) => ((n.savedSecs ?? 0) > (a?.savedSecs ?? 0) ? n : a),
+    null,
+  )
+  return (
+    <section className="savings" aria-labelledby="savings-title">
+      <h2 className="group" id="savings-title">
+        What each network saved
+      </h2>
+      <p className="savings-lead">
+        Finished in <strong className="num">{took(report.secs)}</strong>
+        {best?.savedSecs && best.savedSecs >= 30 ? (
+          <>
+            . Without <span translate="no">{best.label}</span> it would have taken about{' '}
+            <strong className="num">{took(report.secs + best.savedSecs)}</strong>.
+          </>
+        ) : (
+          '.'
+        )}
+      </p>
+      <ul className="savings-list">
+        {report.nets.map((n) => (
+          <li key={n.label}>
+            <span className="savings-name" translate="no">
+              {n.label}
+            </span>
+            <span className="savings-bar" aria-hidden>
+              <span style={{ width: `${total ? (n.bytes / total) * 100 : 0}%` }} />
+            </span>
+            <span className="num">{bytes(n.bytes)}</span>
+            <span className="num savings-saved">
+              {n.savedSecs === null ? '' : `${took(n.savedSecs)} saved`}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
 /** Whether the file is (or will be) checked against a SHA-256, and from where. */
 function ChecksumBadge({ job }: { job: JobView }) {
   const from = job.checksumFrom ? `the SHA-256 from ${job.checksumFrom}` : 'the SHA-256 you gave'
@@ -397,6 +449,10 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
       <p className="sr-only" aria-live="polite">
         {announce}
       </p>
+
+      {job.status === 'completed' && job.report && job.report.nets.length > 1 && (
+        <Savings report={job.report} />
+      )}
 
       <div className="detail-body">
         <FuseCore job={job} live={live ?? finished} center={<Center job={job} live={live} />} />

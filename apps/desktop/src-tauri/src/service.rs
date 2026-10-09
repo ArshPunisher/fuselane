@@ -17,6 +17,7 @@ use std::time::Duration;
 mod already;
 mod checksum;
 mod focus;
+pub mod savings;
 
 pub use already::HaveView;
 
@@ -61,6 +62,8 @@ pub struct JobView {
     pub checksum_from: Option<String>,
     /// Finished and matched its SHA-256.
     pub verified: bool,
+    /// What each network carried and saved in the finishing run (B9.6).
+    pub report: Option<savings::ReportView>,
 }
 
 /// One network the app can see.
@@ -708,6 +711,12 @@ fn view(job: &Job) -> JobView {
         focused: false,
         checksum_from: job.sha256_from.clone().filter(|f| !f.is_empty()),
         verified: job.status == Status::Completed && job.expected_sha256.is_some(),
+        report: job
+            .report
+            .as_deref()
+            .filter(|_| job.status == Status::Completed)
+            .and_then(|r| serde_json::from_str::<savings::RunReport>(r).ok())
+            .map(|r| savings::view(&r)),
     }
 }
 
@@ -2346,10 +2355,15 @@ impl Service {
             .iter()
             .map(|i| (i.name.clone(), i.display_name.clone(), kind_word(i.kind)))
             .collect();
+        let started = std::time::Instant::now();
+        let last: Arc<Mutex<Option<Live>>> = Arc::default();
         let snapshot = {
             let me = self.clone();
+            let last = last.clone();
             SnapshotFn(Arc::new(move |s: &Snapshot| {
-                me.send(UiEvent::Live(live(id, s, &nets)));
+                let l = live(id, s, &nets);
+                *lock(&last) = Some(l.clone());
+                me.send(UiEvent::Live(l));
             }))
         };
         let opts = RunOptions {
@@ -2399,6 +2413,26 @@ impl Service {
             Ok(Outcome::Completed { .. } | Outcome::Paused | Outcome::Failed { .. }) => {}
         }
         if let Ok(Outcome::Completed { report, .. }) = &outcome {
+            if let Some(l) = lock(&last).take() {
+                let run = savings::RunReport {
+                    secs: started.elapsed().as_secs_f64(),
+                    nets: l
+                        .networks
+                        .iter()
+                        .map(|n| savings::NetBytes {
+                            label: if n.label.is_empty() {
+                                n.name.clone()
+                            } else {
+                                n.label.clone()
+                            },
+                            bytes: n.bytes,
+                        })
+                        .collect(),
+                };
+                if let Ok(json) = serde_json::to_string(&run) {
+                    let _ = self.store.set_report(id, &json);
+                }
+            }
             let path = self.replace_if_asked(id, &report.path, report.total);
             self.sort_finished(id, &job.dir, &path, report.total);
             self.after_download(id);
@@ -3208,6 +3242,21 @@ mod tests {
             h.svc.already_have("file.bin", Some(120 * KB)).unwrap(),
             None
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_finished_download_keeps_what_each_network_carried() {
+        let server = RangeServer::start(Content::new(400 * KB, 181))
+            .await
+            .unwrap();
+        let h = harness(3);
+        let id = h.svc.add(&link(&server), None).unwrap();
+        assert_eq!(h.job(id).report, None, "nothing to say before it finishes");
+        h.wait("done", |h| h.job(id).status == "completed").await;
+        let r = h.job(id).report.expect("a report");
+        assert_eq!(r.nets.iter().map(|n| n.bytes).sum::<u64>(), 400 * KB);
+        assert!(r.nets.iter().all(|n| !n.label.is_empty()));
+        assert!(r.secs > 0.0);
     }
 
     #[tokio::test(flavor = "multi_thread")]

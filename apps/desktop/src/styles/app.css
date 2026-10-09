@@ -4051,3 +4051,76 @@ html[data-hidden] .orb b {
 .checksum-badge .muted {
   font-weight: 400;
 }
+
+/* ---------- What each network saved (B9.6) ---------- */
+
+.savings {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  background: var(--surface-1);
+}
+
+.savings-lead {
+  color: var(--body);
+}
+
+.savings-lead strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.savings-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.savings-list li {
+  display: grid;
+  grid-template-columns: minmax(90px, 140px) minmax(0, 1fr) auto minmax(84px, auto);
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.savings-name {
+  overflow: hidden;
+  color: var(--ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.savings-bar {
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+}
+
+.savings-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--fuse);
+}
+
+.savings-saved {
+  color: var(--success);
+  text-align: right;
+}
+
+@container (max-width: 520px) {
+  .savings-list li {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .savings-bar {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+}
