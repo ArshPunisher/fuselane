@@ -7,6 +7,7 @@ pub mod identity;
 pub mod proto;
 pub mod server;
 pub mod tls;
+pub mod web;
 pub mod words;
 
 pub use client::{Outgoing, SendError, Target};
