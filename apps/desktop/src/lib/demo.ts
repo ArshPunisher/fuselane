@@ -603,6 +603,24 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       })
       emitJobs()
     },
+    alreadyHave: async (name, size) => {
+      const j = jobs.find(
+        (x) =>
+          x.status === 'completed' &&
+          x.name.toLowerCase() === name.trim().toLowerCase() &&
+          size !== null &&
+          x.total === size,
+      )
+      return j
+        ? {
+            id: j.id,
+            name: j.name,
+            path: `${j.dir}/${j.name}`,
+            size: size!,
+            finishedAt: now() - 86400,
+          }
+        : null
+    },
     focus: async (id) => {
       const j = find(id)
       if (j.status === 'completed')
@@ -681,9 +699,12 @@ export function createDemoBackend(params: URLSearchParams): Backend {
           null,
         )
       }
+      const filename = nameFromUrl(url)
       return {
-        filename: nameFromUrl(url),
-        total: url.hostname.includes('unknown') ? null : 734003200,
+        filename,
+        total: url.hostname.includes('unknown')
+          ? null
+          : (jobs.find((j) => j.name === filename)?.total ?? 734003200),
         splittable: !url.hostname.includes('noranges'),
       }
     },

@@ -2,6 +2,7 @@
 // plain browser (pnpm dev, Playwright) it uses the demo engine in ./demo.ts,
 // and the UI says so.
 import type {
+  HaveView,
   NearbyView,
   FilePriority,
   AddOptions,
@@ -56,6 +57,8 @@ export interface Backend {
   /** Puts these downloads first in the queue, in this order. */
   reorder(ids: number[]): Promise<void>
   /** Gives one download every network; the others wait and carry on after it. */
+  /** A finished download with this name and size that's still on disk. */
+  alreadyHave(name: string, size: number | null): Promise<HaveView | null>
   focus(id: number): Promise<void>
   unfocus(): Promise<void>
   automation(): Promise<AutomationView>
@@ -214,6 +217,7 @@ async function tauriBackend(): Promise<Backend> {
     setMaxRunning: (n) => call('set_max_running', { n }),
     reorder: (ids) => call('reorder', { ids }),
     focus: (id) => call('focus', { id }),
+    alreadyHave: (name, size) => call('already_have', { name, size }),
     unfocus: () => call('unfocus'),
     setJobLimit: (id, rate) => call('set_job_limit', { id, rate }),
     automation: () => call('automation'),

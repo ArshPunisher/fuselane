@@ -594,6 +594,19 @@ fn name_taken(svc: State<'_>, dir: Option<String>, name: String) -> bool {
     svc.name_taken(dir.as_deref(), &name)
 }
 
+/// A finished download with the same name and size, still on disk (B9.8).
+#[tauri::command]
+fn already_have(
+    svc: State<'_>,
+    name: String,
+    size: Option<u64>,
+) -> Result<Option<service::HaveView>, UiError> {
+    if name.len() > 1024 {
+        return Ok(None);
+    }
+    svc.already_have(&name, size)
+}
+
 /// Opens a finished file with its default app.
 #[tauri::command]
 fn open_file(app: tauri::AppHandle, svc: State<'_>, id: i64) -> Result<(), UiError> {
@@ -1482,6 +1495,7 @@ fn main() {
             reorder,
             focus,
             unfocus,
+            already_have,
             set_job_limit,
             trash_file,
             pause,

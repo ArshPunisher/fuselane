@@ -991,6 +991,22 @@ test('a download checked against a published checksum says Verified, and it can 
   await expect(sw).toHaveAttribute('aria-checked', 'false')
 })
 
+test('a file already downloaded is pointed out before downloading it again', async ({ page }) => {
+  await page.goto('/?drop=0')
+  const dialog = await openDialog(page)
+  await dialog
+    .getByLabel('Link')
+    .fill('https://downloads.example.org/files/Blender-5.1-macos-arm64.dmg')
+  // Here it's in the same folder too, so it joins the "name is taken" choice.
+  const note = dialog.getByRole('group', { name: /You already downloaded this/ })
+  await expect(note).toContainText('412 MB')
+  await expect(note.getByRole('button', { name: /^Show in|^Open folder/ })).toBeVisible()
+  // Downloading again is still possible.
+  await expect(dialog.getByRole('button', { name: 'Download', exact: true })).toBeEnabled()
+  await dialog.getByLabel('Link').fill('https://downloads.example.org/files/something-else.iso')
+  await expect(note).toHaveCount(0)
+})
+
 test('Download later adds it paused, ready to start', async ({ page }) => {
   await page.goto('/?empty=1')
   const dialog = await openDialog(page)

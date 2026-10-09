@@ -14,8 +14,11 @@ use fuselane_limits::{Date, LimitSettings, Limiter, Period, Usage, next_reset};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
+mod already;
 mod checksum;
 mod focus;
+
+pub use already::HaveView;
 
 /// Downloads that run at once; the rest wait their turn (L-53).
 pub const MAX_RUNNING: usize = 3;
@@ -3167,6 +3170,44 @@ mod tests {
         h.wait("off", |h| h.job(id4).status == "completed").await;
         assert!(!h.job(id4).verified);
         assert_eq!(h.svc.store.get(id4).unwrap().sha256_from, None);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_file_already_downloaded_is_pointed_out_only_while_it_is_there() {
+        let content = Content::new(120 * KB, 171);
+        let server = RangeServer::start(content).await.unwrap();
+        let h = harness(3);
+        assert_eq!(
+            h.svc.already_have("file.bin", Some(120 * KB)).unwrap(),
+            None
+        );
+        let id = h.svc.add(&link(&server), None).unwrap();
+        h.wait("done", |h| h.job(id).status == "completed").await;
+        let have = h
+            .svc
+            .already_have("FILE.bin", Some(120 * KB))
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            (have.id, have.size, have.name.as_str()),
+            (id, 120 * KB, "file.bin")
+        );
+        // Another size, an unknown size or another name is a different file.
+        assert_eq!(
+            h.svc.already_have("file.bin", Some(121 * KB)).unwrap(),
+            None
+        );
+        assert_eq!(h.svc.already_have("file.bin", None).unwrap(), None);
+        assert_eq!(
+            h.svc.already_have("other.bin", Some(120 * KB)).unwrap(),
+            None
+        );
+        // Gone from disk: nothing to point at.
+        std::fs::remove_file(&have.path).unwrap();
+        assert_eq!(
+            h.svc.already_have("file.bin", Some(120 * KB)).unwrap(),
+            None
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

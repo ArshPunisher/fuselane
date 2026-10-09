@@ -3,8 +3,9 @@ import { ArrowLeft, FileArrowUp, Magnet, Plus, Warning, X } from '@phosphor-icon
 import { useApp } from '../lib/store'
 import { toUiError } from '../lib/backend'
 import { isSendLink } from '../lib/sendLink'
-import type { ListingView, PreviewView, UiError } from '../lib/types'
+import type { HaveView, ListingView, PreviewView, UiError } from '../lib/types'
 import { FilePicker } from './FilePicker'
+import { REVEAL_LABEL } from './TransferDetail'
 import { bytes, clockTime, nextAt, startsAt } from '../lib/format'
 
 /** Quick local check so obvious mistakes show before a round trip; the backend decides. */
@@ -54,6 +55,12 @@ export function middleCut(s: string): { head: string; tail: string } | null {
 /** A dropped or opened file path (not a link). */
 function isTorrentPath(s: string): boolean {
   return /\.torrent$/i.test(s.trim()) && !looksLikeLink(s) && !isMagnet(s)
+}
+
+/** The folder part of a path, for "It's still in ~/Downloads". */
+function folderOf(path: string): string {
+  const i = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+  return i > 0 ? path.slice(0, i) : path
 }
 
 export function NewDownload() {
@@ -149,6 +156,25 @@ export function NewDownload() {
       setSkipped([])
     }
   }, [open, draft, draftTorrent])
+
+  // Already downloaded (B9.8): the same file finished before and is still on disk.
+  const act = useApp((s) => s.act)
+  const [have, setHave] = useState<HaveView | null>(null)
+  const previewed = preview.state === 'ok' ? preview.data : null
+  useEffect(() => {
+    if (!open || !backend || !previewed) {
+      setHave(null)
+      return
+    }
+    let live = true
+    backend
+      .alreadyHave(previewed.filename, previewed.total)
+      .then((v) => live && setHave(v))
+      .catch(() => live && setHave(null))
+    return () => {
+      live = false
+    }
+  }, [open, backend, previewed])
 
   // Ask whether the name is taken once the name is known (Settings: Ask).
   const wantedName = (more && name.trim()) || (preview.state === 'ok' ? preview.data.filename : '')
@@ -506,7 +532,13 @@ export function NewDownload() {
             <div className="dup" role="group" aria-labelledby="nd-dup">
               <div className="dup-row">
                 <Warning size={16} weight="fill" aria-hidden />
-                <span id="nd-dup">A file named {wantedName} is already in this folder.</span>
+                <span id="nd-dup">
+                  {have
+                    ? `You already downloaded this (${bytes(have.size)}, ${new Date(
+                        have.finishedAt * 1000,
+                      ).toLocaleDateString()}). It's still in this folder.`
+                    : `A file named ${wantedName} is already in this folder.`}
+                </span>
               </div>
               <div className="dup-row">
                 <div className="segmented" role="radiogroup" aria-labelledby="nd-dup">
@@ -537,6 +569,15 @@ export function NewDownload() {
                 >
                   Don&apos;t download
                 </button>
+                {have && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => void act((b) => b.reveal(have.id))}
+                  >
+                    {REVEAL_LABEL}
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -730,6 +771,22 @@ export function NewDownload() {
                 </p>
               </div>
             </details>
+          )}
+          {have && !duplicate && !(taken && !batch) && (
+            <div className="inline-note have-note" role="status">
+              <p>
+                You already downloaded this: <strong translate="no">{have.name}</strong>,{' '}
+                {bytes(have.size)}, on {new Date(have.finishedAt * 1000).toLocaleDateString()}. It's
+                still in <span translate="no">{folderOf(have.path)}</span>.
+              </p>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => void act((b) => b.reveal(have.id))}
+              >
+                {REVEAL_LABEL}
+              </button>
+            </div>
           )}
           {duplicate && (
             <div className="inline-note" role="alert">

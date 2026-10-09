@@ -399,3 +399,13 @@ export interface SeedSettings {
   /** Stop after sharing this many minutes (1 to 10080). */
   minutes: number
 }
+
+/** A finished download with the same name and size, still on disk. */
+export interface HaveView {
+  id: number
+  name: string
+  path: string
+  size: number
+  /** When it finished (unix seconds). */
+  finishedAt: number
+}
