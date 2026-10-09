@@ -95,6 +95,9 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Tauri skips the disk image's Finder layout (background, icon places) on
+          # CI unless told otherwise; macOS runners have a Finder to do it.
+          TAURI_BUNDLER_DMG_IGNORE_CI: 'true'
         shell: bash
         run: |
           pnpm --filter @fuselane/desktop tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} \
@@ -156,6 +159,11 @@ jobs:
           grep -q arm64 archs.txt && grep -q x86_64 archs.txt
           lipo -archs target/universal-apple-darwin/release/fuselane | grep -q x86_64
           codesign --verify --verbose=2 "$app"
+          # The disk image keeps its Finder layout (background and icon places).
+          dmg=$(ls target/universal-apple-darwin/release/bundle/dmg/*.dmg)
+          hdiutil attach -nobrowse -readonly -mountpoint /tmp/fuselane-dmg "$dmg"
+          test -f /tmp/fuselane-dmg/.DS_Store && test -f /tmp/fuselane-dmg/.background/background.tiff
+          hdiutil detach /tmp/fuselane-dmg
       - name: Check package contents (Linux)
         if: runner.os == 'Linux'
         run: |
