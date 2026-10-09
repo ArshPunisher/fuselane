@@ -964,7 +964,7 @@ impl Torrents {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use std::time::Duration;
@@ -974,7 +974,7 @@ mod tests {
         SessionOptions,
     };
 
-    fn ts_fields(src: &str, name: &str) -> Vec<String> {
+    pub(crate) fn ts_fields(src: &str, name: &str) -> Vec<String> {
         let start = src
             .find(&format!("export interface {name} {{"))
             .unwrap_or_else(|| panic!("no {name}"));
@@ -993,7 +993,7 @@ mod tests {
         out
     }
 
-    fn json_fields(v: &impl Serialize) -> Vec<String> {
+    pub(crate) fn json_fields(v: &impl Serialize) -> Vec<String> {
         let mut out: Vec<String> = serde_json::to_value(v)
             .unwrap()
             .as_object()

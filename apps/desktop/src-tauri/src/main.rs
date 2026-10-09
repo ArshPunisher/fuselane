@@ -11,6 +11,7 @@ mod native;
 mod opens;
 mod power;
 mod selftest;
+mod sends;
 mod service;
 mod torrents;
 
@@ -27,6 +28,7 @@ use tauri::tray::TrayIconBuilder;
 
 type State<'a> = tauri::State<'a, Arc<Service>>;
 type Tor<'a> = tauri::State<'a, Arc<torrents::Torrents>>;
+type Snd<'a> = tauri::State<'a, Arc<sends::Sends>>;
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -466,6 +468,55 @@ async fn pick_torrent(app: tauri::AppHandle) -> Option<String> {
         .map(|p| p.to_string_lossy().into_owned())
 }
 
+/// Asks for a file to send with Fuse Send; `None` if they cancel.
+#[tauri::command]
+async fn send_pick(app: tauri::AppHandle) -> Option<String> {
+    use tauri_plugin_dialog::DialogExt;
+    app.dialog()
+        .file()
+        .set_title("Send a file")
+        .blocking_pick_file()
+        .and_then(|p| p.into_path().ok())
+        .map(|p| p.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+async fn send_file(snd: Snd<'_>, path: String) -> Result<String, UiError> {
+    snd.inner().send(&path).await
+}
+
+#[tauri::command]
+async fn sends_state(
+    snd: Snd<'_>,
+) -> Result<(Vec<sends::ShareView>, Vec<sends::ReceiveView>), UiError> {
+    Ok(snd.views().await)
+}
+
+#[tauri::command]
+async fn stop_send(snd: Snd<'_>, id: String) -> Result<(), UiError> {
+    snd.stop(&id).await
+}
+
+#[tauri::command]
+async fn receive_link(snd: Snd<'_>, link: String, dir: Option<String>) -> Result<String, UiError> {
+    snd.inner().receive(&link, dir.as_deref()).await
+}
+
+#[tauri::command]
+async fn reveal_received(app: tauri::AppHandle, snd: Snd<'_>, id: String) -> Result<(), UiError> {
+    use tauri_plugin_opener::OpenerExt;
+    let path = snd.received_path(&id).await?;
+    app.opener()
+        .reveal_item_in_dir(&path)
+        .map_err(|e| ui_error("open-failed", format!("Couldn't show the file: {e}")))
+}
+
+#[tauri::command]
+async fn dismiss_receive(snd: Snd<'_>, id: String) -> Result<(), UiError> {
+    snd.dismiss(&id).await;
+    Ok(())
+}
+
 /// Asks the user for a folder to save into; `None` if they cancel.
 #[tauri::command]
 async fn pick_folder(app: tauri::AppHandle) -> Option<String> {
@@ -566,6 +617,7 @@ fn watch_for_shell(app: tauri::AppHandle, svc: &Arc<Service>) {
                     .show();
             }
             UiEvent::Torrents { .. }
+            | UiEvent::Sends { .. }
             | UiEvent::Open { .. }
             | UiEvent::Networks { .. }
             | UiEvent::WhenDoneCancelled
@@ -598,6 +650,30 @@ fn open_service() -> Result<Arc<Service>, String> {
         .or_else(dirs::home_dir)
         .unwrap_or_else(|| home.clone());
     Service::new(store, downloads).map_err(|e| e.message)
+}
+
+fn open_sends(svc: &Arc<Service>) -> Arc<sends::Sends> {
+    let dir = fuselane_core::home::home()
+        .map(|h| h.join("shares"))
+        .unwrap_or_else(|_| std::env::temp_dir().join("fuselane-shares"));
+    let weak = Arc::downgrade(svc);
+    let nets = Arc::downgrade(svc);
+    sends::Sends::new(
+        svc.store(),
+        dir,
+        svc.default_dir().to_path_buf(),
+        Arc::new(move || match nets.upgrade() {
+            Some(svc) => svc.download_networks(),
+            None => fuselane_core::runner::pick_networks(&[]),
+        }),
+        Some(svc.limiter()),
+        true,
+        Arc::new(move |e| {
+            if let Some(svc) = weak.upgrade() {
+                svc.send(e);
+            }
+        }),
+    )
 }
 
 fn open_torrents(svc: &Arc<Service>) -> Arc<torrents::Torrents> {
@@ -711,10 +787,14 @@ fn main() {
         });
     }
     let tor = open_torrents(&svc);
+    let snd = open_sends(&svc);
     {
-        // Torrents count as work: no sleep or shut-down while one is downloading.
+        // Torrents and Fuse Send count as work: no sleep or shut-down meanwhile.
         let tor = Arc::downgrade(&tor);
-        svc.set_busy_elsewhere(Arc::new(move || tor.upgrade().is_some_and(|t| t.busy())));
+        let snd = Arc::downgrade(&snd);
+        svc.set_busy_elsewhere(Arc::new(move || {
+            tor.upgrade().is_some_and(|t| t.busy()) || snd.upgrade().is_some_and(|s| s.busy())
+        }));
     }
     // Debug builds only (like FUSELANE_DEV_ADD): add a .torrent file with all its
     // files at launch, for checking the real window without clicking.
@@ -781,6 +861,7 @@ fn main() {
         })
         .manage(svc)
         .manage(tor.clone())
+        .manage(snd.clone())
         .setup(move |app| {
             let show = MenuItem::with_id(app, "show", "Show Fuselane", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -834,6 +915,15 @@ fn main() {
                 tor.restore().await;
                 loop {
                     tor.tick().await;
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                }
+            });
+            // Shares from before a restart start seeding again, then a tick every second.
+            let snd = snd.clone();
+            tauri::async_runtime::spawn(async move {
+                snd.restore().await;
+                loop {
+                    snd.tick().await;
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 }
             });
@@ -892,6 +982,13 @@ fn main() {
             torrent_seed_settings,
             set_torrent_seed_settings,
             torrent_stop_sharing,
+            send_pick,
+            send_file,
+            sends_state,
+            stop_send,
+            receive_link,
+            dismiss_receive,
+            reveal_received,
             subscribe
         ])
         .build(tauri::generate_context!());

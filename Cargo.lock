@@ -1741,6 +1741,7 @@ dependencies = [
  "fuselane-engine-torrent",
  "fuselane-limits",
  "fuselane-netif",
+ "fuselane-send",
  "fuselane-storage",
  "fuselane-testkit",
  "fuselane-transport",

@@ -366,6 +366,11 @@ pub enum UiEvent {
     Automation {
         view: AutomationView,
     },
+    /// Fuse Send: files being shared from here and received from links.
+    Sends {
+        shares: Vec<crate::sends::ShareView>,
+        receives: Vec<crate::sends::ReceiveView>,
+    },
 }
 
 /// Automation settings plus where the schedule stands right now.

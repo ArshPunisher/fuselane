@@ -44,3 +44,4 @@ packaging/brand/out/
 
 # Python bytecode from tools/*.py
 __pycache__/
+.playwright-cli/
