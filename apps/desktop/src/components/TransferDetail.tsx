@@ -224,9 +224,10 @@ function ReadyBy({ job }: { job: JobView }) {
   const act = useApp((s) => s.act)
   const [draft, setDraft] = useState('')
   // A time field takes 24-hour "HH:MM" whatever the system's clock style.
+  // Without a time yet, it offers two hours from now, on the hour.
   useEffect(() => {
-    if (!job.readyBy) return setDraft('')
-    const d = new Date(job.readyBy * 1000)
+    const d = job.readyBy ? new Date(job.readyBy * 1000) : new Date(Date.now() + 2 * 3600_000)
+    if (!job.readyBy) d.setMinutes(0)
     setDraft(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`)
   }, [job.id, job.readyBy])
   const at = nextAt(draft)
