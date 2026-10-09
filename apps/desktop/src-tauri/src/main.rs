@@ -171,6 +171,11 @@ async fn reorder(svc: State<'_>, ids: Vec<i64>) -> Result<(), UiError> {
 }
 
 #[tauri::command]
+async fn set_job_limit(svc: State<'_>, id: i64, rate: u64) -> Result<(), UiError> {
+    svc.set_job_limit(id, rate)
+}
+
+#[tauri::command]
 async fn pause(svc: State<'_>, id: i64) -> Result<(), UiError> {
     svc.pause(id)
 }
@@ -944,6 +949,7 @@ fn main() {
             max_running,
             set_max_running,
             reorder,
+            set_job_limit,
             pause,
             resume,
             remove,

@@ -1344,6 +1344,25 @@ h2 {
   gap: 4px;
 }
 
+.job-limit {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: start;
+  align-items: end;
+  gap: 6px 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--hairline);
+}
+
+.job-limit .limit-field label {
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.job-limit .field-help {
+  grid-column: 1 / -1;
+}
+
 .limit-inputs {
   display: grid;
   grid-template-columns: minmax(0, 110px) auto;

@@ -140,6 +140,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       createdAt: now() - (100 - nextId) * 60,
       position: nextId,
       verify: false,
+      speedLimit: 0,
       fill,
       owner,
       inflight: [-1, -1, -1],
@@ -232,12 +233,15 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       const total = j.total ?? 1
       const perTick = total / TICKS
       const share = 1 / Math.max(1, running.length)
+      // A download's own limit scales every lane down to fit it.
+      const full = BASE_RATE.reduce((a, b) => a + b, 0) * share
+      const cap = j.speedLimit > 0 ? Math.min(1, j.speedLimit / full) : 1
       BASE_RATE.forEach((base, lane) => {
         if (!laneUp(lane, clock)) {
           j.inflight[lane] = -1
           return
         }
-        const r = Math.max(0.2 * MB, base * (1 + 0.22 * wobble(lane + 11, clock))) * share
+        const r = Math.max(0.2 * MB, base * (1 + 0.22 * wobble(lane + 11, clock))) * share * cap
         if (j.inflight[lane]! < 0) j.inflight[lane] = nextTick(j)
         const tick = j.inflight[lane]!
         if (tick < 0) return
@@ -504,6 +508,16 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         throw err('bad-value', 'Pick between 1 and 8 downloads at once.', null)
       maxRunning = n
       return n
+    },
+    setJobLimit: async (id, rate) => {
+      if (!Number.isFinite(rate) || rate < 0 || rate > 100 * 1024 * MB)
+        throw err(
+          'bad-limit',
+          'That limit is too high to be a real speed.',
+          'Use a speed in KB/s or MB/s, or leave it empty for no limit.',
+        )
+      find(id).speedLimit = rate
+      emitJobs()
     },
     reorder: async (ids) => {
       const rest = jobs.filter((j) => !ids.includes(j.id)).sort((a, b) => a.position - b.position)

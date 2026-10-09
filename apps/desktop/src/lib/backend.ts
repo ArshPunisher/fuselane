@@ -36,6 +36,8 @@ export interface Backend {
   /** How many downloads run at once (1–8). */
   maxRunning(): Promise<number>
   setMaxRunning(n: number): Promise<number>
+  /** One download's own speed limit in bytes/s (0 removes it); applies at once. */
+  setJobLimit(id: number, rate: number): Promise<void>
   /** Puts these downloads first in the queue, in this order. */
   reorder(ids: number[]): Promise<void>
   automation(): Promise<AutomationView>
@@ -154,6 +156,7 @@ async function tauriBackend(): Promise<Backend> {
     maxRunning: () => call('max_running'),
     setMaxRunning: (n) => call('set_max_running', { n }),
     reorder: (ids) => call('reorder', { ids }),
+    setJobLimit: (id, rate) => call('set_job_limit', { id, rate }),
     automation: () => call('automation'),
     setAutomation: (settings) => call('set_automation', { settings }),
     cancelWhenDone: () => call('cancel_when_done'),

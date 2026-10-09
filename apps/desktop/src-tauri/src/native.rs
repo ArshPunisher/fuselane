@@ -128,6 +128,7 @@ mod tests {
             created_at: 0,
             position: 0,
             verify: false,
+            speed_limit: 0,
         }
     }
 

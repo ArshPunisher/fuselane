@@ -832,6 +832,35 @@ test('start at login and keep running are switches that stick', async ({ page })
   }
 })
 
+test('a download can have its own speed limit, changed while it runs', async ({ page }) => {
+  await page.goto('/')
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'ubuntu-26.04-desktop-amd64.iso' }),
+  ).toBeVisible()
+  const field = page.getByLabel('Speed limit for this download', { exact: true })
+  const set = page.getByRole('button', { name: 'Set limit' })
+  await expect(set).toBeDisabled()
+  await field.fill('fast')
+  await expect(page.getByText('Enter a number, like 5 or 2.5.')).toBeVisible()
+  await expect(set).toBeDisabled()
+  await field.fill('2')
+  await set.click()
+  await expect(set).toBeDisabled()
+  // The live speed settles at or under the limit.
+  await expect
+    .poll(
+      async () => {
+        const t = (await page.locator('.speed').first().textContent()) ?? ''
+        return Number(t.replace(/[^\d.]/g, ''))
+      },
+      { timeout: 8000 },
+    )
+    .toBeLessThanOrEqual(2.2)
+  await field.fill('')
+  await page.getByRole('button', { name: 'Remove limit' }).click()
+  await expect(field).toHaveValue('')
+})
+
 test.describe('Fuse Send', () => {
   const LINK = 'https://arshpunisher.github.io/fuselane/s#v1.AbCdEfGhIjKlMnOpQrStUv'
 

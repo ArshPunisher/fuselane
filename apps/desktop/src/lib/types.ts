@@ -19,6 +19,8 @@ export interface JobView {
   createdAt: number
   position: number
   verify: boolean
+  /** This download's own speed limit in bytes per second; 0 = none. */
+  speedLimit: number
 }
 
 export interface NetView {

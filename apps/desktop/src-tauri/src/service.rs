@@ -40,6 +40,8 @@ pub struct JobView {
     pub position: i64,
     /// A SHA-256 will be checked when it finishes.
     pub verify: bool,
+    /// This download's own speed limit in bytes per second; 0 = none.
+    pub speed_limit: u64,
 }
 
 /// One network the app can see.
@@ -424,6 +426,8 @@ pub type Emit = Arc<dyn Fn(UiEvent) + Send + Sync>;
 struct Running {
     cancel: Cancel,
     remove_after: bool,
+    /// Its own speed limit, changed live from the window.
+    limit: Arc<fuselane_limits::JobLimit>,
 }
 
 /// What the New download dialog can choose besides the link and folder.
@@ -619,6 +623,7 @@ fn view(job: &Job) -> JobView {
         created_at: job.created_at,
         position: job.position,
         verify: job.expected_sha256.is_some(),
+        speed_limit: job.speed_limit,
     }
 }
 
@@ -1435,6 +1440,26 @@ impl Service {
         Ok(())
     }
 
+    /// Sets one download's own speed limit (0 removes it); applies at once if running.
+    pub fn set_job_limit(self: &Arc<Self>, id: i64, rate: u64) -> Result<(), UiError> {
+        if rate > MAX_LIMIT {
+            return Err(UiError::new(
+                "bad-limit",
+                "That limit is too high to be a real speed.",
+                Some("Use a speed in KB/s or MB/s, or leave it empty for no limit."),
+            ));
+        }
+        self.store.set_speed_limit(id, rate).map_err(|e| match e {
+            fuselane_core::StoreError::NotFound(id) => not_found(id),
+            e => store_error(e),
+        })?;
+        if let Some(r) = lock(&self.running).get(&id) {
+            r.limit.set_rate(rate);
+        }
+        self.publish_jobs();
+        Ok(())
+    }
+
     pub fn pause(self: &Arc<Self>, id: i64) -> Result<(), UiError> {
         if let Some(r) = lock(&self.running).get(&id) {
             r.cancel.cancel(); // the task records the pause once progress is saved
@@ -1826,11 +1851,13 @@ impl Service {
                 continue;
             }
             let cancel = Cancel::new();
+            let limit = Arc::new(fuselane_limits::JobLimit::new(job.speed_limit));
             running.insert(
                 job.id,
                 Running {
                     cancel: cancel.clone(),
                     remove_after: false,
+                    limit: limit.clone(),
                 },
             );
             self.had_work
@@ -1840,13 +1867,13 @@ impl Service {
                 c.cancel();
             }
             let me = self.clone();
-            tokio::spawn(async move { me.run(job, cancel).await });
+            tokio::spawn(async move { me.run(job, cancel, limit).await });
         }
         drop(running);
         self.update_awake();
     }
 
-    async fn run(self: Arc<Self>, job: Job, cancel: Cancel) {
+    async fn run(self: Arc<Self>, job: Job, cancel: Cancel, limit: Arc<fuselane_limits::JobLimit>) {
         let id = job.id;
         // Networks behind a sign-in page are left out (they'd serve the login page).
         let picked = self.download_networks().unwrap_or_default();
@@ -1866,6 +1893,7 @@ impl Service {
             cancel: Some(cancel),
             retry_delay_scale: self.retry_scale,
             limiter: Some(self.limiter.clone()),
+            job_limit: Some(limit),
             per_network_dns: self
                 .per_network_dns
                 .load(std::sync::atomic::Ordering::Relaxed),
@@ -2102,6 +2130,35 @@ mod tests {
         // A finished download can't be resumed or paused.
         assert_eq!(h.svc.resume(id).unwrap_err().code, "not-resumable");
         assert_eq!(h.svc.pause(id).unwrap_err().code, "not-running");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_download_limit_applies_while_running_and_is_kept() {
+        let content = Content::new(2 * 1024 * KB, 94);
+        let server = RangeServer::start(content).await.unwrap();
+        let h = harness(3);
+        let id = h.svc.add(&link(&server), None).unwrap();
+        // 256 KiB/s from the start: 2 MiB can't finish in under a few seconds.
+        h.svc.set_job_limit(id, 256 * KB).unwrap();
+        assert_eq!(h.job(id).speed_limit, 256 * KB);
+        let start = Instant::now();
+        h.wait("some progress", |h| {
+            h.lives(id).iter().any(|l| l.written > 128 * KB)
+        })
+        .await;
+        tokio::time::sleep(Duration::from_millis(600)).await;
+        assert_ne!(h.job(id).status, "completed", "limit ignored");
+        // Lifting it lets the rest arrive at full speed.
+        h.svc.set_job_limit(id, 0).unwrap();
+        h.wait("completion", |h| h.job(id).status == "completed")
+            .await;
+        assert!(start.elapsed() < Duration::from_secs(8));
+        assert_eq!(h.job(id).speed_limit, 0);
+        assert_eq!(
+            h.svc.set_job_limit(id, MAX_LIMIT + 1).unwrap_err().code,
+            "bad-limit"
+        );
+        assert_eq!(h.svc.set_job_limit(9999, 1).unwrap_err().code, "not-found");
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -2823,6 +2880,7 @@ mod tests {
             created_at: 0,
             position: 0,
             verify: false,
+            speed_limit: 0,
         };
         let net = NetView {
             name: "en0".into(),

@@ -18,6 +18,7 @@ import { FuseCore } from './FuseCore'
 import { Stream } from './Stream'
 import { Orb } from './Orb'
 import { STATUS_WORD } from './status'
+import { LimitField } from './LimitField'
 import type { JobView, Live } from '../lib/types'
 
 /** The platform's own words for showing a file in its folder. */
@@ -174,6 +175,29 @@ function ErrorPanel({ job }: { job: JobView }) {
         )}
       </div>
     </div>
+  )
+}
+
+/** This download's own speed limit; other limits still apply on top. */
+function JobLimit({ job }: { job: JobView }) {
+  const act = useApp((s) => s.act)
+  const [draft, setDraft] = useState<number | null>(job.speedLimit)
+  useEffect(() => setDraft(job.speedLimit), [job.id, job.speedLimit])
+  const changed = draft !== null && draft !== job.speedLimit
+  return (
+    <form
+      className="job-limit"
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (changed) void act((b) => b.setJobLimit(job.id, draft))
+      }}
+    >
+      <LimitField label="Speed limit for this download" rate={job.speedLimit} onChange={setDraft} />
+      <button type="submit" className="btn" disabled={!changed}>
+        {draft === 0 && job.speedLimit > 0 ? 'Remove limit' : 'Set limit'}
+      </button>
+      <p className="field-help">Empty for no limit. The overall and network limits still apply.</p>
+    </form>
   )
 }
 
@@ -361,6 +385,8 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
               </tbody>
             </table>
           )}
+
+          {job.status !== 'completed' && job.status !== 'cancelled' && <JobLimit job={job} />}
         </div>
       </div>
     </article>
