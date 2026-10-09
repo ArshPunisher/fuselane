@@ -172,6 +172,17 @@ pub struct Cleanup {
 /// up to `folder` itself when the torrent owns it. A folder swapped for a link
 /// between checking and deleting is caught by re-checking each step.
 pub fn remove(folder: &Path, own_folder: bool, files: &[&Planned]) -> Cleanup {
+    remove_with(folder, own_folder, files, |p| std::fs::remove_file(p))
+}
+
+/// [`remove`], with the caller choosing how each checked file goes away (the
+/// desktop app moves them to the Trash so a mistaken removal can be undone).
+pub fn remove_with(
+    folder: &Path,
+    own_folder: bool,
+    files: &[&Planned],
+    mut remove_file: impl FnMut(&Path) -> std::io::Result<()>,
+) -> Cleanup {
     let mut out = Cleanup::default();
     if refuse_link(folder).is_err() {
         out.skipped.push(folder.display().to_string());
@@ -200,7 +211,7 @@ pub fn remove(folder: &Path, own_folder: bool, files: &[&Planned]) -> Cleanup {
                 dirs.insert(p.clone());
             }
         }
-        match std::fs::remove_file(&p) {
+        match remove_file(&p) {
             Ok(()) => out.removed += 1,
             Err(_) => out.skipped.push(p.display().to_string()),
         }
@@ -357,6 +368,40 @@ mod tests {
             "a file not in the torrent stays"
         );
         assert!(folder.exists(), "folder isn't empty, so it stays");
+    }
+
+    #[test]
+    fn a_custom_remover_gets_only_checked_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().join("T");
+        std::fs::create_dir_all(folder.join("sub")).unwrap();
+        std::fs::write(folder.join("a"), b"1").unwrap();
+        std::fs::write(folder.join("sub/b"), b"2").unwrap();
+        std::fs::create_dir(folder.join("dir-not-file")).unwrap();
+        let fs = files(&["a", "sub/b", "dir-not-file", "gone"]);
+        let mut seen = vec![];
+        // Stands in for "move to the Trash": records, then takes the file away.
+        let r = remove_with(&folder, true, &fs.iter().collect::<Vec<_>>(), |p| {
+            seen.push(p.strip_prefix(&folder).unwrap().to_path_buf());
+            std::fs::remove_file(p)
+        });
+        assert_eq!(
+            seen,
+            vec![
+                std::path::PathBuf::from("a"),
+                std::path::PathBuf::from("sub/b")
+            ]
+        );
+        assert_eq!(r.removed, 2);
+        assert_eq!(r.skipped.len(), 1, "the folder posing as a file is skipped");
+        // A remover that fails is reported, not counted.
+        std::fs::write(folder.join("a"), b"1").unwrap();
+        let fs = files(&["a"]);
+        let r = remove_with(&folder, true, &fs.iter().collect::<Vec<_>>(), |_| {
+            Err(std::io::Error::other("no trash here"))
+        });
+        assert_eq!((r.removed, r.skipped.len()), (0, 1));
+        assert!(folder.join("a").exists());
     }
 
     #[test]

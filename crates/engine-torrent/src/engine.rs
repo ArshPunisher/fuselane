@@ -698,6 +698,17 @@ impl TorrentEngine {
         let all: Vec<&Planned> = listing.files.iter().collect();
         paths::remove(&listing.folder, listing.own_folder, &all)
     }
+
+    /// Like [`Self::delete_files`] with the same path checks, but each file goes
+    /// through `remove_file` (for example to the Trash).
+    pub fn delete_files_with(
+        &self,
+        listing: &Listing,
+        remove_file: impl FnMut(&std::path::Path) -> std::io::Result<()>,
+    ) -> Cleanup {
+        let all: Vec<&Planned> = listing.files.iter().collect();
+        paths::remove_with(&listing.folder, listing.own_folder, &all, remove_file)
+    }
 }
 
 fn check_selection(files: &[Planned], set: HashSet<usize>) -> Result<HashSet<usize>, TorrentError> {
