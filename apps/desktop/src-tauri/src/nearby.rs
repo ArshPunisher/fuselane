@@ -33,7 +33,7 @@ pub struct DeviceView {
     /// "Fuselane", "Windows", "Samsung"… as it says.
     pub model: Option<String>,
     pub trusted: bool,
-    /// Another Fuselane (shows the check words).
+    /// Another Fuselane.
     pub fuselane: bool,
 }
 
@@ -56,8 +56,6 @@ pub struct RequestView {
     pub model: Option<String>,
     pub files: Vec<String>,
     pub total: u64,
-    /// Four check words, when both sides are Fuselane and the sender was verified.
-    pub words: Option<Vec<String>>,
     /// Its identity was checked by connecting back to it.
     pub verified: bool,
 }
@@ -76,8 +74,6 @@ pub struct TransferView {
     /// asking | sending | receiving | done | declined | failed | cancelled
     pub state: &'static str,
     pub error: Option<String>,
-    /// While asking: the words the other screen should show too.
-    pub words: Option<Vec<String>>,
     /// Where a received file was saved.
     pub path: Option<String>,
 }
@@ -98,7 +94,6 @@ pub struct PhoneView {
     pub url: String,
     /// The link as a QR code (SVG).
     pub qr: String,
-    pub words: Vec<String>,
     pub offers: Vec<OfferView>,
 }
 
@@ -558,12 +553,6 @@ impl Nearby {
             return Err(err("send-missing", "Pick at least one file to send.", None));
         }
         let id = format!("out-{}", self.next_request.fetch_add(1, Ordering::Relaxed));
-        let words = is_fuselane(&info).then(|| {
-            fuselane_nearby::check_words(&self.fingerprint(), fingerprint)
-                .iter()
-                .map(|w| (*w).to_string())
-                .collect()
-        });
         let (sent, cancel) = (
             Arc::new(AtomicU64::new(0)),
             Arc::new(AtomicBool::new(false)),
@@ -583,7 +572,6 @@ impl Nearby {
                 done: 0,
                 state: "asking",
                 error: None,
-                words,
                 path: None,
             },
             sent: sent.clone(),
@@ -608,7 +596,6 @@ impl Nearby {
                                 && o.view.state == "asking"
                             {
                                 o.view.state = "sending";
-                                o.view.words = None;
                             }
                             me.publish();
                             break;
@@ -620,7 +607,6 @@ impl Nearby {
             watch.abort();
             if let Some(o) = lock(&me.outgoing).iter_mut().find(|o| o.view.id == id) {
                 o.view.done = sent.load(Ordering::Relaxed).min(o.view.size);
-                o.view.words = None;
                 match r {
                     Ok(_) => {
                         o.view.state = "done";
@@ -628,6 +614,10 @@ impl Nearby {
                     }
                     Err(SendError::Declined) => o.view.state = "declined",
                     Err(SendError::Cancelled) => o.view.state = "cancelled",
+                    Err(SendError::CancelledByThem) => {
+                        o.view.state = "cancelled";
+                        o.view.error = Some("They cancelled it.".into());
+                    }
                     Err(e) => {
                         o.view.state = "failed";
                         o.view.error = Some(format!("Couldn't send: {e}."));
@@ -639,9 +629,18 @@ impl Nearby {
         Ok(self.view())
     }
 
-    pub fn cancel(&self, id: &str) {
+    /// Stops a transfer from either side: an outgoing one stops sending; an
+    /// incoming one stops receiving and its partial file is removed.
+    pub async fn cancel(&self, id: &str) {
         if let Some(o) = lock(&self.outgoing).iter().find(|o| o.view.id == id) {
             o.cancel.store(true, Ordering::Relaxed);
+            return;
+        }
+        let receiving = lock(&self.incoming)
+            .get(id)
+            .is_some_and(|v| v.state == "receiving");
+        if receiving && let Some(server) = self.server.lock().await.as_ref() {
+            server.cancel(id);
         }
     }
 
@@ -675,7 +674,6 @@ impl Nearby {
             Arc::new(PhoneHost(Arc::downgrade(self))),
             self.inbox.clone(),
             self.alias.clone(),
-            vec![],
         )
         .await
         .map_err(|e| {
@@ -685,12 +683,6 @@ impl Nearby {
                 None,
             )
         })?;
-        // The page and this screen show the same words, from its token.
-        let words: Vec<String> = fuselane_nearby::check_words(&started.token, &self.fingerprint())
-            .iter()
-            .map(|w| (*w).to_string())
-            .collect();
-        started.set_words(words.clone());
         let url = started.url(ip);
         let qr = qrcode::QrCode::new(url.as_bytes())
             .map(|c| {
@@ -705,7 +697,6 @@ impl Nearby {
         *lock(&self.phone_view) = Some(PhoneView {
             url,
             qr,
-            words,
             offers: vec![],
         });
         *page = Some(started);
@@ -832,15 +823,6 @@ impl Host for Receiver {
             if lock(&n.pending).is_some() {
                 return Decision::Busy;
             }
-            let words = match (&verified, is_fuselane(&req.info)) {
-                (Some(fp), true) => Some(
-                    fuselane_nearby::check_words(&n.fingerprint(), fp)
-                        .iter()
-                        .map(|w| (*w).to_string())
-                        .collect(),
-                ),
-                _ => None,
-            };
             let (tx, rx) = tokio::sync::oneshot::channel();
             let id = n.next_request.fetch_add(1, Ordering::Relaxed);
             *lock(&n.pending) = Some(Pending {
@@ -860,7 +842,6 @@ impl Host for Receiver {
                         .take(50)
                         .collect(),
                     total: req.files.values().map(|f| f.size).sum(),
-                    words,
                     verified: verified.is_some(),
                 },
                 answer: tx,
@@ -900,7 +881,6 @@ impl Host for Receiver {
                 done: 0,
                 state: "receiving",
                 error: None,
-                words: None,
                 path: None,
             },
         );
@@ -928,7 +908,6 @@ impl Host for Receiver {
                 done: 0,
                 state: "receiving",
                 error: None,
-                words: None,
                 path: None,
             });
         // One file: its saved name (it may have been numbered). Several: the folder.
@@ -1001,7 +980,6 @@ impl fuselane_nearby::web::PageHost for PhoneHost {
                 done: 0,
                 state: "receiving",
                 error: None,
-                words: None,
                 path: None,
             },
         );
@@ -1119,7 +1097,6 @@ mod tests {
         let phone = v.phone.unwrap();
         assert!(phone.url.starts_with("http://127.0.0.1:") && phone.url.contains("/p/"));
         assert!(phone.qr.contains("<svg"), "a QR code to show");
-        assert_eq!(phone.words.len(), 4);
         let f = inbox.path().join("offer.txt");
         std::fs::write(&f, b"for the phone").unwrap();
         let v = n
@@ -1168,7 +1145,7 @@ mod tests {
         .await;
         assert_eq!(std::fs::read_dir(a.inbox.path()).unwrap().count(), 0);
 
-        // Everyone: a asks, with the same words on both screens.
+        // Everyone: a asks first.
         a.n.set_everyone(true).await;
         assert!(a.n.view().everyone_for.is_some_and(|s| s > 590));
         b.n.send(&fa, vec![path.clone()]).await.unwrap();
@@ -1177,13 +1154,7 @@ mod tests {
         assert_eq!(req.alias, "STUDIO-PC");
         assert_eq!(req.files, vec!["Holiday video.mov"]);
         assert!(req.verified);
-        let asking =
-            b.n.view()
-                .transfers
-                .into_iter()
-                .find(|t| t.state == "asking")
-                .unwrap();
-        assert_eq!(req.words, asking.words, "both screens show the same words");
+        assert!(b.n.view().transfers.iter().any(|t| t.state == "asking"));
         a.n.answer(req.id, true, true).unwrap();
         let saved = a.inbox.path().join("Holiday video.mov");
         until("the file", || {

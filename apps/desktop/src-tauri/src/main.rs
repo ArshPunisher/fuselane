@@ -918,8 +918,9 @@ fn nearby_forget(near: Near<'_>, fingerprint: String) -> nearby::NearbyView {
 }
 
 #[tauri::command]
-fn nearby_cancel(near: Near<'_>, id: String) {
-    near.cancel(&id);
+async fn nearby_cancel(near: Near<'_>, id: String) -> Result<(), UiError> {
+    near.cancel(&id).await;
+    Ok(())
 }
 
 #[tauri::command]
