@@ -9,7 +9,7 @@ import { Orb } from './Orb'
 import { LimitField } from './LimitField'
 
 /** Live speed per network, summed over running downloads. */
-function useLiveRates(): Record<string, number> {
+export function useLiveRates(): Record<string, number> {
   const live = useApp((s) => s.live)
   const jobs = useApp((s) => s.jobs)
   const torrents = useApp((s) => s.torrents)
@@ -25,6 +25,24 @@ function useLiveRates(): Record<string, number> {
     for (const n of t.networks) out[n.name] = (out[n.name] ?? 0) + n.rate
   }
   return out
+}
+
+/**
+ * The sidebar's total: every download and torrent together, said in so many
+ * words so it isn't mistaken for the speed of the one that's open (B8.1).
+ */
+export function NetworksTotal() {
+  const rates = useLiveRates()
+  const total = Object.values(rates).reduce((a, r) => a + r, 0)
+  return (
+    <>
+      <div className="net-total">
+        <h2 className="group">Networks</h2>
+        {total > 0 && <span className="num">{rateText(total)}</span>}
+      </div>
+      {total > 0 && <p className="net-total-note">All downloads together</p>}
+    </>
+  )
 }
 
 /** A network answering with a sign-in page (hotel, café, airport Wi-Fi). */

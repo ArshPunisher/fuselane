@@ -11,11 +11,12 @@ import {
   WarningCircle,
 } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
-import { bytes, eta, percent, rate } from '../lib/format'
+import { bytes, eta, percent, rate, rateText } from '../lib/format'
 import { assignLanes, kindLabel, netTitle } from '../lib/lanes'
 import { usePoll } from '../lib/poll'
 import { FilePicker } from './FilePicker'
 import { LiveRate } from './LiveRate'
+import { SpeedSplit } from './SpeedSplit'
 import { Orb } from './Orb'
 import { PiecesMap } from './PiecesMap'
 import { REVEAL_LABEL } from './TransferDetail'
@@ -261,7 +262,16 @@ export function TorrentDetail({ t, onBack }: { t: TorrentView; onBack: (() => vo
       <div className="torrent-body">
         <div className="torrent-head">
           {t.status === 'downloading' ? (
-            <LiveRate value={t.rate} />
+            <>
+              <LiveRate value={t.rate} />
+              <SpeedSplit
+                parts={nets.map((n, i) => ({
+                  name: netTitle(n),
+                  lane: lanes[i] ?? 'steel',
+                  rate: n.rate,
+                }))}
+              />
+            </>
           ) : (
             <p className="speed num">
               {Math.floor(pct)}
@@ -355,6 +365,11 @@ export function TorrentDetail({ t, onBack }: { t: TorrentView; onBack: (() => vo
                   <thead>
                     <tr>
                       <th scope="col">Network</th>
+                      {t.status === 'downloading' && (
+                        <th scope="col" className="r">
+                          Speed
+                        </th>
+                      )}
                       <th scope="col" className="r">
                         Peers
                       </th>
@@ -384,6 +399,9 @@ export function TorrentDetail({ t, onBack }: { t: TorrentView; onBack: (() => vo
                             </span>
                           </span>
                         </td>
+                        {t.status === 'downloading' && (
+                          <td className="r num">{rateText(n.rate)}</td>
+                        )}
                         <td className="r num">{n.peers}</td>
                         <td className="r num">
                           {t.done > 0 ? `${Math.round((n.credited / t.done) * 100)}%` : ''}
@@ -392,10 +410,25 @@ export function TorrentDetail({ t, onBack }: { t: TorrentView; onBack: (() => vo
                       </tr>
                     ))}
                   </tbody>
+                  {nets.length > 1 && (
+                    <tfoot>
+                      <tr>
+                        <td>All networks</td>
+                        {t.status === 'downloading' && (
+                          <td className="r num">{rateText(t.rate)}</td>
+                        )}
+                        <td className="r num">{peerCount}</td>
+                        <td className="r num">{t.done > 0 ? '100%' : ''}</td>
+                        <td className="r num">{bytes(t.done)}</td>
+                      </tr>
+                    </tfoot>
+                  )}
                 </table>
               )}
               <p className="field-help">
-                Each network is credited only with pieces that passed their checksum.
+                {t.status === 'downloading'
+                  ? 'Speed is what each network receives right now. Share counts only pieces that passed their checksum.'
+                  : 'Each network is credited only with pieces that passed their checksum.'}
               </p>
             </>
           )}

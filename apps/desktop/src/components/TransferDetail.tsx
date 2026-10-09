@@ -36,10 +36,12 @@ function Center({ job, live }: { job: JobView; live: Live | undefined }) {
       (a, n) => (!a || n.rate > a.rate ? n : a),
       null,
     )
-    const faster = live1.length > 1 && best && best.rate > 0 ? live.rate / best.rate : 0
+    // The centre number is the sum of the speeds shown around the ring (B8.1).
+    const total = live1.reduce((a, n) => a + n.rate, 0)
+    const faster = live1.length > 1 && best && best.rate > 0 ? total / best.rate : 0
     return (
       <>
-        <LiveRate value={live.rate} />
+        <LiveRate value={total} />
         <p className="speed-sub">
           {faster >= 1.1 && best
             ? `${faster.toFixed(1)}x faster than ${netTitle(best)}`

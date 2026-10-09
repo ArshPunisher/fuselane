@@ -31,7 +31,9 @@ test('a torrent shows each network credited with verified bytes', async ({ page 
   await expect(table).toContainText('Ethernet')
   await expect(table).toContainText('Peers')
   // Shares add up to 100% (credit sums to the verified total).
-  const shares = await table.locator('tbody tr td:nth-child(3)').allTextContents()
+  const col =
+    (await table.locator('thead th').allTextContents()).findIndex((h) => h.trim() === 'Share') + 1
+  const shares = await table.locator(`tbody tr td:nth-child(${col})`).allTextContents()
   expect(shares.reduce((a, s) => a + parseInt(s, 10), 0)).toBeGreaterThanOrEqual(99)
   await expect(page.locator('.torrent-head .speed')).toContainText('MB/s')
   await expect(page.getByText('2 of 5', { exact: true })).toBeVisible()
@@ -273,4 +275,32 @@ test('a torrent shows its pieces filling in and who it is talking to', async ({ 
   await expect(peers).toContainText('Unknown app')
   await tabs.getByRole('tab', { name: 'Files' }).click()
   await expect(page.getByRole('tabpanel')).toContainText('.mkv')
+})
+
+test('the big speed is the sum of the networks under it, and the sidebar says what its total counts', async ({
+  page,
+}) => {
+  await page.goto('/?freeze=3')
+  await page.getByRole('button', { name: /^Sprite Fright \(2021\) 4K/ }).click()
+  const split = page.getByRole('list', { name: 'Speed by network' })
+  await expect(split).toBeVisible()
+  // Read both once the glide has settled.
+  await expect
+    .poll(async () => {
+      const lanes = await split
+        .locator('.num')
+        .evaluateAll((els) =>
+          els.map((e) => parseFloat(e.firstChild?.textContent ?? '0')).reduce((a, b) => a + b, 0),
+        )
+      const big = parseFloat((await page.locator('.torrent-head .speed').textContent()) ?? '0')
+      return Math.abs(lanes - big) <= 0.15
+    })
+    .toBe(true)
+  // The table's Speed column ends in an "All networks" row.
+  const table = page.getByRole('table', { name: 'Networks in this torrent' })
+  await expect(table.getByRole('columnheader', { name: 'Speed' })).toBeVisible()
+  await expect(table.locator('tfoot')).toContainText('All networks')
+  // Sidebar: a total, labelled as every download together.
+  await expect(page.locator('.sidebar .net-total')).toContainText('MB/s')
+  await expect(page.locator('.sidebar')).toContainText('All downloads together')
 })

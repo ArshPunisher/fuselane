@@ -290,6 +290,35 @@ fn freeze(v: &mut TorrentView) {
     }
 }
 
+/// Sets each network's speed from the bytes it received since the last tick and
+/// returns the torrent's speed as their sum, so the big number always equals the
+/// lanes shown under it (B8.1). The verified-bytes delta jumps a whole piece at a
+/// time; it is only the fallback when no network reports received bytes.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)]
+fn lane_rates(
+    nets: &mut [TorrentNetView],
+    before: &[(String, u64)],
+    verified_delta: u64,
+    elapsed: f64,
+) -> u64 {
+    let per_sec = |bytes: u64| (bytes as f64 / elapsed.max(0.001)) as u64;
+    for n in nets.iter_mut() {
+        let was = before
+            .iter()
+            .find(|(name, _)| *name == n.name)
+            .map_or(n.received, |(_, r)| *r);
+        n.rate = per_sec(n.received.saturating_sub(was));
+    }
+    if nets.iter().all(|n| n.received == 0) {
+        return per_sec(verified_delta);
+    }
+    nets.iter().map(|n| n.rate).sum()
+}
+
 fn view_of(t: &Torrent, added_at: i64, rate: u64) -> TorrentView {
     let p = t.progress();
     let status = match p.phase {
@@ -826,12 +855,7 @@ impl Torrents {
             let Some(t) = e.torrent.clone() else { continue };
             let p = t.progress();
             let elapsed = e.prev.1.elapsed().as_secs_f64().max(0.001);
-            #[allow(
-                clippy::cast_possible_truncation,
-                clippy::cast_sign_loss,
-                clippy::cast_precision_loss
-            )]
-            let rate = (p.done.saturating_sub(e.prev.0) as f64 / elapsed) as u64;
+            let verified_delta = p.done.saturating_sub(e.prev.0);
             e.prev = (p.done, Instant::now());
             let before: Vec<(String, u64)> = e
                 .last
@@ -839,21 +863,8 @@ impl Torrents {
                 .iter()
                 .map(|n| (n.name.clone(), n.received))
                 .collect();
-            e.last = view_of(&t, e.added_at, rate);
-            for n in &mut e.last.networks {
-                let was = before
-                    .iter()
-                    .find(|(name, _)| *name == n.name)
-                    .map_or(n.received, |(_, r)| *r);
-                #[allow(
-                    clippy::cast_possible_truncation,
-                    clippy::cast_sign_loss,
-                    clippy::cast_precision_loss
-                )]
-                {
-                    n.rate = (n.received.saturating_sub(was) as f64 / elapsed) as u64;
-                }
-            }
+            e.last = view_of(&t, e.added_at, 0);
+            e.last.rate = lane_rates(&mut e.last.networks, &before, verified_delta, elapsed);
             let starved = self.all_networks_used_up(&e.last);
             // An allowance was raised or reset: reconnect now instead of waiting out
             // librqbit's growing retry timers.
@@ -1160,6 +1171,36 @@ pub(crate) mod tests {
         for s in ["checking", "downloading", "paused", "completed", "failed"] {
             assert!(src.contains(&format!("'{s}'")), "{s}");
         }
+    }
+
+    #[test]
+    fn the_speed_is_the_sum_of_the_networks() {
+        let net = |name: &str, received: u64| TorrentNetView {
+            name: name.into(),
+            peers: 1,
+            received,
+            rate: 0,
+            credited: 0,
+        };
+        let mut nets = vec![
+            net("Wi-Fi", 3_000_000),
+            net("Ethernet", 7_000_000),
+            net("New", 500_000),
+        ];
+        let before = vec![
+            ("Wi-Fi".to_string(), 1_000_000),
+            ("Ethernet".to_string(), 2_000_000),
+        ];
+        // A whole 4 MiB piece got verified this tick: it must not move the number.
+        let total = lane_rates(&mut nets, &before, 4 << 20, 2.0);
+        assert_eq!(nets[0].rate, 1_000_000);
+        assert_eq!(nets[1].rate, 2_500_000);
+        // A network that just joined starts from zero instead of counting its total.
+        assert_eq!(nets[2].rate, 0);
+        assert_eq!(total, nets.iter().map(|n| n.rate).sum::<u64>());
+        // No per-network counts (nothing received yet): fall back to verified bytes.
+        let mut idle = vec![net("Wi-Fi", 0)];
+        assert_eq!(lane_rates(&mut idle, &[], 2_000, 2.0), 1_000);
     }
 
     #[test]

@@ -133,7 +133,8 @@ export function createDemoTorrents(params: URLSearchParams, emit: () => (e: UiEv
         credited: c,
       }
     })
-    t.view.rate = rate
+    // Like the service: the torrent's speed is the sum of its networks (B8.1).
+    t.view.rate = t.view.networks.reduce((a, n) => a + n.rate, 0) || rate
   }
 
   const want = params.get('torrents')

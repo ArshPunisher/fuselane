@@ -5,7 +5,7 @@ import { TransferList } from './components/TransferList'
 import { TransferDetail } from './components/TransferDetail'
 import { TorrentDetail } from './components/TorrentDetail'
 import { NewDownload } from './components/NewDownload'
-import { NetworkList, NetworksView } from './components/NetworksView'
+import { NetworkList, NetworksTotal, NetworksView } from './components/NetworksView'
 import { SettingsView } from './components/SettingsView'
 import { SendView } from './components/SendView'
 import { isSendLink } from './lib/sendLink'
@@ -288,7 +288,7 @@ export function App() {
           <Nav kind="sidebar" />
           <div className="sidebar-nets">
             <SlowToggle />
-            <h2 className="group">Networks</h2>
+            <NetworksTotal />
             <NetworkList compact />
           </div>
         </aside>
