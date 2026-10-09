@@ -10,6 +10,23 @@
         "role": "Viewer",
         "rank": "Alternate"
       }
-    ]
+    ],
+    "macOS": {
+      "dmg": {
+        "background": "../../../packaging/macos/dmg/background.tiff",
+        "windowSize": {
+          "width": 660,
+          "height": 472
+        },
+        "appPosition": {
+          "x": 180,
+          "y": 196
+        },
+        "applicationFolderPosition": {
+          "x": 480,
+          "y": 196
+        }
+      }
+    }
   }
 }

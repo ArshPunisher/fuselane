@@ -45,3 +45,6 @@ packaging/brand/out/
 # Python bytecode from tools/*.py
 __pycache__/
 .playwright-cli/
+
+# DMG background intermediates (render with packaging/macos/dmg/render.mjs)
+packaging/macos/dmg/*.png

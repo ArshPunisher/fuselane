@@ -1,0 +1,141 @@
+<!doctype html>
+<!-- The disk image's background (660x420 points). Rendered to PNG at 1x and 2x by
+     render.sh; Finder draws the app icon at (180, 196) and Applications at (480, 196). -->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @font-face {
+        font-family: Geist;
+        src: url('GEIST_URL') format('woff2');
+        font-weight: 100 900;
+      }
+      html,
+      body {
+        margin: 0;
+        width: 660px;
+        height: 420px;
+        overflow: hidden;
+      }
+      body {
+        font-family:
+          Geist,
+          -apple-system,
+          sans-serif;
+        color: #1b1f27;
+        background:
+          radial-gradient(520px 260px at 50% 46%, #ffffff, transparent 70%),
+          linear-gradient(180deg, #f6f7f9, #eceef2);
+        position: relative;
+      }
+      h1 {
+        position: absolute;
+        top: 34px;
+        left: 0;
+        right: 0;
+        margin: 0;
+        text-align: center;
+        font-size: 21px;
+        font-weight: 650;
+        letter-spacing: -0.02em;
+      }
+      h1 span {
+        color: #d9772b;
+      }
+      .glow {
+        position: absolute;
+        top: 116px;
+        width: 160px;
+        height: 160px;
+        border-radius: 50%;
+        background: radial-gradient(
+          closest-side,
+          rgba(255, 255, 255, 0.95),
+          rgba(255, 255, 255, 0)
+        );
+      }
+      .a {
+        left: 100px;
+      }
+      .b {
+        left: 400px;
+      }
+      svg.arrow {
+        position: absolute;
+        left: 0;
+        top: 0;
+      }
+      .card {
+        position: absolute;
+        left: 40px;
+        right: 40px;
+        bottom: 26px;
+        padding: 13px 18px 14px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.78);
+        border: 1px solid #e3e6ec;
+        font-size: 12.5px;
+        line-height: 1.5;
+        color: #454c5a;
+      }
+      .card b {
+        color: #1b1f27;
+        font-weight: 600;
+      }
+      ol {
+        margin: 4px 0 0;
+        padding-left: 18px;
+      }
+      li {
+        margin: 1px 0;
+      }
+      .k {
+        font-weight: 600;
+        color: #1b1f27;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Drag <span>Fuselane</span> into Applications</h1>
+    <div class="glow a"></div>
+    <div class="glow b"></div>
+    <svg class="arrow" width="660" height="420" viewBox="0 0 660 420">
+      <defs>
+        <linearGradient id="g" x1="0" x2="1">
+          <stop offset="0" stop-color="#4cc3df" />
+          <stop offset=".5" stop-color="#9b8cf2" />
+          <stop offset="1" stop-color="#ef8a2f" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M262 190 C 300 168, 356 168, 392 186"
+        fill="none"
+        stroke="url(#g)"
+        stroke-width="4"
+        stroke-linecap="round"
+        stroke-dasharray="2 9"
+      />
+      <path
+        d="M380 176 L 396 188 L 379 197"
+        fill="none"
+        stroke="#ef8a2f"
+        stroke-width="4"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+    <div class="card">
+      <b>Opening it the first time</b> (Fuselane is open source, not notarized by Apple):
+      <ol>
+        <li>
+          Open Fuselane from Applications. If macOS says it can't verify it, click
+          <span class="k">Done</span>.
+        </li>
+        <li>
+          In <span class="k">System Settings › Privacy &amp; Security</span>, click
+          <span class="k">Open Anyway</span>. You only do this once.
+        </li>
+      </ol>
+    </div>
+  </body>
+</html>
