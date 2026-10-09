@@ -35,6 +35,8 @@ pub enum SendError {
     Failed(String),
     #[error("cancelled")]
     Cancelled,
+    #[error("the other person cancelled it")]
+    CancelledByThem,
 }
 
 /// A device to send to: where it listens, and the fingerprint it announced.
@@ -250,7 +252,18 @@ pub async fn send(
             let _ = cancel_session(t, &accepted.session_id).await;
             return Err(SendError::Cancelled);
         }
-        let (status, _) = res?;
+        // The receiver cancelling closes the connection mid-file, which can
+        // look like a network failure here. Asking once more tells them apart.
+        let (status, body) = match res {
+            Err(SendError::Unreachable) => match call(t, &path, full(vec![]), Some(0)).await {
+                Ok((s, b)) if s == StatusCode::FORBIDDEN && b.starts_with(b"Cancelled") => (s, b),
+                _ => return Err(SendError::Unreachable),
+            },
+            other => other?,
+        };
+        if status == StatusCode::FORBIDDEN && body.starts_with(b"Cancelled") {
+            return Err(SendError::CancelledByThem);
+        }
         if !status.is_success() {
             return Err(SendError::Refused(status.as_u16()));
         }

@@ -83,7 +83,12 @@ struct Session {
 struct State<H> {
     host: Arc<H>,
     session: Mutex<Option<Session>>,
+    /// Sessions the person on this side cancelled; their uploads stop.
+    cancelled: Arc<Mutex<std::collections::HashSet<String>>>,
 }
+
+/// The reason a receive stopped because this side cancelled it.
+const CANCELLED_HERE: &str = "cancelled here";
 
 fn random_id() -> String {
     let mut b = [0u8; 16];
@@ -284,6 +289,14 @@ impl<H: Host> State<H> {
             return text(StatusCode::BAD_REQUEST, "Missing parameters");
         };
         // Look the file up, then work without holding the lock.
+        if self
+            .cancelled
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .contains(sid.as_str())
+        {
+            return text(StatusCode::FORBIDDEN, "Cancelled by the receiver");
+        }
         let (meta, dir) = {
             let s = self
                 .session
@@ -339,6 +352,14 @@ impl<H: Host> State<H> {
                 }
                 text(StatusCode::OK, "")
             }
+            Err(why) if why == CANCELLED_HERE => {
+                s.take();
+                drop(s);
+                // The id stays in `cancelled`: the sender may have lost the
+                // connection before reading this reply, and asks again.
+                self.host.ended(sid, Ended::Cancelled);
+                text(StatusCode::FORBIDDEN, "Cancelled by the receiver")
+            }
             Err(why) => {
                 let checksum = why.contains("checksum");
                 s.take();
@@ -392,6 +413,14 @@ impl<H: Host> State<H> {
             out.write_all(&data)
                 .await
                 .map_err(|e| format!("couldn't write it ({e})"))?;
+            if self
+                .cancelled
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .contains(sid)
+            {
+                return Err(CANCELLED_HERE.into());
+            }
             if written - last_report >= 256 * 1024 {
                 last_report = written;
                 self.host.progress(sid, fid, written);
@@ -418,6 +447,7 @@ impl<H: Host> State<H> {
 pub struct Server {
     pub addr: SocketAddr,
     task: tokio::task::JoinHandle<()>,
+    cancelled: Arc<Mutex<std::collections::HashSet<String>>>,
 }
 
 impl Drop for Server {
@@ -427,6 +457,20 @@ impl Drop for Server {
 }
 
 impl Server {
+    /// Stops an incoming session from this side: the file being received
+    /// stops, its partial file is removed, and the sender is told.
+    pub fn cancel(&self, session: &str) {
+        let mut c = self
+            .cancelled
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        // Remembered so a sender asking again hears why; old ones are dropped.
+        if c.len() >= 64 {
+            c.clear();
+        }
+        c.insert(session.to_string());
+    }
+
     /// Listens on `port` on every IPv4 address (the next free port if taken).
     pub async fn start<H: Host>(
         id: &crate::identity::Identity,
@@ -444,9 +488,11 @@ impl Server {
         }
         let listener = listener.ok_or_else(|| std::io::Error::other("no port"))?;
         let addr = listener.local_addr()?;
+        let cancelled: Arc<Mutex<std::collections::HashSet<String>>> = Arc::default();
         let state = Arc::new(State {
             host,
             session: Mutex::new(None),
+            cancelled: cancelled.clone(),
         });
         let acceptor = tokio_rustls::TlsAcceptor::from(tls);
         let task = tokio::spawn(async move {
@@ -468,6 +514,10 @@ impl Server {
                 });
             }
         });
-        Ok(Server { addr, task })
+        Ok(Server {
+            addr,
+            task,
+            cancelled,
+        })
     }
 }

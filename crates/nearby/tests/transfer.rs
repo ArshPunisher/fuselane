@@ -18,6 +18,10 @@ struct Box1 {
     asked: Mutex<Vec<(Option<String>, usize)>>,
     files: Mutex<Vec<PathBuf>>,
     ends: Mutex<Vec<Ended>>,
+    sessions: Mutex<Vec<String>>,
+    written: AtomicU64,
+    /// Receives slowly, so a cancel always lands mid-file even on a busy machine.
+    slow: AtomicBool,
 }
 
 impl Host for Box1 {
@@ -35,8 +39,16 @@ impl Host for Box1 {
         let d = self.answer.lock().unwrap().clone();
         Box::pin(async move { d })
     }
-    fn started(&self, _: &str, _: &DeviceInfo, _: &[String], _: u64) {}
-    fn progress(&self, _: &str, _: &str, _: u64) {}
+    fn started(&self, session: &str, _: &DeviceInfo, _: &[String], _: u64) {
+        self.sessions.lock().unwrap().push(session.to_string());
+    }
+    fn progress(&self, _: &str, _: &str, written: u64) {
+        self.written
+            .store(written, std::sync::atomic::Ordering::Relaxed);
+        if self.slow.load(std::sync::atomic::Ordering::Relaxed) {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+    }
     fn file_done(&self, _: &str, _: &str, path: &Path) {
         self.files.lock().unwrap().push(path.to_path_buf());
     }
@@ -77,6 +89,9 @@ async fn device(alias: &str, inbox: &Path) -> Device {
         asked: Mutex::default(),
         files: Mutex::default(),
         ends: Mutex::default(),
+        sessions: Mutex::default(),
+        written: AtomicU64::new(0),
+        slow: AtomicBool::new(false),
     });
     let server = Server::start(&id, host.clone(), 0).await.unwrap();
     Device {
@@ -226,4 +241,43 @@ async fn cancelling_mid_file_leaves_no_partial_file() {
     }
     let left: Vec<_> = std::fs::read_dir(inbox.path()).unwrap().collect();
     assert!(left.is_empty(), "{left:?}");
+}
+
+#[tokio::test]
+async fn the_receiver_can_cancel_and_the_sender_is_told() {
+    let inbox = tempfile::tempdir().unwrap();
+    let outbox = tempfile::tempdir().unwrap();
+    let a = Arc::new(device("Receiver", inbox.path()).await);
+    a.host
+        .slow
+        .store(true, std::sync::atomic::Ordering::Relaxed);
+    let b = device("Sender", tempfile::tempdir().unwrap().path()).await;
+    let me = info("Sender", &b.id, b.server.addr.port());
+    let f = vec![outgoing(outbox.path(), "big.iso", &vec![3u8; 40_000_000])];
+    let stopper = {
+        let a = a.clone();
+        tokio::spawn(async move {
+            while a.host.written.load(std::sync::atomic::Ordering::Relaxed) < 1_000_000 {
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            }
+            let s = a.host.sessions.lock().unwrap()[0].clone();
+            a.server.cancel(&s);
+        })
+    };
+    let r = client::send(
+        &me,
+        &target(&a, Some(&a.id.fingerprint)),
+        &f,
+        Arc::default(),
+        Arc::new(AtomicBool::new(false)),
+    )
+    .await;
+    stopper.await.unwrap();
+    assert_eq!(r, Err(SendError::CancelledByThem));
+    assert_eq!(a.host.ends.lock().unwrap().as_slice(), &[Ended::Cancelled]);
+    assert_eq!(
+        std::fs::read_dir(inbox.path()).unwrap().count(),
+        0,
+        "no partial file"
+    );
 }
