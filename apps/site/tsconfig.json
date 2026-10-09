@@ -1,12 +1,5 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "noEmit": true, "declaration": false, "types": ["vite/client", "node"] },
-  "include": [
-    "src",
-    "tests",
-    "vite.config.ts",
-    "playwright.config.ts",
-    "../desktop/src/components/coreRenderer.ts",
-    "../desktop/src/lib/color.ts"
-  ]
+  "include": ["src", "tests", "vite.config.ts", "playwright.config.ts"]
 }

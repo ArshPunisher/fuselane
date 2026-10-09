@@ -3,9 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#f9fafc" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0a0c11" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0b0d12" />
     <title>Fuselane: free download manager that combines Wi-Fi, Ethernet and your phone</title>
     <meta
       name="description"
@@ -20,10 +19,13 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Fuselane" />
     <meta property="og:url" content="https://arshpunisher.github.io/fuselane/" />
-    <meta property="og:title" content="Fuselane: one download, every network" />
+    <meta
+      property="og:title"
+      content="Fuselane: free download manager that combines Wi-Fi, Ethernet and your phone"
+    />
     <meta
       property="og:description"
-      content="Splits each download across Wi-Fi, Ethernet and your phone at once, then joins the parts into one verified file. Free for macOS, Windows and Linux."
+      content="Fuselane splits each download across every network you have (Wi-Fi, Ethernet, a USB-tethered phone) and joins the parts into one verified file. Free and open source for macOS, Windows and Linux."
     />
     <meta property="og:image" content="https://arshpunisher.github.io/fuselane/og.png" />
     <meta property="og:image:width" content="1200" />
@@ -33,10 +35,13 @@
       content="Fuselane logo, the headline One download. Every network., and the app downloading over three networks."
     />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Fuselane: one download, every network" />
+    <meta
+      name="twitter:title"
+      content="Fuselane: free download manager that combines Wi-Fi, Ethernet and your phone"
+    />
     <meta
       name="twitter:description"
-      content="Free download manager that combines Wi-Fi, Ethernet and your phone into one fast download."
+      content="Fuselane splits each download across every network you have (Wi-Fi, Ethernet, a USB-tethered phone) and joins the parts into one verified file. Free and open source for macOS, Windows and Linux."
     />
     <meta name="twitter:image" content="https://arshpunisher.github.io/fuselane/og.png" />
     <script type="application/ld+json">
@@ -85,148 +90,365 @@
             />
           </g>
         </svg>
-        <span>Fuselane</span>
+        Fuselane
       </a>
-      <nav aria-label="Site">
-        <a href="#download">Download</a>
-        <a href="#privacy">Privacy</a>
-        <a href="https://github.com/ArshPunisher/fuselane">GitHub</a>
+      <nav aria-label="Main">
+        <ul class="nav-links">
+          <li><a href="./#features">Features</a></li>
+          <li><a href="download/">Download</a></li>
+          <li><a href="faq/">FAQ</a></li>
+          <li><a href="support/">Support</a></li>
+        </ul>
       </nav>
+      <a
+        class="star"
+        href="https://github.com/ArshPunisher/fuselane"
+        aria-label="Fuselane on GitHub (star it)"
+      >
+        <i data-icon="github"></i>
+        <span>Star</span>
+        <span class="count num" data-stars></span>
+      </a>
     </header>
-
+    <nav aria-label="Pages">
+      <ul class="nav-mobile">
+        <li><a href="./#features">Features</a></li>
+        <li><a href="download/">Download</a></li>
+        <li><a href="faq/">FAQ</a></li>
+        <li><a href="support/">Support</a></li>
+      </ul>
+    </nav>
     <main id="main">
-      <section class="hero" aria-labelledby="hero-title">
+      <section class="hero wrap" aria-labelledby="hero-title">
         <div class="hero-text">
-          <h1 id="hero-title">One download.<br />Every network.</h1>
+          <p class="pill">Free and open source</p>
+          <h1 id="hero-title">Every network.<br /><span class="hot">One fast download.</span></h1>
           <p class="lead">
-            Fuselane splits each download across your Wi-Fi, Ethernet and phone at once, then joins
-            the parts into one verified file.
+            Fuselane downloads one file over your Wi-Fi, Ethernet and phone at the same time, then
+            fuses the parts.
           </p>
           <div class="cta">
-            <a class="btn btn-primary" id="primary-download" href="#download">Download</a>
-            <a class="btn btn-quiet" href="#download">All downloads</a>
+            <a class="btn btn-primary" id="primary-download" href="download/"
+              ><i data-icon="download"></i><span id="primary-label">Download</span></a
+            >
+            <a class="link-arrow" href="download/">All downloads <i data-icon="arrow-right"></i></a>
           </div>
-          <p class="meta" id="version-line">Free and open source. macOS, Windows and Linux.</p>
         </div>
-        <figure class="hero-core">
-          <div class="core" aria-hidden="true">
-            <canvas id="core"></canvas>
-            <div class="core-center">
-              <p class="speed"><span id="speed">0.0</span><span class="unit">MB/s</span></p>
-              <p class="speed-sub" id="speed-sub">3 networks</p>
-            </div>
+        <figure
+          class="fusion"
+          aria-label="Sample: Wi-Fi, Ethernet and an iPhone over USB combining into one download"
+        >
+          <canvas aria-hidden="true"></canvas>
+          <div class="net-tag tag-1" style="--c: var(--tide)">
+            <span class="name"><i></i>Wi-Fi</span>
+            <span class="rate num"><span data-lane-rate>41.2</span> <small>MB/s</small></span>
           </div>
-          <figcaption>Live view of a download over three networks (sample data).</figcaption>
+          <div class="net-tag tag-2" style="--c: var(--iris)">
+            <span class="name"><i></i>Ethernet</span>
+            <span class="rate num"><span data-lane-rate>33.8</span> <small>MB/s</small></span>
+          </div>
+          <div class="net-tag tag-3" style="--c: var(--volt)">
+            <span class="name"><i></i>iPhone USB</span>
+            <span class="rate num"><span data-lane-rate>12.4</span> <small>MB/s</small></span>
+          </div>
+          <div class="core-read">
+            <span class="total num" id="total">87.4</span>
+            <span class="unit">MB/s together</span>
+            <span class="gain num" id="gain">2.1× one network</span>
+          </div>
+          <div class="file-chip">
+            <div class="top">
+              <span translate="no">ubuntu-26.04.iso</span><span class="num">4.7 GB</span>
+            </div>
+            <div class="track"><div class="fill"></div></div>
+            <span class="num" id="file-left" style="color: var(--mute); font-size: 12px"
+              >54 s left</span
+            >
+          </div>
+          <figcaption class="sample-note">Sample speeds, as on a good home line.</figcaption>
         </figure>
       </section>
 
-      <section class="how" aria-labelledby="how-title">
-        <div class="how-text">
-          <h2 id="how-title">Faster, without a VPN or a server in the middle</h2>
+      <section class="section wrap" id="how" aria-labelledby="how-title">
+        <div class="section-head reveal">
+          <h2 id="how-title">Turn on a network. Watch the wait shrink.</h2>
           <p>
-            <strong>Every network works at once.</strong> Each part of the file is fetched over
-            whichever network is free, so their speeds add up.
-          </p>
-          <p>
-            <strong>Nothing breaks when one drops.</strong> Unplug the cable or lose the phone
-            signal and the others carry on. Quit or crash, and it resumes where it stopped.
-          </p>
-          <p>
-            <strong>The file is checked.</strong> Parts are only kept if they come from the same
-            file, and you can verify a SHA-256.
+            Each part of the file goes over whichever network is free, so their speeds add up. Try
+            it with the speeds from above.
           </p>
         </div>
-        <figure class="shot">
-          <img
-            src="app.png"
-            width="1440"
-            height="900"
-            alt="The Fuselane app showing a download over Wi-Fi, iPhone USB and Ethernet, with the speed of each network."
-            loading="lazy"
-          />
-          <figcaption>The desktop app (sample data).</figcaption>
-        </figure>
+        <div class="combine">
+          <div class="panel toggles reveal spot" style="--i: 1">
+            <h3>Your networks</h3>
+            <button
+              class="net-toggle"
+              role="switch"
+              aria-checked="true"
+              data-speed="41.2"
+              style="--c: var(--tide)"
+            >
+              <span class="dot"></span>
+              <span class="label">Wi-Fi<small>Your router</small></span>
+              <span class="speed num">41.2 MB/s</span>
+              <span class="knob"></span>
+            </button>
+            <button
+              class="net-toggle"
+              role="switch"
+              aria-checked="false"
+              data-speed="33.8"
+              style="--c: var(--iris)"
+            >
+              <span class="dot"></span>
+              <span class="label">Ethernet<small>A cable to the same or another line</small></span>
+              <span class="speed num">33.8 MB/s</span>
+              <span class="knob"></span>
+            </button>
+            <button
+              class="net-toggle"
+              role="switch"
+              aria-checked="false"
+              data-speed="12.4"
+              style="--c: var(--volt)"
+            >
+              <span class="dot"></span>
+              <span class="label">iPhone over USB<small>Your phone's mobile data</small></span>
+              <span class="speed num">12.4 MB/s</span>
+              <span class="knob"></span>
+            </button>
+          </div>
+          <div class="panel result reveal spot" style="--i: 2" aria-live="polite">
+            <div>
+              <p class="big num"><span id="combined">41.2</span><small>MB/s</small></p>
+              <p class="caption" id="combined-caption">
+                One network: as fast as it goes, no faster.
+              </p>
+            </div>
+            <div class="stack" aria-hidden="true">
+              <span style="--c: var(--tide)"></span><span style="--c: var(--iris)"></span
+              ><span style="--c: var(--volt)"></span>
+            </div>
+            <dl class="times">
+              <div>
+                <dt>A 4.7 GB file, fastest one network</dt>
+                <dd class="num" id="time-one">1 min 57 s</dd>
+              </div>
+              <div>
+                <dt>The same file with Fuselane</dt>
+                <dd class="num win" id="time-all">1 min 57 s</dd>
+              </div>
+            </dl>
+          </div>
+        </div>
       </section>
 
-      <section class="download" id="download" aria-labelledby="download-title">
-        <h2 id="download-title">Download <span class="num" id="version-tag"></span></h2>
-        <p class="muted" id="download-note">
-          Every file is listed in
-          <a id="sums" href="https://github.com/ArshPunisher/fuselane/releases">SHA256SUMS</a>.
-        </p>
-        <div class="platforms">
-          <article class="platform" data-os="mac">
-            <h3>macOS</h3>
-            <p class="muted">macOS 13.3 or later, Apple silicon and Intel.</p>
-            <p class="label">Install with one command</p>
-            <div class="cmd">
-              <code id="cmd-script"
-                >curl -fsSL
-                https://raw.githubusercontent.com/ArshPunisher/fuselane/main/packaging/macos/install.sh
-                | sh</code
-              ><button class="copy" data-copy="cmd-script" type="button">Copy</button>
-            </div>
-            <p class="label">or Homebrew</p>
-            <div class="cmd">
-              <code id="cmd-brew">brew install --cask arshpunisher/tap/fuselane</code
-              ><button class="copy" data-copy="cmd-brew" type="button">Copy</button>
-            </div>
-            <p class="files"><a data-file="macos-universal.dmg">Disk image (.dmg)</a></p>
-          </article>
-          <article class="platform" data-os="windows">
-            <h3>Windows</h3>
-            <p class="muted">Windows 10 or 11, x64.</p>
-            <p class="files">
-              <a class="btn" data-file="windows-x64-setup.exe">Installer (.exe)</a>
+      <section class="section wrap" id="features" aria-labelledby="features-title">
+        <div class="section-head reveal">
+          <h2 id="features-title">Everything a download manager should do. Over every network.</h2>
+        </div>
+        <div class="bento">
+          <article class="panel cell cell-a spot reveal">
+            <h3>Files and torrents, one queue</h3>
+            <p>
+              Paste a link, a magnet or a .torrent. Pick the files you want; every network brings
+              its share, and you see who carried what.
             </p>
-            <p class="muted small">
-              Code signing through the SignPath Foundation is being set up. Until then, SmartScreen
-              may warn: choose More info, then Run anyway.
+            <div class="art shot-crop">
+              <img
+                src="shots/torrent.png"
+                width="1656"
+                height="1048"
+                loading="lazy"
+                alt="Fuselane downloading a torrent over Wi-Fi, iPhone USB and Ethernet, with each network's share."
+              />
+            </div>
+          </article>
+          <article class="panel cell cell-b spot reveal" style="--i: 1">
+            <div class="icon-row">
+              <span class="icon-tile"><i data-icon="puzzle"></i></span
+              ><span class="icon-tile"><i data-icon="magnet"></i></span>
+            </div>
+            <h3>Hands off from your browser</h3>
+            <p>
+              The extension sends big downloads to Fuselane and leaves the rest in the browser.
+              Files behind a sign-in work too, if you allow it.
             </p>
           </article>
-          <article class="platform" data-os="linux">
-            <h3>Linux</h3>
-            <p class="muted">x64 and arm64 (Ubuntu 22.04 or newer).</p>
-            <p class="files">
-              <a data-file="linux-x64.AppImage">AppImage (x64)</a>
-              <a data-file="linux-x64.deb">.deb (x64)</a>
-              <a data-file="linux-x64.rpm">.rpm (x64)</a>
-              <a data-file="linux-arm64.deb">.deb (arm64)</a>
-              <a data-file="linux-arm64.rpm">.rpm (arm64)</a>
+          <article class="panel cell spot reveal" style="--i: 2">
+            <div class="icon-row">
+              <span class="icon-tile"><i data-icon="calendar"></i></span
+              ><span class="icon-tile"><i data-icon="moon"></i></span>
+            </div>
+            <h3>Overnight, then sleep</h3>
+            <p>Only download between set hours, then sleep or shut down when it's done.</p>
+          </article>
+          <article class="panel cell spot reveal" style="--i: 3">
+            <h3>Limits per network</h3>
+            <p>Cap the phone, keep the cable free. Monthly data allowances too.</p>
+            <div class="art mini-meter" aria-hidden="true">
+              <div style="--c: var(--tide); --w: 82%">
+                <span>Wi-Fi</span><span class="bar"><span></span></span
+                ><span class="num">no cap</span>
+              </div>
+              <div style="--c: var(--volt); --w: 34%">
+                <span>Phone</span><span class="bar"><span></span></span
+                ><span class="num">8 MB/s</span>
+              </div>
+            </div>
+          </article>
+          <article class="panel cell cell-e spot reveal" style="--i: 1">
+            <div class="icon-row">
+              <span class="icon-tile"><i data-icon="list"></i></span>
+            </div>
+            <h3>Many links at once</h3>
+            <p>Paste a list, or a pattern, and each becomes its own download.</p>
+            <p class="art code-art" translate="no">
+              https://example.com/part<b>[01-20]</b>.rar
+              <span style="color: var(--mute)">→ 20 downloads</span>
             </p>
+          </article>
+          <article class="panel cell spot reveal" style="--i: 2">
+            <div class="icon-row">
+              <span class="icon-tile"><i data-icon="refresh"></i></span>
+            </div>
+            <h3>Picks up where it stopped</h3>
+            <p>A dropped network, sleep, a crash: it carries on without starting over.</p>
+          </article>
+          <article class="panel cell spot reveal" style="--i: 3">
+            <div class="icon-row">
+              <span class="icon-tile"><i data-icon="shield"></i></span>
+            </div>
+            <h3>Checked, not guessed</h3>
+            <p>Parts only join if they come from the same file. Paste a SHA-256 to be sure.</p>
+          </article>
+          <article class="panel cell cell-h spot reveal">
+            <h3>Private by design</h3>
+            <ul class="assurances">
+              <li>No account</li>
+              <li>No ads</li>
+              <li>No tracking</li>
+              <li>Signed updates</li>
+              <li>Open source</li>
+            </ul>
           </article>
         </div>
-        <p class="muted">
-          Command line tool: <a data-cli="macos-universal.tar.gz">macOS</a>,
-          <a data-cli="windows-x64.exe">Windows</a>, <a data-cli="linux-x64.tar.gz">Linux x64</a>,
-          <a data-cli="linux-arm64.tar.gz">Linux arm64</a>.
-        </p>
       </section>
 
-      <section class="privacy" id="privacy" aria-labelledby="privacy-title">
-        <h2 id="privacy-title">Private by design</h2>
-        <p>
-          No account, no analytics, no crash reporting. Fuselane talks to the servers in your links
-          and to a signed update feed, nothing else unless you turn on optional per-network DNS
-          lookups. Read the
-          <a href="https://github.com/ArshPunisher/fuselane/blob/main/docs/PRIVACY.md"
-            >privacy policy</a
-          >.
-        </p>
-        <p class="muted">
-          Open source under Apache-2.0. Every release is built in public by GitHub Actions; app
-          updates are signed and checked before they install.
-        </p>
+      <section class="section wrap showcase" aria-labelledby="app-title">
+        <div class="section-head reveal">
+          <h2 id="app-title">See every network carry its share</h2>
+          <p>The real app: live speed, each network's part of the file, and what is left.</p>
+        </div>
+        <div style="position: relative; width: 100%">
+          <div class="frame">
+            <img
+              src="shots/app.png"
+              width="1440"
+              height="900"
+              loading="lazy"
+              alt="The Fuselane app showing a download over Wi-Fi, iPhone USB and Ethernet, with the speed of each network."
+            />
+          </div>
+          <div class="glow-floor" aria-hidden="true"></div>
+        </div>
+      </section>
+
+      <section class="section wrap" aria-labelledby="oss-title">
+        <div class="oss reveal">
+          <div>
+            <h2 id="oss-title">Free, and built in the open</h2>
+            <p>
+              No plans, no account, nothing to sign up for. Every release is built in public and
+              every update is signed. If it saves you time, a star helps others find it.
+            </p>
+          </div>
+          <div class="oss-actions">
+            <a class="btn btn-primary" href="https://github.com/ArshPunisher/fuselane"
+              ><span><i data-icon="star"></i> Star on GitHub</span
+              ><span class="num" data-stars></span
+            ></a>
+            <a class="btn" href="https://github.com/ArshPunisher/fuselane/releases"
+              ><span>What's new in each release</span><i data-icon="arrow-up-right"></i
+            ></a>
+            <a class="btn" href="support/"
+              ><span>Report a problem or an idea</span><i data-icon="arrow-right"></i
+            ></a>
+          </div>
+        </div>
       </section>
     </main>
 
     <footer class="foot">
-      <p>
-        Fuselane is free software.
-        <a href="https://github.com/ArshPunisher/fuselane">Source code</a> ·
-        <a href="https://github.com/ArshPunisher/fuselane/issues">Report a problem</a>
-      </p>
+      <div class="wrap">
+        <div class="foot-grid">
+          <ul class="foot-links">
+            <li><a href="download/">Download</a></li>
+            <li><a href="faq/">FAQ</a></li>
+            <li><a href="support/">Support</a></li>
+            <li><a href="https://github.com/ArshPunisher/fuselane/releases">Release notes</a></li>
+            <li>
+              <a href="https://github.com/ArshPunisher/fuselane/blob/main/docs/PRIVACY.md"
+                >Privacy</a
+              >
+            </li>
+            <li><a href="https://github.com/ArshPunisher/fuselane">Source code</a></li>
+          </ul>
+          <small
+            >Free software under Apache-2.0. Made by
+            <a href="https://github.com/ArshPunisher">Arsh Ramgarhia</a>.</small
+          >
+        </div>
+        <svg
+          class="giant reveal"
+          viewBox="0 0 1000 200"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <defs>
+            <filter id="giant-glow" x="-10%" y="-60%" width="120%" height="220%">
+              <feGaussianBlur stdDeviation="6" result="b" />
+              <feMerge>
+                <feMergeNode in="b" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            <linearGradient
+              id="giant-fuse"
+              gradientUnits="userSpaceOnUse"
+              x1="540"
+              x2="992"
+              y1="100"
+              y2="100"
+            >
+              <stop offset="0" stop-color="var(--fuse-hot)" />
+              <stop offset="1" stop-color="var(--fuse)" stop-opacity="0.15" />
+            </linearGradient>
+          </defs>
+          <g fill="none" stroke-linecap="round" filter="url(#giant-glow)">
+            <path
+              pathLength="1"
+              d="M8 34 C 300 34, 380 100, 540 100"
+              stroke="var(--tide)"
+              stroke-width="7"
+            />
+            <path pathLength="1" d="M8 100 L 540 100" stroke="var(--iris)" stroke-width="7" />
+            <path
+              pathLength="1"
+              d="M8 166 C 300 166, 380 100, 540 100"
+              stroke="var(--volt)"
+              stroke-width="7"
+            />
+            <path
+              class="out"
+              pathLength="1"
+              d="M540 100 L 992 100"
+              stroke="url(#giant-fuse)"
+              stroke-width="14"
+            />
+          </g>
+        </svg>
+      </div>
     </footer>
-    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/home.ts"></script>
   </body>
 </html>

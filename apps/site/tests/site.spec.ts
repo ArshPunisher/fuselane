@@ -2,10 +2,20 @@ import { expect, test, type Page } from '@playwright/test'
 
 const FEED = { version: '0.1.0-beta.1', notes: '', pub_date: '2026-10-08T00:00:00Z', platforms: {} }
 const REL = 'https://github.com/ArshPunisher/fuselane/releases'
+const PAGES = ['/', '/download/', '/faq/', '/support/']
 
-async function withFeed(page: Page, ok = true) {
+async function stub(page: Page, { feed = true, stars = 42 } = {}) {
   await page.route('**/updates/latest.json', (r) =>
-    ok ? r.fulfill({ json: FEED }) : r.fulfill({ status: 404, body: 'not found' }),
+    feed ? r.fulfill({ json: FEED }) : r.fulfill({ status: 404, body: 'not found' }),
+  )
+  // Never the real GitHub API in tests: a fixed star count and one asset size.
+  await page.route('https://api.github.com/**', (r) =>
+    r.fulfill({
+      json: {
+        stargazers_count: stars,
+        assets: [{ name: 'Fuselane_0.1.0-beta.1_macos-universal.dmg', size: 18_422_626 }],
+      },
+    }),
   )
 }
 
@@ -19,8 +29,8 @@ test.afterEach(async ({ page }) => {
 })
 
 test('every download link points at the exact file of the current version', async ({ page }) => {
-  await withFeed(page)
-  await page.goto('/')
+  await stub(page)
+  await page.goto('/download/')
   await expect(page.locator('#version-tag')).toHaveText('0.1.0-beta.1')
   const v = '0.1.0-beta.1'
   const expected: Record<string, string> = {
@@ -36,51 +46,84 @@ test('every download link points at the exact file of the current version', asyn
     `${REL}/download/v${v}/fuselane-cli_${v}_linux-x64.tar.gz`,
   )
   await expect(page.locator('#sums')).toHaveAttribute('href', `${REL}/download/v${v}/SHA256SUMS`)
+  await expect(page.locator('#notes')).toHaveAttribute('href', `${REL}/tag/v${v}`)
+  await expect(page.locator('[data-size="macos-universal.dmg"]')).toHaveText('18 MB')
 })
 
 test('without the feed, links fall back to the releases page instead of breaking', async ({
   page,
 }) => {
-  await withFeed(page, false)
-  await page.goto('/')
+  await stub(page, { feed: false })
+  await page.goto('/download/')
   await expect(page.locator('a[data-file="macos-universal.dmg"]')).toHaveAttribute('href', REL)
   await expect(page.locator('#version-tag')).toHaveText('')
 })
 
-for (const [ua, platform, label, current] of [
-  ['Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Win32', 'Download for Windows', 'windows'],
-  ['Mozilla/5.0 (X11; Linux x86_64)', 'Linux x86_64', 'Download for Linux', 'linux'],
-  ['Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5)', 'MacIntel', 'Download for macOS', 'mac'],
+for (const [ua, platform, label, os, tabName] of [
+  [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+    'Win32',
+    'Download for Windows',
+    'windows',
+    /Windows/,
+  ],
+  ['Mozilla/5.0 (X11; Linux x86_64)', 'Linux x86_64', 'Download for Linux', 'linux', /Linux/],
+  [
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5)',
+    'MacIntel',
+    'Download for macOS',
+    'mac',
+    /macOS/,
+  ],
 ] as const) {
-  test(`a ${current} visitor gets the matching button and card`, async ({ browser }) => {
+  test(`a ${os} visitor gets the matching button and tab`, async ({ browser }) => {
     const ctx = await browser.newContext({ userAgent: ua })
     const page = await ctx.newPage()
     await page.addInitScript(
       (p) => Object.defineProperty(navigator, 'platform', { get: () => p }),
       platform,
     )
-    await withFeed(page)
+    await stub(page)
     await page.goto('/')
     await expect(page.locator('#primary-download')).toHaveText(label)
-    await expect(page.locator(`.platform[data-os="${current}"]`)).toHaveAttribute(
-      'data-current',
-      '',
-    )
-    if (current === 'windows') {
+    if (os === 'windows') {
       await expect(page.locator('#primary-download')).toHaveAttribute(
         'href',
         /windows-x64-setup\.exe$/,
       )
     }
+    await page.goto('/download/')
+    const tab = page.getByRole('tab', { name: tabName })
+    await expect(tab).toHaveAttribute('aria-selected', 'true')
+    await expect(tab).toContainText('Yours')
+    await expect(page.locator(`#panel-${os}`)).toBeVisible()
     await ctx.close()
   })
 }
 
+test('system tabs work with the keyboard and show one panel at a time', async ({ page }) => {
+  await stub(page)
+  await page.goto('/download/')
+  const mac = page.getByRole('tab', { name: /macOS/ })
+  await mac.click()
+  await mac.press('ArrowRight')
+  const win = page.getByRole('tab', { name: /Windows/ })
+  await expect(win).toBeFocused()
+  await expect(win).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('#panel-windows')).toBeVisible()
+  await expect(page.locator('#panel-mac')).toBeHidden()
+  await page.getByText('Windows says it protected your PC?').click()
+  await expect(page.getByText(/SignPath Foundation/)).toBeVisible()
+  await win.press('End')
+  await expect(page.getByRole('tab', { name: /Linux/ })).toHaveAttribute('aria-selected', 'true')
+})
+
 test('copy buttons copy the exact command', async ({ page, context, browserName }) => {
   test.skip(browserName !== 'chromium', 'clipboard permissions are Chromium-only in Playwright')
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])
-  await withFeed(page)
-  await page.goto('/')
+  await stub(page)
+  await page.goto('/download/')
+  await page.getByRole('tab', { name: /macOS/ }).click()
   await page.locator('button[data-copy="cmd-brew"]').click()
   await expect(page.locator('button[data-copy="cmd-brew"]')).toHaveText('Copied')
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
@@ -88,54 +131,124 @@ test('copy buttons copy the exact command', async ({ page, context, browserName 
   )
 })
 
-test('the page mentions SignPath, privacy, and never scrolls sideways on a phone', async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 375, height: 812 })
-  await withFeed(page)
+test('turning networks on adds their speeds and cuts the wait', async ({ page }) => {
+  await stub(page)
   await page.goto('/')
-  await expect(page.getByText('SignPath Foundation')).toBeVisible()
-  await expect(page.getByRole('link', { name: 'privacy policy' })).toHaveAttribute(
-    'href',
-    /PRIVACY\.md$/,
-  )
-  expect(
-    await page.evaluate(() => document.documentElement.scrollWidth - innerWidth),
-  ).toBeLessThanOrEqual(0)
-  await expect(page.locator('img[alt]')).toHaveCount(1)
+  const sw = (name: string) => page.getByRole('switch', { name: new RegExp(name) })
+  await expect(page.locator('#combined')).toHaveText('41.2')
+  await sw('Ethernet').click()
+  await sw('iPhone over USB').click()
+  // 41.2 + 33.8 + 12.4 MB/s for 4.7 GB.
+  await expect(page.locator('#combined')).toHaveText('87.4')
+  await expect(page.locator('#time-all')).toHaveText('55 s')
+  await expect(page.locator('#time-one')).toHaveText('1 min 57 s')
+  await expect(page.locator('#combined-caption')).toContainText('3 networks')
+  for (const n of ['Wi-Fi', 'Ethernet', 'iPhone over USB']) await sw(n).click()
+  await expect(page.locator('#time-all')).toHaveText('No network')
 })
 
-test('SEO: title, description, canonical, share card and structured data are right', async ({
+test('the hero shows live sample speeds that add up', async ({ page }) => {
+  await stub(page)
+  await page.goto('/')
+  await page.waitForTimeout(700)
+  const lanes = await page.locator('[data-lane-rate]').allTextContents()
+  const total = Number(await page.locator('#total').textContent())
+  const sum = lanes.map(Number).reduce((a, b) => a + b, 0)
+  expect(total).toBeGreaterThan(70)
+  expect(total).toBeLessThan(100)
+  expect(Math.abs(total - sum)).toBeLessThan(0.25)
+  await expect(page.getByText('Sample speeds')).toBeVisible()
+})
+
+test('every page works on a phone without sideways scrolling', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 })
+  await stub(page)
+  for (const path of PAGES) {
+    await page.goto(path)
+    await expect(page.locator('h1')).toHaveCount(1)
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth - innerWidth),
+      path,
+    ).toBeLessThanOrEqual(0)
+    await expect(page.getByRole('navigation', { name: 'Pages' })).toBeVisible()
+  }
+})
+
+test('the nav marks the current page and every page links to privacy', async ({ page }) => {
+  await stub(page)
+  for (const [path, name] of [
+    ['/download/', 'Download'],
+    ['/faq/', 'FAQ'],
+    ['/support/', 'Support'],
+  ] as const) {
+    await page.goto(path)
+    await expect(
+      page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name, exact: true }),
+    ).toHaveAttribute('aria-current', 'page')
+    await expect(page.getByRole('link', { name: 'Privacy', exact: true })).toHaveAttribute(
+      'href',
+      /PRIVACY\.md$/,
+    )
+  }
+})
+
+test('the star count shows when there is one, and never as 0', async ({ page, browser }) => {
+  await stub(page, { stars: 1234 })
+  await page.goto('/')
+  await expect(page.locator('.star .count')).toHaveText(/1\.2K|1,234|1234/)
+  const ctx = await browser.newContext()
+  const fresh = await ctx.newPage()
+  await stub(fresh, { stars: 0 })
+  await fresh.goto('/support/')
+  await fresh.waitForTimeout(400)
+  await expect(fresh.locator('.star .count')).toHaveText('')
+  await ctx.close()
+})
+
+test('FAQ answers open and close', async ({ page }) => {
+  await stub(page)
+  await page.goto('/faq/')
+  const q = page.getByText("Will it eat my phone's data?")
+  const a = page.getByText(/monthly allowance for each network/)
+  await q.click()
+  await expect(a).toBeVisible()
+  await q.click()
+  await expect(a).toBeHidden()
+})
+
+test('SEO: each page has its own title, description and canonical; shared files exist', async ({
   page,
   request,
 }) => {
-  await withFeed(page)
+  await stub(page)
+  const seen = new Set<string>()
+  for (const path of PAGES) {
+    await page.goto(path)
+    const title = await page.title()
+    expect(title.length, path).toBeGreaterThan(20)
+    expect(title.length, path).toBeLessThanOrEqual(80)
+    expect(seen.has(title), `${path} repeats a title`).toBe(false)
+    seen.add(title)
+    const desc = (await page.locator('meta[name="description"]').getAttribute('content')) ?? ''
+    expect(desc.length, path).toBeGreaterThan(70)
+    expect(desc.length, path).toBeLessThanOrEqual(200)
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+      'href',
+      `https://arshpunisher.github.io/fuselane${path}`,
+    )
+    await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
+      'content',
+      /^https:\/\/.+\/og\.png$/,
+    )
+    for (const img of await page.locator('img').all())
+      expect((await img.getAttribute('alt'))?.length ?? 0, path).toBeGreaterThan(10)
+  }
   await page.goto('/')
-  const title = await page.title()
-  expect(title.length).toBeGreaterThan(20)
-  expect(title.length).toBeLessThanOrEqual(80)
-  const desc = (await page.locator('meta[name="description"]').getAttribute('content')) ?? ''
-  expect(desc.length).toBeGreaterThan(70)
-  expect(desc.length).toBeLessThanOrEqual(200)
-  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
-    'href',
-    'https://arshpunisher.github.io/fuselane/',
-  )
-  await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
-    'content',
-    /^https:\/\/.+\/og\.png$/,
-  )
-  await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute(
-    'content',
-    'summary_large_image',
-  )
-  await expect(page.locator('h1')).toHaveCount(1)
   const ld = JSON.parse(
     (await page.locator('script[type="application/ld+json"]').textContent()) ?? '{}',
   )
   expect(ld['@type']).toBe('SoftwareApplication')
   expect(ld.offers.price).toBe('0')
-  expect(ld.operatingSystem).toContain('Windows')
   for (const path of [
     'robots.txt',
     'sitemap.xml',
@@ -144,21 +257,38 @@ test('SEO: title, description, canonical, share card and structured data are rig
     'og.png',
     'site.webmanifest',
     'apple-touch-icon.png',
+    'shots/app.png',
+    'shots/torrent.png',
   ]) {
     const r = await request.get(`/${path}`)
     expect(r.status(), path).toBe(200)
   }
-  expect(await (await request.get('/robots.txt')).text()).toContain(
-    'Sitemap: https://arshpunisher.github.io/fuselane/sitemap.xml',
-  )
+  const sitemap = await (await request.get('/sitemap.xml')).text()
+  for (const path of PAGES)
+    expect(sitemap).toContain(`https://arshpunisher.github.io/fuselane${path}`)
 })
 
-test('the header logo animates in and ends fully drawn', async ({ page }) => {
-  await withFeed(page)
+test('the logo draws itself in and ends fully drawn', async ({ page }) => {
+  await stub(page)
   await page.goto('/')
   await page.waitForTimeout(1500)
   const offsets = await page
-    .locator('.mark path')
+    .locator('.nav .mark path')
     .evaluateAll((ps) => ps.map((p) => getComputedStyle(p).strokeDashoffset))
   expect(offsets.every((o) => o === '0' || o === '0px')).toBe(true)
+})
+
+test('with reduced motion, nothing waits to appear', async ({ browser }) => {
+  const ctx = await browser.newContext({ reducedMotion: 'reduce' })
+  const page = await ctx.newPage()
+  await stub(page)
+  await page.goto('/')
+  // Sections that would fade in on scroll are visible straight away.
+  const opacity = await page
+    .locator('#features .reveal')
+    .first()
+    .evaluate((e) => getComputedStyle(e).opacity)
+  expect(opacity).toBe('1')
+  await expect(page.locator('#total')).not.toHaveText('')
+  await ctx.close()
 })

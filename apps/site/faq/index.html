@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0b0d12" />
+    <title>Fuselane questions, answered</title>
+    <meta
+      name="description"
+      content="How Fuselane combines Wi-Fi, Ethernet and a tethered phone, which connections work, why your computer may warn the first time, and what it does with your data."
+    />
+    <link rel="canonical" href="https://arshpunisher.github.io/fuselane/faq/" />
+    <meta name="robots" content="index, follow" />
+    <link rel="icon" href="../favicon.ico" sizes="32x32" />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="../apple-touch-icon.png" />
+    <link rel="manifest" href="../site.webmanifest" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Fuselane" />
+    <meta property="og:url" content="https://arshpunisher.github.io/fuselane/faq/" />
+    <meta property="og:title" content="Fuselane questions, answered" />
+    <meta
+      property="og:description"
+      content="How Fuselane combines Wi-Fi, Ethernet and a tethered phone, which connections work, why your computer may warn the first time, and what it does with your data."
+    />
+    <meta property="og:image" content="https://arshpunisher.github.io/fuselane/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Fuselane logo, the headline One download. Every network., and the app downloading over three networks."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Fuselane questions, answered" />
+    <meta
+      name="twitter:description"
+      content="How Fuselane combines Wi-Fi, Ethernet and a tethered phone, which connections work, why your computer may warn the first time, and what it does with your data."
+    />
+    <meta name="twitter:image" content="https://arshpunisher.github.io/fuselane/og.png" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="nav">
+      <a class="wordmark" href="../" translate="no" aria-label="Fuselane home">
+        <svg class="mark" viewBox="0 0 512 512" aria-hidden="true">
+          <g fill="none" stroke-linecap="round" stroke-width="34">
+            <path
+              class="lane l1"
+              pathLength="1"
+              d="M70 150 C 180 150, 220 256, 300 256"
+              stroke="var(--lane-tide)"
+            />
+            <path class="lane l2" pathLength="1" d="M70 256 L 300 256" stroke="var(--lane-volt)" />
+            <path
+              class="lane l3"
+              pathLength="1"
+              d="M70 362 C 180 362, 220 256, 300 256"
+              stroke="var(--lane-iris)"
+            />
+            <path
+              class="fuse"
+              pathLength="1"
+              d="M300 256 L 442 256"
+              stroke="var(--fuse)"
+              stroke-width="46"
+            />
+          </g>
+        </svg>
+        Fuselane
+      </a>
+      <nav aria-label="Main">
+        <ul class="nav-links">
+          <li><a href="../#features">Features</a></li>
+          <li><a href="../download/">Download</a></li>
+          <li><a href="../faq/">FAQ</a></li>
+          <li><a href="../support/">Support</a></li>
+        </ul>
+      </nav>
+      <a
+        class="star"
+        href="https://github.com/ArshPunisher/fuselane"
+        aria-label="Fuselane on GitHub (star it)"
+      >
+        <i data-icon="github"></i>
+        <span>Star</span>
+        <span class="count num" data-stars></span>
+      </a>
+    </header>
+    <nav aria-label="Pages">
+      <ul class="nav-mobile">
+        <li><a href="../#features">Features</a></li>
+        <li><a href="../download/">Download</a></li>
+        <li><a href="../faq/">FAQ</a></li>
+        <li><a href="../support/">Support</a></li>
+      </ul>
+    </nav>
+    <main id="main" class="wrap">
+      <section class="page-hero" aria-labelledby="faq-title">
+        <h1 id="faq-title">Questions, answered</h1>
+        <p>
+          Something missing?
+          <a href="https://github.com/ArshPunisher/fuselane/issues">Ask on GitHub</a>.
+        </p>
+      </section>
+      <div class="qa reveal">
+        <details open>
+          <summary>How does Fuselane combine my connections?</summary>
+          <div class="answer">
+            <p>
+              It splits a download into parts and fetches them over every network you have at the
+              same time, each part over whichever network is free. Faster networks simply take more
+              parts. When they are all in, the parts are checked and joined into one file.
+            </p>
+          </div>
+        </details>
+        <details>
+          <summary>Which connections can I combine?</summary>
+          <div class="answer">
+            <p>
+              Any your computer shows as a network: Wi-Fi, Ethernet, a phone tethered over USB, a
+              second Wi-Fi or USB adapter. They help most when they come from different internet
+              lines (your home Wi-Fi plus your phone's mobile data, say). Two cables to the same
+              router share one line, so they won't be faster together.
+            </p>
+          </div>
+        </details>
+        <details>
+          <summary>Does it speed up my whole computer?</summary>
+          <div class="answer">
+            <p>
+              No. It speeds up what you download with Fuselane: links you add, torrents, and big
+              downloads the browser extension hands over. Everything else uses your normal
+              connection.
+            </p>
+          </div>
+        </details>
+        <details>
+          <summary>Why does my computer warn me the first time I open it?</summary>
+          <div class="answer">
+            <p>
+              Fuselane is free and doesn't pay for Apple's notarization, and its Windows signing
+              through the SignPath Foundation is still being set up. So macOS asks you to choose
+              Open Anyway once (in System Settings, Privacy &amp; Security), and Windows may say
+              More info, then Run anyway. The Mac install command and Homebrew skip the step. See
+              <a href="../download/">Download</a> for each system.
+            </p>
+          </div>
+        </details>
+        <details>
+          <summary>Will it eat my phone's data?</summary>
+          <div class="answer">
+            <p>
+              Only as much as you let it. Set a speed limit or a monthly allowance for each network
+              (for example, 5 GB a month on the phone), turn on Slow mode during calls, or let it
+              download only at night. When a network reaches its allowance, Fuselane stops using it
+              until the reset day.
+            </p>
+          </div>
+        </details>
+        <details>
+          <summary>Does it work with torrents?</summary>
+          <div class="answer">
+            <p>
+              Yes: magnet links and .torrent files, with a choice of files before anything
+              downloads. Peers are spread across your networks, and sharing after a download is off
+              unless you turn it on.
+            </p>
+          </div>
+        </details>
+        <details>
+          <summary>Do servers mind?</summary>
+          <div class="answer">
+            <p>
+              Fuselane asks for parts the standard way (byte ranges), as browsers do when they
+              resume. If a server limits connections, Fuselane backs off; if it doesn't allow parts
+              at all, the file comes over one network.
+            </p>
+          </div>
+        </details>
+        <details>
+          <summary>Is it stable?</summary>
+          <div class="answer">
+            <p>
+              It is in beta. Downloads survive a dropped network, sleep, quitting and even a crash,
+              and pick up where they stopped. Updates arrive inside the app. If something goes
+              wrong, <a href="https://github.com/ArshPunisher/fuselane/issues">tell us</a>; Settings
+              has a Copy diagnostics button that never includes links or file names.
+            </p>
+          </div>
+        </details>
+        <details>
+          <summary>My Android phone over USB doesn't show up on my Mac</summary>
+          <div class="answer">
+            <p>
+              Fuselane uses the networks macOS sees. iPhones work over USB without anything extra.
+              Some Android phones' USB tethering needs a driver macOS doesn't include; if the phone
+              doesn't appear under Network in System Settings, Fuselane can't see it either. On
+              Windows and Linux, Android USB tethering usually just works.
+            </p>
+          </div>
+        </details>
+        <details>
+          <summary>What does Fuselane do with my data?</summary>
+          <div class="answer">
+            <p>
+              Nothing leaves your computer except the downloads themselves and a check for signed
+              updates. No account, no analytics, no crash reports. Read the
+              <a href="https://github.com/ArshPunisher/fuselane/blob/main/docs/PRIVACY.md"
+                >privacy policy</a
+              >.
+            </p>
+          </div>
+        </details>
+        <details>
+          <summary>Is it really free?</summary>
+          <div class="answer">
+            <p>
+              Yes, with no paid plan and nothing to sign up for. It is open source under the
+              Apache-2.0 licence, so anyone can read and check the code.
+            </p>
+          </div>
+        </details>
+      </div>
+    </main>
+
+    <footer class="foot">
+      <div class="wrap">
+        <div class="foot-grid">
+          <ul class="foot-links">
+            <li><a href="../download/">Download</a></li>
+            <li><a href="../faq/">FAQ</a></li>
+            <li><a href="../support/">Support</a></li>
+            <li><a href="https://github.com/ArshPunisher/fuselane/releases">Release notes</a></li>
+            <li>
+              <a href="https://github.com/ArshPunisher/fuselane/blob/main/docs/PRIVACY.md"
+                >Privacy</a
+              >
+            </li>
+            <li><a href="https://github.com/ArshPunisher/fuselane">Source code</a></li>
+          </ul>
+          <small
+            >Free software under Apache-2.0. Made by
+            <a href="https://github.com/ArshPunisher">Arsh Ramgarhia</a>.</small
+          >
+        </div>
+        <svg
+          class="giant reveal"
+          viewBox="0 0 1000 200"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <defs>
+            <filter id="giant-glow" x="-10%" y="-60%" width="120%" height="220%">
+              <feGaussianBlur stdDeviation="6" result="b" />
+              <feMerge>
+                <feMergeNode in="b" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            <linearGradient
+              id="giant-fuse"
+              gradientUnits="userSpaceOnUse"
+              x1="540"
+              x2="992"
+              y1="100"
+              y2="100"
+            >
+              <stop offset="0" stop-color="var(--fuse-hot)" />
+              <stop offset="1" stop-color="var(--fuse)" stop-opacity="0.15" />
+            </linearGradient>
+          </defs>
+          <g fill="none" stroke-linecap="round" filter="url(#giant-glow)">
+            <path
+              pathLength="1"
+              d="M8 34 C 300 34, 380 100, 540 100"
+              stroke="var(--tide)"
+              stroke-width="7"
+            />
+            <path pathLength="1" d="M8 100 L 540 100" stroke="var(--iris)" stroke-width="7" />
+            <path
+              pathLength="1"
+              d="M8 166 C 300 166, 380 100, 540 100"
+              stroke="var(--volt)"
+              stroke-width="7"
+            />
+            <path
+              class="out"
+              pathLength="1"
+              d="M540 100 L 992 100"
+              stroke="url(#giant-fuse)"
+              stroke-width="14"
+            />
+          </g>
+        </svg>
+      </div>
+    </footer>
+    <script type="module" src="/src/common.ts"></script>
+  </body>
+</html>

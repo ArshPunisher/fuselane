@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0b0d12" />
+    <title>Download Fuselane for macOS, Windows and Linux</title>
+    <meta
+      name="description"
+      content="Get Fuselane, the free download manager that uses every network at once. Universal macOS app, Windows installer, Linux AppImage, deb and rpm, and a command line tool."
+    />
+    <link rel="canonical" href="https://arshpunisher.github.io/fuselane/download/" />
+    <meta name="robots" content="index, follow" />
+    <link rel="icon" href="../favicon.ico" sizes="32x32" />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="../apple-touch-icon.png" />
+    <link rel="manifest" href="../site.webmanifest" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Fuselane" />
+    <meta property="og:url" content="https://arshpunisher.github.io/fuselane/download/" />
+    <meta property="og:title" content="Download Fuselane for macOS, Windows and Linux" />
+    <meta
+      property="og:description"
+      content="Get Fuselane, the free download manager that uses every network at once. Universal macOS app, Windows installer, Linux AppImage, deb and rpm, and a command line tool."
+    />
+    <meta property="og:image" content="https://arshpunisher.github.io/fuselane/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Fuselane logo, the headline One download. Every network., and the app downloading over three networks."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Download Fuselane for macOS, Windows and Linux" />
+    <meta
+      name="twitter:description"
+      content="Get Fuselane, the free download manager that uses every network at once. Universal macOS app, Windows installer, Linux AppImage, deb and rpm, and a command line tool."
+    />
+    <meta name="twitter:image" content="https://arshpunisher.github.io/fuselane/og.png" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="nav">
+      <a class="wordmark" href="../" translate="no" aria-label="Fuselane home">
+        <svg class="mark" viewBox="0 0 512 512" aria-hidden="true">
+          <g fill="none" stroke-linecap="round" stroke-width="34">
+            <path
+              class="lane l1"
+              pathLength="1"
+              d="M70 150 C 180 150, 220 256, 300 256"
+              stroke="var(--lane-tide)"
+            />
+            <path class="lane l2" pathLength="1" d="M70 256 L 300 256" stroke="var(--lane-volt)" />
+            <path
+              class="lane l3"
+              pathLength="1"
+              d="M70 362 C 180 362, 220 256, 300 256"
+              stroke="var(--lane-iris)"
+            />
+            <path
+              class="fuse"
+              pathLength="1"
+              d="M300 256 L 442 256"
+              stroke="var(--fuse)"
+              stroke-width="46"
+            />
+          </g>
+        </svg>
+        Fuselane
+      </a>
+      <nav aria-label="Main">
+        <ul class="nav-links">
+          <li><a href="../#features">Features</a></li>
+          <li><a href="../download/">Download</a></li>
+          <li><a href="../faq/">FAQ</a></li>
+          <li><a href="../support/">Support</a></li>
+        </ul>
+      </nav>
+      <a
+        class="star"
+        href="https://github.com/ArshPunisher/fuselane"
+        aria-label="Fuselane on GitHub (star it)"
+      >
+        <i data-icon="github"></i>
+        <span>Star</span>
+        <span class="count num" data-stars></span>
+      </a>
+    </header>
+    <nav aria-label="Pages">
+      <ul class="nav-mobile">
+        <li><a href="../#features">Features</a></li>
+        <li><a href="../download/">Download</a></li>
+        <li><a href="../faq/">FAQ</a></li>
+        <li><a href="../support/">Support</a></li>
+      </ul>
+    </nav>
+    <main id="main" class="wrap">
+      <section class="page-hero" aria-labelledby="dl-title">
+        <h1 id="dl-title">Download Fuselane</h1>
+        <p>
+          Version <span class="num" id="version-tag"></span>, for macOS, Windows and Linux.
+          <a id="notes" href="https://github.com/ArshPunisher/fuselane/releases">Release notes</a>.
+          Every file is listed with its checksum in
+          <a id="sums" href="https://github.com/ArshPunisher/fuselane/releases">SHA256SUMS</a>.
+        </p>
+      </section>
+
+      <div class="os-tabs" role="tablist" aria-label="Your system">
+        <button
+          role="tab"
+          id="tab-mac"
+          aria-controls="panel-mac"
+          aria-selected="true"
+          data-os="mac"
+        >
+          <i data-icon="apple"></i>macOS
+        </button>
+        <button
+          role="tab"
+          id="tab-windows"
+          aria-controls="panel-windows"
+          aria-selected="false"
+          tabindex="-1"
+          data-os="windows"
+        >
+          <i data-icon="windows"></i>Windows
+        </button>
+        <button
+          role="tab"
+          id="tab-linux"
+          aria-controls="panel-linux"
+          aria-selected="false"
+          tabindex="-1"
+          data-os="linux"
+        >
+          <i data-icon="linux"></i>Linux
+        </button>
+      </div>
+
+      <section class="tab-panel" id="panel-mac" role="tabpanel" aria-labelledby="tab-mac">
+        <div class="panel file-row spot">
+          <div>
+            <h3>Mac app</h3>
+            <p class="sub">Apple silicon and Intel, macOS 13.3 or later</p>
+          </div>
+          <p class="fname num">
+            <span data-name="macos-universal.dmg">Disk image (.dmg)</span>
+            <span data-size="macos-universal.dmg"></span>
+          </p>
+          <a class="btn btn-primary btn-small" data-file="macos-universal.dmg"
+            ><i data-icon="download"></i>Download</a
+          >
+        </div>
+        <p class="label">Or install with one command (no warning to click through)</p>
+        <div class="cmd">
+          <code id="cmd-script"
+            >curl -fsSL
+            https://raw.githubusercontent.com/ArshPunisher/fuselane/main/packaging/macos/install.sh
+            | sh</code
+          ><button class="copy" data-copy="cmd-script" type="button">Copy</button>
+        </div>
+        <p class="label">Or with Homebrew</p>
+        <div class="cmd">
+          <code id="cmd-brew">brew install --cask arshpunisher/tap/fuselane</code
+          ><button class="copy" data-copy="cmd-brew" type="button">Copy</button>
+        </div>
+        <div class="qa">
+          <details>
+            <summary>First time opening Fuselane from the disk image?</summary>
+            <div class="answer">
+              <p>
+                Fuselane is open source and signed on your Mac, but not notarized by Apple (that
+                needs a paid account). The first time, macOS stops it once:
+              </p>
+              <ol>
+                <li>Drag Fuselane into Applications and open it. macOS says it can't check it.</li>
+                <li>Open System Settings, then Privacy &amp; Security.</li>
+                <li>Scroll to Security and choose Open Anyway, then Open.</li>
+              </ol>
+              <p>After that it opens like any other app. The command above skips this step.</p>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <section
+        class="tab-panel"
+        id="panel-windows"
+        role="tabpanel"
+        aria-labelledby="tab-windows"
+        hidden
+      >
+        <div class="panel file-row spot">
+          <div>
+            <h3>Windows installer</h3>
+            <p class="sub">Windows 10 or 11, x64</p>
+          </div>
+          <p class="fname num">
+            <span data-name="windows-x64-setup.exe">Installer (.exe)</span>
+            <span data-size="windows-x64-setup.exe"></span>
+          </p>
+          <a class="btn btn-primary btn-small" data-file="windows-x64-setup.exe"
+            ><i data-icon="download"></i>Download</a
+          >
+        </div>
+        <div class="qa">
+          <details>
+            <summary>Windows says it protected your PC?</summary>
+            <div class="answer">
+              <p>
+                Code signing through the SignPath Foundation is being set up. Until then,
+                SmartScreen may stop a new app it hasn't seen often:
+              </p>
+              <ol>
+                <li>Choose More info.</li>
+                <li>Choose Run anyway.</li>
+              </ol>
+              <p>Fuselane installs for your account only and updates itself after that.</p>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <section
+        class="tab-panel"
+        id="panel-linux"
+        role="tabpanel"
+        aria-labelledby="tab-linux"
+        hidden
+      >
+        <div class="panel file-row spot">
+          <div>
+            <h3>AppImage</h3>
+            <p class="sub">x64, runs on most distributions</p>
+          </div>
+          <p class="fname num"><span data-size="linux-x64.AppImage"></span></p>
+          <a class="btn btn-primary btn-small" data-file="linux-x64.AppImage"
+            ><i data-icon="download"></i>Download</a
+          >
+        </div>
+        <div class="panel file-row spot">
+          <div>
+            <h3>Debian and Ubuntu</h3>
+            <p class="sub">.deb, Ubuntu 22.04 or newer</p>
+          </div>
+          <p class="fname num"><span data-size="linux-x64.deb"></span></p>
+          <span class="cta"
+            ><a class="btn btn-small" data-file="linux-x64.deb">x64</a
+            ><a class="btn btn-small" data-file="linux-arm64.deb">arm64</a></span
+          >
+        </div>
+        <div class="panel file-row spot">
+          <div>
+            <h3>Fedora and openSUSE</h3>
+            <p class="sub">.rpm</p>
+          </div>
+          <p class="fname num"><span data-size="linux-x64.rpm"></span></p>
+          <span class="cta"
+            ><a class="btn btn-small" data-file="linux-x64.rpm">x64</a
+            ><a class="btn btn-small" data-file="linux-arm64.rpm">arm64</a></span
+          >
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="more-title" style="padding-top: 64px">
+        <h2
+          id="more-title"
+          class="reveal"
+          style="font-size: clamp(28px, 4vw, 40px); margin-bottom: 20px"
+        >
+          Also
+        </h2>
+        <div class="bento" style="grid-auto-rows: auto">
+          <article class="panel cell cell-b spot reveal">
+            <div class="icon-row">
+              <span class="icon-tile"><i data-icon="terminal"></i></span>
+            </div>
+            <h3>Command line</h3>
+            <p>
+              The same engine for scripts and servers:
+              <code class="num">fuselane get &lt;link&gt;</code>.
+            </p>
+            <p class="art cta">
+              <a class="btn btn-small" data-cli="macos-universal.tar.gz">macOS</a>
+              <a class="btn btn-small" data-cli="windows-x64.exe">Windows</a>
+              <a class="btn btn-small" data-cli="linux-x64.tar.gz">Linux x64</a>
+              <a class="btn btn-small" data-cli="linux-arm64.tar.gz">Linux arm64</a>
+            </p>
+          </article>
+          <article class="panel cell cell-e spot reveal" style="--i: 1">
+            <div class="icon-row">
+              <span class="icon-tile"><i data-icon="puzzle"></i></span>
+            </div>
+            <h3>Browser extension</h3>
+            <p>
+              Sends big downloads from Chrome, Edge and Brave to the app. It is in review on the
+              Chrome Web Store; the app sets itself up for it, nothing to install by hand.
+            </p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div class="wrap">
+        <div class="foot-grid">
+          <ul class="foot-links">
+            <li><a href="../download/">Download</a></li>
+            <li><a href="../faq/">FAQ</a></li>
+            <li><a href="../support/">Support</a></li>
+            <li><a href="https://github.com/ArshPunisher/fuselane/releases">Release notes</a></li>
+            <li>
+              <a href="https://github.com/ArshPunisher/fuselane/blob/main/docs/PRIVACY.md"
+                >Privacy</a
+              >
+            </li>
+            <li><a href="https://github.com/ArshPunisher/fuselane">Source code</a></li>
+          </ul>
+          <small
+            >Free software under Apache-2.0. Made by
+            <a href="https://github.com/ArshPunisher">Arsh Ramgarhia</a>.</small
+          >
+        </div>
+        <svg
+          class="giant reveal"
+          viewBox="0 0 1000 200"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <defs>
+            <filter id="giant-glow" x="-10%" y="-60%" width="120%" height="220%">
+              <feGaussianBlur stdDeviation="6" result="b" />
+              <feMerge>
+                <feMergeNode in="b" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            <linearGradient
+              id="giant-fuse"
+              gradientUnits="userSpaceOnUse"
+              x1="540"
+              x2="992"
+              y1="100"
+              y2="100"
+            >
+              <stop offset="0" stop-color="var(--fuse-hot)" />
+              <stop offset="1" stop-color="var(--fuse)" stop-opacity="0.15" />
+            </linearGradient>
+          </defs>
+          <g fill="none" stroke-linecap="round" filter="url(#giant-glow)">
+            <path
+              pathLength="1"
+              d="M8 34 C 300 34, 380 100, 540 100"
+              stroke="var(--tide)"
+              stroke-width="7"
+            />
+            <path pathLength="1" d="M8 100 L 540 100" stroke="var(--iris)" stroke-width="7" />
+            <path
+              pathLength="1"
+              d="M8 166 C 300 166, 380 100, 540 100"
+              stroke="var(--volt)"
+              stroke-width="7"
+            />
+            <path
+              class="out"
+              pathLength="1"
+              d="M540 100 L 992 100"
+              stroke="url(#giant-fuse)"
+              stroke-width="14"
+            />
+          </g>
+        </svg>
+      </div>
+    </footer>
+    <script type="module" src="/src/download.ts"></script>
+  </body>
+</html>
