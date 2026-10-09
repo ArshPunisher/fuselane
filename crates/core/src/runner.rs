@@ -1358,6 +1358,61 @@ mod tests {
         assert!(good.requests().len() > 3);
     }
 
+    /// Real servers: kernel.org's CDN with its mirror host as a mirror.
+    /// `cargo nextest run -p fuselane-core --run-ignored only real_mirror`
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "downloads 135 MB from kernel.org"]
+    async fn a_real_mirror_helps() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Arc::new(Store::open(&dir.path().join("jobs.db")).unwrap());
+        let main = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.1.tar.xz";
+        let id = store.create(main, dir.path()).unwrap();
+        let notes = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let started = std::time::Instant::now();
+        let out = run(
+            store,
+            id,
+            main,
+            dir.path().to_path_buf(),
+            None,
+            RunOptions {
+                mirrors: vec![
+                    "https://mirrors.edge.kernel.org/pub/linux/kernel/v6.x/linux-6.1.tar.xz".into(),
+                ],
+                mirror_notes: Some(notes.clone()),
+                ..RunOptions::default()
+            },
+        )
+        .await
+        .unwrap();
+        let Outcome::Completed { report, .. } = out else {
+            panic!("{out:?}");
+        };
+        let from_mirror: u64 = report
+            .bytes_by_network
+            .iter()
+            .filter(|(id, _)| **id > MIRROR_ID_STEP)
+            .map(|(_, b)| *b)
+            .sum();
+        eprintln!(
+            "{} bytes in {:?}, {from_mirror} from the mirror, notes {:?}",
+            report.total,
+            started.elapsed(),
+            notes.lock().unwrap()
+        );
+        assert_eq!(report.total, 134_728_520);
+        assert!(notes.lock().unwrap().is_empty());
+        assert!(from_mirror > 0);
+        // xz's own check: the archive must decompress cleanly.
+        let ok = std::process::Command::new("xz")
+            .arg("-t")
+            .arg(&report.path)
+            .status();
+        if let Ok(st) = ok {
+            assert!(st.success(), "xz says the file is damaged");
+        }
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn a_login_in_the_link_is_sent_as_basic_auth() {
         use fuselane_testkit::{Content, RangeServer};
