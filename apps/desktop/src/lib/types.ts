@@ -74,12 +74,15 @@ export interface ShareView {
   size: number
   /** The link to give the receiver, once ready. */
   link: string | null
-  state: 'preparing' | 'sharing' | 'changed' | 'failed'
+  /** `sent`: stopped by itself after one full copy went out. */
+  state: 'preparing' | 'sharing' | 'sent' | 'changed' | 'failed'
   /** How far preparing has got, 0 to 1. */
   prepared: number
   /** Bytes sent to receivers so far. */
   sent: number
   peers: number
+  /** Stop sharing once a full copy has been sent. */
+  once: boolean
   error: string | null
 }
 

@@ -112,6 +112,8 @@ export interface Backend {
   sendsState(): Promise<[ShareView[], ReceiveView[]]>
   /** Stops sharing; the file itself stays. */
   stopSend(id: string): Promise<void>
+  /** Stop sharing by itself once a full copy has been sent. */
+  sendOnce(id: string, on: boolean): Promise<void>
   /** Starts receiving from a link into `dir` (or the download folder). */
   receiveLink(link: string, dir: string | null): Promise<string>
   /** Removes a finished or failed receive from the list; the file stays. */
@@ -208,6 +210,7 @@ async function tauriBackend(): Promise<Backend> {
     sendFile: (path) => call('send_file', { path }),
     sendsState: () => call('sends_state'),
     stopSend: (id) => call('stop_send', { id }),
+    sendOnce: (id, on) => call('send_once', { id, on }),
     receiveLink: (link, dir) => call('receive_link', { link, dir }),
     dismissReceive: (id) => call('dismiss_receive', { id }),
     revealReceived: (id) => call('reveal_received', { id }),

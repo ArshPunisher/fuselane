@@ -2354,6 +2354,19 @@ kbd {
   outline-offset: 1px;
 }
 
+.send-once {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--body);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.send-once input {
+  accent-color: var(--fuse);
+}
+
 .send-error {
   display: flex;
   align-items: flex-start;

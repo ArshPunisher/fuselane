@@ -37,6 +37,7 @@ export function createDemoSends(params: URLSearchParams, emit: () => (e: UiEvent
       prepared: 1,
       sent: 812 * MB,
       peers: 1,
+      once: false,
       error: null,
     })
     receives.push({
@@ -62,6 +63,15 @@ export function createDemoSends(params: URLSearchParams, emit: () => (e: UiEvent
   function step(dt: number) {
     let changed = false
     for (const s of shares) {
+      if (s.state === 'sharing' && s.peers > 0) {
+        s.sent = Math.min(s.size, s.sent + 160 * MB * dt)
+        if (s.once && s.sent >= s.size) {
+          s.state = 'sent'
+          s.link = null
+          s.peers = 0
+        }
+        changed = true
+      }
       if (s.state === 'preparing') {
         s.prepared = Math.min(1, s.prepared + dt / 2)
         if (s.prepared >= 1) {
@@ -128,6 +138,7 @@ export function createDemoSends(params: URLSearchParams, emit: () => (e: UiEvent
         prepared: 0,
         sent: 0,
         peers: 0,
+        once: false,
         error: null,
       })
       send()
@@ -137,6 +148,12 @@ export function createDemoSends(params: URLSearchParams, emit: () => (e: UiEvent
       shares.map((s) => ({ ...s })),
       receives.map(view),
     ],
+    async sendOnce(id: string, on: boolean) {
+      const s = shares.find((x) => x.id === id)
+      if (!s) throw err('not-found', 'That share is no longer in the list.', null)
+      s.once = on
+      send()
+    },
     async stopSend(id: string) {
       const i = shares.findIndex((s) => s.id === id)
       if (i < 0) throw err('not-found', 'That share is no longer in the list.', null)

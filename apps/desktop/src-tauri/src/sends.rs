@@ -30,12 +30,14 @@ pub struct ShareView {
     pub size: u64,
     /// The link to send, once the file is ready.
     pub link: Option<String>,
-    /// preparing, sharing, changed, failed
+    /// preparing, sharing, sent (stopped after one full copy), changed, failed
     pub state: &'static str,
     /// How far preparing has got (0 to 1).
     pub prepared: f64,
     pub sent: u64,
     pub peers: usize,
+    /// Stop sharing once a full copy has been sent.
+    pub once: bool,
     pub error: Option<String>,
 }
 
@@ -61,6 +63,8 @@ struct Saved {
     /// The link's token: info-hash and key. Kept in Fuselane's own data folder,
     /// next to everything else it remembers, so the same link keeps working.
     token: String,
+    #[serde(default)]
+    once: bool,
 }
 
 struct ShareEntry {
@@ -229,6 +233,7 @@ impl Sends {
             name: p.name.clone(),
             size: p.size,
             token: p.link.token(),
+            once: false,
         });
         self.write_saved(&list);
         Ok(())
@@ -277,6 +282,7 @@ impl Sends {
                 prepared: 0.0,
                 sent: 0,
                 peers: 0,
+                once: false,
                 error: None,
             },
             progress: progress.clone(),
@@ -338,6 +344,26 @@ impl Sends {
             me.publish().await;
         });
         Ok(temp)
+    }
+
+    /// Whether to stop sharing once a full copy has been sent (kept across restarts).
+    pub async fn set_once(&self, id: &str, on: bool) -> Result<(), UiError> {
+        {
+            let mut shares = self.shares.lock().await;
+            let s = shares
+                .iter_mut()
+                .find(|s| s.view.id == id)
+                .ok_or_else(|| err("not-found", "That share is no longer in the list.", None))?;
+            s.view.once = on;
+        }
+        let mut list = self.saved();
+        for s in list.iter_mut().filter(|s| same_share(s, id)) {
+            s.once = on;
+        }
+        self.write_saved(&list);
+        self.tick().await;
+        self.publish().await;
+        Ok(())
     }
 
     /// Stops sharing; the file itself is never touched.
@@ -552,6 +578,7 @@ impl Sends {
     /// Called every second: progress for preparing, sharing and receiving.
     pub async fn tick(&self) {
         let mut changed = false;
+        let mut done = Vec::new();
         for s in self.shares.lock().await.iter_mut() {
             let next = match (&s.torrent, s.view.state) {
                 (_, "preparing") => {
@@ -574,6 +601,23 @@ impl Sends {
                 s.view.peers = next.2;
                 changed = true;
             }
+            // The torrent carries the 1 KiB sealed header too.
+            let full = s.view.size + fuselane_send::crypt::HEADER_BLOCK as u64;
+            if s.view.once && s.view.state == "sharing" && s.view.sent >= full {
+                s.view.state = "sent";
+                s.view.link = None;
+                s.view.peers = 0;
+                if let Some(t) = s.torrent.take() {
+                    done.push((s.view.id.clone(), t));
+                }
+                changed = true;
+            }
+        }
+        for (id, t) in done {
+            if let Some(engine) = self.engine.get() {
+                let _ = engine.remove(t, false).await;
+            }
+            self.forget(&id);
         }
         for r in self.receives.lock().await.iter_mut() {
             if let (Some(t), "receiving") = (&r.torrent, r.view.state) {
@@ -631,6 +675,7 @@ impl Sends {
                 prepared: 1.0,
                 sent: 0,
                 peers: 0,
+                once: s.once,
                 error: None,
             };
             if restored.is_none() {
@@ -747,6 +792,7 @@ mod tests {
             prepared: 1.0,
             sent: 0,
             peers: 0,
+            once: false,
             error: None,
         };
         let receive = ReceiveView {
@@ -775,6 +821,8 @@ mod tests {
         let share = shared(&a.sends).await;
         assert_eq!(share.state, "sharing", "{:?}", share.error);
         assert_eq!(share.name, "holiday.mov");
+        // Stop once a full copy is out (kept across restarts).
+        a.sends.set_once(&share.id, true).await.unwrap();
         let link = share.link.clone().unwrap();
         assert!(link.starts_with("https://arshpunisher.github.io/fuselane/s#"));
 
@@ -801,6 +849,20 @@ mod tests {
             .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
             .collect();
         assert_eq!(names, ["holiday.mov"]);
+        // The sender stopped by itself after the full copy.
+        let stopped = until("the share to stop", async || {
+            a.sends.tick().await;
+            let (shares, _) = a.sends.views().await;
+            shares.into_iter().find(|s| s.state == "sent")
+        })
+        .await;
+        assert!(stopped.link.is_none());
+        let again = reopen(&a.store, &a.root);
+        again.restore().await;
+        assert!(
+            again.views().await.0.is_empty(),
+            "a sent share isn't restored"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

@@ -932,6 +932,17 @@ test.describe('Fuse Send', () => {
     await expect(list).toHaveCount(0)
   })
 
+  test('a share can stop by itself after one full copy is sent', async ({ page }) => {
+    await page.goto('/?empty=1&sends=1&speed=10')
+    await openSend(page)
+    const list = page.getByRole('list', { name: "Files you're sending" })
+    await list.getByLabel('Stop sharing after one full copy is sent').check()
+    await expect(list).toContainText('Sent in full. Sharing stopped', { timeout: 10_000 })
+    await expect(list.getByLabel('Link for Wedding photos.zip')).toHaveCount(0)
+    await list.getByRole('button', { name: 'Stop sending Wedding photos.zip' }).click()
+    await expect(list).toHaveCount(0)
+  })
+
   test('cancelling the file picker does nothing', async ({ page }) => {
     await page.goto('/?empty=1&pick=cancel')
     await openSend(page)

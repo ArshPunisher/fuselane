@@ -557,6 +557,11 @@ async fn stop_send(snd: Snd<'_>, id: String) -> Result<(), UiError> {
 }
 
 #[tauri::command]
+async fn send_once(snd: Snd<'_>, id: String, on: bool) -> Result<(), UiError> {
+    snd.set_once(&id, on).await
+}
+
+#[tauri::command]
 async fn receive_link(snd: Snd<'_>, link: String, dir: Option<String>) -> Result<String, UiError> {
     snd.inner().receive(&link, dir.as_deref()).await
 }
@@ -1053,6 +1058,7 @@ fn main() {
             send_file,
             sends_state,
             stop_send,
+            send_once,
             receive_link,
             dismiss_receive,
             reveal_received,

@@ -28,6 +28,8 @@ function shareStatus(s: ShareView): string {
             : `${s.peers} receivers connected`
       return s.sent > 0 ? `${who} · ${bytes(s.sent)} sent` : who
     }
+    case 'sent':
+      return 'Sent in full. Sharing stopped'
     case 'changed':
       return 'File changed'
     case 'failed':
@@ -116,6 +118,16 @@ function ShareRow({ s }: { s: ShareView }) {
         </div>
       )}
       {s.link && <CopyLink link={s.link} name={s.name} />}
+      {s.state === 'sharing' && (
+        <label className="send-once">
+          <input
+            type="checkbox"
+            checked={s.once}
+            onChange={(e) => void act((b) => b.sendOnce(s.id, e.target.checked))}
+          />
+          Stop sharing after one full copy is sent
+        </label>
+      )}
       {s.error && (
         <p className="send-error">
           <WarningCircle size={14} aria-hidden weight="fill" /> {s.error}
