@@ -3,7 +3,7 @@
 Everything the store forms ask for, in one place. Build the upload with
 `pnpm --filter @fuselane/extension zip` (files land in `apps/extension/.output/`).
 
-**Chrome Web Store:** item `nggljghjikdkigiekdciocigdnnhponl`, submitted for review 2026-10-09 (publishes automatically once approved).
+**Chrome Web Store:** item `nggljghjikdkigiekdciocigdnnhponl`, **approved and live** (0.1.0, 2026-10-10): https://chromewebstore.google.com/detail/fuselane/nggljghjikdkigiekdciocigdnnhponl. Next upload: 0.2.0 (page list, signed-in downloads) with the images below.
 
 ## Name and summary
 
@@ -14,18 +14,38 @@ Everything the store forms ask for, in one place. Build the upload with
 
 ## Description
 
-Fuselane is a free, open-source download manager that uses every network your computer has at the same time: Wi-Fi, Ethernet and a phone tethered over USB. It splits each download into parts, fetches them over all of them, and fuses the parts into one verified file.
+Fuselane makes big downloads faster by using every network your computer has, at the same time.
 
-This extension connects your browser to the Fuselane desktop app:
+Wi-Fi, Ethernet and a phone tethered over USB each carry part of the file. Fuselane fetches the parts in parallel, checks every byte, and joins them into one verified file. A download that takes 10 minutes on Wi-Fi alone can finish in a fraction of that.
 
-- Big downloads (1 MB or more) go to Fuselane when the app is running. Anything it can't take stays in the browser, so you never lose a download.
-- Right-click a link and choose "Download with Fuselane".
-- The toolbar button shows whether the app is connected, with a switch to turn hand-off off.
-- A settings page lets you choose the smallest download to hand over, only or never certain sites, and which file types.
+This extension connects your browser to the free Fuselane app:
 
-You need the Fuselane app on the same computer (macOS, Windows or Linux): https://fuselane.app/
+★ Big downloads go to Fuselane automatically
+When the app is running, downloads of 1 MB or more go straight to it. Anything it can't take stays in the browser, so you never lose a download.
 
-The extension sends nothing to the internet. It only talks to the Fuselane app on your own computer.
+★ Everything on the page, one click away
+Open the toolbar button to see the videos and file links on the page you're on, and send any of them to Fuselane.
+
+★ Right-click any link
+Choose "Download with Fuselane" on any link.
+
+★ You decide what goes
+Pick the smallest size to hand over, which sites always or never use Fuselane, and which file types.
+
+★ Signed-in downloads (optional)
+Turn it on in settings and files that need a sign-in work too. Off by default.
+
+What the Fuselane app adds:
+• Every network at once: Wi-Fi, Ethernet and a USB-tethered phone
+• Verified files: checksums found and checked by themselves
+• Resume after any drop, pause, or restart
+• Groups, schedules, "Ready by" times, and per-network data limits
+• Torrents and direct sharing to nearby computers
+• Free and open source, for macOS, Windows and Linux
+
+Get the app: https://fuselane.app/
+
+Privacy: the extension sends nothing to the internet. It only talks to the Fuselane app on your own computer. No account, no tracking, no ads.
 
 ## Single purpose (Chrome)
 
@@ -55,8 +75,21 @@ No host permissions are requested at install. "Signed-in downloads" is off by de
 
 ## Images
 
-- Icon: `public/icon/128.png` (rendered from `packaging/brand/favicon.svg`).
-- Screenshots (1280×800): `store/screenshot-*.png`, rendered by `store/render.mjs`.
+Rendered from the real UI by `node apps/extension/store/render.mjs` into `store/out/`. In the store dashboard, delete the old screenshots and upload these in this order. Captions go in each image's description field where the store has one (Edge, Firefox).
+
+| File | Size | Caption |
+| --- | --- | --- |
+| `screenshot-1-every-network.jpg` | 1280×800 | One download, every network: Wi-Fi, Ethernet and your phone fused into one fast, verified file. |
+| `screenshot-2-from-the-browser.jpg` | 1280×800 | The toolbar button lists the videos and files on the page; big downloads go to Fuselane by themselves. |
+| `screenshot-3-right-click.jpg` | 1280×800 | Right-click any link and choose "Download with Fuselane". |
+| `screenshot-4-verified.jpg` | 1280×800 | Every file is checked against its published checksum, and you see how much time each network saved. |
+| `screenshot-5-whole-page.jpg` | 1280×800 | Grab every file on a downloads page, picked by type, as one group. |
+| `promo-small-440x280.jpg` | 440×280 | Small promo tile |
+| `promo-marquee-1400x560.jpg` | 1400×560 | Marquee promo tile |
+| `logo-icon-300.png` | 300×300 | Edge Add-ons logo |
+
+- Store icon: `public/icon/128.png` (rendered from `packaging/brand/favicon.svg`).
+- Logo kit for social and press: `logo-lockup-on-dark.png`, `logo-lockup-on-light.png`, `logo-lockup-transparent.png`, `logo-icon-512.png`, `logo-mark-white.png`, `social-avatar-800.jpg`.
 
 ## After the first upload
 
