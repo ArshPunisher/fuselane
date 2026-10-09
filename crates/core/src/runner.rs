@@ -208,7 +208,12 @@ pub fn network_for(
             }
         })
     });
-    Network { id, name, connect }
+    Network {
+        id,
+        name,
+        connect,
+        mirror: None,
+    }
 }
 
 /// The plain-language message for each failure (ERRORS.md §2).
@@ -275,6 +280,11 @@ pub struct RunOptions {
     pub filename: Option<String>,
     /// A browser session's cookies and referrer (checked; never logged).
     pub headers: Headers,
+    /// Other links to the same file (B8.9). Each is checked first (same size,
+    /// ranges, the same bytes in a spot check) and only then helps.
+    pub mirrors: Vec<String>,
+    /// Why a mirror wasn't used, in plain words, for the download's detail.
+    pub mirror_notes: Option<Arc<std::sync::Mutex<Vec<String>>>>,
 }
 
 /// Why a job couldn't start at all (nothing in the store changed state).
@@ -642,6 +652,116 @@ pub async fn preview_with(link: &str, headers: Headers) -> Result<Preview, Strin
     })
 }
 
+/// Lane ids for mirrors: device id + 100 per mirror (`live` folds them back
+/// onto their device, so a network shows once however many servers it reaches).
+pub const MIRROR_ID_STEP: u32 = 100;
+
+/// Bytes compared between the main server and a mirror at each spot.
+const MIRROR_SAMPLE: u64 = 16 * 1024;
+
+/// Checks each mirror against the main server and returns lanes for the good
+/// ones. A mirror must answer with the exact same size, take byte ranges, and
+/// serve the same bytes at two spots (the middle and the end of the file).
+async fn mirror_lanes(
+    main: &Source,
+    main_nets: &[Network],
+    mirrors: &[String],
+    chosen: &[String],
+    per_network_dns: bool,
+    signed_in: bool,
+    notes: &(dyn Fn(String) + Send + Sync),
+) -> Vec<Network> {
+    if mirrors.is_empty() || main_nets.is_empty() {
+        return vec![];
+    }
+    // A browser session or a login belongs to the main site: never sent elsewhere.
+    if signed_in {
+        notes("Mirrors weren't used: this download carries a sign-in for its own site.".into());
+        return vec![];
+    }
+    let t = Tuning::default();
+    let Ok(main_probe) = fuselane_engine_http::download::probe(main, main_nets, &t).await else {
+        return vec![];
+    };
+    let (Some(total), true) = (main_probe.total, main_probe.ranges) else {
+        notes("Mirrors weren't used: the main server doesn't let a file be split.".into());
+        return vec![];
+    };
+    let host_of = |l: &str| {
+        url::Url::parse(l)
+            .ok()
+            .and_then(|u| u.host_str().map(str::to_string))
+    };
+    let mut lanes = vec![];
+    for (m, link) in mirrors.iter().take(8).enumerate() {
+        let who = host_of(link).unwrap_or_else(|| link.clone());
+        let checked = async {
+            let (link, _) = follow(
+                link,
+                chosen,
+                per_network_dns,
+                Headers::default(),
+                Duration::from_secs(10),
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+            let (src, nets, _) = connect_plan(&link, chosen, per_network_dns)
+                .await
+                .map_err(|e| e.to_string())?;
+            let p = fuselane_engine_http::download::probe(&src, &nets, &t)
+                .await
+                .map_err(|e| describe(&e))?;
+            if p.total != Some(total) {
+                return Err("it has a different file size".to_string());
+            }
+            if !p.ranges {
+                return Err("it doesn't let the file be split".to_string());
+            }
+            for first in [total / 2, total.saturating_sub(MIRROR_SAMPLE)] {
+                let last = (first + MIRROR_SAMPLE).min(total) - 1;
+                if last < first {
+                    continue;
+                }
+                let a = fuselane_engine_http::download::read_range(
+                    main,
+                    &main_nets[0],
+                    &t,
+                    first,
+                    last,
+                )
+                .await;
+                let b = fuselane_engine_http::download::read_range(&src, &nets[0], &t, first, last)
+                    .await;
+                if a.is_none() || a != b {
+                    return Err("its bytes differ from the main server's".to_string());
+                }
+            }
+            let mirror = Arc::new(fuselane_engine_http::download::Mirror {
+                source: src,
+                if_range: p
+                    .raw_etag
+                    .filter(|e| !e.starts_with("W/") && !e.starts_with("w/"))
+                    .or(p.last_modified),
+                etag: p.etag,
+            });
+            let step = MIRROR_ID_STEP * (m as u32 + 1);
+            Ok(nets
+                .into_iter()
+                .map(|n| Network {
+                    id: n.id + step,
+                    mirror: Some(mirror.clone()),
+                    ..n
+                })
+                .collect::<Vec<_>>())
+        };
+        match checked.await {
+            Ok(mut v) => lanes.append(&mut v),
+            Err(why) => notes(format!("{who} wasn't used: {why}.")),
+        }
+    }
+    lanes
+}
+
 /// Downloads one file into `out` across every usable network, without a job in
 /// the list (the app's own update, B8.4): same redirects, network choice and
 /// bonded engine as [`run`], nothing saved to the store.
@@ -704,8 +824,29 @@ pub async fn run(
         Duration::from_secs(10),
     )
     .await?;
-    let (source, networks, names) =
+    let (source, mut networks, names) =
         connect_plan(&link, &opts.networks, opts.per_network_dns).await?;
+    if !opts.mirrors.is_empty() {
+        let notes = opts.mirror_notes.clone();
+        let note = move |m: String| {
+            if let Some(n) = &notes {
+                n.lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .push(m);
+            }
+        };
+        let mut more = mirror_lanes(
+            &source,
+            &networks,
+            &opts.mirrors,
+            &opts.networks,
+            opts.per_network_dns,
+            headers.has_credentials(),
+            &note,
+        )
+        .await;
+        networks.append(&mut more);
+    }
     let sink = {
         let store = store.clone();
         CheckpointFn(Arc::new(move |cp| {
@@ -1155,6 +1296,66 @@ mod tests {
         .await
         .unwrap_err();
         assert!(!err.is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn good_mirrors_help_and_wrong_ones_are_turned_away_with_a_reason() {
+        use fuselane_testkit::{Content, RangeServer};
+        let content = Content::new(3 * 1024 * 1024 + 7, 41);
+        let main = RangeServer::start(content).await.unwrap();
+        let good = RangeServer::start(content).await.unwrap();
+        let other_size = RangeServer::start(Content::new(3 * 1024 * 1024 + 8, 41))
+            .await
+            .unwrap();
+        // The nastiest case: the same size, but different bytes.
+        let other_bytes = RangeServer::start(Content::new(3 * 1024 * 1024 + 7, 42))
+            .await
+            .unwrap();
+        let url = |s: &RangeServer| format!("http://{}{}", s.addr(), s.path());
+        let dir = tempfile::tempdir().unwrap();
+        let store = Arc::new(Store::open(&dir.path().join("jobs.db")).unwrap());
+        let id = store.create(&url(&main), dir.path()).unwrap();
+        let notes = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let out = run(
+            store,
+            id,
+            &url(&main),
+            dir.path().to_path_buf(),
+            None,
+            RunOptions {
+                mirrors: vec![url(&good), url(&other_size), url(&other_bytes)],
+                mirror_notes: Some(notes.clone()),
+                ..RunOptions::default()
+            },
+        )
+        .await
+        .unwrap();
+        let Outcome::Completed { report, .. } = out else {
+            panic!("{out:?}");
+        };
+        assert_eq!(
+            fuselane_testkit::sha256_file(&report.path).unwrap(),
+            content.sha256()
+        );
+        let notes = notes.lock().unwrap().clone();
+        assert_eq!(notes.len(), 2, "{notes:?}");
+        assert!(
+            notes.iter().any(|n| n.contains("different file size")),
+            "{notes:?}"
+        );
+        assert!(
+            notes.iter().any(|n| n.contains("bytes differ")),
+            "{notes:?}"
+        );
+        // The good mirror's lanes did real work (ids above MIRROR_ID_STEP).
+        let from_mirror: u64 = report
+            .bytes_by_network
+            .iter()
+            .filter(|(id, _)| **id > MIRROR_ID_STEP)
+            .map(|(_, b)| *b)
+            .sum();
+        assert!(from_mirror > 0, "{:?}", report.bytes_by_network);
+        assert!(good.requests().len() > 3);
     }
 
     #[tokio::test(flavor = "multi_thread")]

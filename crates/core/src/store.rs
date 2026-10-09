@@ -74,6 +74,8 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE jobs ADD COLUMN start_at INTEGER;",
     // v8: replace a file of the same name once this one is complete (else keep both).
     "ALTER TABLE jobs ADD COLUMN replace_existing INTEGER NOT NULL DEFAULT 0;",
+    // v9: other links to the same file (one per line), checked before they help.
+    "ALTER TABLE jobs ADD COLUMN mirrors TEXT NOT NULL DEFAULT '';",
 ];
 
 /// What a person can set when adding a download, beyond the link and folder.
@@ -131,6 +133,8 @@ pub struct Job {
     pub start_at: Option<i64>,
     /// Replace a file already there under the same name (moved to the Trash).
     pub replace_existing: bool,
+    /// Other links to the same file.
+    pub mirrors: Vec<String>,
 }
 
 impl Job {
@@ -460,6 +464,18 @@ impl Store {
         Ok(())
     }
 
+    /// Other links to the same file (each one checked before it helps).
+    pub fn set_mirrors(&self, id: i64, mirrors: &[String]) -> Result<(), StoreError> {
+        let n = self.lock().execute(
+            "UPDATE jobs SET mirrors = ?2 WHERE id = ?1",
+            params![id, mirrors.join("\n")],
+        )?;
+        if n == 0 {
+            return Err(StoreError::NotFound(id));
+        }
+        Ok(())
+    }
+
     /// Whether a file already there under the same name is replaced when this finishes.
     pub fn set_replace_existing(&self, id: i64, on: bool) -> Result<(), StoreError> {
         let n = self.lock().execute(
@@ -546,6 +562,13 @@ fn row_to_job(r: &rusqlite::Row<'_>) -> rusqlite::Result<Job> {
         speed_limit: u64::try_from(r.get::<_, i64>("speed_limit")?).unwrap_or(0),
         start_at: r.get("start_at")?,
         replace_existing: r.get::<_, i64>("replace_existing")? != 0,
+        mirrors: r
+            .get::<_, String>("mirrors")?
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .map(str::to_string)
+            .collect(),
     })
 }
 
@@ -596,6 +619,13 @@ mod tests {
         assert!(!s.get(a).unwrap().replace_existing);
         s.set_replace_existing(a, true).unwrap();
         assert!(s.get(a).unwrap().replace_existing);
+        assert!(s.get(a).unwrap().mirrors.is_empty());
+        let m = vec![
+            "https://m1.example/f".to_string(),
+            "https://m2.example/f".to_string(),
+        ];
+        s.set_mirrors(a, &m).unwrap();
+        assert_eq!(s.get(a).unwrap().mirrors, m);
         assert!(matches!(
             s.set_start_at(999, None),
             Err(StoreError::NotFound(999))
