@@ -21,7 +21,7 @@ if ! $WRANGLER pages project list 2>/dev/null | grep -q "│ $PROJECT "; then
   $WRANGLER pages project create "$PROJECT" --production-branch main --force
 fi
 
-$WRANGLER pages deploy dist --force --project-name "$PROJECT" --branch main --commit-dirty=true
+$WRANGLER pages deploy dist --project-name "$PROJECT" --branch main --commit-dirty=true
 
 # Custom domains (no-op when already added). Cloudflare then shows them under
 # Workers & Pages -> fuselane -> Custom domains; press "Activate" there if it
