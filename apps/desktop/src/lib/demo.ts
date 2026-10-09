@@ -91,6 +91,19 @@ function nameFromUrl(url: URL): string {
   }
 }
 
+/** As groups.rs: "3 files from example.org", or "3 downloads" from several sites. */
+function groupName(links: string[]): string {
+  const hosts = links.map((l) => {
+    try {
+      return new URL(l).host
+    } catch {
+      return ''
+    }
+  })
+  const same = hosts.every((h) => h && h === hosts[0])
+  return same ? `${links.length} files from ${hosts[0]}` : `${links.length} downloads`
+}
+
 /** The same estimate as savings.rs: without network k, T × bytes_k / (total − bytes_k) more. */
 function savings(secs: number, nets: [string, number][]): ReportView {
   const total = nets.reduce((a, [, b]) => a + b, 0)
@@ -170,6 +183,8 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       report: null,
       readyBy: null,
       readyState: null,
+      groupId: null,
+      groupName: null,
       fill,
       owner,
       inflight: [-1, -1, -1],
@@ -414,6 +429,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
 
   let maxRunning = 3
   let findSums = true
+  let nextGroup = 1
   let longMinutes = 5
   const windowPrefs = { startAtLogin: false, closeToTray: false, watchClipboard: false }
   let automation: Automation = {
@@ -543,7 +559,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
             null,
             true,
           ),
-    addBatch: async (text, dir, later) => {
+    addBatch: async (text, dir, later, group) => {
       const found = [...new Set(text.match(/https?:\/\/[^\s"<>]+/gi) ?? [])].map((l) =>
         l.replace(/[.,;)']+$/, ''),
       )
@@ -578,13 +594,21 @@ export function createDemoBackend(params: URLSearchParams): Backend {
           'There are no http:// or https:// links in that text.',
           'Paste one link per line, or a pattern like https://example.com/part[01-10].zip.',
         )
-      const result: BatchResult = { added: [], skipped: [] }
+      const result: BatchResult = { added: [], skipped: [], group: null }
       for (const l of [...new Set(links)]) {
         try {
           result.added.push(await backend.add(l, dir, { later: later ?? false }))
         } catch (e) {
           result.skipped.push({ url: l, reason: (e as UiError).message })
         }
+      }
+      if (group !== null && group !== undefined && result.added.length >= 2) {
+        const name = group.trim() || groupName(links)
+        if (name.length > 80) throw err('bad-group-name', 'That group name is too long.', null)
+        result.group = nextGroup++
+        for (const id of result.added)
+          Object.assign(find(id), { groupId: result.group, groupName: name })
+        emitJobs()
       }
       return result
     },
@@ -668,6 +692,26 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         j.readyState = nowS + left / rate > at ? 'at-risk' : 'on-track'
       }
       emitJobs()
+    },
+    renameGroup: async (id, name) => {
+      const n = name.trim()
+      if (!n) throw err('bad-group-name', 'Give the group a name.', null)
+      if (n.length > 80) throw err('bad-group-name', 'That group name is too long.', null)
+      for (const j of jobs) if (j.groupId === id) j.groupName = n
+      emitJobs()
+    },
+    ungroup: async (id) => {
+      for (const j of jobs)
+        if (j.groupId === id) Object.assign(j, { groupId: null, groupName: null })
+      emitJobs()
+    },
+    pauseGroup: async (id) => {
+      for (const j of jobs.filter((x) => x.groupId === id))
+        if (j.status === 'running' || j.status === 'queued') await backend.pause(j.id)
+    },
+    resumeGroup: async (id) => {
+      for (const j of jobs.filter((x) => x.groupId === id))
+        if (j.resumable) await backend.resume(j.id)
     },
     focus: async (id) => {
       const j = find(id)

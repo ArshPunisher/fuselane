@@ -18,6 +18,7 @@ mod already;
 mod checksum;
 mod deadline;
 mod focus;
+mod groups;
 mod power_aware;
 pub mod savings;
 mod worth;
@@ -73,6 +74,9 @@ pub struct JobView {
     /// on-track, at-risk or missed (B9.4).
     pub ready_by: Option<i64>,
     pub ready_state: Option<&'static str>,
+    /// The group it was added in, and the group's name (B9.2).
+    pub group_id: Option<i64>,
+    pub group_name: Option<String>,
 }
 
 /// One network the app can see.
@@ -511,6 +515,8 @@ pub struct Skipped {
 pub struct BatchResult {
     pub added: Vec<i64>,
     pub skipped: Vec<Skipped>,
+    /// The group they were put in, when asked for and two or more were added.
+    pub group: Option<i64>,
 }
 
 /// `name`, or `name (2)`, `name (3)`… whichever is free in `dir`.
@@ -741,6 +747,8 @@ fn view(job: &Job) -> JobView {
             .map(|r| savings::view(&r)),
         ready_by: job.ready_by.filter(|_| job.status != Status::Completed),
         ready_state: None,
+        group_id: job.group_id,
+        group_name: None,
     }
 }
 
@@ -1039,6 +1047,12 @@ impl Service {
         let retries = lock(&self.retries).clone();
         let notes = lock(&self.mirror_notes).clone();
         let focus = self.focused();
+        let group_names: HashMap<i64, String> = self
+            .store
+            .groups()
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
         let now = std::time::Instant::now();
         Ok(self
             .store
@@ -1048,6 +1062,10 @@ impl Service {
             .map(|j| {
                 let mut v = view(j);
                 v.focused = focus == Some(j.id);
+                v.group_name = j.group_id.and_then(|g| group_names.get(&g).cloned());
+                if v.group_name.is_none() {
+                    v.group_id = None; // a group since removed
+                }
                 v.ready_state = self.ready_state(j).map(deadline::ReadyState::word);
                 if let Some(n) = notes.get(&j.id) {
                     v.mirror_notes = lock(n).clone();
@@ -1459,6 +1477,7 @@ impl Service {
         text: &str,
         dir: Option<&str>,
         later: bool,
+        group: Option<&str>,
     ) -> Result<BatchResult, UiError> {
         let mut links = Vec::new();
         for found in fuselane_core::batch::links_in(text) {
@@ -1490,19 +1509,24 @@ impl Service {
             ));
         }
         let mut result = BatchResult::default();
+        let mut added_links = Vec::new();
         for link in links {
             let req = AddRequest {
                 later,
                 ..AddRequest::default()
             };
             match self.add_with(&link, dir, &req) {
-                Ok(id) => result.added.push(id),
+                Ok(id) => {
+                    result.added.push(id);
+                    added_links.push(link);
+                }
                 Err(e) => result.skipped.push(Skipped {
                     url: link,
                     reason: e.message,
                 }),
             }
         }
+        result.group = self.group_added(group, &added_links, &result.added)?;
         Ok(result)
     }
 
@@ -2797,11 +2821,11 @@ mod tests {
             dir.path().to_path_buf(),
         )
         .unwrap();
-        let r = other.add_batch(&text, None, true).unwrap();
+        let r = other.add_batch(&text, None, true, None).unwrap();
         assert_eq!(r.added.len(), 2);
         assert!(r.skipped.is_empty());
         // Importing twice skips what's already there.
-        let again = other.add_batch(&text, None, true).unwrap();
+        let again = other.add_batch(&text, None, true, None).unwrap();
         assert_eq!((again.added.len(), again.skipped.len()), (0, 2));
     }
 
@@ -2824,7 +2848,7 @@ mod tests {
             .await;
         // A batch can wait too.
         let text = format!("{0}?a\n{0}?b", link(&server));
-        let r = h.svc.add_batch(&text, None, true).unwrap();
+        let r = h.svc.add_batch(&text, None, true, None).unwrap();
         assert_eq!(r.added.len(), 2);
         for id in r.added {
             assert_eq!(h.job(id).status, "paused");
@@ -3474,6 +3498,46 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn links_added_together_stay_together_as_a_group() {
+        let a = RangeServer::start(Content::new(256 * KB, 221))
+            .await
+            .unwrap();
+        let b = RangeServer::start(Content::new(256 * KB, 222))
+            .await
+            .unwrap();
+        let h = harness(3);
+        let text = format!("{}\n{}\n", link(&a), link(&b));
+        let r = h.svc.add_batch(&text, None, true, Some("")).unwrap();
+        let g = r.group.expect("a group");
+        let [ia, ib] = [r.added[0], r.added[1]];
+        assert_eq!(h.job(ia).group_id, Some(g));
+        assert_eq!(
+            h.job(ib).group_name.as_deref(),
+            Some("2 files from 127.0.0.1")
+        );
+        h.svc.rename_group(g, "  Season 1 ").unwrap();
+        assert_eq!(h.job(ia).group_name.as_deref(), Some("Season 1"));
+        assert!(h.svc.rename_group(g, "   ").is_err());
+
+        // Added "later": resume all starts both; pause all stops both.
+        h.svc.resume_group(g).unwrap();
+        h.wait("both done", |h| {
+            h.job(ia).status == "completed" && h.job(ib).status == "completed"
+        })
+        .await;
+
+        // Without a name asked for, or with one link, there's no group.
+        let c = RangeServer::start(Content::new(64 * KB, 223))
+            .await
+            .unwrap();
+        let one = h.svc.add_batch(&link(&c), None, true, Some("x")).unwrap();
+        assert_eq!(one.group, None);
+        h.svc.ungroup(g).unwrap();
+        assert_eq!(h.job(ia).group_id, None);
+        assert!(h.svc.pause_group(g).is_err(), "gone");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn bad_names_and_checksums_are_refused_before_saving() {
         let h = harness(3);
         let link = "http://127.0.0.1:9/f.bin";
@@ -3509,24 +3573,27 @@ mod tests {
     async fn pasted_text_and_patterns_add_many_downloads_at_once() {
         let h = harness(1);
         let text = "Parts:\nhttp://127.0.0.1:9/part[1-3].bin\nhttp://127.0.0.1:9/extra.bin, http://127.0.0.1:9/part2.bin";
-        let r = h.svc.add_batch(text, None, false).unwrap();
+        let r = h.svc.add_batch(text, None, false, None).unwrap();
         assert_eq!(r.added.len(), 4, "{r:?}");
         assert!(
             r.skipped.is_empty(),
             "the repeat of part2 was merged: {r:?}"
         );
         // Again: everything is already in the list.
-        let again = h.svc.add_batch(text, None, false).unwrap();
+        let again = h.svc.add_batch(text, None, false, None).unwrap();
         assert!(again.added.is_empty());
         assert_eq!(again.skipped.len(), 4);
         assert!(again.skipped.iter().all(|s| s.reason.contains("already")));
         assert_eq!(
-            h.svc.add_batch("no links", None, false).unwrap_err().code,
+            h.svc
+                .add_batch("no links", None, false, None)
+                .unwrap_err()
+                .code,
             "bad-link"
         );
         assert_eq!(
             h.svc
-                .add_batch("http://127.0.0.1:9/[1-5000]", None, false)
+                .add_batch("http://127.0.0.1:9/[1-5000]", None, false, None)
                 .unwrap_err()
                 .code,
             "too-many"

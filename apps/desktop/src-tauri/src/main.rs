@@ -97,6 +97,7 @@ async fn add_batch(
     text: String,
     dir: Option<String>,
     later: Option<bool>,
+    group: Option<String>,
 ) -> Result<service::BatchResult, UiError> {
     if text.len() > 1024 * 1024 {
         return Err(UiError::new_public(
@@ -105,7 +106,12 @@ async fn add_batch(
             Some("Paste the links in smaller groups."),
         ));
     }
-    svc.add_batch(&text, dir.as_deref(), later.unwrap_or(false))
+    svc.add_batch(
+        &text,
+        dir.as_deref(),
+        later.unwrap_or(false),
+        group.as_deref(),
+    )
 }
 
 #[tauri::command]
@@ -233,6 +239,26 @@ async fn focus(svc: State<'_>, id: i64) -> Result<(), UiError> {
 #[tauri::command]
 async fn set_ready_by(svc: State<'_>, id: i64, at: Option<i64>) -> Result<(), UiError> {
     svc.set_ready_by(id, at)
+}
+
+#[tauri::command]
+fn rename_group(svc: State<'_>, id: i64, name: String) -> Result<(), UiError> {
+    svc.rename_group(id, &name)
+}
+
+#[tauri::command]
+fn ungroup(svc: State<'_>, id: i64) -> Result<(), UiError> {
+    svc.ungroup(id)
+}
+
+#[tauri::command]
+async fn pause_group(svc: State<'_>, id: i64) -> Result<(), UiError> {
+    svc.pause_group(id)
+}
+
+#[tauri::command]
+async fn resume_group(svc: State<'_>, id: i64) -> Result<(), UiError> {
+    svc.resume_group(id)
 }
 
 #[tauri::command]
@@ -884,7 +910,7 @@ async fn import_links(
         )
     })?;
     let text = String::from_utf8_lossy(&bytes);
-    svc.add_batch(&text, None, true).map(Some)
+    svc.add_batch(&text, None, true, None).map(Some)
 }
 
 /// Asks for a file to send with Fuse Send; `None` if they cancel.
@@ -1519,6 +1545,10 @@ fn main() {
             unfocus,
             already_have,
             set_ready_by,
+            rename_group,
+            ungroup,
+            pause_group,
+            resume_group,
             set_job_limit,
             trash_file,
             pause,

@@ -155,7 +155,7 @@ The owner approved the Figma designs (local file "Fuselane") and asked for all o
 The owner asked for all ten ideas from the feature list. Each one is tested at the cheapest level and checked in the browser demo; the Send redesign, receiver Cancel and wide layouts from the same round are done.
 
 - [x] B9.1 Do this one now: one download gets every network; the others wait and carry on after it
-- [ ] B9.2 Groups: links added together stay together (one row, one progress, pause or resume all, one notice when all are done)
+- [x] B9.2 Groups: links added together stay together (one row, one progress, pause or resume all, one notice when all are done)
 - [ ] B9.3 Find files on a page: paste a web page, pick its files by type, add them as a group
 - [x] B9.4 Ready by: a deadline per download; earliest deadline first, runs outside the schedule when it would otherwise miss, says On track or At risk
 - [x] B9.5 The phone only when it's worth it: per network Always / Only for long downloads / Never, with a minutes threshold

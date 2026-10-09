@@ -26,9 +26,29 @@ impl Watcher {
     /// statuses, so launching the app doesn't replay old news.
     pub fn jobs(&mut self, jobs: &[JobView]) -> Vec<Notice> {
         let mut out = Vec::new();
+        let mut groups_done: Vec<i64> = Vec::new();
         for j in jobs {
             let before = self.last.insert(j.id, j.status);
             if !self.primed || before != Some("running") {
+                continue;
+            }
+            // A group says it's done once, when its last download finishes (B9.2).
+            if let (Some(g), "completed") = (j.group_id, j.status) {
+                let all_done = jobs
+                    .iter()
+                    .filter(|o| o.group_id == Some(g))
+                    .all(|o| o.status == "completed");
+                if all_done && !groups_done.contains(&g) {
+                    groups_done.push(g);
+                    let n = jobs.iter().filter(|o| o.group_id == Some(g)).count();
+                    out.push(Notice {
+                        title: "Group finished".into(),
+                        body: format!(
+                            "{}: all {n} downloads are done.",
+                            j.group_name.clone().unwrap_or_default()
+                        ),
+                    });
+                }
                 continue;
             }
             match j.status {
@@ -143,6 +163,25 @@ mod tests {
             mirror_notes: vec![],
             ..JobView::default()
         }
+    }
+
+    #[test]
+    fn a_group_says_once_when_all_of_it_is_done() {
+        let member = |id, status| JobView {
+            group_id: Some(7),
+            group_name: Some("Season 1".into()),
+            ..job(id, status)
+        };
+        let mut w = Watcher::default();
+        w.jobs(&[member(1, "running"), member(2, "running")]);
+        assert!(
+            w.jobs(&[member(1, "completed"), member(2, "running")])
+                .is_empty()
+        );
+        let n = w.jobs(&[member(1, "completed"), member(2, "completed")]);
+        assert_eq!(n.len(), 1);
+        assert_eq!(n[0].title, "Group finished");
+        assert_eq!(n[0].body, "Season 1: all 2 downloads are done.");
     }
 
     #[test]

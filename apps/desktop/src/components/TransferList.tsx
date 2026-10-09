@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Funnel,
   CheckCircle,
@@ -11,6 +11,8 @@ import {
   HourglassMedium,
   Magnet,
   Plus,
+  Stack,
+  CaretRight,
   UploadSimple,
 } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
@@ -140,6 +142,91 @@ function torrentMeta(t: TorrentView): string {
   const pct = percent(t.done, t.total)
   const head = `${pct === null ? 0 : Math.floor(pct)}%, ${bytes(t.done)} of ${bytes(t.total)}`
   return t.status === 'downloading' ? `${head}, ${rateText(t.rate)}` : head
+}
+
+/**
+ * Links added together (B9.2): one row with one progress, opened to show each
+ * download. Pause all / Resume all act on the whole group.
+ */
+function GroupRow({ id, name, jobs }: { id: number; name: string; jobs: JobView[] }) {
+  const selected = useApp((s) => s.selected)
+  const live = useApp((s) => s.live)
+  const act = useApp((s) => s.act)
+  const holdsSelected = jobs.some((j) => j.id === selected)
+  const [open, setOpen] = useState(holdsSelected)
+  // Picking one of its downloads (or adding the group) opens it.
+  useEffect(() => {
+    if (holdsSelected) setOpen(true)
+  }, [holdsSelected])
+  const done = jobs.filter((j) => j.status === 'completed').length
+  const written = jobs.reduce(
+    (a, j) =>
+      a + (j.status === 'completed' ? (j.total ?? j.written) : (live[j.id]?.written ?? j.written)),
+    0,
+  )
+  const sized = jobs.every((j) => j.total !== null)
+  const total = jobs.reduce((a, j) => a + (j.total ?? 0), 0)
+  const rate = jobs.reduce((a, j) => a + (j.status === 'running' ? (live[j.id]?.rate ?? 0) : 0), 0)
+  const canPause = jobs.some((j) => j.status === 'running' || j.status === 'queued')
+  const canResume = jobs.some((j) => j.resumable)
+  const failed = jobs.some((j) => j.status === 'failed' || j.status === 'failed-final')
+  const pct = done === jobs.length ? 100 : sized && total ? (written / total) * 100 : 0
+  const status =
+    done === jobs.length ? 'completed' : canPause ? 'running' : failed ? 'failed' : 'paused'
+  const membersId = `group-${id}`
+  return (
+    <li className="group-block" data-open={open || undefined}>
+      <div className="row group-row" data-status={status}>
+        <button
+          className="row-main"
+          aria-expanded={open}
+          aria-controls={membersId}
+          onClick={() => setOpen(!open)}
+        >
+          <CaretRight size={14} aria-hidden className="group-caret" />
+          <Stack size={18} aria-hidden className={done === jobs.length ? 'ic ic-success' : 'ic'} />
+          <span className="row-text">
+            <span className="row-name" title={name}>
+              {name}
+            </span>
+            <span className="row-meta">
+              <span className="row-state">
+                {done} of {jobs.length} done
+              </span>
+              <span className="num">
+                {sized ? `${bytes(written)} of ${bytes(total)}` : bytes(written)}
+                {rate > 0 ? `, ${rateText(rate)}` : ''}
+              </span>
+            </span>
+            <div className="bar" data-status={status}>
+              <div className="bar-fill" style={{ width: `${pct}%` }} />
+            </div>
+          </span>
+        </button>
+        {canPause || canResume ? (
+          <button
+            className="icon-btn row-action"
+            aria-label={canPause ? `Pause all in ${name}` : `Resume all in ${name}`}
+            title={canPause ? 'Pause all' : 'Resume all'}
+            onClick={() => act((b) => (canPause ? b.pauseGroup(id) : b.resumeGroup(id)))}
+          >
+            {canPause ? <Pause size={16} aria-hidden /> : <Play size={16} aria-hidden />}
+          </button>
+        ) : (
+          <span className="row-action-slot" aria-hidden="true" />
+        )}
+      </div>
+      {open && (
+        <ul className="list group-members" id={membersId} aria-label={name}>
+          {[...jobs]
+            .sort((a, b) => a.position - b.position || a.id - b.id)
+            .map((j) => (
+              <Row key={j.id} job={j} />
+            ))}
+        </ul>
+      )}
+    </li>
+  )
 }
 
 function TorrentRow({ t }: { t: TorrentView }) {
@@ -292,13 +379,22 @@ export function TransferList() {
   const torrents = allTorrents.filter(
     (t) => (filter === 'all' || torrentKind(t) === filter) && typeOk('torrents') && matches(t.name),
   )
+  // Groups (B9.2) show as one row each; their downloads aren't listed again below.
+  const groups = new Map<number, { name: string; jobs: JobView[] }>()
+  for (const j of jobs)
+    if (j.groupId !== null) {
+      const g = groups.get(j.groupId) ?? { name: j.groupName ?? '', jobs: [] }
+      g.jobs.push(j)
+      groups.set(j.groupId, g)
+    }
+  const single = jobs.filter((j) => j.groupId === null)
   // Running first, then the queue in the order it will start.
-  const active = jobs
+  const active = single
     .filter((j) => j.status === 'running' || j.status === 'queued')
     .sort((a, b) =>
       a.status === b.status ? a.position - b.position : a.status === 'running' ? -1 : 1,
     )
-  const rest = jobs.filter((j) => !(j.status === 'running' || j.status === 'queued'))
+  const rest = single.filter((j) => !(j.status === 'running' || j.status === 'queued'))
   const nothing = !jobs.length && !torrents.length
   return (
     <div className="list-wrap">
@@ -370,6 +466,18 @@ export function TransferList() {
             Show everything
           </button>
         </p>
+      )}
+      {groups.size > 0 && (
+        <section aria-labelledby="g-groups">
+          <h2 id="g-groups" className="group">
+            Groups <span className="num">{groups.size}</span>
+          </h2>
+          <ul className="list">
+            {[...groups].map(([id, g]) => (
+              <GroupRow key={id} id={id} name={g.name} jobs={g.jobs} />
+            ))}
+          </ul>
+        </section>
       )}
       {active.length > 0 && (
         <section aria-labelledby="g-active">

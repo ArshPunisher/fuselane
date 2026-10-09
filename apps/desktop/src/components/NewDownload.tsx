@@ -94,6 +94,9 @@ export function NewDownload() {
   const [replace, setReplace] = useState(false)
   // Other links to the same file (B8.9).
   const [mirrors, setMirrors] = useState<string[]>([])
+  // Several links: kept together as a group unless unticked (B9.2).
+  const [together, setTogether] = useState(true)
+  const [groupDraft, setGroupDraft] = useState('')
   const nameRule = useApp((s) => s.automation?.settings.nameTaken ?? 'ask')
   /** What a batch add skipped, shown until the dialog closes. */
   const [skipped, setSkipped] = useState<{ url: string; reason: string }[]>([])
@@ -289,7 +292,12 @@ export function NewDownload() {
     setSkipped([])
     try {
       if (batch) {
-        const r = await backend.addBatch(url, dir.trim() || null, later.current)
+        const r = await backend.addBatch(
+          url,
+          dir.trim() || null,
+          later.current,
+          together ? groupDraft : null,
+        )
         if (r.skipped.length === 0) {
           reset()
           setAdding(false)
@@ -528,6 +536,33 @@ export function NewDownload() {
               </p>
             )}
           </div>
+          {batch && count > 1 && (
+            <div className="group-choice">
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={together}
+                  onChange={(e) => setTogether(e.target.checked)}
+                />
+                <span>
+                  Keep them together as a group
+                  <span className="field-help">
+                    One row in your list with one progress, and one notice when all are done.
+                  </span>
+                </span>
+              </label>
+              {together && (
+                <input
+                  aria-label="Group name"
+                  className="group-name"
+                  maxLength={80}
+                  placeholder="Name (optional)"
+                  value={groupDraft}
+                  onChange={(e) => setGroupDraft(e.target.value)}
+                />
+              )}
+            </div>
+          )}
           {taken && !batch && !isMagnet(url) && (
             <div className="dup" role="group" aria-labelledby="nd-dup">
               <div className="dup-row">

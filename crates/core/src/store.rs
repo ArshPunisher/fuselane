@@ -82,6 +82,10 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE jobs ADD COLUMN report TEXT;",
     // v12: the time a download should be finished by (unix seconds).
     "ALTER TABLE jobs ADD COLUMN ready_by INTEGER;",
+    // v13: groups of downloads added together (B9.2).
+    "CREATE TABLE groups (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
+        created_at INTEGER NOT NULL);
+     ALTER TABLE jobs ADD COLUMN group_id INTEGER;",
 ];
 
 /// What a person can set when adding a download, beyond the link and folder.
@@ -148,6 +152,8 @@ pub struct Job {
     pub report: Option<String>,
     /// When it should be finished (unix seconds), B9.4.
     pub ready_by: Option<i64>,
+    /// The group it was added in, if any (B9.2).
+    pub group_id: Option<i64>,
 }
 
 impl Job {
@@ -477,6 +483,60 @@ impl Store {
         Ok(())
     }
 
+    /// Makes a group for downloads added together and puts them in it.
+    pub fn create_group(&self, name: &str, jobs: &[i64]) -> Result<i64, StoreError> {
+        let mut conn = self.lock();
+        let tx = conn.transaction()?;
+        tx.execute(
+            "INSERT INTO groups (name, created_at) VALUES (?1, ?2)",
+            params![name, now()],
+        )?;
+        let id = tx.last_insert_rowid();
+        for j in jobs {
+            tx.execute(
+                "UPDATE jobs SET group_id = ?2 WHERE id = ?1",
+                params![j, id],
+            )?;
+        }
+        tx.commit()?;
+        Ok(id)
+    }
+
+    /// Every group's id and name.
+    pub fn groups(&self) -> Result<Vec<(i64, String)>, StoreError> {
+        let conn = self.lock();
+        let mut st = conn.prepare("SELECT id, name FROM groups ORDER BY id")?;
+        let rows = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    pub fn rename_group(&self, id: i64, name: &str) -> Result<(), StoreError> {
+        let n = self.lock().execute(
+            "UPDATE groups SET name = ?2 WHERE id = ?1",
+            params![id, name],
+        )?;
+        if n == 0 {
+            return Err(StoreError::NotFound(id));
+        }
+        Ok(())
+    }
+
+    /// Lets a group's downloads go back to being single ones, and drops the group.
+    pub fn ungroup(&self, id: i64) -> Result<(), StoreError> {
+        let mut conn = self.lock();
+        let tx = conn.transaction()?;
+        tx.execute(
+            "UPDATE jobs SET group_id = NULL WHERE group_id = ?1",
+            params![id],
+        )?;
+        let n = tx.execute("DELETE FROM groups WHERE id = ?1", params![id])?;
+        tx.commit()?;
+        if n == 0 {
+            return Err(StoreError::NotFound(id));
+        }
+        Ok(())
+    }
+
     /// The time a download should be finished by, or none.
     pub fn set_ready_by(&self, id: i64, at: Option<i64>) -> Result<(), StoreError> {
         let n = self.lock().execute(
@@ -626,6 +686,7 @@ fn row_to_job(r: &rusqlite::Row<'_>) -> rusqlite::Result<Job> {
         sha256_from: r.get("sha256_from")?,
         report: r.get("report")?,
         ready_by: r.get("ready_by")?,
+        group_id: r.get("group_id")?,
     })
 }
 

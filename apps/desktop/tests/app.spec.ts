@@ -1098,6 +1098,37 @@ test('a download can be given a time to be ready by, and says how it is doing', 
   ).toHaveCount(0)
 })
 
+test('links added together become one group row, paused and resumed as a whole', async ({
+  page,
+}) => {
+  await page.goto('/?empty=1')
+  const dialog = await openDialog(page)
+  await dialog
+    .getByLabel('Link')
+    .fill(
+      'https://media.example.org/s1/ep1.mkv\nhttps://media.example.org/s1/ep2.mkv\nhttps://media.example.org/s1/ep3.mkv',
+    )
+  await expect(
+    dialog.getByRole('checkbox', { name: /Keep them together as a group/ }),
+  ).toBeChecked()
+  await dialog.getByLabel('Group name').fill('Season 1')
+  await dialog.getByRole('button', { name: 'Download 3' }).click()
+  await expect(dialog).toBeHidden()
+  const head = page.getByRole('button', { name: /Season 1/ }).first()
+  await expect(head).toContainText('0 of 3 done')
+  // It opens on its first download, which is selected.
+  await expect(head).toHaveAttribute('aria-expanded', 'true')
+  await expect(page.getByRole('list', { name: 'Season 1' }).getByRole('listitem')).toHaveCount(3)
+  await page.getByRole('button', { name: 'Pause all in Season 1' }).click()
+  await expect(page.getByRole('button', { name: 'Resume all in Season 1' })).toBeVisible()
+  await page.getByRole('button', { name: 'Resume all in Season 1' }).click()
+  await expect(page.getByRole('button', { name: 'Pause all in Season 1' })).toBeVisible()
+  // Collapsed, the group is a single row.
+  await head.click()
+  await expect(head).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.getByRole('list', { name: 'Season 1' })).toHaveCount(0)
+})
+
 test('Download later adds it paused, ready to start', async ({ page }) => {
   await page.goto('/?empty=1')
   const dialog = await openDialog(page)

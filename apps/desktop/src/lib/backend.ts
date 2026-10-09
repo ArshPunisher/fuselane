@@ -44,7 +44,17 @@ export interface Backend {
   listNetworks(): Promise<NetView[]>
   add(url: string, dir: string | null, options?: AddOptions): Promise<number>
   /** Adds every link in pasted text (patterns like file[01-20].zip expanded). */
-  addBatch(text: string, dir: string | null, later?: boolean): Promise<BatchResult>
+  /** `group`: a name (empty for one made up) to keep them together, or null. */
+  addBatch(
+    text: string,
+    dir: string | null,
+    later?: boolean,
+    group?: string | null,
+  ): Promise<BatchResult>
+  renameGroup(id: number, name: string): Promise<void>
+  ungroup(id: number): Promise<void>
+  pauseGroup(id: number): Promise<void>
+  resumeGroup(id: number): Promise<void>
   /** Saves every link to a file the person picks; how many, or null if cancelled. */
   exportLinks(): Promise<number | null>
   /** Adds the links in a file the person picks, paused; null if cancelled. */
@@ -217,7 +227,12 @@ async function tauriBackend(): Promise<Backend> {
     add: (url, dir, options) => call('add_download', { url, dir, options: options ?? null }),
     exportLinks: () => call('export_links'),
     importLinks: () => call('import_links'),
-    addBatch: (text, dir, later) => call('add_batch', { text, dir, later: later ?? false }),
+    addBatch: (text, dir, later, group) =>
+      call('add_batch', { text, dir, later: later ?? false, group: group ?? null }),
+    renameGroup: (id, name) => call('rename_group', { id, name }),
+    ungroup: (id) => call('ungroup', { id }),
+    pauseGroup: (id) => call('pause_group', { id }),
+    resumeGroup: (id) => call('resume_group', { id }),
     maxRunning: () => call('max_running'),
     setMaxRunning: (n) => call('set_max_running', { n }),
     reorder: (ids) => call('reorder', { ids }),

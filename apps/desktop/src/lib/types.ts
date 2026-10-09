@@ -52,6 +52,9 @@ export interface JobView {
   /** When it should be finished (unix seconds), and how that looks. */
   readyBy: number | null
   readyState: 'on-track' | 'at-risk' | 'missed' | null
+  /** The group it was added in, and its name. */
+  groupId: number | null
+  groupName: string | null
 }
 
 export interface ReportView {
@@ -261,6 +264,8 @@ export interface AddOptions {
 export interface BatchResult {
   added: number[]
   skipped: { url: string; reason: string }[]
+  /** The group they were put in, if one was asked for and two or more were added. */
+  group: number | null
 }
 
 export interface WindowPrefs {

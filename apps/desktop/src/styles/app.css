@@ -4205,3 +4205,40 @@ html[data-hidden] .orb b {
   color: var(--mute);
   font-size: 12px;
 }
+
+/* ---------- Groups (B9.2) ---------- */
+
+.group-block {
+  display: grid;
+}
+
+.group-caret {
+  flex: none;
+  margin-top: 4px;
+  color: var(--mute);
+  transition: rotate var(--dur-quick) var(--ease-out);
+}
+
+.group-block[data-open] .group-caret {
+  rotate: 90deg;
+}
+
+.group-members {
+  margin-left: 22px;
+  padding-left: 8px;
+  border-left: 1px solid var(--hairline);
+}
+
+.group-choice {
+  display: grid;
+  gap: 8px;
+}
+
+.group-choice .check > span {
+  display: grid;
+  gap: 2px;
+}
+
+.group-name {
+  max-width: 320px;
+}
