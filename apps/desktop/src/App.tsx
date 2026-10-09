@@ -262,6 +262,18 @@ export function App() {
 
   const backend = useApp((s) => s.backend)
 
+  // The desktop app gets dropped files from the OS with their paths. A .torrent
+  // dropped anywhere but on a Nearby device starts a download.
+  useEffect(() => {
+    if (!backend) return
+    return backend.onFileDrop((e) => {
+      if (e.type !== 'drop') return
+      if (document.elementFromPoint(e.x, e.y)?.closest('[data-device]')) return
+      const torrent = e.paths.find((p) => /\.torrent$/i.test(p))
+      if (torrent) setAdding(true, torrent)
+    })
+  }, [backend, setAdding])
+
   // Pages appear once the backend is connected, so no button can be clicked into
   // the moment where its action would silently do nothing.
   const connected = backend !== null

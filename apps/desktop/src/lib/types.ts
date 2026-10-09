@@ -87,7 +87,7 @@ export interface DeviceView {
   kind: string
   model: string | null
   trusted: boolean
-  /** Another Fuselane: shows the four check words. */
+  /** Another Fuselane, verified by its certificate. */
   fuselane: boolean
 }
 
@@ -106,7 +106,6 @@ export interface NearbyRequest {
   model: string | null
   files: string[]
   total: number
-  words: string[] | null
   verified: boolean
 }
 
@@ -119,7 +118,6 @@ export interface NearbyTransfer {
   done: number
   state: 'asking' | 'sending' | 'receiving' | 'done' | 'declined' | 'failed' | 'cancelled'
   error: string | null
-  words: string[] | null
   path: string | null
 }
 
@@ -128,7 +126,6 @@ export interface PhoneView {
   url: string
   /** The link as a QR code (SVG made by the app). */
   qr: string
-  words: string[]
   offers: { id: string; name: string; size: number }[]
 }
 

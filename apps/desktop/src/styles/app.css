@@ -3099,7 +3099,7 @@ select.prio[data-level='skip'] {
   font-size: 13px;
 }
 
-/* ---------- Nearby (B8.11) ---------- */
+/* ---------- Nearby: the space view (B and C hybrid) ---------- */
 
 .page-head.with-tabs {
   display: flex;
@@ -3108,71 +3108,461 @@ select.prio[data-level='skip'] {
   gap: 16px;
 }
 
+/* Nearby uses the whole window: the radar grows, activity sits beside it. */
+.send-page:has(.nearby) {
+  max-width: 1360px;
+  container-type: inline-size;
+}
+
+.nearby {
+  display: grid;
+  gap: 20px;
+}
+
+@container (min-width: 960px) {
+  .nearby {
+    grid-template-columns: minmax(0, 1.55fr) minmax(320px, 1fr);
+    align-items: start;
+  }
+
+  .nearby-side {
+    position: sticky;
+    top: 12px;
+  }
+}
+
+.nearby-stage,
+.nearby-side,
+.nearby-devices {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.nearby-side {
+  gap: 20px;
+}
+
+/* Rings (progress, countdown) */
+.ring {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+
+.ring-track {
+  fill: none;
+  stroke: var(--hairline);
+}
+
+.ring-fill {
+  fill: none;
+  stroke: var(--fuse);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 700ms var(--ease-out);
+}
+
+/* Who can see this computer */
 .visibility {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) auto;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
   align-items: center;
   gap: 14px;
-  padding: 14px 14px 14px 16px;
+  padding: 12px 12px 12px 14px;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-panel);
   background: var(--surface-1);
 }
 
 .vis-ic {
+  position: relative;
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border-radius: var(--radius-pill);
   background: var(--fuse-soft);
   color: var(--fuse-text);
 }
 
-.device-grid {
+.vis-ic .ring-fill {
+  transition: stroke-dashoffset 1s linear;
+}
+
+/* The radar */
+.radar {
+  position: relative;
+  overflow: hidden;
+  min-height: 360px;
+  aspect-ratio: 16 / 10;
+  max-height: 600px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  background:
+    radial-gradient(circle at 50% 46%, var(--fuse-soft), transparent 42%), var(--surface-1);
+}
+
+.radar-rings,
+.radar-beams {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.radar-rings i {
+  position: absolute;
+  top: 46%;
+  left: 50%;
+  border: 1px dashed var(--hairline-strong);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.radar-rings i:nth-child(1) {
+  width: 26%;
+  height: 34%;
+}
+
+.radar-rings i:nth-child(2) {
+  width: 52%;
+  height: 64%;
+  opacity: 0.8;
+}
+
+.radar-rings i:nth-child(3) {
+  width: 78%;
+  height: 94%;
+  opacity: 0.55;
+}
+
+.radar-sweep {
+  position: absolute;
+  inset: -40%;
+  top: -44%;
+  bottom: -36%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    color-mix(in oklch, var(--fuse) 16%, transparent) 30deg,
+    transparent 64deg
+  );
+  mask-image: radial-gradient(circle, black 18%, transparent 62%);
+  opacity: 0.55;
+}
+
+.radar[data-searching] .radar-sweep {
+  opacity: 1;
+}
+
+.radar-me {
+  position: absolute;
+  top: 46%;
+  left: 50%;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
-  gap: 12px;
+  justify-items: center;
+  gap: 4px;
+  transform: translate(-50%, -32px);
+  text-align: center;
+}
+
+.radar-me-tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--fuse);
+  color: var(--fuse-ink);
+  box-shadow: 0 0 0 6px var(--fuse-soft);
+}
+
+.radar-me-tile::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border: 1px solid color-mix(in oklch, var(--fuse) 50%, transparent);
+  border-radius: 50%;
+  opacity: 0;
+}
+
+.radar-me-name {
+  max-width: 22ch;
+  overflow: hidden;
+  color: var(--ink);
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.radar-me-sub,
+.radar-node-sub {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--mute);
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Labels sit on a small plate so a beam passing behind never runs through text. */
+.radar-node-name,
+.radar-node-sub,
+.radar-me-name,
+.radar-me-sub {
+  padding: 0 6px;
+  border-radius: 6px;
+  background: color-mix(in oklch, var(--surface-1) 82%, transparent);
+}
+
+.radar-empty {
+  position: absolute;
+  bottom: 9%;
+  left: 0;
+  right: 0;
+  color: var(--mute);
+  text-align: center;
+}
+
+.radar-node {
+  position: absolute;
+  top: var(--y);
+  left: var(--x);
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: 180px;
+  padding: 6px 4px;
+  border: 0;
+  border-radius: var(--radius-panel);
+  background: transparent;
+  color: var(--body);
+  text-align: center;
+  cursor: pointer;
+  translate: -50% -32px;
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    opacity var(--dur-slow) var(--ease-out);
+}
+
+.radar-node-tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--ink);
+  transition:
+    border-color var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    background var(--dur-base) var(--ease-out);
+}
+
+.radar-node:hover,
+.radar-node:focus-visible {
+  transform: translateY(-3px);
+}
+
+.radar-node:hover .radar-node-tile,
+.radar-node:focus-visible .radar-node-tile {
+  border-color: color-mix(in oklch, var(--fuse) 55%, transparent);
+  box-shadow: 0 8px 24px color-mix(in oklch, var(--fuse) 18%, transparent);
+}
+
+.radar-node:focus-visible {
+  outline: 2px solid var(--fuse);
+  outline-offset: 2px;
+}
+
+/* A file dragged over a device: it lifts to catch it (motion 2). */
+.radar-node[data-over] {
+  transform: translateY(-6px) scale(1.12);
+}
+
+.radar-node[data-over] .radar-node-tile {
+  border-color: var(--fuse);
+  background: var(--fuse-soft);
+  box-shadow:
+    0 0 0 6px var(--fuse-soft),
+    0 12px 32px color-mix(in oklch, var(--fuse) 28%, transparent);
+}
+
+.radar-node[data-busy] .radar-node-tile {
+  border-color: transparent;
+}
+
+.radar-node-name {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--ink);
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.radar-trust {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--surface-1);
+  border-radius: 50%;
+  background: var(--fuse);
+  color: var(--fuse-ink);
+}
+
+/* Beams between this computer and a device (motion 3). */
+.beam {
+  stroke: var(--fuse);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 0.5 9;
+  opacity: 0.9;
+}
+
+.beam[data-wait] {
+  opacity: 0.35;
+}
+
+/* Activity */
+.activity-list {
+  display: grid;
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.device {
+.activity {
   display: grid;
-  align-content: start;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
   gap: 12px;
-  min-height: 150px;
-  padding: 14px;
+  padding: 10px 10px 10px 12px;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-panel);
   background: var(--surface-1);
-  box-shadow: var(--highlight-top);
-  transition: border-color var(--dur-base) var(--ease-out);
+  transition:
+    opacity var(--dur-slow) var(--ease-out),
+    transform var(--dur-slow) var(--ease-out);
 }
 
 @starting-style {
-  .device {
+  .activity {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateX(14px);
   }
 }
 
-.device {
+.activity-ic {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  color: var(--body);
+}
+
+.activity[data-state='done'] .ring-fill {
+  stroke: var(--success);
+}
+
+.activity[data-state='done'] .activity-ic {
+  color: var(--success);
+}
+
+.done-check {
   transition:
-    opacity var(--dur-base) var(--ease-out),
-    transform var(--dur-base) var(--ease-out),
-    border-color var(--dur-base) var(--ease-out);
+    transform 420ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity var(--dur-base) var(--ease-out);
 }
 
-.device[data-state='sending'] {
-  border-color: color-mix(in oklch, var(--fuse) 40%, transparent);
+@starting-style {
+  .done-check {
+    opacity: 0;
+    transform: scale(0.3);
+  }
 }
 
-.device-top {
+.activity-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.activity-name {
+  overflow: hidden;
+  color: var(--ink);
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.activity-meta {
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.activity-bar {
+  height: 3px;
+  margin-top: 4px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+}
+
+.activity-bar span {
+  display: block;
+  height: 100%;
+  background: var(--fuse);
+  transition: width 700ms var(--ease-out);
+}
+
+.activity-actions {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+}
+
+.activity-empty {
+  padding: 4px 2px;
+}
+
+/* Trusted devices */
+.trusted {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  background: var(--surface-1);
+}
+
+.trusted li {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px 10px 14px;
+}
+
+.trusted li + li {
+  border-top: 1px solid var(--hairline);
+}
+
+.trusted .muted {
+  font-size: 12px;
 }
 
 .device-tile {
@@ -3186,113 +3576,9 @@ select.prio[data-level='skip'] {
   color: var(--ink);
 }
 
-.device-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: var(--radius-pill);
-  background: var(--fuse-soft);
-  color: var(--fuse-text);
-  font-size: 11px;
-  font-weight: 500;
-}
-
 .device-name {
   color: var(--ink);
   font-weight: 500;
-}
-
-.device-sub {
-  color: var(--mute);
-  font-size: 12px;
-}
-
-.device-foot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: auto;
-}
-
-.device-progress {
-  display: grid;
-  gap: 6px;
-  font-size: 12px;
-}
-
-.device-progress .bar {
-  height: 4px;
-}
-
-.device-progress .btn {
-  justify-self: start;
-}
-
-.near-empty {
-  padding: 14px 0;
-}
-
-.trusted {
-  display: grid;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-panel);
-  background: var(--surface-1);
-}
-
-.trusted li {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 10px 10px 14px;
-}
-
-.trusted li + li {
-  border-top: 1px solid var(--hairline);
-}
-
-.trusted .muted {
-  font-size: 12px;
-}
-
-.words-check {
-  display: grid;
-  gap: 10px;
-  padding: 14px;
-  border-radius: var(--radius-control);
-  background: var(--surface-2);
-}
-
-.words {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.words li {
-  display: grid;
-  place-items: center;
-  min-height: 36px;
-  padding: 0 4px;
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--radius-control);
-  background: var(--surface-1);
-  color: var(--ink);
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.device-progress .words li {
-  min-height: 28px;
-  font-size: 11px;
 }
 
 .check {
@@ -3317,53 +3603,51 @@ select.prio[data-level='skip'] {
   font-size: 15px;
 }
 
-@media (max-width: 639px) {
-  .visibility {
-    grid-template-columns: 36px minmax(0, 1fr);
-  }
-
-  .visibility .segmented {
-    grid-column: 1 / -1;
-    justify-self: start;
-  }
-
-  .device-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-
-  .device {
-    min-height: 0;
-    padding: 12px;
-  }
+/* A phone without the app */
+.phone-card {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px 12px;
+  padding: 12px 14px;
+  border: 1px dashed var(--hairline-strong);
+  border-radius: var(--radius-panel);
 }
 
-/* ---------- Phone page card (B8.12) ---------- */
-
-.device-qr {
-  border-style: dashed;
-  border-color: var(--hairline-strong);
-  background: transparent;
-  box-shadow: none;
+.phone-card > .btn {
+  grid-column: 2;
+  justify-self: start;
 }
 
-.device-qr.phone-on {
-  grid-column: 1 / -1;
+.phone-card-ic {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--surface-3);
+  color: var(--ink);
+}
+
+.phone-card.phone-on {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
   border-style: solid;
   background: var(--surface-1);
 }
 
 .phone-code {
   display: grid;
-  grid-template-columns: 148px minmax(0, 1fr);
+  grid-template-columns: 132px minmax(0, 1fr);
   align-items: start;
-  gap: 16px;
+  gap: 14px;
 }
 
 .qr {
   display: block;
-  width: 148px;
-  height: 148px;
+  width: 132px;
+  height: 132px;
   padding: 8px;
   border-radius: var(--radius-control);
   background: oklch(0.99 0 0);
@@ -3386,6 +3670,12 @@ select.prio[data-level='skip'] {
   color: var(--ink);
 }
 
+.phone-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .offers {
   display: grid;
   gap: 4px;
@@ -3402,8 +3692,114 @@ select.prio[data-level='skip'] {
   font-size: 13px;
 }
 
-@media (max-width: 639px) {
+/* Small windows and phones: a square radar with smaller devices. */
+@container (max-width: 640px) {
+  .radar {
+    aspect-ratio: 1 / 1;
+    min-height: 300px;
+  }
+
+  .radar-node {
+    width: 104px;
+  }
+
+  .radar-node-tile,
+  .radar-me-tile {
+    width: 52px;
+    height: 52px;
+  }
+
+  .radar-node-tile .ring {
+    width: 52px;
+    height: 52px;
+  }
+
+  .radar-node-sub {
+    display: none;
+  }
+
+  .visibility {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .visibility .segmented {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
   .phone-code {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Motion: the sweep turns, this computer breathes, devices spring in, beams flow. */
+@media (prefers-reduced-motion: no-preference) {
+  .radar-sweep {
+    animation: sweep 7s linear infinite;
+  }
+
+  .radar[data-searching] .radar-sweep {
+    animation-duration: 3.5s;
+  }
+
+  .radar-me-tile::after {
+    animation: halo 3s var(--ease-out) infinite;
+  }
+
+  .radar-node {
+    transition:
+      transform var(--dur-base) var(--ease-out),
+      opacity 520ms var(--ease-out),
+      scale 560ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition-delay: 0s, calc(var(--i) * 70ms), calc(var(--i) * 70ms);
+  }
+
+  @starting-style {
+    .radar-node {
+      opacity: 0;
+      scale: 0.5;
+    }
+  }
+
+  .beam {
+    animation: beam 0.9s linear infinite;
+  }
+
+  .beam[data-wait] {
+    animation-duration: 2.4s;
+  }
+}
+
+html[data-hidden] .radar-sweep,
+html[data-hidden] .radar-me-tile::after,
+html[data-hidden] .beam {
+  animation-play-state: paused;
+}
+
+@keyframes sweep {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes halo {
+  0% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+}
+
+@keyframes beam {
+  from {
+    stroke-dashoffset: 9.5;
+  }
+
+  to {
+    stroke-dashoffset: 0;
   }
 }

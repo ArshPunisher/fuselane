@@ -6,5 +6,18 @@
         "installerHooks": "windows/hooks.nsh"
       }
     }
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Fuselane",
+        "width": 1180,
+        "height": 760,
+        "minWidth": 360,
+        "minHeight": 560,
+        "dragDropEnabled": false
+      }
+    ]
   }
 }

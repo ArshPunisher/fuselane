@@ -29,6 +29,14 @@ import type {
   UpdateInfo,
 } from './types'
 
+/** A drag of files over the window (desktop app only). */
+export interface FileDrop {
+  type: 'over' | 'drop' | 'leave'
+  paths: string[]
+  x: number
+  y: number
+}
+
 export interface Backend {
   readonly demo: boolean
   appInfo(): Promise<AppInfo>
@@ -142,6 +150,11 @@ export interface Backend {
   nearbyClear(id: string): Promise<NearbyView>
   nearbyReveal(id: string): Promise<void>
   nearbyPhone(on: boolean): Promise<NearbyView>
+  /**
+   * Files dragged over or dropped on the window, with their paths and where
+   * (CSS pixels). Only the desktop app has paths; the demo never calls back.
+   */
+  onFileDrop(cb: (e: FileDrop) => void): () => void
   nearbyPhoneOffer(add: string[], remove: string | null): Promise<NearbyView>
   /** Stops sharing; the file itself stays. */
   stopSend(id: string): Promise<void>
@@ -262,6 +275,29 @@ async function tauriBackend(): Promise<Backend> {
     nearbyClear: (id) => call('nearby_clear', { id }),
     nearbyReveal: (id) => call('nearby_reveal', { id }),
     nearbyPhone: (on) => call('nearby_phone', { on }),
+    onFileDrop: (cb) => {
+      let stop: (() => void) | null = null
+      let gone = false
+      void import('@tauri-apps/api/webview').then(({ getCurrentWebview }) =>
+        getCurrentWebview()
+          .onDragDropEvent((e) => {
+            const p = e.payload
+            const at = (pos: { x: number; y: number }) => ({
+              x: pos.x / devicePixelRatio,
+              y: pos.y / devicePixelRatio,
+            })
+            if (p.type === 'leave') cb({ type: 'leave', paths: [], x: 0, y: 0 })
+            else if (p.type === 'enter') cb({ type: 'over', paths: p.paths, ...at(p.position) })
+            else if (p.type === 'over') cb({ type: 'over', paths: [], ...at(p.position) })
+            else if (p.type === 'drop') cb({ type: 'drop', paths: p.paths, ...at(p.position) })
+          })
+          .then((un) => (gone ? un() : (stop = un))),
+      )
+      return () => {
+        gone = true
+        stop?.()
+      }
+    },
     nearbyPhoneOffer: (add, remove) => call('nearby_phone_offer', { add, remove }),
     stopSend: (id) => call('stop_send', { id }),
     sendOnce: (id, on) => call('send_once', { id, on }),

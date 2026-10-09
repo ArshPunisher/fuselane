@@ -1119,8 +1119,8 @@ test.describe('Fuse Send', () => {
       .getByRole('navigation', { name: 'Main' })
       .getByRole('button', { name: 'Send' })
       .click()
-    // Nearby fits too: two device cards a row, nothing sideways.
-    await expect(page.locator('.device').first()).toBeVisible()
+    // Nearby fits too: the radar shrinks, nothing sideways.
+    await expect(page.locator('.radar-node').first()).toBeVisible()
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0)
     await page.getByRole('radio', { name: 'Link' }).click()
     await expect(page.getByText('Wedding photos.zip')).toBeVisible()
@@ -1306,28 +1306,54 @@ test.describe('Nearby', () => {
     )
   }
 
-  test('devices on the network are listed, and sending shows progress then Done', async ({
+  test('devices sit around this computer, and sending shows a beam, progress, then Done', async ({
     page,
   }) => {
     await openNearby(page)
-    const grid = page.locator('.device-grid')
-    await expect(grid.locator('.device:not(.device-qr)')).toHaveCount(4)
-    const maya = grid.locator('.device', { hasText: "Maya's MacBook Air" })
-    await expect(maya).toContainText('Trusted')
-    await expect(grid.locator('.device', { hasText: 'Pixel 9' })).toContainText('via LocalSend')
-    await maya.getByRole('button', { name: 'Send files' }).click()
-    await expect(maya.getByRole('status')).toContainText('Sending')
-    await expect(page.locator('.send-list')).toContainText('Done', { timeout: 10_000 })
+    const radar = page.locator('.radar')
+    await expect(radar.locator('.radar-me')).toContainText("Arsh's MacBook Pro")
+    await expect(radar.locator('.radar-node')).toHaveCount(4)
+    await expect(radar.getByRole('button', { name: 'Send files to Pixel 9' })).toContainText(
+      'via LocalSend',
+    )
+    await radar.getByRole('button', { name: "Send files to Maya's MacBook Air" }).click()
+    await expect(radar.locator('.beam')).toHaveCount(1)
+    const row = page.getByRole('complementary', { name: 'Activity' }).locator('.activity').first()
+    await expect(row).toContainText("To Maya's MacBook Air")
+    await expect(row).toHaveAttribute('data-state', 'done', { timeout: 10_000 })
+    await expect(row.locator('.done-check')).toBeVisible()
+    await expect(radar.locator('.beam')).toHaveCount(0)
   })
 
-  test('a new device shows check words while asking, and a decline is reported', async ({
-    page,
-  }) => {
+  test('files dropped on a device lift it, then go to it', async ({ page }) => {
+    await openNearby(page)
+    const ravi = page.getByRole('button', { name: "Send files to Ravi's ThinkPad" })
+    await ravi.scrollIntoViewIfNeeded()
+    await page.waitForTimeout(700) // devices finish springing in
+    const box = (await ravi.boundingBox())!
+    const at = { x: box.x + box.width / 2, y: box.y + 30 }
+    const drop = (type: string) =>
+      page.evaluate(
+        ([type, x, y]) =>
+          (
+            window as unknown as {
+              __demoFileDrop: (e: { type: string; paths: string[]; x: number; y: number }) => void
+            }
+          ).__demoFileDrop({ type: type as string, paths: ['/Users/demo/a.mov'], x: +x!, y: +y! }),
+        [type, at.x, at.y] as const,
+      )
+    await drop('over')
+    await expect(ravi).toHaveAttribute('data-over', 'true')
+    await drop('drop')
+    await expect(ravi).not.toHaveAttribute('data-over', 'true')
+    await expect(page.locator('.activity').first()).toContainText("To Ravi's ThinkPad")
+  })
+
+  test('a decline is reported', async ({ page }) => {
     await openNearby(page, '&nearby=decline')
-    const ravi = page.locator('.device', { hasText: "Ravi's ThinkPad" })
-    await ravi.getByRole('button', { name: 'Send files' }).click()
-    await expect(ravi.getByRole('list', { name: 'Check words' })).toContainText('amber')
-    await expect(page.locator('.send-list')).toContainText('They declined')
+    await page.getByRole('button', { name: "Send files to Ravi's ThinkPad" }).click()
+    await expect(page.locator('.activity').first()).toContainText('Waiting')
+    await expect(page.locator('.activity').first()).toContainText('They declined')
   })
 
   test('who can see this computer: trusted only by default, everyone for 10 minutes', async ({
@@ -1341,26 +1367,35 @@ test.describe('Nearby', () => {
     )
     await vis.getByRole('radio', { name: 'Everyone, 10 min' }).click()
     await expect(page.locator('.visibility')).toContainText(/for (10:00|9:5\d) more/)
+    await expect(page.locator('.vis-ic .ring-fill')).toBeVisible()
     await vis.getByRole('radio', { name: 'Trusted only' }).click()
-    await expect(page.locator('.visibility')).toContainText('Only trusted devices')
+    await expect(page.locator('.visibility')).toContainText('Only devices you trust')
   })
 
-  test('an incoming file asks with words, can be trusted, and a device can be forgotten', async ({
-    page,
-  }) => {
+  test('an incoming file asks, can be trusted, and a device can be forgotten', async ({ page }) => {
     await openNearby(page, '&nearby=request')
     const ask = page.getByRole('dialog', { name: /wants to send you a file/ })
     await expect(ask).toBeVisible()
-    await expect(ask.getByRole('list', { name: 'Check words' })).toContainText('orbit')
+    await expect(ask).not.toContainText('Check words')
     await expect(ask.getByRole('button', { name: 'Decline' })).toBeFocused()
     await ask.getByRole('checkbox', { name: /Trust Ravi's ThinkPad/ }).check()
     await ask.getByRole('button', { name: 'Accept' }).click()
     await expect(ask).toBeHidden()
-    await expect(page.locator('.send-list')).toContainText('From Ravi')
+    await expect(page.locator('.activity').first()).toContainText('From Ravi')
     const trusted = page.locator('.trusted')
     await expect(trusted).toContainText("Ravi's ThinkPad")
     await trusted.getByRole('button', { name: "Forget Ravi's ThinkPad" }).click()
     await expect(trusted).not.toContainText("Ravi's ThinkPad")
+  })
+
+  test('the receiver can cancel a file that is coming in', async ({ page }) => {
+    await openNearby(page, '&nearby=request')
+    await page.getByRole('button', { name: 'Accept' }).click()
+    const row = page.locator('.activity[data-dir="in"]')
+    await expect(row.locator('.activity-bar')).toBeVisible()
+    await row.getByRole('button', { name: 'Cancel Holiday video.mov' }).click()
+    await expect(row).toHaveAttribute('data-state', 'cancelled')
+    await expect(row.getByRole('button', { name: /^Cancel/ })).toHaveCount(0)
   })
 
   test('a phone without the app gets a code, offered files, and Stop', async ({ page }) => {
@@ -1381,6 +1416,7 @@ test.describe('Nearby', () => {
 
   test('nobody on the network says what to do', async ({ page }) => {
     await openNearby(page, '&nearby=empty')
-    await expect(page.getByText(/No one yet/)).toBeVisible()
+    await expect(page.locator('.radar-empty')).toContainText('Open Fuselane or LocalSend')
+    await expect(page.locator('.radar')).toHaveAttribute('data-searching', 'true')
   })
 })
