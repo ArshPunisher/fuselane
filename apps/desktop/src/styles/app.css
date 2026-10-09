@@ -3883,6 +3883,12 @@ html[data-settled] .row .ic-success {
   }
 }
 
+/* A click during a screen change reaches the page underneath instead of the
+   animation's overlay (WebKit otherwise swallows it). */
+::view-transition {
+  pointer-events: none;
+}
+
 html[data-hidden] .bar-fill::after,
 html[data-hidden] .orb b {
   animation-play-state: paused;
