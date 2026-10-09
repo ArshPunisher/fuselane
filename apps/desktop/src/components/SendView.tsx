@@ -336,8 +336,9 @@ export function SendView() {
           </span>
         </button>
         <p className="send-note muted">
-          <LockKey size={14} aria-hidden /> Keep Fuselane open until it arrives. The key is only in
-          the link, so share it the way you'd share a password.
+          <LockKey size={14} aria-hidden /> Keep Fuselane open until it arrives. On the same network
+          it connects straight away; across the internet your router needs UPnP on. The key is only
+          in the link, so share it the way you'd share a password.
         </p>
         {shares.length > 0 && (
           <ul className="send-list" aria-label="Files you're sending">

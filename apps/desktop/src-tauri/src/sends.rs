@@ -1002,7 +1002,7 @@ mod tests {
         })
         .await;
         let e = failed.error.unwrap();
-        assert!(e.contains("couldn't find the sender"), "{e}");
+        assert!(e.contains("couldn't reach the sender"), "{e}");
         b.sends.dismiss(&id).await;
         assert!(b.sends.views().await.1.is_empty());
     }

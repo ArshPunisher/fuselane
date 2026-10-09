@@ -35,7 +35,7 @@ pub enum ShareError {
     #[error("This link doesn't lead to a Fuse Send share. Ask the sender for the link again.")]
     NotAShare,
     #[error(
-        "Fuselane couldn't find the sender. Ask them to open Fuselane and keep it open until the file arrives, then try the link again."
+        "Fuselane couldn't reach the sender. Ask them to open Fuselane and keep it open until the file arrives, then try the link again. On different networks, their router may block incoming connections: turning on UPnP there, or using the same Wi-Fi, fixes it."
     )]
     SenderOffline,
     #[error(
