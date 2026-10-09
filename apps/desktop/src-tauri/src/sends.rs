@@ -755,8 +755,12 @@ mod tests {
         )
     }
 
-    async fn until<T>(what: &str, mut f: impl AsyncFnMut() -> Option<T>) -> T {
-        for _ in 0..600 {
+    async fn until<T>(what: &str, f: impl AsyncFnMut() -> Option<T>) -> T {
+        until_for(what, 600, f).await
+    }
+
+    async fn until_for<T>(what: &str, ticks: u32, mut f: impl AsyncFnMut() -> Option<T>) -> T {
+        for _ in 0..ticks {
             if let Some(v) = f().await {
                 return v;
             }
@@ -863,6 +867,51 @@ mod tests {
             again.views().await.0.is_empty(),
             "a sent share isn't restored"
         );
+    }
+
+    /// The app's real setup: DHT, UPnP and local discovery on the real networks, no
+    /// address given. Needs the internet or a LAN, so it's run by hand:
+    /// `cargo nextest run -p fuselane-desktop --run-ignored only found_without`.
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "uses the real network"]
+    async fn a_share_is_found_without_an_address() {
+        // RUST_LOG=librqbit=debug,librqbit_lsd=trace shows how the peers met.
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
+        let tmp = tempfile::tempdir().unwrap();
+        let real = |root: &Path| {
+            std::fs::create_dir_all(root.join("dl")).unwrap();
+            let store = Arc::new(Store::open(&root.join("fuselane.db")).unwrap());
+            Sends::new(
+                store,
+                root.join("shares"),
+                root.join("dl"),
+                Arc::new(|| fuselane_core::runner::pick_networks(&[])),
+                None,
+                true,
+                Arc::new(|_| {}),
+            )
+        };
+        let (a_root, b_root) = (tmp.path().join("a"), tmp.path().join("b"));
+        let (a, b) = (real(&a_root), real(&b_root));
+        let file = a_root.join("found.bin");
+        let data = payload(2 * 1024 * 1024 + 3);
+        std::fs::write(&file, &data).unwrap();
+        a.send(file.to_str().unwrap()).await.unwrap();
+        let link = shared(&a).await.link.unwrap();
+        let start = std::time::Instant::now();
+        b.receive(&link, None).await.unwrap();
+        let done = until_for("the file to arrive", 3000, async || {
+            b.tick().await;
+            let (_, r) = b.views().await;
+            let r = r.into_iter().next()?;
+            assert_ne!(r.state, "failed", "{:?}", r.error);
+            (r.state == "done").then_some(r)
+        })
+        .await;
+        eprintln!("found and received in {:?}", start.elapsed());
+        assert_eq!(std::fs::read(done.path.unwrap()).unwrap(), data);
     }
 
     #[tokio::test(flavor = "multi_thread")]
