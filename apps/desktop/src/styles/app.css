@@ -4163,3 +4163,45 @@ html[data-hidden] .orb b {
 .long-minutes .field-help {
   flex-basis: 100%;
 }
+
+/* ---------- Ready by (B9.4) ---------- */
+
+.ready-by {
+  grid-template-columns: auto auto;
+}
+
+.ready-field {
+  display: grid;
+  gap: 6px;
+}
+
+.ready-field label {
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.ready-field input {
+  width: 120px;
+}
+
+.ready-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.ready-by .field-help[data-state='on-track'],
+.row-ready[data-state='on-track'] {
+  color: var(--success);
+}
+
+.ready-by .field-help[data-state='at-risk'],
+.ready-by .field-help[data-state='missed'],
+.row-ready[data-state='at-risk'],
+.row-ready[data-state='missed'] {
+  color: var(--warning);
+}
+
+.row-ready {
+  color: var(--mute);
+  font-size: 12px;
+}

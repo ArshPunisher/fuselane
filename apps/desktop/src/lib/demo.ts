@@ -168,6 +168,8 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       checksumFrom: null,
       verified: false,
       report: null,
+      readyBy: null,
+      readyState: null,
       fill,
       owner,
       inflight: [-1, -1, -1],
@@ -651,6 +653,21 @@ export function createDemoBackend(params: URLSearchParams): Backend {
             finishedAt: now() - 86400,
           }
         : null
+    },
+    setReadyBy: async (id, at) => {
+      const j = find(id)
+      const nowS = Math.floor(Date.now() / 1000)
+      if (at !== null && (at <= nowS || at > nowS + 366 * 86400))
+        throw err('bad-value', 'Pick a time in the next year.', null)
+      j.readyBy = at
+      if (at === null) j.readyState = null
+      else {
+        // As deadline.rs: the remaining bytes at the networks' combined speed.
+        const left = (j.total ?? 0) - j.written
+        const rate = BASE_RATE.reduce((a, b) => a + b, 0)
+        j.readyState = nowS + left / rate > at ? 'at-risk' : 'on-track'
+      }
+      emitJobs()
     },
     focus: async (id) => {
       const j = find(id)

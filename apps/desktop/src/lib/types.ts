@@ -49,6 +49,9 @@ export interface JobView {
   verified: boolean
   /** What each network carried and saved in the finishing run. */
   report: ReportView | null
+  /** When it should be finished (unix seconds), and how that looks. */
+  readyBy: number | null
+  readyState: 'on-track' | 'at-risk' | 'missed' | null
 }
 
 export interface ReportView {

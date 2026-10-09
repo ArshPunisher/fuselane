@@ -70,6 +70,13 @@ export function startsAt(unix: number, now = Date.now()): string {
   return `Starts ${at.toLocaleDateString([], { weekday: 'short' })} at ${time}`
 }
 
+/** "Ready by 08:00", "Ready by tomorrow 08:00", "Ready by Fri 08:00". */
+export function readyBy(unix: number, now = Date.now()): string {
+  return startsAt(unix, now)
+    .replace(/^Starts (at )?/, 'Ready by ')
+    .replace(' at ', ' ')
+}
+
 /** The next time the clock shows "HH:MM": today if it's still ahead, else tomorrow. */
 export function nextAt(hhmm: string, now = Date.now()): number | null {
   const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim())

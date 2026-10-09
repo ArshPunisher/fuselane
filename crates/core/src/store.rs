@@ -80,6 +80,8 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE jobs ADD COLUMN sha256_from TEXT;",
     // v11: what the finishing run did per network (JSON), for "what each network saved".
     "ALTER TABLE jobs ADD COLUMN report TEXT;",
+    // v12: the time a download should be finished by (unix seconds).
+    "ALTER TABLE jobs ADD COLUMN ready_by INTEGER;",
 ];
 
 /// What a person can set when adding a download, beyond the link and folder.
@@ -144,6 +146,8 @@ pub struct Job {
     pub sha256_from: Option<String>,
     /// What the finishing run did per network, as JSON written by the app (B9.6).
     pub report: Option<String>,
+    /// When it should be finished (unix seconds), B9.4.
+    pub ready_by: Option<i64>,
 }
 
 impl Job {
@@ -473,6 +477,18 @@ impl Store {
         Ok(())
     }
 
+    /// The time a download should be finished by, or none.
+    pub fn set_ready_by(&self, id: i64, at: Option<i64>) -> Result<(), StoreError> {
+        let n = self.lock().execute(
+            "UPDATE jobs SET ready_by = ?2 WHERE id = ?1",
+            params![id, at],
+        )?;
+        if n == 0 {
+            return Err(StoreError::NotFound(id));
+        }
+        Ok(())
+    }
+
     /// Keeps what the finishing run did (opaque JSON from the app).
     pub fn set_report(&self, id: i64, report: &str) -> Result<(), StoreError> {
         self.lock().execute(
@@ -609,6 +625,7 @@ fn row_to_job(r: &rusqlite::Row<'_>) -> rusqlite::Result<Job> {
             .collect(),
         sha256_from: r.get("sha256_from")?,
         report: r.get("report")?,
+        ready_by: r.get("ready_by")?,
     })
 }
 

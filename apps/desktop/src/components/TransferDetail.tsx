@@ -15,7 +15,7 @@ import {
 } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { toUiError } from '../lib/backend'
-import { bytes, eta, percent, rate, rateText, startsAt } from '../lib/format'
+import { bytes, eta, nextAt, percent, rate, rateText, readyBy, startsAt } from '../lib/format'
 import { assignLanes, kindLabel, netTitle } from '../lib/lanes'
 import { FuseCore } from './FuseCore'
 import { Stream } from './Stream'
@@ -209,6 +209,69 @@ function JobLimit({ job }: { job: JobView }) {
         {draft === 0 && job.speedLimit > 0 ? 'Remove limit' : 'Set limit'}
       </button>
       <p className="field-help">Empty for no limit. The overall and network limits still apply.</p>
+    </form>
+  )
+}
+
+const READY_WORD = {
+  'on-track': 'On track',
+  'at-risk': 'At risk: it goes first, and runs outside the schedule if it has to',
+  missed: 'The time has passed; it carries on',
+} as const
+
+/** Ready by (B9.4): a time this download should be finished. */
+function ReadyBy({ job }: { job: JobView }) {
+  const act = useApp((s) => s.act)
+  const [draft, setDraft] = useState('')
+  // A time field takes 24-hour "HH:MM" whatever the system's clock style.
+  useEffect(() => {
+    if (!job.readyBy) return setDraft('')
+    const d = new Date(job.readyBy * 1000)
+    setDraft(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`)
+  }, [job.id, job.readyBy])
+  const at = nextAt(draft)
+  const id = `ready-${job.id}`
+  return (
+    <form
+      className="job-limit ready-by"
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (at !== null) void act((b) => b.setReadyBy(job.id, at))
+      }}
+    >
+      <div className="ready-field">
+        <label htmlFor={id}>Ready by</label>
+        <input
+          id={id}
+          type="time"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          aria-describedby={`${id}-state`}
+        />
+      </div>
+      <div className="ready-actions">
+        <button
+          type="submit"
+          className="btn"
+          disabled={at === null || (job.readyBy !== null && at === job.readyBy)}
+        >
+          Set
+        </button>
+        {job.readyBy !== null && (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => void act((b) => b.setReadyBy(job.id, null))}
+          >
+            Clear
+          </button>
+        )}
+      </div>
+      <p id={`${id}-state`} className="field-help" data-state={job.readyState ?? undefined}>
+        {job.readyBy && job.readyState
+          ? `${readyBy(job.readyBy)}. ${READY_WORD[job.readyState]}.`
+          : 'Downloads with a time go first, earliest first.'}
+      </p>
     </form>
   )
 }
@@ -560,6 +623,7 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
           )}
 
           {job.status !== 'completed' && job.status !== 'cancelled' && <JobLimit job={job} />}
+          {job.status !== 'completed' && job.status !== 'cancelled' && <ReadyBy job={job} />}
         </div>
       </div>
     </article>

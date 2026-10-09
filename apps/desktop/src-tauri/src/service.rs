@@ -16,6 +16,7 @@ use std::time::Duration;
 
 mod already;
 mod checksum;
+mod deadline;
 mod focus;
 mod power_aware;
 pub mod savings;
@@ -68,6 +69,10 @@ pub struct JobView {
     pub verified: bool,
     /// What each network carried and saved in the finishing run (B9.6).
     pub report: Option<savings::ReportView>,
+    /// When it should be finished (unix seconds), and how that looks:
+    /// on-track, at-risk or missed (B9.4).
+    pub ready_by: Option<i64>,
+    pub ready_state: Option<&'static str>,
 }
 
 /// One network the app can see.
@@ -734,6 +739,8 @@ fn view(job: &Job) -> JobView {
             .filter(|_| job.status == Status::Completed)
             .and_then(|r| serde_json::from_str::<savings::RunReport>(r).ok())
             .map(|r| savings::view(&r)),
+        ready_by: job.ready_by.filter(|_| job.status != Status::Completed),
+        ready_state: None,
     }
 }
 
@@ -1041,6 +1048,7 @@ impl Service {
             .map(|j| {
                 let mut v = view(j);
                 v.focused = focus == Some(j.id);
+                v.ready_state = self.ready_state(j).map(deadline::ReadyState::word);
                 if let Some(n) = notes.get(&j.id) {
                     v.mirror_notes = lock(n).clone();
                 }
@@ -1577,6 +1585,14 @@ impl Service {
             let mut paused = lock(&self.schedule_paused);
             let before = paused.len();
             for (id, r) in lock(&self.running).iter() {
+                // One that would miss its deadline by waiting keeps going (B9.4).
+                if self
+                    .store
+                    .get(*id)
+                    .is_ok_and(|j| self.deadline_needs_now(&j, true))
+                {
+                    continue;
+                }
                 if paused.insert(*id) {
                     r.cancel.cancel();
                 }
@@ -2336,20 +2352,26 @@ impl Service {
 
     /// Starts queued jobs, oldest first, while there are free slots.
     fn pump(self: &Arc<Self>) {
-        if !self.schedule_allows() || !self.battery_allows() {
+        if !self.battery_allows() {
             self.update_awake();
             return;
         }
+        // Outside the schedule only a download that would miss its deadline runs.
+        let scheduled = self.schedule_allows();
         let Ok(mut jobs) = self.store.list() else {
             return;
         };
-        jobs.sort_by_key(|j| (j.position, j.id));
+        // Deadlines first, earliest first (B9.4); then the order chosen.
+        jobs.sort_by_key(|j| (j.ready_by.unwrap_or(i64::MAX), j.position, j.id));
         let mut running = lock(&self.running);
         for job in jobs.into_iter().filter(|j| j.status == Status::Queued) {
             if running.len() >= self.max_running() {
                 break;
             }
             if running.contains_key(&job.id) || !self.focus_allows(job.id) {
+                continue;
+            }
+            if !scheduled && !self.deadline_needs_now(&job, false) {
                 continue;
             }
             let cancel = Cancel::new();
@@ -3391,6 +3413,64 @@ mod tests {
             h.job(id).status == "completed" && h.job(id2).status == "completed"
         })
         .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_earliest_deadline_goes_first_and_an_urgent_one_ignores_the_schedule() {
+        let now = deadline::unix_now();
+        let slow = RangeServer::start(Content::new(512 * KB, 211))
+            .await
+            .unwrap();
+        slow.add_rule(Rule {
+            skip: 1,
+            times: u32::MAX,
+            fault: Fault::Throttle(256 * KB),
+        });
+        let sb = RangeServer::start(Content::new(64 * KB, 212))
+            .await
+            .unwrap();
+        let sc = RangeServer::start(Content::new(64 * KB, 213))
+            .await
+            .unwrap();
+        let h = harness(1);
+        let ia = h.svc.add(&link(&slow), None).unwrap();
+        h.wait("first running", |h| h.job(ia).status == "running")
+            .await;
+        let ib = h.svc.add(&link(&sb), None).unwrap();
+        let ic = h.svc.add(&link(&sc), None).unwrap();
+        h.svc.set_ready_by(ib, Some(now + 7200)).unwrap();
+        h.svc.set_ready_by(ic, Some(now + 5400)).unwrap();
+        assert_eq!(h.job(ic).ready_by, Some(now + 5400));
+        assert_eq!(h.job(ic).ready_state, Some("on-track"));
+        h.wait("the earlier deadline started first", |h| {
+            h.job(ic).status != "queued" && h.job(ib).status == "queued"
+                || h.job(ib).status == "completed" && h.job(ic).status == "completed"
+        })
+        .await;
+        h.wait("all done", |h| h.job(ib).status == "completed")
+            .await;
+        assert_eq!(h.job(ic).ready_by, None, "nothing to show once done");
+
+        // Outside the schedule: only the download that would miss its deadline runs.
+        h.svc.set_clock(noon());
+        h.svc.set_automation(overnight_only()).unwrap();
+        let sd = RangeServer::start(Content::new(64 * KB, 214))
+            .await
+            .unwrap();
+        let se = RangeServer::start(Content::new(64 * KB, 215))
+            .await
+            .unwrap();
+        let id = h.svc.add(&link(&sd), None).unwrap();
+        let ie = h.svc.add(&link(&se), None).unwrap();
+        h.svc.set_ready_by(ie, Some(now + 600)).unwrap();
+        assert_eq!(h.job(ie).ready_state, Some("at-risk"));
+        h.wait("urgent one done", |h| h.job(ie).status == "completed")
+            .await;
+        assert_eq!(h.job(id).status, "queued", "the other waits for the window");
+        assert!(
+            h.svc.set_ready_by(id, Some(now - 10)).is_err(),
+            "not in the past"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

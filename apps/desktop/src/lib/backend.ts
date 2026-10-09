@@ -59,6 +59,8 @@ export interface Backend {
   /** Gives one download every network; the others wait and carry on after it. */
   /** A finished download with this name and size that's still on disk. */
   alreadyHave(name: string, size: number | null): Promise<HaveView | null>
+  /** When a download should be finished (unix seconds), or null to clear it. */
+  setReadyBy(id: number, at: number | null): Promise<void>
   focus(id: number): Promise<void>
   unfocus(): Promise<void>
   automation(): Promise<AutomationView>
@@ -220,6 +222,7 @@ async function tauriBackend(): Promise<Backend> {
     setMaxRunning: (n) => call('set_max_running', { n }),
     reorder: (ids) => call('reorder', { ids }),
     focus: (id) => call('focus', { id }),
+    setReadyBy: (id, at) => call('set_ready_by', { id, at }),
     alreadyHave: (name, size) => call('already_have', { name, size }),
     unfocus: () => call('unfocus'),
     setJobLimit: (id, rate) => call('set_job_limit', { id, rate }),

@@ -231,6 +231,11 @@ async fn focus(svc: State<'_>, id: i64) -> Result<(), UiError> {
 }
 
 #[tauri::command]
+async fn set_ready_by(svc: State<'_>, id: i64, at: Option<i64>) -> Result<(), UiError> {
+    svc.set_ready_by(id, at)
+}
+
+#[tauri::command]
 async fn unfocus(svc: State<'_>) -> Result<(), UiError> {
     svc.unfocus();
     Ok(())
@@ -1513,6 +1518,7 @@ fn main() {
             focus,
             unfocus,
             already_have,
+            set_ready_by,
             set_job_limit,
             trash_file,
             pause,

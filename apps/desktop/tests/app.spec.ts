@@ -1074,6 +1074,30 @@ test('what happens on low battery is a setting', async ({ page }) => {
   await expect(page.getByText(/downloads pause and carry on when you plug in/)).toBeVisible()
 })
 
+test('a download can be given a time to be ready by, and says how it is doing', async ({
+  page,
+}) => {
+  await page.goto('/?drop=0')
+  await page
+    .getByRole('button', { name: /dataset-shard-0042/ })
+    .first()
+    .click()
+  const field = page.getByLabel('Ready by')
+  await field.fill('23:59')
+  const form = page.locator('.ready-by')
+  await form.getByRole('button', { name: 'Set' }).click()
+  await expect(field).toHaveValue('23:59')
+  await expect(form.locator('.field-help')).toContainText(/Ready by .*(On track|At risk)/)
+  await expect(
+    page.locator('.row', { hasText: 'dataset-shard-0042' }).locator('.row-ready'),
+  ).toContainText('Ready by')
+  await form.getByRole('button', { name: 'Clear' }).click()
+  await expect(field).toHaveValue('')
+  await expect(
+    page.locator('.row', { hasText: 'dataset-shard-0042' }).locator('.row-ready'),
+  ).toHaveCount(0)
+})
+
 test('Download later adds it paused, ready to start', async ({ page }) => {
   await page.goto('/?empty=1')
   const dialog = await openDialog(page)

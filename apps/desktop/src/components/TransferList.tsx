@@ -15,7 +15,7 @@ import {
 } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { fileType, TYPE_LABEL, type FileType } from '../lib/categories'
-import { bytes, percent, rateText, startsAt } from '../lib/format'
+import { bytes, percent, rateText, readyBy, startsAt } from '../lib/format'
 import { assignLanes } from '../lib/lanes'
 import type { JobView, Live, TorrentView } from '../lib/types'
 import { STATUS_WORD } from './status'
@@ -109,6 +109,12 @@ function Row({ job }: { job: JobView }) {
             </span>
             <span className="num">{meta(job, showLive)}</span>
           </span>
+          {job.readyBy !== null && (
+            <span className="row-ready" data-state={job.readyState ?? undefined}>
+              {readyBy(job.readyBy)}
+              {job.readyState === 'at-risk' ? ', at risk' : ''}
+            </span>
+          )}
           <Bar job={job} live={showLive} />
         </span>
       </button>
