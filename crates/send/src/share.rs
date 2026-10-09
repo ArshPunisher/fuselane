@@ -217,7 +217,13 @@ pub async fn receive(
         ),
     )
     .await
-    .map_err(|_| ShareError::SenderOffline)??;
+    .map_err(|_| ShareError::SenderOffline)?
+    // The magnet is ours, so an engine failure here means nobody had the share:
+    // every address tried, none answered.
+    .map_err(|e| match e {
+        TorrentError::Engine(_) | TorrentError::Invalid(_) => ShareError::SenderOffline,
+        e => e.into(),
+    })?;
     // Anything else under this info-hash is not ours to open.
     let size = match listing.files.as_slice() {
         [f] if !f.padding && f.parts == [torrent::NAME] && f.len >= HEADER_BLOCK as u64 => {
