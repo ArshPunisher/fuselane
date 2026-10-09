@@ -150,6 +150,21 @@ The owner approved the Figma designs (local file "Fuselane") and asked for all o
 - [x] B8.12 Nearby for phones: a page served by the app over the LAN (QR code) to send and receive in a phone browser; LocalSend v2 interop
 - [x] B8.13 Screenshots for the owner, then release 0.1.0-beta.8
 
+## Beta.9 round: download features (2026-10-10)
+
+The owner asked for all ten ideas from the feature list. Each one is tested at the cheapest level and checked in the browser demo; the Send redesign, receiver Cancel and wide layouts from the same round are done.
+
+- [ ] B9.1 Do this one now: one download gets every network; the others wait and carry on after it
+- [ ] B9.2 Groups: links added together stay together (one row, one progress, pause or resume all, one notice when all are done)
+- [ ] B9.3 Find files on a page: paste a web page, pick its files by type, add them as a group
+- [ ] B9.4 Ready by: a deadline per download; earliest deadline first, runs outside the schedule when it would otherwise miss, says On track or At risk
+- [ ] B9.5 The phone only when it's worth it: per network Always / Only for long downloads / Never, with a minutes threshold
+- [ ] B9.6 What each network saved: after a download, "Without iPhone USB it would have taken 6 min"
+- [ ] B9.7 Checksums found by themselves: `<file>.sha256` or `SHA256SUMS` next to the link is used, and the download shows Verified
+- [ ] B9.8 Already downloaded: the same file (name and size) already finished and still on disk is pointed out before downloading again
+- [ ] B9.9 Hand off over Nearby: a paused download (its partial file and progress) goes to another Fuselane and continues there
+- [ ] B9.10 Battery aware: on low battery (not charging), keep going, leave out the phone, or pause
+
 ## P5 Torrents (0.2)
 
 - [x] 5.1 `engine-torrent` crate with librqbit; uTP/UPnP/LSD/web seeds off (librqbit 9 has no web seeds)

@@ -76,6 +76,16 @@ Design in [`../03-architecture/BROWSER-EXTENSION.md`](../03-architecture/BROWSER
 | Headless daemon `fuselaned` for servers, NAS and home labs | P1 |
 | Diagnostics: rotating logs, a "Copy diagnostics" button, no crash-reporting service (ADR 0009) | P0 (Ph 3) |
 | Internationalization (English first; Hindi next) | P1 |
+| Do this one now: one download gets every network, the rest wait (B9.1) | P0 |
+| Groups of downloads added together, with one progress and one notice (B9.2) | P0 |
+| Find files on a web page and add them by type (B9.3) | P1 |
+| Ready by: a deadline per download, earliest first, On track / At risk (B9.4) | P1 |
+| The phone only for long downloads, with a threshold (B9.5) | P0 |
+| What each network saved, shown after a download (B9.6) | P1 |
+| Checksums found next to the link (`.sha256`, `SHA256SUMS`) and a Verified badge (B9.7) | P1 |
+| Already downloaded: same name and size already on disk (B9.8) | P1 |
+| Hand a paused download to another Fuselane over Nearby (B9.9) | P1 |
+| Battery aware: on low battery leave out the phone or pause (B9.10) | P2 |
 
 ## F. Platforms beyond desktop
 
