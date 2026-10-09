@@ -1439,6 +1439,7 @@ section {
 .foot-grid {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
   gap: 24px;
 }
@@ -1447,6 +1448,7 @@ section {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 22px;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
@@ -1644,8 +1646,6 @@ section {
 }
 
 /* Native disclosure, styled: FAQ and first-run guides. */
-.qa {
-  border: 1px solid var(--line);
 .faq-layout {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
@@ -1727,6 +1727,8 @@ section {
   }
 }
 
+.qa {
+  border: 1px solid var(--line);
   border-radius: var(--r-panel);
   background: var(--panel);
   overflow: hidden;
@@ -1814,6 +1816,30 @@ section {
 .support-lead p strong {
   color: var(--ink);
   font-weight: 550;
+}
+
+.lead-facts {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 18px 0 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+.lead-facts li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.lead-facts svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--fuse-hot);
 }
 
 .ways {
@@ -2418,8 +2444,12 @@ body:not([data-link='ok']) .beam-path {
 
 .smalls li {
   display: grid;
-  gap: 4px;
-  padding: 18px 20px;
+  grid-template-columns: 36px minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  align-content: start;
+  column-gap: 14px;
+  row-gap: 4px;
+  padding: 22px 22px 24px;
   background: var(--night);
   transition: background 0.3s var(--ease);
 }
@@ -2428,16 +2458,6 @@ body:not([data-link='ok']) .beam-path {
   background: var(--panel);
 }
 
-.smalls strong {
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.smalls span {
-  color: var(--body);
-  font-size: 14px;
-  text-wrap: pretty;
-}
 .small-ic {
   grid-row: span 2;
   display: grid;
@@ -2485,3 +2505,13 @@ body:not([data-link='ok']) .beam-path {
   }
 }
 
+.smalls strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.smalls span {
+  color: var(--body);
+  font-size: 14px;
+  text-wrap: pretty;
+}
