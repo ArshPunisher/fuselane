@@ -95,6 +95,7 @@
       <nav aria-label="Main">
         <ul class="nav-links">
           <li><a href="./#features">Features</a></li>
+          <li><a href="./#send">Send</a></li>
           <li><a href="download/">Download</a></li>
           <li><a href="faq/">FAQ</a></li>
           <li><a href="support/">Support</a></li>
@@ -113,6 +114,7 @@
     <nav aria-label="Pages">
       <ul class="nav-mobile">
         <li><a href="./#features">Features</a></li>
+        <li><a href="./#send">Send</a></li>
         <li><a href="download/">Download</a></li>
         <li><a href="faq/">FAQ</a></li>
         <li><a href="support/">Support</a></li>
@@ -332,6 +334,98 @@
             </ul>
           </article>
         </div>
+      </section>
+
+      <section class="section wrap send-band" id="send" aria-labelledby="send-title">
+        <div class="send-copy reveal">
+          <p class="label">New: Fuse Send</p>
+          <h2 id="send-title">Send a file of any size. Nothing to upload.</h2>
+          <p>
+            Pick a file, copy the link, send it however you like. The receiver gets it straight from
+            your computer, encrypted on the way and checked when it lands. No cloud in the middle,
+            so no size limit, no expiry, no account.
+          </p>
+          <ul class="send-points">
+            <li><i data-icon="shield"></i>End-to-end encrypted: the key lives only in the link</li>
+            <li><i data-icon="gauge"></i>No size limit: 4 GB or 400 GB, same link</li>
+            <li><i data-icon="plug"></i>Computer to computer, across the internet or the room</li>
+            <li><i data-icon="refresh"></i>Survives a restart: the same link keeps working</li>
+          </ul>
+        </div>
+        <div class="send-stage reveal" style="--i: 1" aria-hidden="true">
+          <svg viewBox="0 0 560 300" class="send-svg">
+            <defs>
+              <linearGradient id="send-beam" x1="0" x2="1">
+                <stop offset="0" stop-color="var(--tide)" stop-opacity="0.2" />
+                <stop offset="0.55" stop-color="var(--fuse-hot)" />
+                <stop offset="1" stop-color="var(--fuse)" />
+              </linearGradient>
+              <radialGradient id="send-glow">
+                <stop offset="0" stop-color="var(--fuse)" stop-opacity="0.55" />
+                <stop offset="1" stop-color="var(--fuse)" stop-opacity="0" />
+              </radialGradient>
+            </defs>
+            <circle cx="470" cy="150" r="120" fill="url(#send-glow)" class="send-halo" />
+            <g class="send-dev">
+              <rect x="20" y="96" width="150" height="104" rx="14" />
+              <rect x="34" y="110" width="122" height="62" rx="6" class="screen" />
+              <rect x="64" y="208" width="62" height="6" rx="3" />
+            </g>
+            <g class="send-dev send-dev-b">
+              <rect x="390" y="96" width="150" height="104" rx="14" />
+              <rect x="404" y="110" width="122" height="62" rx="6" class="screen" />
+              <rect x="434" y="208" width="62" height="6" rx="3" />
+              <rect class="fill" x="414" y="152" width="0" height="8" rx="4" />
+            </g>
+            <path
+              class="send-path"
+              d="M170 148 C 250 60, 310 236, 390 148"
+              pathLength="1"
+              stroke="url(#send-beam)"
+            />
+            <circle class="pk pk1" r="6" />
+            <circle class="pk pk2" r="4.5" />
+            <circle class="pk pk3" r="3.5" />
+            <circle class="pk pk4" r="5" />
+          </svg>
+          <div class="send-link-card">
+            <span class="num" translate="no">arshpunisher.github.io/fuselane/s#v1.k3Q…</span>
+            <span class="send-copy-btn">Copy link</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="section wrap" id="small" aria-labelledby="small-title">
+        <div class="section-head reveal">
+          <h2 id="small-title">And the small things you'd miss</h2>
+        </div>
+        <ul class="smalls reveal">
+          <li><strong>Download later</strong><span>Add now, start when you're ready.</span></li>
+          <li><strong>A limit per download</strong><span>Slow one file, leave the rest.</span></li>
+          <li>
+            <strong>Copied links</strong
+            ><span>Copy a file link and Fuselane offers it, if you want.</span>
+          </li>
+          <li><strong>Export and import</strong><span>Your list as a plain text file.</span></li>
+          <li><strong>Search and filters</strong><span>Find any download in a long list.</span></li>
+          <li>
+            <strong>Downloads at once</strong><span>Run one, or up to eight side by side.</span>
+          </li>
+          <li>
+            <strong>Sorted by type</strong><span>Videos, music, archives, each to its folder.</span>
+          </li>
+          <li><strong>Start at login</strong><span>Waits in the tray for the schedule.</span></li>
+          <li>
+            <strong>MB/s or Mbps</strong><span>Match your files, or your internet plan.</span>
+          </li>
+          <li><strong>Slow mode</strong><span>One switch to leave room for calls.</span></li>
+          <li>
+            <strong>Data allowances</strong><span>A monthly cap per network, never passed.</span>
+          </li>
+          <li>
+            <strong>Keyboard first</strong><span>Shortcuts for adding, pausing, moving.</span>
+          </li>
+        </ul>
       </section>
 
       <section class="section wrap showcase" aria-labelledby="app-title">
