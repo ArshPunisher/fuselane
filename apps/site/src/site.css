@@ -2515,3 +2515,96 @@ body:not([data-link='ok']) .beam-path {
   font-size: 14px;
   text-wrap: pretty;
 }
+
+/* ---------- Download: first open on a Mac ---------- */
+
+.first-open {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 6px;
+  padding: clamp(20px, 3vw, 28px);
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
+  background:
+    radial-gradient(500px 220px at 0% 0%, oklch(0.74 0.17 50 / 0.08), transparent 70%), var(--panel);
+}
+
+.first-open h3 {
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.first-open .sub {
+  max-width: 70ch;
+  color: var(--body);
+}
+
+.open-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.open-steps li {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--night);
+  counter-increment: step;
+}
+
+.open-steps li::after {
+  content: counter(step);
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.open-steps strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.open-steps span:last-child {
+  color: var(--body);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.open-steps b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.step-ic {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-bottom: 4px;
+  border-radius: 10px;
+  background: oklch(0.74 0.17 50 / 0.12);
+  color: var(--fuse-hot);
+}
+
+.step-ic svg {
+  width: 18px;
+  height: 18px;
+}
+
+@media (max-width: 760px) {
+  .open-steps {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

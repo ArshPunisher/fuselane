@@ -36,6 +36,9 @@ import units from '@phosphor-icons/core/assets/regular/arrows-left-right.svg?raw
 import walk from '@phosphor-icons/core/assets/regular/person-simple-walk.svg?raw'
 import pie from '@phosphor-icons/core/assets/regular/chart-pie-slice.svg?raw'
 import keys from '@phosphor-icons/core/assets/regular/keyboard.svg?raw'
+import warning from '@phosphor-icons/core/assets/regular/warning-circle.svg?raw'
+import gear from '@phosphor-icons/core/assets/regular/gear-six.svg?raw'
+import check from '@phosphor-icons/core/assets/regular/check-circle.svg?raw'
 import menu from '@phosphor-icons/core/assets/regular/list.svg?raw'
 import close from '@phosphor-icons/core/assets/regular/x.svg?raw'
 
@@ -69,6 +72,9 @@ const ICONS: Record<string, string> = {
   copy,
   menu,
   close,
+  warning,
+  gear,
+  check,
   later,
   clip,
   export: exportIcon,

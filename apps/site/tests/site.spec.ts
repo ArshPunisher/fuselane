@@ -118,6 +118,17 @@ test('system tabs work with the keyboard and show one panel at a time', async ({
   await expect(page.getByRole('tab', { name: /Linux/ })).toHaveAttribute('aria-selected', 'true')
 })
 
+test('the Mac panel shows how to open the app the first time', async ({ page }) => {
+  await stub(page)
+  await page.goto('/download/')
+  await page.getByRole('tab', { name: /macOS/ }).click()
+  const steps = page.locator('.open-steps li')
+  await expect(steps).toHaveCount(3)
+  await expect(steps.nth(0)).toContainText('Not Opened')
+  await expect(steps.nth(2)).toContainText('Open Anyway')
+  await expect(page.getByText('Or skip the warning: install with one command')).toBeVisible()
+})
+
 test('copy buttons copy the exact command', async ({ page, context, browserName }) => {
   test.skip(browserName !== 'chromium', 'clipboard permissions are Chromium-only in Playwright')
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])

@@ -162,7 +162,40 @@
             ><i data-icon="download"></i>Download</a
           >
         </div>
-        <p class="label">Or install with one command (no warning to click through)</p>
+        <div class="first-open" aria-labelledby="first-open-title">
+          <h3 id="first-open-title">Opening it the first time</h3>
+          <p class="sub">
+            Fuselane is open source but not notarized by Apple (that needs a paid account), so macOS
+            stops it once. It takes three clicks:
+          </p>
+          <ol class="open-steps">
+            <li>
+              <span class="step-ic"><i data-icon="warning"></i></span>
+              <strong>&ldquo;Fuselane&rdquo; Not Opened</strong>
+              <span
+                >Open Fuselane from Applications. When macOS says it can't verify it, click
+                <b>Done</b>.</span
+              >
+            </li>
+            <li>
+              <span class="step-ic"><i data-icon="gear"></i></span>
+              <strong>Privacy &amp; Security</strong>
+              <span
+                >Open <b>System Settings</b> and choose <b>Privacy &amp; Security</b>. Scroll down
+                to Security.</span
+              >
+            </li>
+            <li>
+              <span class="step-ic"><i data-icon="check"></i></span>
+              <strong>Open Anyway</strong>
+              <span
+                >Click <b>Open Anyway</b>, then <b>Open</b>. From now on it opens like any other
+                app.</span
+              >
+            </li>
+          </ol>
+        </div>
+        <p class="label">Or skip the warning: install with one command</p>
         <div class="cmd">
           <code id="cmd-script"
             >curl -fsSL
@@ -174,23 +207,6 @@
         <div class="cmd">
           <code id="cmd-brew">brew install --cask arshpunisher/tap/fuselane</code
           ><button class="copy" data-copy="cmd-brew" type="button">Copy</button>
-        </div>
-        <div class="qa">
-          <details>
-            <summary>First time opening Fuselane from the disk image?</summary>
-            <div class="answer">
-              <p>
-                Fuselane is open source and signed on your Mac, but not notarized by Apple (that
-                needs a paid account). The first time, macOS stops it once:
-              </p>
-              <ol>
-                <li>Drag Fuselane into Applications and open it. macOS says it can't check it.</li>
-                <li>Open System Settings, then Privacy &amp; Security.</li>
-                <li>Scroll to Security and choose Open Anyway, then Open.</li>
-              </ol>
-              <p>After that it opens like any other app. The command above skips this step.</p>
-            </div>
-          </details>
         </div>
       </section>
 
