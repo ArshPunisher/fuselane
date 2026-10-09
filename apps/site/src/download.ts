@@ -64,6 +64,8 @@ async function links() {
   })
   if (!version) return
   $('#version-tag')!.textContent = version
+  $('[data-ver]')!.hidden = false
+  $('[data-nover]')!.hidden = true
   $<HTMLAnchorElement>('#sums')!.href = `${REPO}/releases/download/v${version}/SHA256SUMS`
   $<HTMLAnchorElement>('#notes')!.href = `${REPO}/releases/tag/v${version}`
   void sizes(version)
