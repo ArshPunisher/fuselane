@@ -48,6 +48,65 @@ pub enum TorrentError {
     Engine(String),
 }
 
+const LSD_V4: std::net::SocketAddrV4 =
+    std::net::SocketAddrV4::new(std::net::Ipv4Addr::new(239, 192, 152, 143), 6771);
+const LSD_V6: std::net::Ipv6Addr = std::net::Ipv6Addr::new(0xff15, 0, 0, 0, 0, 0, 0xefc0, 0x988f);
+
+/// Asks the local networks who has a torrent. A peer on the same network that
+/// shares it answers at once, instead of at its next announce, which can be five
+/// minutes away (librqbit only announces, never asks).
+#[derive(Debug, Clone)]
+pub struct LocalSearch {
+    interfaces: Vec<Interface>,
+    info_hash: String,
+    port: u16,
+    cookie: u32,
+}
+
+impl LocalSearch {
+    /// Sends the search out of every network. Best effort: failures are ignored.
+    pub fn send(&self) {
+        for iface in &self.interfaces {
+            for ip in &iface.addrs {
+                let _ = lsd_search(*ip, iface.index, &self.info_hash, self.port, self.cookie);
+            }
+        }
+    }
+}
+
+/// One BEP 14 search for `info_hash`, sent out of the network with address `ip`.
+fn lsd_search(
+    ip: std::net::IpAddr,
+    index: u32,
+    info_hash: &str,
+    port: u16,
+    cookie: u32,
+) -> std::io::Result<()> {
+    use socket2::{Domain, Protocol, Socket, Type};
+    let (socket, to, host) = match ip {
+        std::net::IpAddr::V4(v4) => {
+            let s = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
+            s.set_multicast_if_v4(&v4)?;
+            s.set_multicast_loop_v4(true)?;
+            s.bind(&SocketAddr::from((v4, 0)).into())?;
+            (s, SocketAddr::V4(LSD_V4), LSD_V4.to_string())
+        }
+        std::net::IpAddr::V6(v6) => {
+            let s = Socket::new(Domain::IPV6, Type::DGRAM, Some(Protocol::UDP))?;
+            s.set_multicast_if_v6(index)?;
+            s.set_multicast_loop_v6(true)?;
+            s.bind(&SocketAddr::from((v6, 0)).into())?;
+            let to = std::net::SocketAddrV6::new(LSD_V6, 6771, 0, index);
+            (s, SocketAddr::V6(to), format!("[{LSD_V6}]:6771"))
+        }
+    };
+    let msg = format!(
+        "BT-SEARCH * HTTP/1.1\r\nHost: {host}\r\nPort: {port}\r\nInfohash: {info_hash}\r\ncookie: {cookie}\r\n\r\n\r\n"
+    );
+    socket.send_to(msg.as_bytes(), &to.into())?;
+    Ok(())
+}
+
 fn engine(e: impl std::fmt::Display) -> TorrentError {
     TorrentError::Engine(e.to_string())
 }
@@ -295,6 +354,21 @@ impl TorrentEngine {
     /// networks while torrents only seed).
     pub fn avoid_networks<I: IntoIterator<Item = String>>(&self, names: I) {
         self.balancer.set_avoid(names);
+    }
+
+    /// A BEP 14 search for `info_hash` on this engine's networks (see [`LocalSearch`]).
+    pub fn local_search(&self, info_hash: &str) -> Option<LocalSearch> {
+        let port = self.listen_addr()?.port();
+        // Any number but the answering peer's own (it ignores its own messages).
+        let cookie = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(1, |d| d.subsec_nanos() ^ std::process::id());
+        Some(LocalSearch {
+            interfaces: self.interfaces(),
+            info_hash: info_hash.to_string(),
+            port,
+            cookie,
+        })
     }
 
     /// Follows network changes (plugged in, unplugged, new address).

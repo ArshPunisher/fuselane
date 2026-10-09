@@ -9,7 +9,7 @@ pub mod socks;
 
 pub use balancer::{NetShare, NetStat};
 pub use engine::{
-    AddOptions, EngineOptions, Listing, Phase, Progress, Source, Storage, Torrent, TorrentEngine,
-    TorrentError,
+    AddOptions, EngineOptions, Listing, LocalSearch, Phase, Progress, Source, Storage, Torrent,
+    TorrentEngine, TorrentError,
 };
 pub use paths::{Cleanup, Planned};
