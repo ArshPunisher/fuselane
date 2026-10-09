@@ -17,6 +17,12 @@
   WriteRegStr SHCTX "Software\Classes\Fuselane.magnet\DefaultIcon" "" "$INSTDIR\${MAINBINARYNAME}.exe,0"
   WriteRegStr SHCTX "Software\Classes\Fuselane.magnet\shell\open\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" "%1"'
 
+  ; fuselane:// is Fuselane's own scheme (Fuse Send links), so it is registered outright.
+  WriteRegStr SHCTX "Software\Classes\fuselane" "" "URL:Fuse Send link"
+  WriteRegStr SHCTX "Software\Classes\fuselane" "URL Protocol" ""
+  WriteRegStr SHCTX "Software\Classes\fuselane\DefaultIcon" "" "$INSTDIR\${MAINBINARYNAME}.exe,0"
+  WriteRegStr SHCTX "Software\Classes\fuselane\shell\open\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" "%1"'
+
   WriteRegStr SHCTX "Software\Fuselane\Capabilities" "ApplicationName" "Fuselane"
   WriteRegStr SHCTX "Software\Fuselane\Capabilities" "ApplicationDescription" "Downloads over every network at once"
   WriteRegStr SHCTX "Software\Fuselane\Capabilities\FileAssociations" ".torrent" "Fuselane.torrent"
@@ -28,6 +34,7 @@
   DeleteRegValue SHCTX "Software\Classes\.torrent\OpenWithProgids" "Fuselane.torrent"
   DeleteRegKey SHCTX "Software\Classes\Fuselane.torrent"
   DeleteRegKey SHCTX "Software\Classes\Fuselane.magnet"
+  DeleteRegKey SHCTX "Software\Classes\fuselane"
   DeleteRegValue SHCTX "Software\RegisteredApplications" "Fuselane"
   DeleteRegKey SHCTX "Software\Fuselane\Capabilities"
 

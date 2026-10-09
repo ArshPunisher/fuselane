@@ -10,5 +10,12 @@
         "role": "Viewer"
       }
     ]
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["fuselane"]
+      }
+    }
   }
 }

@@ -1,4 +1,5 @@
-//! Things the OS asks Fuselane to open: a magnet link, or a .torrent file (from
+//! Things the OS asks Fuselane to open: a magnet link, a Fuse Send link
+//! (`fuselane://send/…`, from the share page), or a .torrent file (from
 //! Finder/Explorer "Open with", a double-click, or a browser). They arrive as
 //! command-line arguments (Windows, Linux, second launches) or as URLs (macOS).
 //! Anything else is ignored: these strings come from outside the app.
@@ -12,6 +13,8 @@ const MAX_MAGNET: usize = 16 * 1024;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Target {
     Magnet(String),
+    /// A Fuse Send link, checked to be whole.
+    Send(String),
     TorrentFile(PathBuf),
 }
 
@@ -19,7 +22,7 @@ impl Target {
     /// The string handed to the window's New download dialog.
     pub fn as_draft(&self) -> String {
         match self {
-            Target::Magnet(m) => m.clone(),
+            Target::Magnet(m) | Target::Send(m) => m.clone(),
             Target::TorrentFile(p) => p.display().to_string(),
         }
     }
@@ -57,6 +60,13 @@ pub fn parse(raw: &str) -> Option<Target> {
             && s.to_ascii_lowercase().contains("xt=urn:btih:")
             && !s.chars().any(char::is_control);
         return ok.then(|| Target::Magnet(s.to_owned()));
+    }
+    let scheme = fuselane_send::link::SCHEME;
+    if s.len() >= scheme.len() && s[..scheme.len()].eq_ignore_ascii_case(scheme) {
+        // Links are a few dozen characters; anything long or unparseable is dropped.
+        let link = format!("{scheme}{}", &s[scheme.len()..]);
+        let ok = s.len() <= 512 && fuselane_send::link::Link::parse(&link).is_ok();
+        return ok.then_some(Target::Send(link));
     }
     let path = if s.len() >= 7 && s[..7].eq_ignore_ascii_case("file://") {
         // file:///Users/x/a.torrent (macOS, Linux); file://localhost/... too.
@@ -119,6 +129,30 @@ mod tests {
             parse(&format!("{MAGNET}{}", "a".repeat(MAX_MAGNET))),
             None,
             "too long"
+        );
+    }
+
+    #[test]
+    fn send_links_are_accepted_only_when_whole() {
+        let link = fuselane_send::link::Link::new([7; 20], Default::default()).unwrap();
+        let url = link.app_url();
+        assert_eq!(parse(&url), Some(Target::Send(url.clone())));
+        assert_eq!(
+            parse(&url.replacen("fuselane://send/", "FUSELANE://SEND/", 1)),
+            Some(Target::Send(url.clone())),
+            "scheme case doesn't matter"
+        );
+        assert_eq!(parse(&url[..url.len() - 4]), None, "cut short");
+        assert_eq!(parse("fuselane://send/"), None);
+        assert_eq!(parse("fuselane://other/thing"), None);
+        assert_eq!(
+            parse(&format!("{url}{}", "A".repeat(600))),
+            None,
+            "too long"
+        );
+        assert_eq!(
+            from_args(["fuselane".to_string(), url.clone()]),
+            vec![Target::Send(url)]
         );
     }
 

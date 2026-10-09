@@ -933,6 +933,17 @@ test.describe('Fuse Send', () => {
     await expect(page.getByLabel('Link someone sent you')).toHaveValue(LINK)
   })
 
+  test('the share page handing a link to the app opens it on the Send page', async ({ page }) => {
+    await page.goto('/?empty=1')
+    await expect(page.getByText('Nothing downloading yet')).toBeVisible()
+    const link = `fuselane://send/${LINK.split('#')[1]}`
+    await page.evaluate((t) => {
+      ;(window as unknown as { __demoOpen: (t: string) => void }).__demoOpen(t)
+    }, link)
+    await expect(page.getByLabel('Link someone sent you')).toHaveValue(link)
+    await expect(page.getByRole('dialog', { name: 'New download' })).toBeHidden()
+  })
+
   test('the Send page fits a phone', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 })
     await page.goto('/?sends=1')

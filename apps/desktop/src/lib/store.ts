@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { connect, toUiError, type Backend } from './backend'
 import { setNetPrefs } from './lanes'
 import { setSpeedUnit, type SpeedUnit } from './format'
+import { isSendLink } from './sendLink'
 import type {
   AppInfo,
   Automation,
@@ -330,6 +331,11 @@ async function startOnce(): Promise<void> {
     await backend.subscribe((e) => {
       if (e.type === 'networks') {
         set({ networks: e.networks })
+        return
+      }
+      if (e.type === 'open' && isSendLink(e.target)) {
+        // The share page's "Open in Fuselane": receive it on the Send page.
+        get().openReceive(e.target)
         return
       }
       if (e.type === 'open') {

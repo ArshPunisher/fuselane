@@ -16,6 +16,17 @@
       <key>CFBundleTypeRole</key>
       <string>Viewer</string>
     </dict>
+    <!-- Fuse Send links (fuselane://send/…), from the share page's Open button. -->
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>Fuse Send link</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>fuselane</string>
+      </array>
+      <key>CFBundleTypeRole</key>
+      <string>Viewer</string>
+    </dict>
   </array>
 </dict>
 </plist>

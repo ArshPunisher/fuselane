@@ -3,6 +3,7 @@
 // checked. URL parameters: sends=1 (a share and a received file at start).
 // A link containing "offline" never finds its sender.
 import type { ReceiveView, ShareView, UiError, UiEvent } from './types'
+import { isSendLink } from './sendLink'
 
 const MB = 1024 * 1024
 const PAGE = 'https://arshpunisher.github.io/fuselane/s#'
@@ -144,7 +145,7 @@ export function createDemoSends(params: URLSearchParams, emit: () => (e: UiEvent
     },
     async receiveLink(link: string, _dir: string | null) {
       const text = link.trim()
-      if (!text.startsWith(PAGE) || text.length < PAGE.length + 8)
+      if (!isSendLink(text) || text.length < PAGE.length + 8)
         throw err(
           'bad-send-link',
           "That isn't a whole Fuse Send link. Copy all of it and paste it again.",

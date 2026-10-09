@@ -13,12 +13,7 @@ import { useApp } from '../lib/store'
 import { toUiError } from '../lib/backend'
 import { bytes } from '../lib/format'
 import type { ReceiveView, ShareView, UiError } from '../lib/types'
-
-/** Fuse Send links open the receive form, not the download dialog. */
-export const SEND_PAGE = 'https://arshpunisher.github.io/fuselane/s#'
-export function isSendLink(text: string): boolean {
-  return text.trim().startsWith(SEND_PAGE)
-}
+import { SEND_PAGE } from '../lib/sendLink'
 
 function shareStatus(s: ShareView): string {
   switch (s.state) {
