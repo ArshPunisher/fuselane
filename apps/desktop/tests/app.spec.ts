@@ -1313,7 +1313,10 @@ test('mirrors can be added to a download and are listed on it', async ({ page })
   // A bad mirror is explained under the field, and the dialog stays.
   await expect(dialog.getByText(/A mirror link isn't usable/)).toBeVisible()
   await dialog.getByLabel('Mirror 1', { exact: true }).fill('https://mirror.example.net/os.iso')
+  // Editing clears the error; wait for that re-render before the next click (WebKit on CI).
+  await expect(dialog.getByText(/A mirror link isn't usable/)).toBeHidden()
   await dialog.getByRole('button', { name: 'Add a mirror' }).click()
+  await expect(dialog.getByLabel('Mirror 2', { exact: true })).toBeVisible()
   await dialog.getByLabel('Mirror 2', { exact: true }).fill('https://other.example.com/pub/os.iso')
   await dialog.getByRole('button', { name: 'Remove mirror 2' }).click()
   await expect(dialog.getByLabel('Mirror 2', { exact: true })).toHaveCount(0)
