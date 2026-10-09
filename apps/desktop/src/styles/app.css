@@ -3098,3 +3098,242 @@ select.prio[data-level='skip'] {
   color: var(--body);
   font-size: 13px;
 }
+
+/* ---------- Nearby (B8.11) ---------- */
+
+.page-head.with-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.visibility {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 14px 14px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  background: var(--surface-1);
+}
+
+.vis-ic {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-pill);
+  background: var(--fuse-soft);
+  color: var(--fuse-text);
+}
+
+.device-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.device {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-height: 150px;
+  padding: 14px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  background: var(--surface-1);
+  box-shadow: var(--highlight-top);
+  transition: border-color var(--dur-base) var(--ease-out);
+}
+
+@starting-style {
+  .device {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.device {
+  transition:
+    opacity var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out);
+}
+
+.device[data-state='sending'] {
+  border-color: color-mix(in oklch, var(--fuse) 40%, transparent);
+}
+
+.device-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.device-tile {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--surface-3);
+  color: var(--ink);
+}
+
+.device-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--fuse-soft);
+  color: var(--fuse-text);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.device-name {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.device-sub {
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.device-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.device-progress {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.device-progress .bar {
+  height: 4px;
+}
+
+.device-progress .btn {
+  justify-self: start;
+}
+
+.near-empty {
+  padding: 14px 0;
+}
+
+.trusted {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  background: var(--surface-1);
+}
+
+.trusted li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 10px 10px 14px;
+}
+
+.trusted li + li {
+  border-top: 1px solid var(--hairline);
+}
+
+.trusted .muted {
+  font-size: 12px;
+}
+
+.words-check {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+}
+
+.words {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.words li {
+  display: grid;
+  place-items: center;
+  min-height: 36px;
+  padding: 0 4px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.device-progress .words li {
+  min-height: 28px;
+  font-size: 11px;
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--body);
+}
+
+.check input {
+  margin-top: 3px;
+  accent-color: var(--fuse);
+}
+
+.req-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.req-head h2 {
+  font-size: 15px;
+}
+
+@media (max-width: 639px) {
+  .visibility {
+    grid-template-columns: 36px minmax(0, 1fr);
+  }
+
+  .visibility .segmented {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .device-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .device {
+    min-height: 0;
+    padding: 12px;
+  }
+}

@@ -8,6 +8,7 @@
 import type { Backend } from './backend'
 import { createDemoTorrents } from './demoTorrents'
 import { createDemoSends } from './demoSends'
+import { createDemoNearby } from './demoNearby'
 import type {
   AllowanceView,
   Automation,
@@ -99,6 +100,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
   let listener: ((e: UiEvent) => void) | null = null
   const torrents = createDemoTorrents(params, () => (e) => listener?.(e))
   const sends = createDemoSends(params, () => (e) => listener?.(e))
+  const nearby = createDemoNearby(params, () => (e) => listener?.(e))
   let limits: LimitsView = { global: 0, networks: [], slow: false, slowRate: 1024 * 1024 }
   let prefs: NetPref[] = []
   let perNetDns = false
@@ -820,6 +822,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     },
     ...torrents.methods,
     ...sends.methods,
+    ...nearby.methods,
     subscribe: async (onEvent) => {
       listener = onEvent
       // Tests stand in for the OS handing over a magnet or .torrent (demo only).

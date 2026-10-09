@@ -384,6 +384,10 @@ pub enum UiEvent {
     Update {
         progress: crate::update::UpdateProgress,
     },
+    /// Nearby: devices, who can see this computer, requests, transfers (B8.11).
+    Nearby {
+        view: crate::nearby::NearbyView,
+    },
 }
 
 /// Automation settings plus where the schedule stands right now.

@@ -4,6 +4,7 @@ import { setNetPrefs } from './lanes'
 import { setSpeedUnit, type SpeedUnit } from './format'
 import { isSendLink } from './sendLink'
 import type {
+  NearbyView,
   AppInfo,
   Automation,
   AutomationView,
@@ -39,9 +40,14 @@ interface State {
   torrents: TorrentView[]
   /** Fuse Send: files shared from here, and files arriving from links. */
   shares: ShareView[]
+  /** Nearby: devices, visibility, requests and transfers (null until started). */
+  nearby: NearbyView | null
   receives: ReceiveView[]
   /** A Fuse Send link handed to the Send page by paste or drop. */
   receiveDraft: string
+  /** The Send page's tab: Nearby devices, or Fuse Send links. */
+  sendTab: 'nearby' | 'link'
+  setSendTab(tab: 'nearby' | 'link'): void
   /** Opens the Send page with a link ready to receive. */
   openReceive(link: string): void
   /** The torrent shown in the detail pane (torrents and downloads share it). */
@@ -132,8 +138,11 @@ export const useApp = create<State>((set, get) => ({
   jobs: [],
   torrents: [],
   shares: [],
+  nearby: null,
   receives: [],
   receiveDraft: '',
+  sendTab: 'nearby',
+  setSendTab: (sendTab) => set({ sendTab }),
   selectedTorrent: null,
   live: {},
   history: {},
@@ -166,7 +175,7 @@ export const useApp = create<State>((set, get) => ({
   select: (id) => set({ selected: id, selectedTorrent: null }),
   selectTorrent: (id) => set({ selectedTorrent: id, selected: null }),
   setView: (view) => set({ view }),
-  openReceive: (link) => set({ view: 'send', receiveDraft: link, adding: false }),
+  openReceive: (link) => set({ view: 'send', sendTab: 'link', receiveDraft: link, adding: false }),
   setAdding: (adding, draft) =>
     set((s) => ({
       adding,
@@ -392,6 +401,10 @@ async function startOnce(): Promise<void> {
           selectedTorrent:
             s.selectedTorrent !== null && !ids.has(s.selectedTorrent) ? null : s.selectedTorrent,
         }))
+        return
+      }
+      if (e.type === 'nearby') {
+        set({ nearby: e.view })
         return
       }
       if (e.type === 'update') {

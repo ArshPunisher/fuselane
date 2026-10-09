@@ -14,6 +14,7 @@ import { toUiError } from '../lib/backend'
 import { bytes } from '../lib/format'
 import type { ReceiveView, ShareView, UiError } from '../lib/types'
 import { SEND_PAGE } from '../lib/sendLink'
+import { NearbyPanel } from './NearbyPanel'
 
 function shareStatus(s: ShareView): string {
   switch (s.state) {
@@ -312,56 +313,100 @@ export function SendView() {
     })
   }
 
+  const tab = useApp((s) => s.sendTab)
+  const setTab = useApp((s) => s.setSendTab)
+  const tabs: ['nearby' | 'link', string][] = [
+    ['nearby', 'Nearby'],
+    ['link', 'Link'],
+  ]
   return (
     <div className="page send-page">
-      <div className="page-head">
+      <div className="page-head with-tabs">
         <h1>Send</h1>
+        <div
+          className="segmented"
+          role="radiogroup"
+          aria-label="How to send"
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+              e.preventDefault()
+              const next = tab === 'nearby' ? 'link' : 'nearby'
+              setTab(next)
+              e.currentTarget.querySelector<HTMLButtonElement>(`[data-id="${next}"]`)?.focus()
+            }
+          }}
+        >
+          {tabs.map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="radio"
+              data-id={id}
+              aria-checked={tab === id}
+              tabIndex={tab === id ? 0 : -1}
+              onClick={() => setTab(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
-      <p className="page-lead muted">
-        Send a file of any size straight from this computer. No upload, no account, no size limit:
-        the receiver gets it directly from you, encrypted, and only the link can open it.
-      </p>
+      {tab === 'nearby' ? (
+        <>
+          <p className="page-lead muted">
+            Send to computers and phones on this network. Nothing goes through the internet.
+          </p>
+          <NearbyPanel />
+        </>
+      ) : (
+        <>
+          <p className="page-lead muted">
+            Send a file of any size straight from this computer. No upload, no account, no size
+            limit: the receiver gets it directly from you, encrypted, and only the link can open it.
+          </p>
 
-      <section className="send-section" aria-labelledby="send-out">
-        <h2 className="group" id="send-out">
-          Send a file
-        </h2>
-        <button type="button" className="send-drop" onClick={() => void choose()}>
-          <span className="send-drop-orb" aria-hidden>
-            <PaperPlaneTilt size={26} weight="duotone" />
-          </span>
-          <span className="send-drop-text">
-            <span className="send-drop-title">Choose a file to send</span>
-            <span className="muted">You get a link to give to the person receiving it.</span>
-          </span>
-        </button>
-        <p className="send-note muted">
-          <LockKey size={14} aria-hidden /> Keep Fuselane open until it arrives. On the same network
-          it connects straight away; across the internet your router needs UPnP on. The key is only
-          in the link, so share it the way you'd share a password.
-        </p>
-        {shares.length > 0 && (
-          <ul className="send-list" aria-label="Files you're sending">
-            {shares.map((s) => (
-              <ShareRow key={s.id} s={s} />
-            ))}
-          </ul>
-        )}
-      </section>
+          <section className="send-section" aria-labelledby="send-out">
+            <h2 className="group" id="send-out">
+              Send a file
+            </h2>
+            <button type="button" className="send-drop" onClick={() => void choose()}>
+              <span className="send-drop-orb" aria-hidden>
+                <PaperPlaneTilt size={26} weight="duotone" />
+              </span>
+              <span className="send-drop-text">
+                <span className="send-drop-title">Choose a file to send</span>
+                <span className="muted">You get a link to give to the person receiving it.</span>
+              </span>
+            </button>
+            <p className="send-note muted">
+              <LockKey size={14} aria-hidden /> Keep Fuselane open until it arrives. On the same
+              network it connects straight away; across the internet your router needs UPnP on. The
+              key is only in the link, so share it the way you'd share a password.
+            </p>
+            {shares.length > 0 && (
+              <ul className="send-list" aria-label="Files you're sending">
+                {shares.map((s) => (
+                  <ShareRow key={s.id} s={s} />
+                ))}
+              </ul>
+            )}
+          </section>
 
-      <section className="send-section" aria-labelledby="send-in">
-        <h2 className="group" id="send-in">
-          Receive
-        </h2>
-        <ReceiveForm />
-        {receives.length > 0 && (
-          <ul className="send-list" aria-label="Files you're receiving">
-            {receives.map((r) => (
-              <ReceiveRow key={r.id} r={r} />
-            ))}
-          </ul>
-        )}
-      </section>
+          <section className="send-section" aria-labelledby="send-in">
+            <h2 className="group" id="send-in">
+              Receive
+            </h2>
+            <ReceiveForm />
+            {receives.length > 0 && (
+              <ul className="send-list" aria-label="Files you're receiving">
+                {receives.map((r) => (
+                  <ReceiveRow key={r.id} r={r} />
+                ))}
+              </ul>
+            )}
+          </section>
+        </>
+      )}
     </div>
   )
 }

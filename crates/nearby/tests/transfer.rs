@@ -35,6 +35,7 @@ impl Host for Box1 {
         let d = self.answer.lock().unwrap().clone();
         Box::pin(async move { d })
     }
+    fn started(&self, _: &str, _: &DeviceInfo, _: &[String], _: u64) {}
     fn progress(&self, _: &str, _: &str, _: u64) {}
     fn file_done(&self, _: &str, _: &str, path: &Path) {
         self.files.lock().unwrap().push(path.to_path_buf());

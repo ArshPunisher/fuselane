@@ -1809,6 +1809,7 @@ dependencies = [
  "fuselane-engine-http",
  "fuselane-engine-torrent",
  "fuselane-limits",
+ "fuselane-nearby",
  "fuselane-netif",
  "fuselane-send",
  "fuselane-storage",

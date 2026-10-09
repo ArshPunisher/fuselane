@@ -993,6 +993,11 @@ test.describe('Fuse Send', () => {
       .getByRole('button', { name: 'Send' })
       .click()
     await expect(page.getByRole('heading', { level: 1, name: 'Send' })).toBeVisible()
+    // Links live on the Link tab; Nearby is the default.
+    await page
+      .getByRole('radiogroup', { name: 'How to send' })
+      .getByRole('radio', { name: 'Link' })
+      .click()
   }
 
   test('choosing a file prepares it and gives a link to copy', async ({
@@ -1114,6 +1119,10 @@ test.describe('Fuse Send', () => {
       .getByRole('navigation', { name: 'Main' })
       .getByRole('button', { name: 'Send' })
       .click()
+    // Nearby fits too: two device cards a row, nothing sideways.
+    await expect(page.locator('.device').first()).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0)
+    await page.getByRole('radio', { name: 'Link' }).click()
     await expect(page.getByText('Wedding photos.zip')).toBeVisible()
     await expect(page.getByText('Band demo.wav')).toBeVisible()
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0)
@@ -1279,4 +1288,80 @@ test('mirrors can be added to a download and are listed on it', async ({ page })
   await expect(page.locator('article.detail')).toContainText(
     'Also from a mirror: mirror.example.net',
   )
+})
+
+test.describe('Nearby', () => {
+  async function openNearby(page: Page, query = '') {
+    await page.goto(`/?freeze=3${query}`)
+    await page
+      .getByRole('navigation', { name: 'Main' })
+      .getByRole('button', { name: 'Send' })
+      .click()
+    await expect(page.getByRole('radio', { name: 'Nearby' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+  }
+
+  test('devices on the network are listed, and sending shows progress then Done', async ({
+    page,
+  }) => {
+    await openNearby(page)
+    const grid = page.locator('.device-grid')
+    await expect(grid.locator('.device')).toHaveCount(4)
+    const maya = grid.locator('.device', { hasText: "Maya's MacBook Air" })
+    await expect(maya).toContainText('Trusted')
+    await expect(grid.locator('.device', { hasText: 'Pixel 9' })).toContainText('via LocalSend')
+    await maya.getByRole('button', { name: 'Send files' }).click()
+    await expect(maya.getByRole('status')).toContainText('Sending')
+    await expect(page.locator('.send-list')).toContainText('Done', { timeout: 10_000 })
+  })
+
+  test('a new device shows check words while asking, and a decline is reported', async ({
+    page,
+  }) => {
+    await openNearby(page, '&nearby=decline')
+    const ravi = page.locator('.device', { hasText: "Ravi's ThinkPad" })
+    await ravi.getByRole('button', { name: 'Send files' }).click()
+    await expect(ravi.getByRole('list', { name: 'Check words' })).toContainText('amber')
+    await expect(page.locator('.send-list')).toContainText('They declined')
+  })
+
+  test('who can see this computer: trusted only by default, everyone for 10 minutes', async ({
+    page,
+  }) => {
+    await openNearby(page)
+    const vis = page.getByRole('radiogroup', { name: 'Who can see this computer' })
+    await expect(vis.getByRole('radio', { name: 'Trusted only' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+    await vis.getByRole('radio', { name: 'Everyone, 10 min' }).click()
+    await expect(page.locator('.visibility')).toContainText(/for (10:00|9:5\d) more/)
+    await vis.getByRole('radio', { name: 'Trusted only' }).click()
+    await expect(page.locator('.visibility')).toContainText('Only trusted devices')
+  })
+
+  test('an incoming file asks with words, can be trusted, and a device can be forgotten', async ({
+    page,
+  }) => {
+    await openNearby(page, '&nearby=request')
+    const ask = page.getByRole('dialog', { name: /wants to send you a file/ })
+    await expect(ask).toBeVisible()
+    await expect(ask.getByRole('list', { name: 'Check words' })).toContainText('orbit')
+    await expect(ask.getByRole('button', { name: 'Decline' })).toBeFocused()
+    await ask.getByRole('checkbox', { name: /Trust Ravi's ThinkPad/ }).check()
+    await ask.getByRole('button', { name: 'Accept' }).click()
+    await expect(ask).toBeHidden()
+    await expect(page.locator('.send-list')).toContainText('From Ravi')
+    const trusted = page.locator('.trusted')
+    await expect(trusted).toContainText("Ravi's ThinkPad")
+    await trusted.getByRole('button', { name: "Forget Ravi's ThinkPad" }).click()
+    await expect(trusted).not.toContainText("Ravi's ThinkPad")
+  })
+
+  test('nobody on the network says what to do', async ({ page }) => {
+    await openNearby(page, '&nearby=empty')
+    await expect(page.getByText(/No one yet/)).toBeVisible()
+  })
 })

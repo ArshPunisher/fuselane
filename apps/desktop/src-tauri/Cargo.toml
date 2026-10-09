@@ -49,6 +49,7 @@ fuselane-limits.workspace = true
 fuselane-transport.workspace = true
 fuselane-storage.workspace = true
 fuselane-send.workspace = true
+fuselane-nearby.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_System_Power"] }

@@ -77,6 +77,63 @@ export type UiEvent =
   | { type: 'automation'; view: AutomationView }
   | { type: 'sends'; shares: ShareView[]; receives: ReceiveView[] }
   | { type: 'update'; progress: UpdateProgress }
+  | { type: 'nearby'; view: NearbyView }
+
+/** A device on the network (Nearby, B8.11). */
+export interface DeviceView {
+  fingerprint: string
+  alias: string
+  /** mobile | desktop | web | headless | server */
+  kind: string
+  model: string | null
+  trusted: boolean
+  /** Another Fuselane: shows the four check words. */
+  fuselane: boolean
+}
+
+export interface TrustedDevice {
+  fingerprint: string
+  alias: string
+  /** yyyy-mm-dd */
+  since: string
+}
+
+/** Someone asking to send files here. */
+export interface NearbyRequest {
+  id: number
+  alias: string
+  kind: string
+  model: string | null
+  files: string[]
+  total: number
+  words: string[] | null
+  verified: boolean
+}
+
+export interface NearbyTransfer {
+  id: string
+  direction: 'out' | 'in'
+  device: string
+  name: string
+  size: number
+  done: number
+  state: 'asking' | 'sending' | 'receiving' | 'done' | 'declined' | 'failed' | 'cancelled'
+  error: string | null
+  words: string[] | null
+  path: string | null
+}
+
+export interface NearbyView {
+  on: boolean
+  me: string
+  /** Seconds left of "Everyone"; null when only trusted devices can see this computer. */
+  everyoneFor: number | null
+  devices: DeviceView[]
+  trusted: TrustedDevice[]
+  transfers: NearbyTransfer[]
+  request: NearbyRequest | null
+  problem: string | null
+}
 
 /** A file this computer is sending with Fuse Send. */
 export interface ShareView {

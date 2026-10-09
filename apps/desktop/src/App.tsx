@@ -6,6 +6,7 @@ import { TransferDetail } from './components/TransferDetail'
 import { TorrentDetail } from './components/TorrentDetail'
 import { NewDownload } from './components/NewDownload'
 import { NetworkList, NetworksTotal, NetworksView } from './components/NetworksView'
+import { NearbyRequestDialog } from './components/NearbyPanel'
 import { SettingsView } from './components/SettingsView'
 import { SendView } from './components/SendView'
 import { isSendLink } from './lib/sendLink'
@@ -315,6 +316,7 @@ export function App() {
         {layout === 'compact' && <Nav kind="tabs" />}
       </div>
       <NewDownload />
+      <NearbyRequestDialog />
       <Toast />
     </div>
   )

@@ -2,6 +2,7 @@
 // plain browser (pnpm dev, Playwright) it uses the demo engine in ./demo.ts,
 // and the UI says so.
 import type {
+  NearbyView,
   FilePriority,
   AddOptions,
   AllowanceRequest,
@@ -129,6 +130,17 @@ export interface Backend {
   /** Starts sharing a file; progress and the link arrive as `sends` events. */
   sendFile(path: string): Promise<string>
   sendsState(): Promise<[ShareView[], ReceiveView[]]>
+  // Nearby (B8.11)
+  nearbyStart(): Promise<NearbyView>
+  nearbyState(): Promise<NearbyView>
+  nearbySetEveryone(on: boolean): Promise<NearbyView>
+  nearbyPick(): Promise<string[]>
+  nearbySend(fingerprint: string, paths: string[]): Promise<NearbyView>
+  nearbyAnswer(id: number, accept: boolean, trust: boolean): Promise<NearbyView>
+  nearbyForget(fingerprint: string): Promise<NearbyView>
+  nearbyCancel(id: string): Promise<void>
+  nearbyClear(id: string): Promise<NearbyView>
+  nearbyReveal(id: string): Promise<void>
   /** Stops sharing; the file itself stays. */
   stopSend(id: string): Promise<void>
   /** Stop sharing by itself once a full copy has been sent. */
@@ -237,6 +249,16 @@ async function tauriBackend(): Promise<Backend> {
     pickSendFile: () => call('send_pick'),
     sendFile: (path) => call('send_file', { path }),
     sendsState: () => call('sends_state'),
+    nearbyStart: () => call('nearby_start'),
+    nearbyState: () => call('nearby_state'),
+    nearbySetEveryone: (on) => call('nearby_set_everyone', { on }),
+    nearbyPick: () => call('nearby_pick'),
+    nearbySend: (fingerprint, paths) => call('nearby_send', { fingerprint, paths }),
+    nearbyAnswer: (id, accept, trust) => call('nearby_answer', { id, accept, trust }),
+    nearbyForget: (fingerprint) => call('nearby_forget', { fingerprint }),
+    nearbyCancel: (id) => call('nearby_cancel', { id }),
+    nearbyClear: (id) => call('nearby_clear', { id }),
+    nearbyReveal: (id) => call('nearby_reveal', { id }),
     stopSend: (id) => call('stop_send', { id }),
     sendOnce: (id, on) => call('send_once', { id, on }),
     receiveLink: (link, dir) => call('receive_link', { link, dir }),

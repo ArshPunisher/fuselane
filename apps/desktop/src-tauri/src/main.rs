@@ -8,6 +8,7 @@
 mod api_bridge;
 mod automation;
 mod native;
+mod nearby;
 mod opens;
 mod power;
 mod selftest;
@@ -32,6 +33,7 @@ use tauri::tray::TrayIconBuilder;
 type State<'a> = tauri::State<'a, Arc<Service>>;
 type Tor<'a> = tauri::State<'a, Arc<torrents::Torrents>>;
 type Snd<'a> = tauri::State<'a, Arc<sends::Sends>>;
+type Near<'a> = tauri::State<'a, Arc<nearby::Nearby>>;
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -847,6 +849,81 @@ async fn send_pick(app: tauri::AppHandle) -> Option<String> {
         .map(|p| p.to_string_lossy().into_owned())
 }
 
+/// Asks for files to send to a nearby device; empty if they cancel.
+#[tauri::command]
+async fn nearby_pick(app: tauri::AppHandle) -> Vec<String> {
+    use tauri_plugin_dialog::DialogExt;
+    app.dialog()
+        .file()
+        .set_title("Send files")
+        .blocking_pick_files()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|p| p.into_path().ok())
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect()
+}
+
+#[tauri::command]
+async fn nearby_start(near: Near<'_>) -> Result<nearby::NearbyView, UiError> {
+    near.inner().start().await
+}
+
+#[tauri::command]
+fn nearby_state(near: Near<'_>) -> nearby::NearbyView {
+    near.view()
+}
+
+#[tauri::command]
+async fn nearby_set_everyone(near: Near<'_>, on: bool) -> Result<nearby::NearbyView, UiError> {
+    Ok(near.inner().set_everyone(on).await)
+}
+
+#[tauri::command]
+async fn nearby_send(
+    near: Near<'_>,
+    fingerprint: String,
+    paths: Vec<String>,
+) -> Result<nearby::NearbyView, UiError> {
+    near.inner().send(&fingerprint, paths).await
+}
+
+#[tauri::command]
+fn nearby_answer(
+    near: Near<'_>,
+    id: u64,
+    accept: bool,
+    trust: bool,
+) -> Result<nearby::NearbyView, UiError> {
+    near.answer(id, accept, trust)
+}
+
+#[tauri::command]
+fn nearby_forget(near: Near<'_>, fingerprint: String) -> nearby::NearbyView {
+    near.forget(&fingerprint)
+}
+
+#[tauri::command]
+fn nearby_cancel(near: Near<'_>, id: String) {
+    near.cancel(&id);
+}
+
+#[tauri::command]
+fn nearby_clear(near: Near<'_>, id: String) -> nearby::NearbyView {
+    near.clear(&id)
+}
+
+#[tauri::command]
+fn nearby_reveal(app: tauri::AppHandle, near: Near<'_>, id: String) -> Result<(), UiError> {
+    use tauri_plugin_opener::OpenerExt;
+    let path = near
+        .received_path(&id)
+        .ok_or_else(|| ui_error("not-found", "That file isn't here anymore.".into()))?;
+    app.opener()
+        .reveal_item_in_dir(&path)
+        .map_err(|e| ui_error("open-failed", format!("Couldn't show the file: {e}")))
+}
+
 #[tauri::command]
 async fn send_file(snd: Snd<'_>, path: String) -> Result<String, UiError> {
     snd.inner().send(&path).await
@@ -994,6 +1071,7 @@ fn watch_for_shell(app: tauri::AppHandle, svc: &Arc<Service>) {
             | UiEvent::Networks { .. }
             | UiEvent::WhenDoneCancelled
             | UiEvent::Update { .. }
+            | UiEvent::Nearby { .. }
             | UiEvent::Automation { .. } => {}
             UiEvent::Live(l) => {
                 w.live(l);
@@ -1046,6 +1124,25 @@ fn open_sends(svc: &Arc<Service>) -> Arc<sends::Sends> {
                 svc.send(e);
             }
         }),
+    )
+}
+
+fn open_nearby(svc: &Arc<Service>) -> Arc<nearby::Nearby> {
+    let state =
+        fuselane_core::home::home().unwrap_or_else(|_| std::env::temp_dir().join("fuselane"));
+    let weak = Arc::downgrade(svc);
+    nearby::Nearby::new(
+        svc.store(),
+        state,
+        svc.default_dir().to_path_buf(),
+        Arc::new(nearby::lan_addrs),
+        Arc::new(move |e| {
+            if let Some(svc) = weak.upgrade() {
+                svc.send(e);
+            }
+        }),
+        nearby::computer_name(),
+        fuselane_nearby::proto::PORT,
     )
 }
 
@@ -1164,6 +1261,7 @@ fn main() {
     }
     let tor = open_torrents(&svc);
     let snd = open_sends(&svc);
+    let near = open_nearby(&svc);
     {
         // Torrents and Fuse Send count as work: no sleep or shut-down meanwhile.
         let tor = Arc::downgrade(&tor);
@@ -1239,6 +1337,7 @@ fn main() {
         .manage(svc)
         .manage(tor.clone())
         .manage(snd.clone())
+        .manage(near.clone())
         .setup(move |app| {
             // "Open it" when a download finishes uses the system's default app.
             {
@@ -1308,6 +1407,14 @@ fn main() {
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 }
             });
+            // Nearby: re-announce while visible, drop stale devices, refresh progress.
+            let near = near.clone();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    near.tick().await;
+                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                }
+            });
             // Shares from before a restart start seeding again, then a tick every second.
             let snd = snd.clone();
             tauri::async_runtime::spawn(async move {
@@ -1357,6 +1464,16 @@ fn main() {
             open_release_notes,
             install_update,
             cancel_update,
+            nearby_pick,
+            nearby_start,
+            nearby_state,
+            nearby_set_everyone,
+            nearby_send,
+            nearby_answer,
+            nearby_forget,
+            nearby_cancel,
+            nearby_clear,
+            nearby_reveal,
             name_taken,
             set_limits,
             fix_link,

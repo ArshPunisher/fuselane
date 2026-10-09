@@ -60,6 +60,8 @@ pub trait Host: Send + Sync + 'static {
         verified: Option<String>,
         req: &'a PrepareUpload,
     ) -> Fut<'a, Decision>;
+    /// An accepted session begins: who from, which files, how many bytes in all.
+    fn started(&self, session: &str, from: &DeviceInfo, names: &[String], total: u64);
     fn progress(&self, session: &str, file: &str, written: u64);
     fn file_done(&self, session: &str, file: &str, path: &Path);
     fn ended(&self, session: &str, how: Ended);
@@ -237,6 +239,7 @@ impl<H: Host> State<H> {
         if s.is_some() {
             return text(StatusCode::CONFLICT, "Blocked by another session");
         }
+        let sender = p.info.clone();
         let mut files = HashMap::new();
         let mut reply = PrepareUploadReply {
             session_id: random_id(),
@@ -260,12 +263,16 @@ impl<H: Host> State<H> {
         if files.is_empty() {
             return text(StatusCode::NO_CONTENT, "");
         }
+        let names: Vec<String> = files.values().map(|f| f.meta.file_name.clone()).collect();
+        let total = files.values().map(|f| f.meta.size).sum();
         *s = Some(Session {
             id: reply.session_id.clone(),
             from: from.ip(),
             dir,
             files,
         });
+        drop(s);
+        self.host.started(&reply.session_id, &sender, &names, total);
         json(&reply)
     }
 
