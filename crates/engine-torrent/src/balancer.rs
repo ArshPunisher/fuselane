@@ -50,6 +50,8 @@ pub struct Balancer {
     limiter: Option<Arc<Limiter>>,
     /// Networks that take no new peers for now (metered ones while only seeding).
     avoid: Mutex<std::collections::HashSet<String>>,
+    /// Which network each open peer connection went out on (by peer address).
+    routes: Mutex<HashMap<SocketAddr, String>>,
 }
 
 /// One network's part in one torrent: raw bytes moved and the verified bytes it
@@ -96,6 +98,7 @@ impl Balancer {
             ),
             next: Mutex::new(0),
             torrents: Mutex::new(HashMap::new()),
+            routes: Mutex::new(HashMap::new()),
             limiter: None,
             avoid: Mutex::default(),
         }
@@ -254,6 +257,30 @@ impl Balancer {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         m.retain(|(h, _), _| h != info_hash);
+    }
+
+    /// A peer connection to `dest` is open on network `net`.
+    pub fn route_opened(&self, dest: SocketAddr, net: &str) {
+        self.routes
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .insert(dest, net.to_string());
+    }
+
+    pub fn route_closed(&self, dest: SocketAddr) {
+        self.routes
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .remove(&dest);
+    }
+
+    /// The network an open connection to `dest` uses (None for incoming ones).
+    pub fn route_of(&self, dest: SocketAddr) -> Option<String> {
+        self.routes
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(&dest)
+            .cloned()
     }
 
     pub fn snapshot(&self) -> Vec<NetStat> {

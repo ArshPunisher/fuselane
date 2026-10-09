@@ -225,6 +225,7 @@ async fn serve(
             sinks.iter().for_each(|c| {
                 c.peers.fetch_add(1, Ordering::Relaxed);
             });
+            balancer.route_opened(dest, &iface.name);
             let mut peer = Counted {
                 inner: peer,
                 sinks: &sinks,
@@ -240,6 +241,7 @@ async fn serve(
             sinks.iter().for_each(|c| {
                 c.peers.fetch_sub(1, Ordering::Relaxed);
             });
+            balancer.route_closed(dest);
             return res.map(|_| ());
         }
     }

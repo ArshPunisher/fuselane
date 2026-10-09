@@ -714,8 +714,17 @@ async fn the_apps_speed_limit_holds_for_torrents_and_usage_is_counted() {
         .unwrap();
     // A timeline of progress, printed if the timing is off (read it from CI logs).
     let mut timeline = Vec::new();
+    // While it downloads: the seeder shows up as a peer on the loopback network,
+    // and the piece map fills in part way.
+    let mut seen_peer = None;
+    let mut partial_map = false;
     tokio::time::timeout(Duration::from_secs(60), async {
         loop {
+            if seen_peer.is_none() {
+                seen_peer = t.peers().into_iter().find(|p| p.received > 0);
+            }
+            let map = engine.piece_map(&t, 64);
+            partial_map |= map.contains(&100) && map.iter().any(|&c| c < 100);
             let p = t.progress();
             timeline.push(format!(
                 "{:.1}s:{}KiB",
@@ -731,6 +740,12 @@ async fn the_apps_speed_limit_holds_for_torrents_and_usage_is_counted() {
     .await
     .unwrap_or_else(|_| panic!("never finished: {}", timeline.join(" ")));
     t.finished().await.unwrap();
+    let peer = seen_peer.expect("the seeder was listed as a peer while downloading");
+    assert_eq!(peer.addr, addr.to_string());
+    assert_eq!(peer.network.as_deref(), Some("lo0"), "{peer:?}");
+    assert!(partial_map, "the piece map filled in gradually");
+    let map = engine.piece_map(&t, 64);
+    assert!(!map.is_empty() && map.iter().all(|&c| c == 100), "{map:?}");
     let took = started.elapsed().as_secs_f64();
     let timeline = timeline.join(" ");
     // 3 MiB at 1 MiB/s from an empty bucket: about 3 s (a little less if the last

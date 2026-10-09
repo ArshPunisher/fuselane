@@ -240,6 +240,22 @@ pub struct Torrent {
     held: Arc<std::sync::atomic::AtomicBool>,
 }
 
+/// One connected peer, as the window shows it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PeerInfo {
+    /// Its address (stable key while connected).
+    pub addr: String,
+    /// The app it says it is ("qBittorrent 5.0.1"), when it tells.
+    pub client: Option<String>,
+    /// Bytes received from it and sent to it so far.
+    pub received: u64,
+    pub sent: u64,
+    /// Which of our networks the connection goes over (None: it connected to us).
+    pub network: Option<String>,
+    /// "tcp", "utp" or "socks".
+    pub kind: &'static str,
+}
+
 impl std::fmt::Debug for Torrent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Torrent")
@@ -297,6 +313,33 @@ impl Torrent {
             .unwrap_or_else(|p| p.into_inner())
             .clone()
     }
+    /// The peers connected right now.
+    pub fn peers(&self) -> Vec<PeerInfo> {
+        let Some(live) = self.handle.live() else {
+            return Vec::new();
+        };
+        let mut out: Vec<PeerInfo> = live
+            .per_peer_stats_snapshot(Default::default())
+            .peers
+            .into_iter()
+            .map(|(addr, p)| PeerInfo {
+                network: addr.parse().ok().and_then(|a| self.balancer.route_of(a)),
+                addr,
+                client: p.client_name.filter(|c| !c.trim().is_empty()),
+                received: p.counters.fetched_bytes,
+                sent: p.counters.uploaded_bytes,
+                // librqbit doesn't export the type, only its name.
+                kind: match p.conn_kind.map(|k| format!("{k:?}")).as_deref() {
+                    Some("Utp") => "utp",
+                    Some("Socks") => "socks",
+                    _ => "tcp",
+                },
+            })
+            .collect();
+        out.sort_by(|a, b| b.received.cmp(&a.received).then(a.addr.cmp(&b.addr)));
+        out
+    }
+
     /// Resolves when every selected file is complete and verified.
     pub async fn finished(&self) -> Result<(), TorrentError> {
         self.handle.wait_until_completed().await.map_err(engine)
@@ -380,6 +423,33 @@ impl TorrentEngine {
     /// Follows network changes (plugged in, unplugged, new address).
     pub fn set_networks(&self, now: Vec<Interface>) {
         self.balancer.set_networks(now);
+    }
+
+    /// How complete each part of the torrent is, in `cells` equal slices of its
+    /// pieces (0 to 100 each), for a map that fills in as pieces arrive.
+    pub fn piece_map(&self, t: &Torrent, cells: usize) -> Vec<u8> {
+        let api = librqbit::Api::new(self.session.clone(), None);
+        let Ok((have, total)) = api.api_dump_haves(librqbit::api::TorrentIdOrHash::Id(t.id()))
+        else {
+            return Vec::new();
+        };
+        let total = total as usize;
+        if total == 0 || cells == 0 {
+            return Vec::new();
+        }
+        let cells = cells.min(total);
+        (0..cells)
+            .map(|c| {
+                let (from, to) = (
+                    c * total / cells,
+                    ((c + 1) * total / cells).max(c * total / cells + 1),
+                );
+                let got = (from..to)
+                    .filter(|&i| have.get(i).is_some_and(|b| *b))
+                    .count();
+                (got * 100 / (to - from)) as u8
+            })
+            .collect()
     }
 
     /// The networks present now.
