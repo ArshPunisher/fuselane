@@ -67,6 +67,7 @@ export type UiEvent =
   | { type: 'whenDoneCancelled' }
   | { type: 'automation'; view: AutomationView }
   | { type: 'sends'; shares: ShareView[]; receives: ReceiveView[] }
+  | { type: 'update'; progress: UpdateProgress }
 
 /** A file this computer is sending with Fuse Send. */
 export interface ShareView {
@@ -184,6 +185,18 @@ export interface NetLimit {
 export interface UpdateInfo {
   version: string
   notes: string | null
+  /** Size of the download, when the server says. */
+  size: number | null
+}
+
+/** The app's own update downloading or installing (B8.4). */
+export interface UpdateProgress {
+  phase: 'downloading' | 'installing'
+  done: number
+  total: number | null
+  rate: number
+  /** Networks carrying it; 1 when the fallback download is used. */
+  networks: number
 }
 
 /** A network's name and colour as the user chose them (by device name). */

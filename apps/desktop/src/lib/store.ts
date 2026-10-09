@@ -17,6 +17,7 @@ import type {
   NetView,
   UiError,
   UpdateInfo,
+  UpdateProgress,
   WhenDone,
 } from './types'
 
@@ -52,6 +53,10 @@ interface State {
   netPrefs: NetPref[]
   update: UpdateInfo | null
   updateDismissed: boolean
+  /** Set while the update downloads or installs. */
+  updateProgress: UpdateProgress | null
+  /** Why the last update attempt failed, with what to do. */
+  updateError: UiError | null
   selected: number | null
   view: View
   adding: boolean
@@ -89,6 +94,8 @@ interface State {
   /** Checks the feed; quiet=true never shows errors (the launch check). */
   checkUpdate(quiet: boolean): Promise<'available' | 'current' | 'error'>
   dismissUpdate(): void
+  installUpdate(): Promise<void>
+  cancelUpdate(): Promise<void>
   /** Runs an action; failures become a toast. Returns false on failure. */
   act(f: (b: Backend) => Promise<unknown>): Promise<boolean>
 }
@@ -135,6 +142,8 @@ export const useApp = create<State>((set, get) => ({
   netPrefs: [],
   update: null,
   updateDismissed: false,
+  updateProgress: null,
+  updateError: null,
   selected: null,
   view: 'transfers',
   adding: false,
@@ -234,6 +243,32 @@ export const useApp = create<State>((set, get) => ({
     }
   },
   dismissUpdate: () => set({ updateDismissed: true }),
+  async installUpdate() {
+    const b = get().backend
+    if (!b || get().updateProgress) return
+    set({
+      updateError: null,
+      updateProgress: {
+        phase: 'downloading',
+        done: 0,
+        total: get().update?.size ?? null,
+        rate: 0,
+        networks: 0,
+      },
+    })
+    try {
+      // On success the app restarts, so this only returns on failure.
+      await b.installUpdate()
+    } catch (e) {
+      const err = toUiError(e)
+      set({ updateProgress: null, updateError: err.code === 'update-cancelled' ? null : err })
+    }
+  },
+  async cancelUpdate() {
+    await get()
+      .backend?.cancelUpdate()
+      .catch(() => {})
+  },
   async setSlow(on) {
     const b = get().backend
     if (!b) return
@@ -357,6 +392,11 @@ async function startOnce(): Promise<void> {
           selectedTorrent:
             s.selectedTorrent !== null && !ids.has(s.selectedTorrent) ? null : s.selectedTorrent,
         }))
+        return
+      }
+      if (e.type === 'update') {
+        // Late progress after a cancel or failure must not bring the bar back.
+        if (get().updateProgress) set({ updateProgress: e.progress })
         return
       }
       if (e.type === 'sends') {

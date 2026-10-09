@@ -493,21 +493,49 @@ test('Copy diagnostics shows exactly what is copied, with nothing personal', asy
   expect(text).not.toContain('ubuntu-26.04')
 })
 
-test('an available update is offered once and can be put off', async ({ page }) => {
+test('an available update says its size and can be put off', async ({ page }) => {
   await page.goto('/?empty=1&update=1')
   const banner = page.locator('.update-banner')
-  await expect(banner).toContainText('Fuselane 0.1.0-beta.2 is available')
+  await expect(banner).toContainText('Fuselane 0.1.0-beta.8 is ready to download, 38.6')
   await banner.getByRole('button', { name: 'Later' }).click()
   await expect(banner).toHaveCount(0)
 })
 
-test('a bad update signature is refused with a plain message', async ({ page }) => {
+test('an update downloads with a progress bar, sizes and speed, then installs', async ({
+  page,
+}) => {
+  await page.goto('/?empty=1&update=1')
+  const banner = page.locator('.update-banner')
+  await banner.getByRole('button', { name: 'Update and restart' }).click()
+  const bar = banner.getByRole('progressbar', { name: 'Update download' })
+  await expect(bar).toBeVisible()
+  await expect(banner).toContainText('over 3 networks')
+  await expect(banner.locator('.update-progress .num')).toContainText(
+    /MB of 38\.6\u00a0MB, .+MB\/s/,
+  )
+  await expect(banner).toContainText('Installing 0.1.0-beta.8', { timeout: 10_000 })
+})
+
+test('an update download can be cancelled and offered again', async ({ page }) => {
+  await page.goto('/?empty=1&update=slow')
+  const banner = page.locator('.update-banner')
+  await banner.getByRole('button', { name: 'Update and restart' }).click()
+  await expect(banner.getByRole('progressbar')).toBeVisible()
+  await banner.getByRole('button', { name: 'Cancel' }).click()
+  await expect(banner.getByRole('button', { name: 'Update and restart' })).toBeVisible()
+  await expect(banner.getByRole('progressbar')).toHaveCount(0)
+})
+
+test('a failed update says why and offers Try again', async ({ page }) => {
   await page.goto('/?empty=1&update=bad')
   const banner = page.locator('.update-banner')
   await banner.getByRole('button', { name: 'Update and restart' }).click()
-  await expect(page.getByRole('alert').filter({ hasText: "signature doesn't match" })).toBeVisible()
-  // Nothing was installed: the offer is still there to retry later.
-  await expect(banner.getByRole('button', { name: 'Update and restart' })).toBeEnabled()
+  const failed = page.getByRole('alert').filter({ hasText: "Couldn't download the update" })
+  await expect(failed).toBeVisible({ timeout: 10_000 })
+  await expect(failed).toContainText('dropped at 22.0 MB')
+  // Nothing was installed: Try again starts it over.
+  await failed.getByRole('button', { name: 'Try again' }).click()
+  await expect(banner.getByRole('progressbar')).toBeVisible()
 })
 
 test('update checks: quiet when offline at launch, clear when asked', async ({ page }) => {

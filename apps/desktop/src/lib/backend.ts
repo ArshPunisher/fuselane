@@ -77,6 +77,7 @@ export interface Backend {
   checkUpdate(): Promise<UpdateInfo | null>
   /** Pauses downloads, installs the update and restarts the app. */
   installUpdate(): Promise<void>
+  cancelUpdate(): Promise<void>
   /** Opens this version's release notes in the browser. */
   openReleaseNotes(): Promise<void>
   /** Saves limits (validated by the backend); returns what was saved. */
@@ -198,6 +199,7 @@ async function tauriBackend(): Promise<Backend> {
     diagnostics: () => call('diagnostics'),
     checkUpdate: () => call('check_update'),
     installUpdate: () => call('install_update'),
+    cancelUpdate: () => call('cancel_update'),
     openReleaseNotes: () => call('open_release_notes'),
     setLimits: (limits) => call('set_limits', { limits }),
     fixLink: (id, url) => call('fix_link', { id, url }),

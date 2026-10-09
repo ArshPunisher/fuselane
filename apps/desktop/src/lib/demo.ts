@@ -95,6 +95,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
   const jobs: SimJob[] = []
   let nextId = 1
   let clock = 0
+  let updateCancelled = false
   let listener: ((e: UiEvent) => void) | null = null
   const torrents = createDemoTorrents(params, () => (e) => listener?.(e))
   const sends = createDemoSends(params, () => (e) => listener?.(e))
@@ -618,17 +619,46 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     checkUpdate: async () => {
       if (params.get('update') === 'offline')
         throw err('update-check', "Couldn't check for updates: you're offline.", null)
-      return ['1', 'bad'].includes(params.get('update') ?? '')
-        ? { version: '0.1.0-beta.2', notes: 'Faster resume.' }
+      return ['1', 'bad', 'slow'].includes(params.get('update') ?? '')
+        ? { version: '0.1.0-beta.8', notes: 'Faster resume.', size: 38.6 * MB }
         : null
     },
     installUpdate: async () => {
-      if (params.get('update') === 'bad')
-        throw err(
-          'update-failed',
-          "The update couldn't be installed: the signature doesn't match.",
-          null,
-        )
+      // Like the app: progress over the networks, then installing (B8.4).
+      const total = 38.6 * MB
+      const slow = params.get('update') === 'slow'
+      let done = 0
+      updateCancelled = false
+      while (done < total) {
+        await new Promise((r) => setTimeout(r, slow ? 250 : 40))
+        if (updateCancelled) throw err('update-cancelled', 'Update cancelled.', null)
+        if (params.get('update') === 'bad' && done > total * 0.57)
+          throw err(
+            'update-failed',
+            "Couldn't download the update: every network dropped at 22.0 MB.",
+            'Try again. It continues from where it stopped, and your downloads are safe.',
+          )
+        done = Math.min(total, done + (slow ? 0.6 : 3.1) * MB)
+        listener?.({
+          type: 'update',
+          progress: {
+            phase: 'downloading',
+            done,
+            total,
+            rate: slow ? 2.4 * MB : 6.1 * MB,
+            networks: 3,
+          },
+        })
+      }
+      listener?.({
+        type: 'update',
+        progress: { phase: 'installing', done: total, total, rate: 0, networks: 0 },
+      })
+      // The real app restarts here; the demo just stays on "installing".
+      await new Promise(() => {})
+    },
+    cancelUpdate: async () => {
+      updateCancelled = true
     },
     getLimits: async () => structuredClone(limits),
     perNetworkDns: async () => perNetDns,

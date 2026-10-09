@@ -14,6 +14,7 @@ mod selftest;
 mod sends;
 mod service;
 mod torrents;
+mod update;
 
 use std::sync::Arc;
 
@@ -334,6 +335,8 @@ fn set_limits(svc: State<'_>, limits: LimitsView) -> Result<LimitsView, UiError>
 struct UpdateInfo {
     version: String,
     notes: Option<String>,
+    /// The download's size, so the banner can say it before anything starts.
+    size: Option<u64>,
 }
 
 #[tauri::command]
@@ -343,10 +346,22 @@ async fn check_update(app: tauri::AppHandle) -> Result<Option<UpdateInfo>, UiErr
         .updater()
         .map_err(|e| ui_error("update-check", format!("Couldn't check for updates: {e}")))?;
     match updater.check().await {
-        Ok(Some(u)) => Ok(Some(UpdateInfo {
-            version: u.version.clone(),
-            notes: u.body.clone(),
-        })),
+        Ok(Some(u)) => {
+            // A quick look at the package for its size; the banner works without it.
+            let size = tokio::time::timeout(
+                std::time::Duration::from_secs(8),
+                fuselane_core::runner::preview(u.download_url.as_str()),
+            )
+            .await
+            .ok()
+            .and_then(Result::ok)
+            .and_then(|p| p.total);
+            Ok(Some(UpdateInfo {
+                version: u.version.clone(),
+                notes: u.body.clone(),
+                size,
+            }))
+        }
         Ok(None) => Ok(None),
         Err(e) => Err(ui_error(
             "update-check",
@@ -378,11 +393,157 @@ async fn install_update(app: tauri::AppHandle, svc: State<'_>) -> Result<(), UiE
     while svc.running() > 0 && std::time::Instant::now() < deadline {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
-    update
-        .download_and_install(|_, _| {}, || {})
-        .await
-        .map_err(|e| fail(&e))?;
+    let bytes = download_update(&app, &svc, &update).await?;
+    svc.send(UiEvent::Update {
+        progress: update::UpdateProgress {
+            phase: "installing",
+            done: bytes.len() as u64,
+            total: Some(bytes.len() as u64),
+            rate: 0,
+            networks: 0,
+        },
+    });
+    update.install(bytes).map_err(|e| fail(&e))?;
     app.restart();
+}
+
+/// Stops the update download in progress (the banner's Cancel).
+static UPDATE_CANCEL: std::sync::Mutex<Option<fuselane_engine_http::download::Cancel>> =
+    std::sync::Mutex::new(None);
+
+#[tauri::command]
+fn cancel_update() {
+    if let Some(c) = UPDATE_CANCEL
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .as_ref()
+    {
+        c.cancel();
+    }
+}
+
+/// Fetches the update package with Fuselane's engine over every network and
+/// verifies it against the release key (B8.4). If the engine can't get it, the
+/// updater's own single-connection download (which verifies too) is the fallback.
+async fn download_update(
+    app: &tauri::AppHandle,
+    svc: &Arc<Service>,
+    update: &tauri_plugin_updater::Update,
+) -> Result<Vec<u8>, UiError> {
+    use fuselane_core::runner::{RunOptions, fetch};
+    use fuselane_engine_http::download::ProgressFn;
+    let failed = |why: String| UiError {
+        code: "update-failed",
+        message: format!("Couldn't download the update: {why}."),
+        hint: Some(
+            "Try again. It picks up the check from the start, and your downloads are safe.".into(),
+        ),
+    };
+    let pubkey = app
+        .config()
+        .plugins
+        .0
+        .get("updater")
+        .and_then(|u| u.get("pubkey"))
+        .and_then(|k| k.as_str())
+        .map(str::to_string)
+        .ok_or_else(|| failed("this build has no update key".into()))?;
+    let send_progress = {
+        let svc = svc.clone();
+        move |done: u64, total: Option<u64>, rate: u64, networks: u32| {
+            svc.send(UiEvent::Update {
+                progress: update::UpdateProgress {
+                    phase: "downloading",
+                    done,
+                    total,
+                    rate,
+                    networks,
+                },
+            });
+        }
+    };
+    let networks = u32::try_from(
+        fuselane_core::runner::pick_networks(&[])
+            .map(|n| n.len())
+            .unwrap_or(1),
+    )
+    .unwrap_or(1)
+    .max(1);
+    send_progress(0, None, 0, networks);
+    let dir = std::env::temp_dir().join(format!("fuselane-update-{}", update.version));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).map_err(|e| failed(format!("no room for it ({e})")))?;
+    let cancel = fuselane_engine_http::download::Cancel::new();
+    *UPDATE_CANCEL
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(cancel.clone());
+    let meter = Arc::new(std::sync::Mutex::new(update::Meter::new()));
+    let progress = {
+        let meter = meter.clone();
+        let send = send_progress.clone();
+        ProgressFn(Arc::new(move |done, total| {
+            let finished = total.is_some_and(|t| done >= t);
+            let rate = meter
+                .lock()
+                .ok()
+                .and_then(|mut m| m.tick(std::time::Instant::now(), done, finished));
+            if let Some(rate) = rate {
+                send(done, total, rate, networks);
+            }
+        }))
+    };
+    let fetched = fetch(
+        update.download_url.as_str(),
+        dir.clone(),
+        RunOptions {
+            progress: Some(progress),
+            cancel: Some(cancel.clone()),
+            ..RunOptions::default()
+        },
+    )
+    .await;
+    UPDATE_CANCEL
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .take();
+    if cancel.is_cancelled() {
+        let _ = std::fs::remove_dir_all(&dir);
+        return Err(UiError {
+            code: "update-cancelled",
+            message: "Update cancelled.".into(),
+            hint: None,
+        });
+    }
+    let bytes = match fetched {
+        Ok(report) => {
+            let bytes = std::fs::read(&report.path).map_err(|e| failed(e.to_string()))?;
+            update::verify(&bytes, &update.signature, &pubkey, &update.version).map_err(failed)?;
+            bytes
+        }
+        Err(why) => {
+            // The plugin's download is a single connection, but it works where the
+            // engine couldn't (for example a proxy only the system knows about).
+            let _ = why;
+            let mut meter = update::Meter::new();
+            let mut done = 0u64;
+            let send = send_progress.clone();
+            update
+                .download(
+                    move |chunk, total| {
+                        done += chunk as u64;
+                        let finished = total.is_some_and(|t| done >= t);
+                        if let Some(rate) = meter.tick(std::time::Instant::now(), done, finished) {
+                            send(done, total, rate, 1);
+                        }
+                    },
+                    || {},
+                )
+                .await
+                .map_err(|e| failed(e.to_string()))?
+        }
+    };
+    let _ = std::fs::remove_dir_all(&dir);
+    Ok(bytes)
 }
 
 /// Name, size and splittability of a link, before downloading it.
@@ -769,6 +930,7 @@ fn watch_for_shell(app: tauri::AppHandle, svc: &Arc<Service>) {
             | UiEvent::Open { .. }
             | UiEvent::Networks { .. }
             | UiEvent::WhenDoneCancelled
+            | UiEvent::Update { .. }
             | UiEvent::Automation { .. } => {}
             UiEvent::Live(l) => {
                 w.live(l);
@@ -1121,6 +1283,7 @@ fn main() {
             check_update,
             open_release_notes,
             install_update,
+            cancel_update,
             set_limits,
             fix_link,
             start_over,

@@ -2830,3 +2830,44 @@ html[data-hidden] *::after {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+/* ---------- Updates show size and progress (B8.4) ---------- */
+
+.update-banner .update-text {
+  display: grid;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+}
+
+.update-progress {
+  display: grid;
+  grid-template-columns: minmax(120px, 280px) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.update-progress .bar {
+  height: 4px;
+}
+
+.update-progress .num {
+  color: var(--body);
+  font-size: 12px;
+}
+
+.update-banner[data-state='failed'] {
+  border-color: color-mix(in oklch, var(--danger) 40%, transparent);
+  background: color-mix(in oklch, var(--danger) 9%, transparent);
+}
+
+.update-banner[data-state='failed'] .ic-fuse {
+  color: var(--danger);
+}
+
+@media (max-width: 639px) {
+  .update-progress {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+}

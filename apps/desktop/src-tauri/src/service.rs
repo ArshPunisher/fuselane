@@ -375,6 +375,10 @@ pub enum UiEvent {
         shares: Vec<crate::sends::ShareView>,
         receives: Vec<crate::sends::ReceiveView>,
     },
+    /// The app's own update downloading or installing (B8.4).
+    Update {
+        progress: crate::update::UpdateProgress,
+    },
 }
 
 /// Automation settings plus where the schedule stands right now.
