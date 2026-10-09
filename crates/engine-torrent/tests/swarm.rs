@@ -117,6 +117,8 @@ async fn a_torrent_downloads_byte_exact_through_the_proxy() {
         listen: None,
         state_dir: None,
         limiter: None,
+        upnp: false,
+        local_discovery: false,
     })
     .await
     .unwrap();
@@ -158,6 +160,8 @@ async fn broken_inputs_get_clear_errors() {
         listen: None,
         state_dir: None,
         limiter: None,
+        upnp: false,
+        local_discovery: false,
     })
     .await;
     assert!(matches!(none, Err(TorrentError::NoNetworks)));
@@ -169,6 +173,8 @@ async fn broken_inputs_get_clear_errors() {
         listen: None,
         state_dir: None,
         limiter: None,
+        upnp: false,
+        local_discovery: false,
     })
     .await
     .unwrap();
@@ -216,6 +222,8 @@ async fn an_existing_file_is_never_overwritten() {
         listen: None,
         state_dir: None,
         limiter: None,
+        upnp: false,
+        local_discovery: false,
     })
     .await
     .unwrap();
@@ -325,6 +333,8 @@ async fn chosen_files_download_and_edge_pieces_are_cleaned_up() {
         listen: None,
         state_dir: None,
         limiter: None,
+        upnp: false,
+        local_discovery: false,
     })
     .await
     .unwrap();
@@ -410,6 +420,8 @@ async fn removing_with_files_deletes_the_torrent_folder() {
         listen: None,
         state_dir: None,
         limiter: None,
+        upnp: false,
+        local_discovery: false,
     })
     .await
     .unwrap();
@@ -505,6 +517,8 @@ async fn two_networks_share_a_torrent_and_credit_sums_to_the_file() {
             });
             l
         })),
+        upnp: false,
+        local_discovery: false,
     })
     .await
     .unwrap();
@@ -558,6 +572,8 @@ async fn after_a_restart_saved_files_are_rechecked_not_downloaded_again() {
         listen: None,
         state_dir: Some(state.path().to_path_buf()),
         limiter: None,
+        upnp: false,
+        local_discovery: false,
     };
     let first = TorrentEngine::start(opts(leech.path())).await.unwrap();
     let t = first
@@ -628,6 +644,8 @@ async fn a_torrent_can_start_paused() {
         listen: None,
         state_dir: None,
         limiter: None,
+        upnp: false,
+        local_discovery: false,
     })
     .await
     .unwrap();
@@ -664,6 +682,8 @@ fn limited_engine_opts(
         listen: None,
         state_dir: None,
         limiter: Some(limiter),
+        upnp: false,
+        local_discovery: false,
     }
 }
 

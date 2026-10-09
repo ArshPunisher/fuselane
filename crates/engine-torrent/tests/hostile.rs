@@ -93,6 +93,8 @@ async fn engine(dir: &std::path::Path) -> TorrentEngine {
         listen: None,
         state_dir: None,
         limiter: None,
+        upnp: false,
+        local_discovery: false,
     })
     .await
     .unwrap()

@@ -102,6 +102,11 @@ pub struct EngineOptions {
     pub state_dir: Option<PathBuf>,
     /// The app's speed limits and data allowances (shared with HTTP downloads).
     pub limiter: Option<Arc<fuselane_limits::Limiter>>,
+    /// Ask the router to forward the listening port (UPnP), so peers can reach us.
+    /// Off for ordinary torrents; Fuse Send turns it on for its own engine.
+    pub upnp: bool,
+    /// Find peers on the same network (BitTorrent local service discovery).
+    pub local_discovery: bool,
 }
 
 /// How to start a torrent.
@@ -256,14 +261,14 @@ impl TorrentEngine {
                 listen: opts.listen.map(|listen_addr| ListenerOptions {
                     mode: ListenerMode::TcpOnly,
                     listen_addr,
-                    enable_upnp_port_forwarding: false,
+                    enable_upnp_port_forwarding: opts.upnp,
                     ..Default::default()
                 }),
                 connect: Some(ConnectionOptions {
                     proxy_url: Some(socks.url()),
                     ..Default::default()
                 }),
-                disable_local_service_discovery: true,
+                disable_local_service_discovery: !opts.local_discovery,
                 ..Default::default()
             },
         )

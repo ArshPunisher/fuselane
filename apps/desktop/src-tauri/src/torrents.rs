@@ -360,6 +360,8 @@ impl Torrents {
                     listen: None,
                     state_dir: Some(self.state_dir.clone()),
                     limiter: self.limiter.clone(),
+                    upnp: false,
+                    local_discovery: false,
                 })
                 .await
                 .map(Arc::new)

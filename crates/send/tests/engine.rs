@@ -42,6 +42,8 @@ async fn engine(dir: &std::path::Path, listen: bool) -> TorrentEngine {
         listen: listen.then(|| (Ipv4Addr::LOCALHOST, 0).into()),
         state_dir: None,
         limiter: None,
+        upnp: false,
+        local_discovery: false,
     })
     .await
     .unwrap()
