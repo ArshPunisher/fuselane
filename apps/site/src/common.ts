@@ -26,6 +26,8 @@ import magnet from '@phosphor-icons/core/assets/regular/magnet.svg?raw'
 import list from '@phosphor-icons/core/assets/regular/list-numbers.svg?raw'
 import plug from '@phosphor-icons/core/assets/regular/plugs-connected.svg?raw'
 import copy from '@phosphor-icons/core/assets/regular/copy.svg?raw'
+import menu from '@phosphor-icons/core/assets/regular/list.svg?raw'
+import close from '@phosphor-icons/core/assets/regular/x.svg?raw'
 
 export const REPO = 'https://github.com/ArshPunisher/fuselane'
 
@@ -55,6 +57,8 @@ const ICONS: Record<string, string> = {
   list,
   plug,
   copy,
+  menu,
+  close,
 }
 
 /** `<i data-icon="star"></i>` becomes the icon, hidden from screen readers. */
@@ -96,10 +100,77 @@ async function stars() {
 
 function currentPage() {
   const here = location.pathname.replace(/index\.html$/, '').replace(/\/$/, '')
-  document.querySelectorAll<HTMLAnchorElement>('.nav-links a, .nav-mobile a').forEach((a) => {
-    const to = new URL(a.href).pathname.replace(/index\.html$/, '').replace(/\/$/, '')
-    if (to === here && !a.hash) a.setAttribute('aria-current', 'page')
+  document
+    .querySelectorAll<HTMLAnchorElement>('.nav-links a, .nav-cta, .nav-sheet a')
+    .forEach((a) => {
+      const to = new URL(a.href).pathname.replace(/index\.html$/, '').replace(/\/$/, '')
+      if (to === here && !a.hash) a.setAttribute('aria-current', 'page')
+    })
+}
+
+/**
+ * The navbar: a highlight glides to whichever link the pointer or focus is on
+ * (and rests on the current page), the bar tightens once the page scrolls, and
+ * on phones a menu button opens the page list.
+ */
+function navbar() {
+  const nav = document.querySelector<HTMLElement>('[data-nav]')
+  if (!nav) return
+  const track = nav.querySelector<HTMLElement>('.nav-track')
+  const links = [...nav.querySelectorAll<HTMLAnchorElement>('.nav-links a')]
+  const glideTo = (a: HTMLElement | undefined) => {
+    if (!track) return
+    if (!a) {
+      track.style.setProperty('--glide-o', '0')
+      return
+    }
+    track.style.setProperty('--glide-x', `${a.offsetLeft}px`)
+    track.style.setProperty('--glide-w', `${a.offsetWidth}px`)
+    track.style.setProperty('--glide-o', '1')
+  }
+  const rest = () => glideTo(links.find((a) => a.getAttribute('aria-current') === 'page'))
+  links.forEach((a) => {
+    a.addEventListener('pointerenter', () => glideTo(a))
+    a.addEventListener('focus', () => glideTo(a))
   })
+  track?.addEventListener('pointerleave', rest)
+  track?.addEventListener('focusout', (e) => {
+    if (!track.contains(e.relatedTarget as Node)) rest()
+  })
+  rest()
+  // Scrolled: a sentinel at the top of the page leaves view (no scroll listener).
+  const sentinel = document.querySelector('.nav-sentinel')
+  if (sentinel && 'IntersectionObserver' in window) {
+    new IntersectionObserver(([e]) => {
+      nav.toggleAttribute('data-scrolled', !e?.isIntersecting)
+    }).observe(sentinel)
+  }
+  // Phones: the menu button opens the page list.
+  const button = nav.querySelector<HTMLButtonElement>('.nav-menu')
+  const sheet = document.querySelector<HTMLElement>('#nav-sheet')
+  if (!button || !sheet) return
+  const set = (open: boolean) => {
+    button.setAttribute('aria-expanded', String(open))
+    sheet.hidden = !open
+    nav.toggleAttribute('data-open', open)
+    const icon = button.querySelector('svg')
+    if (icon)
+      icon.outerHTML = (open ? close : menu).replace(
+        '<svg ',
+        '<svg aria-hidden="true" focusable="false" ',
+      )
+  }
+  button.addEventListener('click', () => set(sheet.hidden))
+  sheet.addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).closest('a')) set(false)
+  })
+  addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !sheet.hidden) {
+      set(false)
+      button.focus()
+    }
+  })
+  matchMedia('(min-width: 721px)').addEventListener('change', (m) => m.matches && set(false))
 }
 
 function reveal() {
@@ -192,6 +263,7 @@ export function fileUrl(version: string, suffix: string, cli = false) {
 
 icons()
 currentPage()
+navbar()
 reveal()
 spotlight()
 copyButtons()

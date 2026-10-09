@@ -41,7 +41,8 @@
   </head>
   <body>
     <a class="skip" href="#main">Skip to content</a>
-    <header class="nav">
+    <div class="nav-sentinel" aria-hidden="true"></div>
+    <header class="nav" data-nav>
       <a class="wordmark" href="../" translate="no" aria-label="Fuselane home">
         <svg class="mark" viewBox="0 0 512 512" aria-hidden="true">
           <g fill="none" stroke-linecap="round" stroke-width="34">
@@ -67,29 +68,35 @@
             />
           </g>
         </svg>
-        Fuselane
+        <span>Fuselane</span>
       </a>
-      <nav aria-label="Main">
-        <ul class="nav-links">
-          <li><a href="../#features">Features</a></li>
-          <li><a href="../#send">Send</a></li>
-          <li><a href="../download/">Download</a></li>
-          <li><a href="../faq/">FAQ</a></li>
-          <li><a href="../support/">Support</a></li>
-        </ul>
+      <nav class="nav-main" aria-label="Main">
+        <div class="nav-track">
+          <span class="nav-glide" aria-hidden="true"></span>
+          <ul class="nav-links">
+            <li><a href="../#features">Features</a></li>
+            <li><a href="../#send">Send</a></li>
+            <li><a href="../faq/">FAQ</a></li>
+            <li><a href="../support/">Support</a></li>
+          </ul>
+        </div>
+        <a
+          class="star"
+          href="https://github.com/ArshPunisher/fuselane"
+          aria-label="Fuselane on GitHub (star it)"
+        >
+          <i data-icon="github"></i>
+          <span class="count num" data-stars></span>
+        </a>
+        <a class="nav-cta" href="../download/"><i data-icon="download"></i>Download</a>
       </nav>
-      <a
-        class="star"
-        href="https://github.com/ArshPunisher/fuselane"
-        aria-label="Fuselane on GitHub (star it)"
-      >
-        <i data-icon="github"></i>
-        <span>Star</span>
-        <span class="count num" data-stars></span>
-      </a>
+      <button class="nav-menu" type="button" aria-expanded="false" aria-controls="nav-sheet">
+        <i data-icon="menu"></i>
+        <span class="sr-only">Menu</span>
+      </button>
     </header>
-    <nav aria-label="Pages">
-      <ul class="nav-mobile">
+    <nav class="nav-sheet" id="nav-sheet" aria-label="Pages" hidden>
+      <ul>
         <li><a href="../#features">Features</a></li>
         <li><a href="../#send">Send</a></li>
         <li><a href="../download/">Download</a></li>

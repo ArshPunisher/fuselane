@@ -139,42 +139,84 @@ a {
 
 /* ---------- Navigation: a floating pill ---------- */
 
+/* ---------- Navbar ----------
+   A content-width pill: logo, links with a gliding highlight, GitHub stars and
+   the one Download button. Once the page scrolls it tightens and picks up a
+   thin edge in the lane colours. Phones get a menu button and a sheet. */
+
+.nav-sentinel {
+  position: absolute;
+  top: 0;
+  height: 24px;
+  width: 1px;
+  pointer-events: none;
+}
+
 .nav {
   position: sticky;
-  top: 12px;
+  top: 14px;
   z-index: 40;
-  width: min(960px, calc(100vw - 24px));
-  margin: 12px auto 0;
+  width: fit-content;
+  max-width: calc(100vw - 24px);
+  margin: 14px auto 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 60px;
-  padding: 8px 8px 8px 18px;
-  border: 1px solid var(--line);
+  gap: 6px;
+  height: 60px;
+  padding: 0 8px 0 16px;
   border-radius: 999px;
-  background: oklch(0.17 0.014 262 / 0.62);
+  background:
+    linear-gradient(oklch(0.17 0.014 262 / 0.7), oklch(0.17 0.014 262 / 0.7)) padding-box,
+    linear-gradient(var(--line), var(--line)) border-box;
+  border: 1px solid transparent;
   backdrop-filter: blur(18px) saturate(160%);
   -webkit-backdrop-filter: blur(18px) saturate(160%);
-  box-shadow:
-    inset 0 1px 0 oklch(1 0 0 / 0.06),
-    0 18px 50px oklch(0.05 0.02 262 / 0.5);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.06);
+  transition:
+    height 0.4s var(--ease),
+    padding 0.4s var(--ease),
+    box-shadow 0.4s var(--ease),
+    top 0.4s var(--ease);
   view-transition-name: nav;
 }
 
+.nav[data-scrolled] {
+  top: 10px;
+  height: 52px;
+  background:
+    linear-gradient(oklch(0.15 0.014 262 / 0.82), oklch(0.15 0.014 262 / 0.82)) padding-box,
+    linear-gradient(
+        100deg,
+        oklch(0.78 0.12 215 / 0.55),
+        oklch(0.72 0.14 285 / 0.45) 40%,
+        oklch(0.86 0.17 128 / 0.35) 70%,
+        oklch(0.74 0.17 50 / 0.6)
+      )
+      border-box;
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.07),
+    0 16px 44px oklch(0.05 0.02 262 / 0.55);
+}
+
 @media (prefers-reduced-transparency: reduce) {
-  .nav {
-    background: var(--panel-solid);
+  .nav,
+  .nav[data-scrolled] {
     backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background:
+      linear-gradient(var(--panel-solid), var(--panel-solid)) padding-box,
+      linear-gradient(var(--line), var(--line)) border-box;
   }
 }
 
 .wordmark {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
+  margin-right: 18px;
   color: var(--ink);
   font-weight: 650;
-  font-size: 17px;
+  font-size: 16px;
   letter-spacing: -0.02em;
   text-decoration: none;
 }
@@ -207,13 +249,39 @@ a {
   }
 }
 
-.nav > nav {
-  margin-inline: auto;
+.nav-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nav-track {
+  position: relative;
+  margin-right: 10px;
+}
+
+.nav-glide {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: var(--glide-w, 0);
+  border-radius: 999px;
+  background: oklch(1 0 0 / 0.07);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.06);
+  opacity: var(--glide-o, 0);
+  transform: translateX(var(--glide-x, 0));
+  transition:
+    transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    width 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.25s var(--ease);
+  pointer-events: none;
 }
 
 .nav-links {
+  position: relative;
   display: flex;
-  gap: 2px;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
@@ -225,97 +293,215 @@ a {
   color: var(--body);
   font-size: 14px;
   text-decoration: none;
-  transition:
-    color 0.2s var(--ease),
-    background 0.2s var(--ease);
+  transition: color 0.2s var(--ease);
 }
 
-.nav-links a:hover {
-  color: var(--ink);
-  background: oklch(1 0 0 / 0.05);
-}
-
+.nav-links a:hover,
+.nav-links a:focus-visible,
 .nav-links a[aria-current='page'] {
   color: var(--ink);
-  background: oklch(1 0 0 / 0.08);
+}
+
+.nav-links a:focus-visible,
+.nav-cta:focus-visible,
+.star:focus-visible,
+.nav-menu:focus-visible {
+  outline: 2px solid var(--fuse);
+  outline-offset: 2px;
 }
 
 .star {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 42px;
-  padding: 0 14px;
-  border: 1px solid var(--line-strong);
+  gap: 6px;
+  height: 38px;
+  padding: 0 12px;
   border-radius: 999px;
-  background: oklch(1 0 0 / 0.04);
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 500;
+  color: var(--body);
+  font-size: 13px;
   text-decoration: none;
   white-space: nowrap;
   transition:
-    border-color 0.2s var(--ease),
+    color 0.2s var(--ease),
     background 0.2s var(--ease);
 }
 
 .star:hover {
-  border-color: var(--fuse);
-  background: oklch(0.74 0.17 50 / 0.1);
+  color: var(--ink);
+  background: oklch(1 0 0 / 0.06);
 }
 
 .star svg {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
 }
 
 .star .count:empty {
   display: none;
 }
 
-.star .count {
-  padding-left: 8px;
-  border-left: 1px solid var(--line-strong);
-  color: var(--body);
+.nav-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--fuse-hot), var(--fuse));
+  color: var(--fuse-ink);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.35);
+  transition:
+    transform 0.2s var(--ease),
+    box-shadow 0.3s var(--ease);
+}
+
+.nav-cta:hover {
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.4),
+    0 8px 24px oklch(0.74 0.17 50 / 0.35);
+}
+
+.nav-cta:active {
+  transform: scale(0.98);
+}
+
+.nav-cta svg {
+  width: 16px;
+  height: 16px;
+}
+
+.nav[data-scrolled] .nav-cta {
+  height: 36px;
+}
+
+.nav-menu {
+  display: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 999px;
+  background: oklch(1 0 0 / 0.06);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.nav-menu svg {
+  width: 20px;
+  height: 20px;
+}
+
+.nav-sheet {
+  position: fixed;
+  top: 82px;
+  left: 12px;
+  right: 12px;
+  z-index: 39;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: oklch(0.16 0.014 262 / 0.95);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 24px 60px oklch(0.05 0.02 262 / 0.6);
+}
+
+.nav-sheet ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nav-sheet a {
+  display: block;
+  padding: 14px 16px;
+  border-radius: 14px;
+  color: var(--ink);
+  font-size: 17px;
+  text-decoration: none;
+}
+
+.nav-sheet a:hover,
+.nav-sheet a[aria-current='page'] {
+  background: oklch(1 0 0 / 0.06);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .nav-sheet:not([hidden]) {
+    animation: sheet-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .nav-sheet li {
+    animation: sheet-item 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+
+  .nav-sheet li:nth-child(2) {
+    animation-delay: 30ms;
+  }
+  .nav-sheet li:nth-child(3) {
+    animation-delay: 60ms;
+  }
+  .nav-sheet li:nth-child(4) {
+    animation-delay: 90ms;
+  }
+  .nav-sheet li:nth-child(5) {
+    animation-delay: 120ms;
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+}
+
+@keyframes sheet-item {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav,
+  .nav-glide {
+    transition: none;
+  }
+}
+
+/* Tablets: the stars give up their room first. */
+@media (max-width: 860px) {
+  .star .count {
+    display: none;
+  }
 }
 
 @media (max-width: 720px) {
   .nav {
+    width: calc(100vw - 24px);
     padding-left: 14px;
   }
-  .nav-links {
+  .nav-track,
+  .star {
     display: none;
   }
-  .star {
+  .nav-main {
     margin-left: auto;
   }
+  .nav-menu {
+    display: grid;
+  }
 }
 
-/* Phones get the page links in a bar under the pill. */
-.nav-mobile {
-  display: none;
-}
-
-@media (max-width: 720px) {
-  .nav-mobile {
-    display: flex;
-    justify-content: center;
-    gap: 4px;
-    width: min(960px, calc(100vw - 24px));
-    margin: 8px auto 0;
-    padding: 0;
-    list-style: none;
-  }
-  .nav-mobile a {
-    padding: 6px 12px;
-    border-radius: 999px;
-    color: var(--body);
-    font-size: 13px;
-    text-decoration: none;
-  }
-  .nav-mobile a[aria-current='page'] {
-    color: var(--ink);
-    background: oklch(1 0 0 / 0.08);
+@media (min-width: 721px) {
+  .nav-sheet {
+    display: none;
   }
 }
 
@@ -849,6 +1035,48 @@ section {
   line-height: 0.9;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.odo {
+  display: inline-flex;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.odo-d {
+  display: inline-block;
+  height: 1em;
+  overflow: hidden;
+  /* Soft top and bottom edges, so digits roll in and out of view. */
+  mask-image: linear-gradient(transparent, #000 18%, #000 82%, transparent);
+}
+
+.odo-strip {
+  /* "0123456789" one character wide: each digit wraps onto its own 1em line. */
+  display: block;
+  transform: translateY(calc(var(--n, 0) * -1em));
+  transition: transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+  word-break: break-all;
+  width: 1ch;
+}
+
+.odo-sep {
+  display: inline-block;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .odo-strip {
+    transition: none;
+  }
+}
+
 .result .big small {
   color: var(--mute);
   font-size: 18px;
@@ -1035,48 +1263,6 @@ section {
   border: 1px solid var(--line);
   border-radius: 12px;
   background: oklch(0.12 0.01 262 / 0.8);
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-.odo {
-  display: inline-flex;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-
-.odo-d {
-  display: inline-block;
-  height: 1em;
-  overflow: hidden;
-  /* Soft top and bottom edges, so digits roll in and out of view. */
-  mask-image: linear-gradient(transparent, #000 18%, #000 82%, transparent);
-}
-
-.odo-strip {
-  /* "0123456789" one character wide: each digit wraps onto its own 1em line. */
-  display: block;
-  transform: translateY(calc(var(--n, 0) * -1em));
-  transition: transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
-  word-break: break-all;
-  width: 1ch;
-}
-
-.odo-sep {
-  display: inline-block;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .odo-strip {
-    transition: none;
-  }
-}
-
   color: var(--body);
   font-family: var(--font-mono);
   font-size: 13px;

@@ -174,8 +174,57 @@ test('every page works on a phone without sideways scrolling', async ({ page }) 
       await page.evaluate(() => document.documentElement.scrollWidth - innerWidth),
       path,
     ).toBeLessThanOrEqual(0)
+    // The page list sits behind the menu button.
+    const menu = page.getByRole('button', { name: 'Menu' })
+    await expect(page.getByRole('navigation', { name: 'Pages' })).toBeHidden()
+    await menu.click()
+    await expect(menu).toHaveAttribute('aria-expanded', 'true')
     await expect(page.getByRole('navigation', { name: 'Pages' })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('navigation', { name: 'Pages' })).toBeHidden()
+    await expect(menu).toBeFocused()
   }
+})
+
+test('the navbar tightens once the page scrolls, and its highlight follows the pointer', async ({
+  page,
+}) => {
+  await stub(page)
+  await page.goto('/faq/')
+  const nav = page.locator('[data-nav]')
+  await expect(nav).not.toHaveAttribute('data-scrolled', '')
+  const track = page.locator('.nav-track')
+  // Resting on the current page.
+  await expect(track).toHaveCSS('--glide-o', '1')
+  const faqX = await track.evaluate((t) => t.style.getPropertyValue('--glide-x'))
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Send' }).hover()
+  await expect
+    .poll(() => track.evaluate((t) => t.style.getPropertyValue('--glide-x')))
+    .not.toBe(faqX)
+  await page.mouse.wheel(0, 800)
+  await expect(nav).toHaveAttribute('data-scrolled', '')
+})
+
+test('the combined speed rolls and keeps running, while the exact figure stays readable', async ({
+  page,
+}) => {
+  await stub(page)
+  await page.goto('/#how')
+  const odo = page.locator('.odo')
+  await expect(odo.locator('.odo-d')).toHaveCount(3) // 41.2
+  const read = () =>
+    odo.evaluate((el) =>
+      [...el.children]
+        .map((c) =>
+          c.classList.contains('odo-d')
+            ? getComputedStyle(c.firstElementChild!).getPropertyValue('--n')
+            : '.',
+        )
+        .join(''),
+    )
+  const first = await read()
+  await expect.poll(read, { timeout: 6000 }).not.toBe(first)
+  await expect(page.locator('#combined')).toHaveText('41.2')
 })
 
 test('the nav marks the current page and every page links to privacy', async ({ page }) => {
