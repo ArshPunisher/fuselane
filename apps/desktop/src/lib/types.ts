@@ -23,6 +23,8 @@ export interface JobView {
   speedLimit: number
   /** Seconds until Fuselane tries this failed download again by itself. */
   retryIn: number | null
+  /** When it starts by itself (unix seconds), while it waits paused. */
+  startAt: number | null
 }
 
 export interface NetView {
@@ -140,6 +142,8 @@ export interface AddOptions {
   allowDuplicate?: boolean
   /** Add it paused, to start later. */
   later?: boolean
+  /** Start by itself at this time (unix seconds). */
+  startAt?: number | null
 }
 
 export interface BatchResult {

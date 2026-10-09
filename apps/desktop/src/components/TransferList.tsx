@@ -12,7 +12,7 @@ import {
   UploadSimple,
 } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
-import { bytes, percent, rateText } from '../lib/format'
+import { bytes, percent, rateText, startsAt } from '../lib/format'
 import { assignLanes } from '../lib/lanes'
 import type { JobView, Live, TorrentView } from '../lib/types'
 import { STATUS_WORD } from './status'
@@ -91,7 +91,9 @@ function Row({ job }: { job: JobView }) {
             {job.name}
           </span>
           <span className="row-meta">
-            <span className="row-state">{STATUS_WORD[job.status]}</span>
+            <span className="row-state">
+              {job.startAt ? startsAt(job.startAt) : STATUS_WORD[job.status]}
+            </span>
             <span className="num">{meta(job, showLive)}</span>
           </span>
           <Bar job={job} live={showLive} />

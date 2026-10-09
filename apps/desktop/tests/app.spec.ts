@@ -1155,3 +1155,39 @@ test('the link box is one line: no scrollbar, long links cut in the middle, magn
   await link.pressSequentially('https://example.com/b.iso')
   await expect(dialog.getByLabel('Links')).toHaveAttribute('rows', '3')
 })
+
+test('a download can start at a set time, and starts by itself when it comes', async ({ page }) => {
+  // 23:58 local time, so "00:00" is two minutes ahead (tomorrow).
+  const now = new Date()
+  now.setHours(23, 58, 0, 0)
+  await page.clock.install({ time: now })
+  await page.goto('/?empty=1')
+  const dialog = await openDialog(page)
+  await dialog.getByLabel('Link').fill('https://example.com/night.iso')
+  await dialog.getByText('More options').click()
+  await dialog.getByRole('radio', { name: 'At a time' }).click()
+  await dialog.getByLabel('Start time').fill('00:00')
+  await expect(dialog.getByText(/^tomorrow at /)).toBeVisible()
+  // "Download later" makes no sense next to a start time.
+  await expect(dialog.getByRole('button', { name: 'Download later' })).toHaveCount(0)
+  await dialog.getByRole('button', { name: /^Download at / }).click()
+  await expect(dialog).toBeHidden()
+  const row = page.locator('.row', { hasText: 'night.iso' })
+  await expect(row.locator('.row-state')).toHaveText(/^Starts tomorrow at /)
+  // Two minutes later it starts by itself.
+  await page.clock.fastForward('02:05')
+  await expect(row.locator('.row-state')).toHaveText('Downloading')
+})
+
+test('starting a scheduled download by hand drops its start time', async ({ page }) => {
+  await page.goto('/?empty=1')
+  const dialog = await openDialog(page)
+  await dialog.getByLabel('Link').fill('https://example.com/later.iso')
+  await dialog.getByText('More options').click()
+  await dialog.getByRole('radio', { name: 'At a time' }).click()
+  await dialog.getByRole('button', { name: /^Download at / }).click()
+  const row = page.locator('.row', { hasText: 'later.iso' })
+  await expect(row.locator('.row-state')).toHaveText(/^Starts /)
+  await row.getByRole('button', { name: 'Resume later.iso' }).click()
+  await expect(row.locator('.row-state')).toHaveText('Downloading')
+})

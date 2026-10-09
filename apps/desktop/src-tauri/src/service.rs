@@ -44,6 +44,8 @@ pub struct JobView {
     pub speed_limit: u64,
     /// Seconds until Fuselane tries a failed download again by itself.
     pub retry_in: Option<u64>,
+    /// When it starts by itself (unix seconds), for "Starts at 02:00".
+    pub start_at: Option<i64>,
 }
 
 /// One network the app can see.
@@ -445,6 +447,9 @@ pub struct AddRequest {
     pub allow_duplicate: bool,
     /// Add it paused ("Download later"): it waits in the list until started.
     pub later: bool,
+    /// Start by itself at this time (unix seconds, B8.5); it waits paused until then.
+    #[serde(default)]
+    pub start_at: Option<i64>,
     /// A browser session's cookies and referrer (from the extension, never the window).
     #[serde(skip)]
     pub headers: Vec<(String, String)>,
@@ -649,6 +654,7 @@ fn view(job: &Job) -> JobView {
         verify: job.expected_sha256.is_some(),
         speed_limit: job.speed_limit,
         retry_in: None,
+        start_at: job.start_at.filter(|_| job.status == Status::Paused),
     }
 }
 
@@ -978,6 +984,22 @@ impl Service {
         }
     }
 
+    /// Called every few seconds: starts the downloads whose start time has come
+    /// (B8.5). Ones whose time passed while Fuselane was closed start on launch.
+    pub fn tick_starts(self: &Arc<Self>, now_unix: i64) {
+        let due: Vec<i64> = self
+            .store
+            .list()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|j| j.status == Status::Paused && j.start_at.is_some_and(|at| at <= now_unix))
+            .map(|j| j.id)
+            .collect();
+        for id in due {
+            let _ = self.resume(id);
+        }
+    }
+
     /// A network appeared or came back: waiting retries go now.
     pub fn retry_now(&self) {
         let now = std::time::Instant::now();
@@ -1227,10 +1249,13 @@ impl Service {
             .store
             .create_with(url, &dir, &fuselane_core::NewJob { name, sha256 })
             .map_err(store_error)?;
-        if req.later {
+        if req.later || req.start_at.is_some() {
             self.store
                 .apply(id, Event::Pause, None)
                 .map_err(store_error)?;
+        }
+        if let Some(at) = req.start_at {
+            self.store.set_start_at(id, Some(at)).map_err(store_error)?;
         }
         if !session.is_empty() {
             lock(&self.sessions).insert(id, session);
@@ -1679,6 +1704,10 @@ impl Service {
     pub fn resume(self: &Arc<Self>, id: i64) -> Result<(), UiError> {
         if lock(&self.running).contains_key(&id) {
             return Ok(());
+        }
+        // Starting it by hand (or on time) ends any waiting for a start time.
+        if self.store.get(id).is_ok_and(|j| j.start_at.is_some()) {
+            let _ = self.store.set_start_at(id, None);
         }
         let job = match runner::job_to_resume(&self.store, &id.to_string()) {
             Ok(j) => j,
@@ -2450,6 +2479,46 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn a_download_with_a_start_time_waits_then_starts_by_itself() {
+        let content = Content::new(256 * KB, 97);
+        let server = RangeServer::start(content).await.unwrap();
+        let h = harness(3);
+        let at = 2_000_000_000; // a fixed "now" for the test's clock
+        let req = AddRequest {
+            start_at: Some(at),
+            ..AddRequest::default()
+        };
+        let id = h.svc.add_with(&link(&server), None, &req).unwrap();
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert_eq!(h.job(id).status, "paused");
+        assert_eq!(h.job(id).start_at, Some(at));
+        // A tick a minute early does nothing.
+        h.svc.tick_starts(at - 60);
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!((h.job(id).status, h.svc.running()), ("paused", 0));
+        // On time: it starts, the time is cleared, and it finishes.
+        h.svc.tick_starts(at);
+        h.wait("completion", |h| h.job(id).status == "completed")
+            .await;
+        assert_eq!(h.job(id).start_at, None);
+
+        // Started by hand before its time: the schedule is dropped, not kept.
+        let req = AddRequest {
+            start_at: Some(at + 3600),
+            allow_duplicate: true,
+            ..AddRequest::default()
+        };
+        let id = h
+            .svc
+            .add_with(&format!("{}?again", link(&server)), None, &req)
+            .unwrap();
+        h.svc.resume(id).unwrap();
+        h.wait("completion", |h| h.job(id).status == "completed")
+            .await;
+        assert_eq!(h.svc.store.get(id).unwrap().start_at, None);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn a_download_that_fails_for_a_passing_reason_tries_again_by_itself() {
         let content = Content::new(256 * KB, 96);
         let server = RangeServer::start(content).await.unwrap();
@@ -2702,6 +2771,7 @@ mod tests {
             ),
             allow_duplicate: false,
             later: false,
+            start_at: None,
             headers: vec![],
         };
         let id = h.svc.add_with(&link(&server), None, &good).unwrap();
@@ -3267,6 +3337,7 @@ mod tests {
             verify: false,
             speed_limit: 0,
             retry_in: None,
+            start_at: None,
         };
         let net = NetView {
             name: "en0".into(),

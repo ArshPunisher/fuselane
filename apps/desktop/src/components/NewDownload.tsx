@@ -5,7 +5,7 @@ import { toUiError } from '../lib/backend'
 import { isSendLink } from '../lib/sendLink'
 import type { ListingView, PreviewView, UiError } from '../lib/types'
 import { FilePicker } from './FilePicker'
-import { bytes } from '../lib/format'
+import { bytes, clockTime, nextAt, startsAt } from '../lib/format'
 
 /** Quick local check so obvious mistakes show before a round trip; the backend decides. */
 function looksLikeLink(s: string): boolean {
@@ -79,6 +79,9 @@ export function NewDownload() {
   const [more, setMore] = useState(false)
   const [name, setName] = useState('')
   const [sha256, setSha256] = useState('')
+  // Start at a set time (B8.5): off, or the next time the clock shows `startTime`.
+  const [startLater, setStartLater] = useState(false)
+  const [startTime, setStartTime] = useState('02:00')
   /** What a batch add skipped, shown until the dialog closes. */
   const [skipped, setSkipped] = useState<{ url: string; reason: string }[]>([])
   const [error, setError] = useState<UiError | null>(null)
@@ -206,6 +209,7 @@ export function NewDownload() {
     setDir('')
     setName('')
     setSha256('')
+    setStartLater(false)
     setMore(false)
     setSkipped([])
   }
@@ -248,6 +252,7 @@ export function NewDownload() {
         sha256: more ? sha256.trim() || null : null,
         allowDuplicate,
         later: later.current,
+        startAt: scheduled,
       })
       reset()
       setAdding(false)
@@ -277,6 +282,8 @@ export function NewDownload() {
   const otherError =
     error && !urlError && !dirError && !nameError && !shaError && !duplicate ? error : null
   const multi = batch || url.includes('\n')
+  const scheduled = more && startLater && !batch && !isMagnet(url) ? nextAt(startTime) : null
+  const badTime = more && startLater && scheduled === null
   const card = !editing && !urlError ? magnetCard(url) : null
   const cut = !multi ? middleCut(url) : null
 
@@ -558,6 +565,51 @@ export function NewDownload() {
                     : "Fuselane checks the finished file and won't save it under its name if it differs."}
                 </p>
               </div>
+              <div className="field">
+                <span className="label" id="nd-start-label">
+                  Start
+                </span>
+                <div className="inline-row">
+                  <div className="segmented" role="radiogroup" aria-labelledby="nd-start-label">
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={!startLater}
+                      onClick={() => setStartLater(false)}
+                    >
+                      Now
+                    </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={startLater}
+                      onClick={() => setStartLater(true)}
+                    >
+                      At a time
+                    </button>
+                  </div>
+                  {startLater && (
+                    <>
+                      <input
+                        type="time"
+                        className="num time-in"
+                        aria-label="Start time"
+                        value={startTime}
+                        aria-invalid={badTime || undefined}
+                        onChange={(e) => setStartTime(e.target.value)}
+                      />
+                      {scheduled !== null && (
+                        <span className="muted">{startsAt(scheduled).replace('Starts ', '')}</span>
+                      )}
+                    </>
+                  )}
+                </div>
+                <p className="field-help">
+                  {startLater
+                    ? 'It waits in your list and starts by itself, even with the window closed.'
+                    : 'Starts as soon as there is room in the queue.'}
+                </p>
+              </div>
             </details>
           )}
           {duplicate && (
@@ -618,7 +670,7 @@ export function NewDownload() {
             >
               Cancel
             </button>
-            {!isMagnet(url) && (
+            {!isMagnet(url) && scheduled === null && (
               <button
                 type="button"
                 className="btn"
@@ -632,7 +684,7 @@ export function NewDownload() {
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={busy || finding}
+              disabled={busy || finding || badTime}
               onClick={() => (later.current = false)}
             >
               {finding
@@ -643,7 +695,9 @@ export function NewDownload() {
                     ? 'Next'
                     : batch
                       ? `Download ${count > 1 && !pattern ? count : 'all'}`
-                      : 'Download'}
+                      : scheduled !== null
+                        ? `Download at ${clockTime(scheduled)}`
+                        : 'Download'}
             </button>
           </footer>
         </form>

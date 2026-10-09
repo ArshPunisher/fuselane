@@ -2871,3 +2871,25 @@ html[data-hidden] *::after {
     gap: 4px;
   }
 }
+
+/* ---------- Start at a set time (B8.5) ---------- */
+
+.inline-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.field .label {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.field input.time-in {
+  width: 136px;
+}
+
+.more-options[open] > .field + .field {
+  margin-top: 16px;
+}

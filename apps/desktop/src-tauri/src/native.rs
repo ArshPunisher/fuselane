@@ -130,6 +130,7 @@ mod tests {
             verify: false,
             speed_limit: 0,
             retry_in: None,
+            start_at: None,
         }
     }
 

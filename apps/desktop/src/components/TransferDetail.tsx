@@ -12,7 +12,7 @@ import {
 } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { toUiError } from '../lib/backend'
-import { bytes, eta, percent, rate, rateText } from '../lib/format'
+import { bytes, eta, percent, rate, rateText, startsAt } from '../lib/format'
 import { assignLanes, kindLabel, netTitle } from '../lib/lanes'
 import { FuseCore } from './FuseCore'
 import { Stream } from './Stream'
@@ -59,7 +59,7 @@ function Center({ job, live }: { job: JobView; live: Live | undefined }) {
         <span className="unit">%</span>
       </p>
       <p className="speed-sub" data-status={job.status}>
-        {STATUS_WORD[job.status]}
+        {job.startAt ? startsAt(job.startAt) : STATUS_WORD[job.status]}
       </p>
     </>
   )

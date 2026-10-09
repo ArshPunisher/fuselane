@@ -143,6 +143,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       verify: false,
       speedLimit: 0,
       retryIn: status === 'failed' && errorAction === 'retry' ? 95 : null,
+      startAt: null,
       fill,
       owner,
       inflight: [-1, -1, -1],
@@ -450,8 +451,9 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       const j = make(
         name || nameFromUrl(url),
         (180 + random() * 700) * MB,
-        options?.later ? 'paused' : 'running',
+        options?.later || options?.startAt ? 'paused' : 'running',
       )
+      j.startAt = options?.startAt ?? null
       j.url = url.href
       j.verify = Boolean(sha)
       if (dir?.trim()) j.dir = dir.trim()
@@ -575,6 +577,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     },
     resume: async (id) => {
       const j = find(id)
+      j.startAt = null
       if (j.status === 'running') return
       if (!j.resumable)
         throw err(
@@ -822,6 +825,13 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         return
       }
       setInterval(tick, 200)
+      // Like the service's 5-second tick: start what is due (B8.5).
+      setInterval(() => {
+        const due = jobs.filter(
+          (j) => j.status === 'paused' && j.startAt !== null && j.startAt * 1000 <= Date.now(),
+        )
+        for (const j of due) void backend.resume(j.id)
+      }, 1000)
     },
   }
   return backend

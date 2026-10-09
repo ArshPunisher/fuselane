@@ -1091,6 +1091,7 @@ fn main() {
                 svc.tick_usage(service::local_today());
                 svc.tick_schedule();
                 svc.tick_retries();
+                svc.tick_starts(chrono::Utc::now().timestamp());
                 svc.update_awake();
                 drop(svc);
                 std::thread::sleep(std::time::Duration::from_secs(5));
