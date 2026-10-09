@@ -534,6 +534,19 @@ function DiagnosticsSetting() {
   )
 }
 
+/** A titled group of settings; groups sit side by side on wide windows. */
+function Group({ title, children }: { title: string; children: React.ReactNode }) {
+  const id = `set-${title.toLowerCase().replace(/[^a-z]+/g, '-')}`
+  return (
+    <section className="settings-group" aria-labelledby={id}>
+      <h2 className="group" id={id}>
+        {title}
+      </h2>
+      {children}
+    </section>
+  )
+}
+
 export function SettingsView() {
   const info = useApp((s) => s.info)
   const demo = useApp((s) => s.backend?.demo)
@@ -542,44 +555,58 @@ export function SettingsView() {
       <header className="page-head">
         <h1 id="set-title">Settings</h1>
       </header>
-      <div className="setting">
-        <div>
-          <p className="setting-name">Appearance</p>
-          <p className="muted">Follows your system unless you pick one.</p>
-        </div>
-        <ThemePicker />
-      </div>
-      <SpeedUnitSetting />
-      <SpeedLimitSetting />
-      <DownloadsAtOnceSetting />
-      <div className="setting">
-        <div>
-          <p className="setting-name">Downloads folder</p>
-          <p className="muted num">{info?.defaultDir ?? ''}</p>
-        </div>
-      </div>
-      <SortSetting />
-      <AfterDownloadSetting />
-      <NameTakenSetting />
-      <SlowModeSetting />
-      <ScheduleSetting />
-      <WhenDoneSetting />
-      <KeepAwakeSetting />
-      <WindowSettings />
-      <ListSetting />
-      <SharingSetting />
-      <LookupSetting />
-      <UpdateSetting />
-      <ShortcutsSetting />
-      <DiagnosticsSetting />
-      <div className="setting">
-        <div>
-          <p className="setting-name">Version</p>
-          <p className="muted num">
-            {info?.version ?? ''}
-            {demo ? ', demo data' : ''}
-          </p>
-        </div>
+      <div className="settings-groups">
+        <Group title="Look and feel">
+          <div className="setting">
+            <div>
+              <p className="setting-name">Appearance</p>
+              <p className="muted">Follows your system unless you pick one.</p>
+            </div>
+            <ThemePicker />
+          </div>
+          <SpeedUnitSetting />
+        </Group>
+        <Group title="Speed">
+          <SpeedLimitSetting />
+          <DownloadsAtOnceSetting />
+          <SlowModeSetting />
+          <ScheduleSetting />
+        </Group>
+        <Group title="Files">
+          <div className="setting">
+            <div>
+              <p className="setting-name">Downloads folder</p>
+              <p className="muted num">{info?.defaultDir ?? ''}</p>
+            </div>
+          </div>
+          <SortSetting />
+          <AfterDownloadSetting />
+          <NameTakenSetting />
+          <ListSetting />
+        </Group>
+        <Group title="This computer">
+          <WhenDoneSetting />
+          <KeepAwakeSetting />
+          <WindowSettings />
+        </Group>
+        <Group title="Torrents and lookups">
+          <SharingSetting />
+          <LookupSetting />
+        </Group>
+        <Group title="About">
+          <UpdateSetting />
+          <ShortcutsSetting />
+          <DiagnosticsSetting />
+          <div className="setting">
+            <div>
+              <p className="setting-name">Version</p>
+              <p className="muted num">
+                {info?.version ?? ''}
+                {demo ? ', demo data' : ''}
+              </p>
+            </div>
+          </div>
+        </Group>
       </div>
     </section>
   )

@@ -3925,3 +3925,80 @@ html[data-hidden] .orb b {
     translate: 14px 0;
   }
 }
+
+/* ---------- Wide windows: Networks and Settings use the room ---------- */
+
+.page:has(.settings-groups),
+.page:has(.nets-grid) {
+  max-width: 1240px;
+  container-type: inline-size;
+}
+
+.settings-groups {
+  column-gap: 20px;
+}
+
+.settings-group {
+  display: grid;
+  margin-bottom: 20px;
+  break-inside: avoid;
+  padding: 4px 18px 6px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  background: var(--surface-1);
+}
+
+.settings-group > .group {
+  padding: 12px 0 8px;
+}
+
+.settings-group > .setting:first-of-type,
+.settings-group > .group + * {
+  border-top: 0;
+}
+
+/* Segmented choices keep each label on one line. */
+.settings-group .segmented button,
+.settings-group .segmented [role='radio'],
+.settings-group .slow-toggle .net-name {
+  white-space: nowrap;
+}
+
+.nets-grid {
+  display: grid;
+  gap: 18px;
+  align-items: start;
+}
+
+.nets-side,
+.nets-wide {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+@container (min-width: 1000px) {
+  /* Columns, not a grid: each group takes its own height, no gaps beside short ones. */
+  .settings-groups {
+    columns: 2;
+  }
+
+  .allowance-list {
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    column-gap: 24px;
+  }
+
+  .nets-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .nets-wide {
+    grid-column: 1 / -1;
+  }
+
+  .nets-grid .net-limits {
+    margin-top: 0;
+    border-top: 0;
+    padding-top: 0;
+  }
+}

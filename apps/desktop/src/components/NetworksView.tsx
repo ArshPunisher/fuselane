@@ -433,9 +433,15 @@ export function NetworksView() {
         Every network here can carry part of each download. Plug in a phone or join another network
         and it joins in.
       </p>
-      <NetworkList />
-      <NetworkLimits />
-      <Allowances />
+      <div className="nets-grid">
+        <NetworkList />
+        <div className="nets-side">
+          <NetworkLimits />
+        </div>
+        <div className="nets-wide">
+          <Allowances />
+        </div>
+      </div>
       {other.length > 0 && (
         <details className="other-nets">
           <summary>Not used ({other.length})</summary>
