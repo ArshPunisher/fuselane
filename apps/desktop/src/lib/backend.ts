@@ -33,6 +33,10 @@ export interface Backend {
   add(url: string, dir: string | null, options?: AddOptions): Promise<number>
   /** Adds every link in pasted text (patterns like file[01-20].zip expanded). */
   addBatch(text: string, dir: string | null, later?: boolean): Promise<BatchResult>
+  /** Saves every link to a file the person picks; how many, or null if cancelled. */
+  exportLinks(): Promise<number | null>
+  /** Adds the links in a file the person picks, paused; null if cancelled. */
+  importLinks(): Promise<BatchResult | null>
   /** How many downloads run at once (1–8). */
   maxRunning(): Promise<number>
   setMaxRunning(n: number): Promise<number>
@@ -155,6 +159,8 @@ async function tauriBackend(): Promise<Backend> {
     listJobs: () => call('list_jobs'),
     listNetworks: () => call('list_networks'),
     add: (url, dir, options) => call('add_download', { url, dir, options: options ?? null }),
+    exportLinks: () => call('export_links'),
+    importLinks: () => call('import_links'),
     addBatch: (text, dir, later) => call('add_batch', { text, dir, later: later ?? false }),
     maxRunning: () => call('max_running'),
     setMaxRunning: (n) => call('set_max_running', { n }),

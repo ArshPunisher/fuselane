@@ -439,6 +439,16 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       emitJobs()
       return j.id
     },
+    exportLinks: async () =>
+      params.get('pick') === 'cancel' ? null : new Set(jobs.map((j) => j.url)).size,
+    importLinks: async () =>
+      params.get('pick') === 'cancel'
+        ? null
+        : backend.addBatch(
+            '# Fuselane downloads\nhttps://example.com/one.iso\nhttps://example.com/two.zip',
+            null,
+            true,
+          ),
     addBatch: async (text, dir, later) => {
       const found = [...new Set(text.match(/https?:\/\/[^\s"<>]+/gi) ?? [])].map((l) =>
         l.replace(/[.,;)']+$/, ''),

@@ -527,6 +527,75 @@ async fn pick_torrent(app: tauri::AppHandle) -> Option<String> {
         .map(|p| p.to_string_lossy().into_owned())
 }
 
+/// Saves every download's link to a text file the person picks. How many links
+/// were saved, or `None` if they cancelled.
+#[tauri::command]
+async fn export_links(app: tauri::AppHandle, svc: State<'_>) -> Result<Option<usize>, UiError> {
+    use tauri_plugin_dialog::DialogExt;
+    let (text, n) = svc.export_text()?;
+    let day = chrono::Local::now().format("%Y-%m-%d");
+    let Some(path) = app
+        .dialog()
+        .file()
+        .set_title("Export download links")
+        .set_file_name(format!("Fuselane downloads {day}.txt"))
+        .add_filter("Text", &["txt"])
+        .blocking_save_file()
+        .and_then(|p| p.into_path().ok())
+    else {
+        return Ok(None);
+    };
+    std::fs::write(&path, text).map_err(|e| {
+        UiError::new_public(
+            "write-failed",
+            format!("Couldn't save \"{}\": {e}", path.display()),
+            Some("Pick a folder you can write to."),
+        )
+    })?;
+    Ok(Some(n))
+}
+
+/// Adds the links in a text file the person picks (an export, or any list of
+/// links), waiting to be started. `None` if they cancelled.
+#[tauri::command]
+async fn import_links(
+    app: tauri::AppHandle,
+    svc: State<'_>,
+) -> Result<Option<service::BatchResult>, UiError> {
+    use tauri_plugin_dialog::DialogExt;
+    const MAX: u64 = 1024 * 1024;
+    let Some(path) = app
+        .dialog()
+        .file()
+        .set_title("Import download links")
+        .add_filter("Text", &["txt", "csv", "list"])
+        .blocking_pick_file()
+        .and_then(|p| p.into_path().ok())
+    else {
+        return Ok(None);
+    };
+    let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+    if size > MAX {
+        return Err(UiError::new_public(
+            "too-big",
+            format!(
+                "That file is {} KB; a list of links is at most 1 MB.",
+                size.div_ceil(1024)
+            ),
+            Some("Pick the text file with the links, or split it into smaller files."),
+        ));
+    }
+    let bytes = std::fs::read(&path).map_err(|e| {
+        UiError::new_public(
+            "read-failed",
+            format!("Couldn't read \"{}\": {e}", path.display()),
+            None,
+        )
+    })?;
+    let text = String::from_utf8_lossy(&bytes);
+    svc.add_batch(&text, None, true).map(Some)
+}
+
 /// Asks for a file to send with Fuse Send; `None` if they cancel.
 #[tauri::command]
 async fn send_pick(app: tauri::AppHandle) -> Option<String> {
@@ -1005,6 +1074,8 @@ fn main() {
             list_networks,
             add_download,
             add_batch,
+            export_links,
+            import_links,
             window_prefs,
             set_start_at_login,
             set_close_to_tray,

@@ -410,6 +410,73 @@ function UpdateSetting() {
   )
 }
 
+function ListSetting() {
+  const backend = useApp((s) => s.backend)
+  const [status, setStatus] = useState('')
+  const [busy, setBusy] = useState(false)
+  async function run(f: () => Promise<string | null>) {
+    if (busy) return
+    setBusy(true)
+    setStatus('')
+    try {
+      const said = await f()
+      if (said) setStatus(said)
+    } catch (e) {
+      const err = toUiError(e)
+      setStatus(`${err.message}${err.hint ? ` ${err.hint}` : ''}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+  if (!backend) return null
+  return (
+    <div className="setting">
+      <div>
+        <p className="setting-name">Download list</p>
+        <p className="muted">
+          Save every link to a text file, or add links from one. Imported downloads wait until you
+          start them.
+        </p>
+        <p className="muted" role="status">
+          {status}
+        </p>
+      </div>
+      <div className="setting-control">
+        <button
+          type="button"
+          className="btn"
+          disabled={busy}
+          onClick={() =>
+            run(async () => {
+              const n = await backend.exportLinks()
+              return n === null ? null : `Saved ${n} ${n === 1 ? 'link' : 'links'}.`
+            })
+          }
+        >
+          Export…
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={busy}
+          onClick={() =>
+            run(async () => {
+              const r = await backend.importLinks()
+              if (!r) return null
+              const added = `Added ${r.added.length} ${r.added.length === 1 ? 'download' : 'downloads'}`
+              return r.skipped.length
+                ? `${added}; skipped ${r.skipped.length} already in the list or not valid.`
+                : `${added}.`
+            })
+          }
+        >
+          Import…
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function DiagnosticsSetting() {
   const backend = useApp((s) => s.backend)
   const [report, setReport] = useState('')
@@ -495,6 +562,7 @@ export function SettingsView() {
       <WhenDoneSetting />
       <KeepAwakeSetting />
       <WindowSettings />
+      <ListSetting />
       <SharingSetting />
       <LookupSetting />
       <UpdateSetting />

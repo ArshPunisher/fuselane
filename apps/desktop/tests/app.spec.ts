@@ -838,6 +838,20 @@ test('start at login, keep running and copied links are switches, off at first',
   }
 })
 
+test('the download list exports and imports from Settings', async ({ page }) => {
+  await page.goto('/?empty=1')
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await page.getByRole('button', { name: 'Import…' }).click()
+  await expect(page.getByText('Added 2 downloads.')).toBeVisible()
+  await page.getByRole('button', { name: 'Import…' }).click()
+  await expect(page.getByText('Added 0 downloads; skipped 2')).toBeVisible()
+  await page.getByRole('button', { name: 'Export…' }).click()
+  await expect(page.getByText('Saved 2 links.')).toBeVisible()
+  await page.getByRole('button', { name: 'Downloads' }).first().click()
+  await expect(page.getByText('one.iso')).toBeVisible()
+  await expect(page.locator('.row', { hasText: 'two.zip' })).toContainText('Paused')
+})
+
 test('a copied download link opens the dialog with it', async ({ page }) => {
   await page.goto('/?empty=1')
   await expect(page.getByText('Nothing downloading yet')).toBeVisible()

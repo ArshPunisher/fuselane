@@ -1138,6 +1138,28 @@ impl Service {
         Ok(id)
     }
 
+    /// Every download's link, one per line in queue order, for saving to a file.
+    /// Importing the file adds them back (lines starting with # are ignored).
+    pub fn export_text(&self) -> Result<(String, usize), UiError> {
+        let mut jobs = self.store.list().map_err(store_error)?;
+        jobs.sort_by_key(|j| (j.position, j.id));
+        let mut seen = std::collections::HashSet::new();
+        let links: Vec<&str> = jobs
+            .iter()
+            .map(|j| j.url.as_str())
+            .filter(|u| seen.insert(*u))
+            .collect();
+        let mut text = format!(
+            "# Fuselane downloads ({} links). Import this file in Fuselane to add them again.\n",
+            links.len()
+        );
+        for l in &links {
+            text.push_str(l);
+            text.push('\n');
+        }
+        Ok((text, links.len()))
+    }
+
     /// Adds every link in `text` (one per line, or mixed with other words), each
     /// pattern like `file[01-20].zip` expanded. Links already in the list and bad
     /// ones are skipped with a reason, never added twice.
@@ -2227,6 +2249,39 @@ mod tests {
         assert!(svc.watch_clipboard());
         svc.set_watch_clipboard(false).unwrap();
         assert_eq!(svc.clipboard_seen("https://example.com/b.zip"), None);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_list_exports_as_links_and_imports_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = Service::new(
+            Store::open(&dir.path().join("a.db")).unwrap(),
+            dir.path().to_path_buf(),
+        )
+        .unwrap();
+        let later = AddRequest {
+            later: true,
+            ..AddRequest::default()
+        };
+        for l in ["http://127.0.0.1:9/a.iso", "http://127.0.0.1:9/b.zip"] {
+            svc.add_with(l, None, &later).unwrap();
+        }
+        let (text, n) = svc.export_text().unwrap();
+        assert_eq!(n, 2);
+        assert!(text.starts_with("# Fuselane downloads (2 links)"));
+        assert!(text.ends_with("http://127.0.0.1:9/a.iso\nhttp://127.0.0.1:9/b.zip\n"));
+        // Into an empty list: both come back, waiting.
+        let other = Service::new(
+            Store::open(&dir.path().join("b.db")).unwrap(),
+            dir.path().to_path_buf(),
+        )
+        .unwrap();
+        let r = other.add_batch(&text, None, true).unwrap();
+        assert_eq!(r.added.len(), 2);
+        assert!(r.skipped.is_empty());
+        // Importing twice skips what's already there.
+        let again = other.add_batch(&text, None, true).unwrap();
+        assert_eq!((again.added.len(), again.skipped.len()), (0, 2));
     }
 
     #[tokio::test(flavor = "multi_thread")]
