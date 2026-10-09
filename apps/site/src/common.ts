@@ -26,6 +26,16 @@ import magnet from '@phosphor-icons/core/assets/regular/magnet.svg?raw'
 import list from '@phosphor-icons/core/assets/regular/list-numbers.svg?raw'
 import plug from '@phosphor-icons/core/assets/regular/plugs-connected.svg?raw'
 import copy from '@phosphor-icons/core/assets/regular/copy.svg?raw'
+import later from '@phosphor-icons/core/assets/regular/clock-countdown.svg?raw'
+import clip from '@phosphor-icons/core/assets/regular/clipboard-text.svg?raw'
+import exportIcon from '@phosphor-icons/core/assets/regular/export.svg?raw'
+import search from '@phosphor-icons/core/assets/regular/magnifying-glass.svg?raw'
+import stack from '@phosphor-icons/core/assets/regular/stack.svg?raw'
+import folders from '@phosphor-icons/core/assets/regular/folders.svg?raw'
+import units from '@phosphor-icons/core/assets/regular/arrows-left-right.svg?raw'
+import walk from '@phosphor-icons/core/assets/regular/person-simple-walk.svg?raw'
+import pie from '@phosphor-icons/core/assets/regular/chart-pie-slice.svg?raw'
+import keys from '@phosphor-icons/core/assets/regular/keyboard.svg?raw'
 import menu from '@phosphor-icons/core/assets/regular/list.svg?raw'
 import close from '@phosphor-icons/core/assets/regular/x.svg?raw'
 
@@ -59,6 +69,16 @@ const ICONS: Record<string, string> = {
   copy,
   menu,
   close,
+  later,
+  clip,
+  export: exportIcon,
+  search,
+  stack,
+  folders,
+  units,
+  walk,
+  pie,
+  keys,
 }
 
 /** `<i data-icon="star"></i>` becomes the icon, hidden from screen readers. */
@@ -174,7 +194,7 @@ function navbar() {
 }
 
 function reveal() {
-  const els = document.querySelectorAll<HTMLElement>('.reveal, .frame')
+  const els = document.querySelectorAll<HTMLElement>('.reveal, .frame, .smalls')
   if (!('IntersectionObserver' in window)) {
     els.forEach((e) => e.classList.add('seen'))
     return
