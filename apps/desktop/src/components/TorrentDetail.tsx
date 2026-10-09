@@ -17,6 +17,7 @@ import { usePoll } from '../lib/poll'
 import { FilePicker } from './FilePicker'
 import { LiveRate } from './LiveRate'
 import { SpeedSplit } from './SpeedSplit'
+import { BIN, RemoveDialog } from './RemoveDialog'
 import { Orb } from './Orb'
 import { PiecesMap } from './PiecesMap'
 import { REVEAL_LABEL } from './TransferDetail'
@@ -41,27 +42,34 @@ export function torrentNets(nets: TorrentNetView[], known: NetView[]) {
 
 function RemoveTorrent({ t }: { t: TorrentView }) {
   const act = useApp((s) => s.act)
-  const [confirm, setConfirm] = useState(false)
-  useEffect(() => {
-    if (!confirm) return
-    const id = setTimeout(() => setConfirm(false), 6000)
-    return () => clearTimeout(id)
-  }, [confirm])
-  if (!confirm)
-    return (
-      <button className="btn btn-ghost" onClick={() => setConfirm(true)}>
+  const [open, setOpen] = useState(false)
+  const finished = t.status === 'completed' || t.status === 'seeding'
+  return (
+    <>
+      <button className="btn btn-ghost" onClick={() => setOpen(true)}>
         <Trash size={16} aria-hidden /> Remove
       </button>
-    )
-  return (
-    <span className="confirm" role="group" aria-label="Remove this torrent">
-      <button className="btn" onClick={() => act((b) => b.removeTorrent(t.id, false))}>
-        Keep files
-      </button>
-      <button className="btn btn-danger" onClick={() => act((b) => b.removeTorrent(t.id, true))}>
-        Delete files
-      </button>
-    </span>
+      <RemoveDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Remove this torrent?"
+        text={`${t.name} ${finished ? 'leaves your list' : 'stops and leaves your list'}. What should happen to what's already saved?`}
+        where={t.folder}
+        facts={
+          finished
+            ? `${bytes(t.total)}, ${t.selectedCount} of ${t.fileCount} files`
+            : `${bytes(t.done)} of ${bytes(t.total)} saved`
+        }
+        choices={[
+          { label: 'Keep files', run: () => act((b) => b.removeTorrent(t.id, false)) },
+          {
+            label: `Move files to ${BIN}`,
+            danger: true,
+            run: () => act((b) => b.removeTorrent(t.id, true)),
+          },
+        ]}
+      />
+    </>
   )
 }
 

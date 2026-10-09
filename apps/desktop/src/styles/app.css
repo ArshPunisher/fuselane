@@ -2671,3 +2671,52 @@ html[data-hidden] *::after {
   color: var(--ink);
   font-weight: 500;
 }
+
+/* ---------- Remove asks and waits (B8.2) ---------- */
+
+.dialog-text {
+  color: var(--body);
+  line-height: 1.5;
+}
+
+.file-summary {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+}
+
+.file-summary > span:first-child {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-control);
+  background: var(--surface-3);
+  color: var(--body);
+}
+
+.file-summary > span:last-child {
+  display: grid;
+  min-width: 0;
+}
+
+.file-summary b {
+  overflow: hidden;
+  color: var(--ink);
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.file-summary .muted {
+  font-size: 12px;
+}
+
+.dialog-foot {
+  flex-wrap: wrap;
+}

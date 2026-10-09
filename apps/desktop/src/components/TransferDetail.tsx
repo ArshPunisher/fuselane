@@ -20,6 +20,7 @@ import { Orb } from './Orb'
 import { STATUS_WORD } from './status'
 import { LimitField } from './LimitField'
 import { LiveRate } from './LiveRate'
+import { BIN, RemoveDialog } from './RemoveDialog'
 import type { JobView, Live } from '../lib/types'
 
 /** The platform's own words for showing a file in its folder. */
@@ -211,44 +212,50 @@ function JobLimit({ job }: { job: JobView }) {
 
 function RemoveButton({ job }: { job: JobView }) {
   const act = useApp((s) => s.act)
-  const [confirm, setConfirm] = useState(false)
-  useEffect(() => {
-    if (!confirm) return
-    const t = setTimeout(() => setConfirm(false), 4000)
-    return () => clearTimeout(t)
-  }, [confirm])
+  const [open, setOpen] = useState(false)
   const done = job.status === 'completed'
+  const where = job.finalPath ?? `${job.dir}/${job.name}`
   return (
-    <button
-      className={confirm ? 'btn btn-danger' : 'btn btn-ghost'}
-      onClick={() => (confirm ? act((b) => b.remove(job.id)) : setConfirm(true))}
-      aria-live="polite"
-    >
-      <Trash size={16} aria-hidden />
-      {confirm ? (done ? 'Remove from list' : 'Delete partial file') : 'Remove'}
-    </button>
-  )
-}
-
-/** Finished downloads: the file goes to the Trash (never deleted outright). */
-function TrashButton({ job }: { job: JobView }) {
-  const act = useApp((s) => s.act)
-  const [confirm, setConfirm] = useState(false)
-  useEffect(() => {
-    if (!confirm) return
-    const t = setTimeout(() => setConfirm(false), 4000)
-    return () => clearTimeout(t)
-  }, [confirm])
-  const bin = /Win/i.test(navigator.platform) ? 'Recycle Bin' : 'Trash'
-  return (
-    <button
-      className={confirm ? 'btn btn-danger' : 'btn btn-ghost'}
-      onClick={() => (confirm ? act((b) => b.trashFile(job.id)) : setConfirm(true))}
-      aria-live="polite"
-    >
-      <Trash size={16} aria-hidden />
-      {confirm ? `Move file to ${bin}` : `Move to ${bin}`}
-    </button>
+    <>
+      <button className="btn btn-ghost" onClick={() => setOpen(true)}>
+        <Trash size={16} aria-hidden />
+        Remove
+      </button>
+      <RemoveDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        title={done ? 'Remove this download?' : 'Stop and remove this download?'}
+        text={
+          done
+            ? `${job.name} leaves your list. Keep the file, or move it to the ${BIN}?`
+            : `${job.name} stops and leaves your list. The unfinished file can't be used, so it's deleted.`
+        }
+        where={where}
+        facts={
+          done
+            ? bytes(job.total ?? job.written)
+            : `${bytes(job.written)}${job.total ? ` of ${bytes(job.total)}` : ''} downloaded`
+        }
+        choices={
+          done
+            ? [
+                { label: 'Keep file', run: () => act((b) => b.remove(job.id)) },
+                {
+                  label: `Move file to ${BIN}`,
+                  danger: true,
+                  run: () => act((b) => b.trashFile(job.id)),
+                },
+              ]
+            : [
+                {
+                  label: 'Delete unfinished file',
+                  danger: true,
+                  run: () => act((b) => b.remove(job.id)),
+                },
+              ]
+        }
+      />
+    </>
   )
 }
 
@@ -324,7 +331,6 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
               </button>
             </>
           )}
-          {job.status === 'completed' && <TrashButton job={job} />}
           <RemoveButton job={job} />
         </div>
       </header>

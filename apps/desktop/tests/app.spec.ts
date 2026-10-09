@@ -99,12 +99,39 @@ test('pause, resume and a two-step remove', async ({ page }) => {
   await detail.getByRole('button', { name: 'Resume' }).click()
   await expect(detail.locator('.speed')).toContainText('MB/s', { timeout: 5000 })
   await detail.getByRole('button', { name: 'Remove' }).click()
-  // First click only arms it.
-  await expect(
-    page.getByRole('heading', { level: 1, name: 'ubuntu-26.04-desktop-amd64.iso' }),
-  ).toBeVisible()
-  await detail.getByRole('button', { name: 'Delete partial file' }).click()
+  // It asks first, in a dialog that waits.
+  const ask = page.getByRole('dialog', { name: 'Stop and remove this download?' })
+  await expect(ask).toBeVisible()
+  await expect(ask.getByRole('button', { name: 'Cancel' })).toBeFocused()
+  await ask.getByRole('button', { name: 'Delete unfinished file' }).click()
+  await expect(ask).toBeHidden()
   await expect(page.locator('.row-name', { hasText: 'ubuntu-26.04' })).toHaveCount(0)
+})
+
+test('remove waits for an answer: no timer, and Esc or a click outside cancels', async ({
+  page,
+}) => {
+  await page.goto('/?freeze=3')
+  await page.getByText('Blender-5.1-macos-arm64.dmg').click()
+  const detail = page.locator('article.detail')
+  await detail.getByRole('button', { name: 'Remove' }).click()
+  const ask = page.getByRole('dialog', { name: 'Remove this download?' })
+  await expect(ask).toBeVisible()
+  // The old inline confirm went away after 4 s; this one stays.
+  await page.waitForTimeout(6500)
+  await expect(ask).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(ask).toBeHidden()
+  await expect(page.getByText('Blender-5.1-macos-arm64.dmg').first()).toBeVisible()
+  // A click on the dimmed area outside cancels too.
+  await detail.getByRole('button', { name: 'Remove' }).click()
+  await expect(ask).toBeVisible()
+  await page.mouse.click(8, 8)
+  await expect(ask).toBeHidden()
+  // Keep file: gone from the list, file untouched.
+  await detail.getByRole('button', { name: 'Remove' }).click()
+  await ask.getByRole('button', { name: 'Keep file' }).click()
+  await expect(page.locator('.row-name', { hasText: 'Blender-5.1' })).toHaveCount(0)
 })
 
 test('a failed download shows the catalogue message and can be retried', async ({ page }) => {
@@ -873,12 +900,14 @@ test('a download that failed for a passing reason says it will try again', async
   await expect(page.getByText(/tries again by itself/)).toHaveCount(0)
 })
 
-test('a finished file can go to the Trash after a confirming click', async ({ page }) => {
+test('a finished file can go to the Trash from the remove dialog', async ({ page }) => {
   await page.goto('/')
   await page.getByText('Blender-5.1-macos-arm64.dmg').click()
-  const move = page.getByRole('button', { name: /^Move to (Trash|Recycle Bin)$/ })
-  await move.click()
-  await page.getByRole('button', { name: /^Move file to/ }).click()
+  await page.locator('article.detail').getByRole('button', { name: 'Remove' }).click()
+  await page
+    .getByRole('dialog', { name: 'Remove this download?' })
+    .getByRole('button', { name: /^Move file to (Trash|Recycle Bin)$/ })
+    .click()
   await expect(page.getByText('Blender-5.1-macos-arm64.dmg')).toHaveCount(0)
 })
 

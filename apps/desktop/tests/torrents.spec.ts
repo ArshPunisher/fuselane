@@ -129,7 +129,11 @@ test('files can be changed mid-download and the torrent removed keeping files', 
   await files.getByRole('button', { name: 'Undo' }).click()
 
   await page.getByRole('button', { name: 'Remove' }).click()
-  await page.getByRole('button', { name: 'Keep files' }).click()
+  const ask = page.getByRole('dialog', { name: 'Remove this torrent?' })
+  await expect(
+    ask.getByRole('button', { name: /^Move files to (Trash|Recycle Bin)$/ }),
+  ).toBeVisible()
+  await ask.getByRole('button', { name: 'Keep files' }).click()
   await expect(page.getByRole('heading', { name: /Torrents/ })).toBeHidden()
 })
 

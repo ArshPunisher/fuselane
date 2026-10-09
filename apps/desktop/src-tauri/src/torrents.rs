@@ -241,6 +241,36 @@ fn ui(e: TorrentError) -> UiError {
     }
 }
 
+/// Moves a removed torrent's files to the Trash (B8.2), with the engine's path
+/// checks: only the torrent's own regular files, never through a link.
+fn to_trash(engine: &TorrentEngine, listing: &Listing) -> Result<(), UiError> {
+    let done = engine.delete_files_with(listing, |p| {
+        // Unit tests delete outright: they must never fill the developer's (or a
+        // CI runner's) Trash.
+        if cfg!(test) {
+            std::fs::remove_file(p)
+        } else {
+            trash::delete(p).map_err(std::io::Error::other)
+        }
+    });
+    if done.skipped.is_empty() {
+        Ok(())
+    } else {
+        Err(UiError {
+            code: "trash-failed",
+            message: format!(
+                "Removed from the list, but {} file{} couldn't be moved to the Trash.",
+                done.skipped.len(),
+                if done.skipped.len() == 1 { "" } else { "s" }
+            ),
+            hint: Some(format!(
+                "Delete what's left in {} yourself.",
+                listing.folder.display()
+            )),
+        })
+    }
+}
+
 fn not_found() -> UiError {
     UiError {
         code: "not-found",
@@ -741,12 +771,11 @@ impl Torrents {
         };
         if let Some(t) = entry.torrent {
             let engine = self.engine().await?;
+            let listing = t.listing().clone();
+            engine.release(t).await.map_err(ui)?;
             if delete_files {
-                engine.remove(t, true).await
-            } else {
-                engine.release(t).await
+                to_trash(&engine, &listing)?;
             }
-            .map_err(ui)?;
         } else if delete_files && valid_id(id) {
             // Already released: read the saved .torrent again for its exact file list.
             let bytes = std::fs::read(self.state_dir.join(format!("{id}.torrent"))).map_err(|_| UiError {
@@ -759,7 +788,7 @@ impl Torrents {
                 .inspect(Source::File(bytes), Some(entry.base.clone()), vec![])
                 .await
                 .map_err(ui)?;
-            engine.delete_files(&listing);
+            to_trash(&engine, &listing)?;
         }
         if valid_id(id) {
             let _ = std::fs::remove_file(self.state_dir.join(format!("{id}.torrent")));
