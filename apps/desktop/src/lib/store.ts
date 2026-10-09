@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { connect, toUiError, type Backend } from './backend'
+import { withTransition } from './transition'
 import { setNetPrefs } from './lanes'
 import { setSpeedUnit, type SpeedUnit } from './format'
 import { isSendLink } from './sendLink'
@@ -172,9 +173,9 @@ export const useApp = create<State>((set, get) => ({
     starting ??= startOnce()
     return starting
   },
-  select: (id) => set({ selected: id, selectedTorrent: null }),
-  selectTorrent: (id) => set({ selectedTorrent: id, selected: null }),
-  setView: (view) => set({ view }),
+  select: (id) => withTransition(() => set({ selected: id, selectedTorrent: null })),
+  selectTorrent: (id) => withTransition(() => set({ selectedTorrent: id, selected: null })),
+  setView: (view) => withTransition(() => set({ view })),
   openReceive: (link) => set({ view: 'send', sendTab: 'link', receiveDraft: link, adding: false }),
   setAdding: (adding, draft) =>
     set((s) => ({
