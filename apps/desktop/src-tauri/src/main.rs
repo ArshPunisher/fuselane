@@ -899,6 +899,20 @@ fn nearby_answer(
 }
 
 #[tauri::command]
+async fn nearby_phone(near: Near<'_>, on: bool) -> Result<nearby::NearbyView, UiError> {
+    near.inner().set_phone(on).await
+}
+
+#[tauri::command]
+async fn nearby_phone_offer(
+    near: Near<'_>,
+    add: Vec<String>,
+    remove: Option<String>,
+) -> Result<nearby::NearbyView, UiError> {
+    near.phone_offer(add, remove).await
+}
+
+#[tauri::command]
 fn nearby_forget(near: Near<'_>, fingerprint: String) -> nearby::NearbyView {
     near.forget(&fingerprint)
 }
@@ -1471,6 +1485,8 @@ fn main() {
             nearby_send,
             nearby_answer,
             nearby_forget,
+            nearby_phone,
+            nearby_phone_offer,
             nearby_cancel,
             nearby_clear,
             nearby_reveal,

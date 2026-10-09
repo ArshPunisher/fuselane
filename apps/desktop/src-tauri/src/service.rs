@@ -386,7 +386,7 @@ pub enum UiEvent {
     },
     /// Nearby: devices, who can see this computer, requests, transfers (B8.11).
     Nearby {
-        view: crate::nearby::NearbyView,
+        view: Box<crate::nearby::NearbyView>,
     },
 }
 

@@ -82,6 +82,26 @@ pub struct TransferView {
     pub path: Option<String>,
 }
 
+/// A file offered to the phone page.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct OfferView {
+    pub id: String,
+    pub name: String,
+    pub size: u64,
+}
+
+/// The phone page while it's on (B8.12).
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PhoneView {
+    pub url: String,
+    /// The link as a QR code (SVG).
+    pub qr: String,
+    pub words: Vec<String>,
+    pub offers: Vec<OfferView>,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct NearbyView {
@@ -95,6 +115,7 @@ pub struct NearbyView {
     pub request: Option<RequestView>,
     /// Why Nearby isn't working, when it isn't.
     pub problem: Option<String>,
+    pub phone: Option<PhoneView>,
 }
 
 struct Seen {
@@ -139,6 +160,9 @@ pub struct Nearby {
     /// The discovery port (tests use their own).
     discovery_port: u16,
     alias: String,
+    phone: tokio::sync::Mutex<Option<fuselane_nearby::web::PhonePage>>,
+    phone_view: Mutex<Option<PhoneView>>,
+    offers: Mutex<Vec<fuselane_nearby::web::Offer>>,
 }
 
 impl std::fmt::Debug for Nearby {
@@ -231,6 +255,9 @@ impl Nearby {
             problem: Mutex::new(None),
             discovery_port,
             alias,
+            phone: tokio::sync::Mutex::new(None),
+            phone_view: Mutex::new(None),
+            offers: Mutex::new(Vec::new()),
         })
     }
 
@@ -421,11 +448,24 @@ impl Nearby {
             transfers,
             request: lock(&self.pending).as_ref().map(|p| p.view.clone()),
             problem: lock(&self.problem).clone(),
+            phone: lock(&self.phone_view).clone().map(|mut p| {
+                p.offers = lock(&self.offers)
+                    .iter()
+                    .map(|o| OfferView {
+                        id: o.id.clone(),
+                        name: o.name.clone(),
+                        size: o.size,
+                    })
+                    .collect();
+                p
+            }),
         }
     }
 
     fn publish(&self) {
-        (self.emit)(UiEvent::Nearby { view: self.view() });
+        (self.emit)(UiEvent::Nearby {
+            view: Box::new(self.view()),
+        });
     }
 
     fn save_trusted(&self) {
@@ -612,6 +652,113 @@ impl Nearby {
         lock(&self.incoming).retain(|k, v| k != id || v.state == "receiving");
         self.publish();
         self.view()
+    }
+
+    /// Turns the phone page on (a fresh link each time) or off.
+    pub async fn set_phone(self: &Arc<Self>, on: bool) -> Result<NearbyView, UiError> {
+        let mut page = self.phone.lock().await;
+        if !on {
+            *page = None;
+            *lock(&self.phone_view) = None;
+            lock(&self.offers).clear();
+            self.publish();
+            return Ok(self.view());
+        }
+        let ip = (self.addrs)().into_iter().next().ok_or_else(|| {
+            err(
+                "nearby-no-network",
+                "This computer isn't on a network a phone can reach.",
+                Some("Join the same Wi-Fi as the phone, then try again."),
+            )
+        })?;
+        let started = fuselane_nearby::web::PhonePage::start(
+            Arc::new(PhoneHost(Arc::downgrade(self))),
+            self.inbox.clone(),
+            self.alias.clone(),
+            vec![],
+        )
+        .await
+        .map_err(|e| {
+            err(
+                "nearby-phone",
+                format!("Couldn't start the phone page ({e})."),
+                None,
+            )
+        })?;
+        // The page and this screen show the same words, from its token.
+        let words: Vec<String> = fuselane_nearby::check_words(&started.token, &self.fingerprint())
+            .iter()
+            .map(|w| (*w).to_string())
+            .collect();
+        started.set_words(words.clone());
+        let url = started.url(ip);
+        let qr = qrcode::QrCode::new(url.as_bytes())
+            .map(|c| {
+                c.render::<qrcode::render::svg::Color<'_>>()
+                    .quiet_zone(false)
+                    .min_dimensions(160, 160)
+                    .dark_color(qrcode::render::svg::Color("#1b1f27"))
+                    .light_color(qrcode::render::svg::Color("#ffffff"))
+                    .build()
+            })
+            .unwrap_or_default();
+        *lock(&self.phone_view) = Some(PhoneView {
+            url,
+            qr,
+            words,
+            offers: vec![],
+        });
+        *page = Some(started);
+        drop(page);
+        self.publish();
+        Ok(self.view())
+    }
+
+    /// Offers more files to the phone page (or takes one away with `remove`).
+    pub async fn phone_offer(
+        &self,
+        add: Vec<String>,
+        remove: Option<String>,
+    ) -> Result<NearbyView, UiError> {
+        {
+            let mut offers = lock(&self.offers);
+            if let Some(id) = remove {
+                offers.retain(|o| o.id != id);
+            }
+            for p in add {
+                let path = PathBuf::from(p.trim());
+                let meta = std::fs::metadata(&path).map_err(|e| {
+                    err(
+                        "send-missing",
+                        format!("Fuselane couldn't open \"{}\" ({e}).", path.display()),
+                        None,
+                    )
+                })?;
+                if meta.is_dir() {
+                    return Err(err(
+                        "send-folder",
+                        "Only files can be offered for now.",
+                        Some("Zip the folder and offer the zip."),
+                    ));
+                }
+                let name = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                let id = format!("o{}", self.next_request.fetch_add(1, Ordering::Relaxed));
+                offers.push(fuselane_nearby::web::Offer {
+                    id,
+                    path,
+                    name,
+                    size: meta.len(),
+                });
+            }
+        }
+        if let Some(page) = self.phone.lock().await.as_ref() {
+            page.offer(lock(&self.offers).clone());
+        }
+        self.publish();
+        Ok(self.view())
     }
 
     pub fn received_path(&self, id: &str) -> Option<PathBuf> {
@@ -837,6 +984,60 @@ pub fn lan_addrs() -> Vec<Ipv4Addr> {
         .collect()
 }
 
+/// The phone page's view of the app.
+struct PhoneHost(std::sync::Weak<Nearby>);
+
+impl fuselane_nearby::web::PageHost for PhoneHost {
+    fn receiving(&self, id: &str, name: &str, size: u64) {
+        let Some(n) = self.0.upgrade() else { return };
+        lock(&n.incoming).insert(
+            id.to_string(),
+            TransferView {
+                id: id.to_string(),
+                direction: "in",
+                device: "A phone (browser)".into(),
+                name: name.to_string(),
+                size,
+                done: 0,
+                state: "receiving",
+                error: None,
+                words: None,
+                path: None,
+            },
+        );
+        n.publish();
+    }
+
+    fn progress(&self, id: &str, written: u64) {
+        let Some(n) = self.0.upgrade() else { return };
+        if let Some(v) = lock(&n.incoming).get_mut(id) {
+            v.done = written;
+        }
+    }
+
+    fn received(&self, id: &str, result: Result<PathBuf, String>) {
+        let Some(n) = self.0.upgrade() else { return };
+        if let Some(v) = lock(&n.incoming).get_mut(id) {
+            match result {
+                Ok(p) => {
+                    v.state = "done";
+                    v.done = v.size;
+                    v.name = p
+                        .file_name()
+                        .map(|x| x.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    v.path = Some(p.display().to_string());
+                }
+                Err(why) => {
+                    v.state = "failed";
+                    v.error = Some(format!("It didn't arrive: {why}."));
+                }
+            }
+        }
+        n.publish();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -891,6 +1092,48 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(25)).await;
         }
         panic!("timed out waiting for {what}");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn the_phone_page_has_a_link_a_code_and_offers() {
+        let no_net = side("Laptop").await;
+        assert_eq!(
+            no_net.n.set_phone(true).await.unwrap_err().code,
+            "nearby-no-network"
+        );
+
+        let state = tempfile::tempdir().unwrap();
+        let inbox = tempfile::tempdir().unwrap();
+        let store = Arc::new(fuselane_core::Store::open(&state.path().join("db")).unwrap());
+        let n = Nearby::new(
+            store,
+            state.path().to_path_buf(),
+            inbox.path().to_path_buf(),
+            Arc::new(|| vec![Ipv4Addr::LOCALHOST]),
+            Arc::new(|_| {}),
+            "Laptop".into(),
+            54_950,
+        );
+        n.start().await.unwrap();
+        let v = n.set_phone(true).await.unwrap();
+        let phone = v.phone.unwrap();
+        assert!(phone.url.starts_with("http://127.0.0.1:") && phone.url.contains("/p/"));
+        assert!(phone.qr.contains("<svg"), "a QR code to show");
+        assert_eq!(phone.words.len(), 4);
+        let f = inbox.path().join("offer.txt");
+        std::fs::write(&f, b"for the phone").unwrap();
+        let v = n
+            .phone_offer(vec![f.display().to_string()], None)
+            .await
+            .unwrap();
+        let offers = v.phone.unwrap().offers;
+        assert_eq!((offers.len(), offers[0].size), (1, 13));
+        let v = n
+            .phone_offer(vec![], Some(offers[0].id.clone()))
+            .await
+            .unwrap();
+        assert!(v.phone.unwrap().offers.is_empty());
+        assert!(n.set_phone(false).await.unwrap().phone.is_none());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

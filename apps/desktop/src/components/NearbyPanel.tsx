@@ -7,12 +7,13 @@ import {
   Laptop,
   LockKey,
   PaperPlaneTilt,
+  QrCode,
   ShieldCheck,
   X,
 } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { bytes } from '../lib/format'
-import type { DeviceView, NearbyRequest, NearbyTransfer } from '../lib/types'
+import type { DeviceView, NearbyRequest, NearbyTransfer, PhoneView } from '../lib/types'
 
 /** "Mac", "Windows", "Linux", or what a LocalSend device says it is. */
 function deviceSub(d: Pick<DeviceView, 'model' | 'fuselane' | 'kind'>): string {
@@ -149,6 +150,87 @@ function DeviceCard({ d, transfer }: { d: DeviceView; transfer: NearbyTransfer |
   )
 }
 
+/** A phone without an app: show a code; it opens a page from this computer (B8.12). */
+function PhoneCard({ phone }: { phone: PhoneView | null }) {
+  const act = useApp((s) => s.act)
+  if (!phone)
+    return (
+      <li className="device device-qr">
+        <div className="device-top">
+          <span className="device-tile">
+            <QrCode size={22} aria-hidden />
+          </span>
+        </div>
+        <div>
+          <p className="device-name">A phone without Fuselane?</p>
+          <p className="device-sub">It can send and receive in its browser, on this Wi-Fi.</p>
+        </div>
+        <div className="device-foot">
+          <button className="btn btn-sm" onClick={() => act((b) => b.nearbyPhone(true))}>
+            <QrCode size={16} aria-hidden /> Show a code to scan
+          </button>
+        </div>
+      </li>
+    )
+  return (
+    <li className="device device-qr phone-on">
+      <div className="phone-code">
+        {/* The SVG is made by the app from the link; nothing from outside goes in here. */}
+        <span
+          className="qr"
+          role="img"
+          aria-label="Code to scan with the phone's camera"
+          dangerouslySetInnerHTML={{ __html: phone.qr }}
+        />
+        <div className="phone-text">
+          <p className="device-name">Scan with the phone&apos;s camera</p>
+          <p className="device-sub">
+            Or type{' '}
+            <span className="num" translate="no">
+              {phone.url}
+            </span>
+          </p>
+          <p className="device-sub">The page shows these words too:</p>
+          <Words words={phone.words} />
+        </div>
+      </div>
+      {phone.offers.length > 0 && (
+        <ul className="offers" aria-label="Offered to the phone">
+          {phone.offers.map((o) => (
+            <li key={o.id}>
+              <span translate="no">{o.name}</span>
+              <span className="num muted">{bytes(o.size)}</span>
+              <button
+                className="icon-btn"
+                aria-label={`Stop offering ${o.name}`}
+                onClick={() => act((b) => b.nearbyPhoneOffer([], o.id))}
+              >
+                <X size={14} aria-hidden />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="device-foot">
+        <button
+          className="btn btn-sm"
+          onClick={() =>
+            act(async (b) => {
+              const paths = await b.nearbyPick()
+              if (paths.length) await b.nearbyPhoneOffer(paths, null)
+            })
+          }
+        >
+          <PaperPlaneTilt size={16} aria-hidden /> Offer files to the phone
+        </button>
+        <button className="btn btn-ghost btn-sm" onClick={() => act((b) => b.nearbyPhone(false))}>
+          Stop
+        </button>
+      </div>
+    </li>
+  )
+}
+
 const STATE_WORD: Record<NearbyTransfer['state'], string> = {
   asking: 'Waiting for them to accept',
   sending: 'Sending',
@@ -264,12 +346,13 @@ export function NearbyPanel() {
         <h2 className="group" id="near-devices">
           On this network <span className="num">{others.length}</span>
         </h2>
-        {others.length === 0 ? (
+        {others.length === 0 && (
           <p className="muted near-empty">
             No one yet. On the other computer open Fuselane&apos;s Send page; on a phone open
-            LocalSend. Both need to be on this Wi-Fi.
+            LocalSend, or show the phone a code below. Both need to be on this Wi-Fi.
           </p>
-        ) : (
+        )}
+        {
           <ul className="device-grid">
             {others.map((d) => (
               <DeviceCard
@@ -283,8 +366,9 @@ export function NearbyPanel() {
                 )}
               />
             ))}
+            <PhoneCard phone={nearby.phone} />
           </ul>
-        )}
+        }
         <p className="send-note muted">
           <LockKey size={14} aria-hidden /> Files go straight to the other device, encrypted. A new
           device shows four words to check before anything is sent.

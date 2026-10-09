@@ -3337,3 +3337,73 @@ select.prio[data-level='skip'] {
     padding: 12px;
   }
 }
+
+/* ---------- Phone page card (B8.12) ---------- */
+
+.device-qr {
+  border-style: dashed;
+  border-color: var(--hairline-strong);
+  background: transparent;
+  box-shadow: none;
+}
+
+.device-qr.phone-on {
+  grid-column: 1 / -1;
+  border-style: solid;
+  background: var(--surface-1);
+}
+
+.phone-code {
+  display: grid;
+  grid-template-columns: 148px minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.qr {
+  display: block;
+  width: 148px;
+  height: 148px;
+  padding: 8px;
+  border-radius: var(--radius-control);
+  background: oklch(0.99 0 0);
+}
+
+.qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.phone-text {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.phone-text .num {
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+
+.offers {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.offers li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+@media (max-width: 639px) {
+  .phone-code {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

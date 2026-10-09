@@ -1308,7 +1308,7 @@ test.describe('Nearby', () => {
   }) => {
     await openNearby(page)
     const grid = page.locator('.device-grid')
-    await expect(grid.locator('.device')).toHaveCount(4)
+    await expect(grid.locator('.device:not(.device-qr)')).toHaveCount(4)
     const maya = grid.locator('.device', { hasText: "Maya's MacBook Air" })
     await expect(maya).toContainText('Trusted')
     await expect(grid.locator('.device', { hasText: 'Pixel 9' })).toContainText('via LocalSend')
@@ -1358,6 +1358,22 @@ test.describe('Nearby', () => {
     await expect(trusted).toContainText("Ravi's ThinkPad")
     await trusted.getByRole('button', { name: "Forget Ravi's ThinkPad" }).click()
     await expect(trusted).not.toContainText("Ravi's ThinkPad")
+  })
+
+  test('a phone without the app gets a code, offered files, and Stop', async ({ page }) => {
+    await openNearby(page)
+    await page.getByRole('button', { name: 'Show a code to scan' }).click()
+    await expect(
+      page.getByRole('img', { name: "Code to scan with the phone's camera" }),
+    ).toBeVisible()
+    await expect(page.locator('.phone-text')).toContainText('http://')
+    await page.getByRole('button', { name: 'Offer files to the phone' }).click()
+    const offers = page.getByRole('list', { name: 'Offered to the phone' })
+    await expect(offers).toContainText('Holiday video.mov')
+    await offers.getByRole('button', { name: 'Stop offering Holiday video.mov' }).click()
+    await expect(offers).toHaveCount(0)
+    await page.getByRole('button', { name: 'Stop', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Show a code to scan' })).toBeVisible()
   })
 
   test('nobody on the network says what to do', async ({ page }) => {

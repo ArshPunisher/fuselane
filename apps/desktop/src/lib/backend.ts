@@ -141,6 +141,8 @@ export interface Backend {
   nearbyCancel(id: string): Promise<void>
   nearbyClear(id: string): Promise<NearbyView>
   nearbyReveal(id: string): Promise<void>
+  nearbyPhone(on: boolean): Promise<NearbyView>
+  nearbyPhoneOffer(add: string[], remove: string | null): Promise<NearbyView>
   /** Stops sharing; the file itself stays. */
   stopSend(id: string): Promise<void>
   /** Stop sharing by itself once a full copy has been sent. */
@@ -259,6 +261,8 @@ async function tauriBackend(): Promise<Backend> {
     nearbyCancel: (id) => call('nearby_cancel', { id }),
     nearbyClear: (id) => call('nearby_clear', { id }),
     nearbyReveal: (id) => call('nearby_reveal', { id }),
+    nearbyPhone: (on) => call('nearby_phone', { on }),
+    nearbyPhoneOffer: (add, remove) => call('nearby_phone_offer', { add, remove }),
     stopSend: (id) => call('stop_send', { id }),
     sendOnce: (id, on) => call('send_once', { id, on }),
     receiveLink: (link, dir) => call('receive_link', { link, dir }),

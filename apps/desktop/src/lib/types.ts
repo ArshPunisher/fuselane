@@ -123,6 +123,15 @@ export interface NearbyTransfer {
   path: string | null
 }
 
+/** The phone page while it's on (B8.12). */
+export interface PhoneView {
+  url: string
+  /** The link as a QR code (SVG made by the app). */
+  qr: string
+  words: string[]
+  offers: { id: string; name: string; size: number }[]
+}
+
 export interface NearbyView {
   on: boolean
   me: string
@@ -133,6 +142,7 @@ export interface NearbyView {
   transfers: NearbyTransfer[]
   request: NearbyRequest | null
   problem: string | null
+  phone: PhoneView | null
 }
 
 /** A file this computer is sending with Fuse Send. */
