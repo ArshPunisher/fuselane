@@ -4002,3 +4002,26 @@ html[data-hidden] .orb b {
     padding-top: 0;
   }
 }
+
+/* ---------- Do this one now (B9.1) ---------- */
+
+.btn-focus {
+  border-color: color-mix(in oklch, var(--fuse) 55%, transparent);
+  background: var(--fuse-soft);
+  color: var(--fuse-text);
+}
+
+.notice-wait {
+  border-color: var(--hairline);
+  background: var(--surface-1);
+  color: var(--body);
+}
+
+.notice-wait svg {
+  color: var(--fuse-text);
+}
+
+.row-focus {
+  color: var(--fuse-text);
+  vertical-align: -2px;
+}

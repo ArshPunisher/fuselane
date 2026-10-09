@@ -14,13 +14,15 @@ use fuselane_limits::{Date, LimitSettings, Limiter, Period, Usage, next_reset};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
+mod focus;
+
 /// Downloads that run at once; the rest wait their turn (L-53).
 pub const MAX_RUNNING: usize = 3;
 /// The most downloads at once a person can choose (each already uses many streams).
 pub const MAX_RUNNING_LIMIT: usize = 8;
 
 /// One row in the transfers list.
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct JobView {
     pub id: i64,
@@ -49,6 +51,8 @@ pub struct JobView {
     /// Hosts of its mirrors (B8.9), and why any of them wasn't used.
     pub mirrors: Vec<String>,
     pub mirror_notes: Vec<String>,
+    /// It has every network to itself ("Do this one now").
+    pub focused: bool,
 }
 
 /// One network the app can see.
@@ -566,6 +570,10 @@ pub struct Service {
     opener: Mutex<OpenFn>,
     /// Why mirrors weren't used, per download, from its latest run.
     mirror_notes: Mutex<HashMap<i64, Arc<Mutex<Vec<String>>>>>,
+    /// "Do this one now" (B9.1): the download with every network to itself, and
+    /// the ones it paused, which carry on after it.
+    focus: Mutex<Option<i64>>,
+    focus_held: Mutex<std::collections::HashSet<i64>>,
 }
 
 /// Opens a file with the system's default app.
@@ -687,6 +695,7 @@ fn view(job: &Job) -> JobView {
             })
             .collect(),
         mirror_notes: vec![],
+        focused: false,
     }
 }
 
@@ -864,6 +873,8 @@ impl Service {
             retry_scale: None,
             opener: Mutex::new(Arc::new(|_| {})),
             mirror_notes: Mutex::new(HashMap::new()),
+            focus: Mutex::new(None),
+            focus_held: Mutex::new(std::collections::HashSet::new()),
             retries: Mutex::new(HashMap::new()),
             limiter,
             saved_limits: Mutex::new(saved_limits),
@@ -967,6 +978,7 @@ impl Service {
     pub fn jobs(&self) -> Result<Vec<JobView>, UiError> {
         let retries = lock(&self.retries).clone();
         let notes = lock(&self.mirror_notes).clone();
+        let focus = self.focused();
         let now = std::time::Instant::now();
         Ok(self
             .store
@@ -975,6 +987,7 @@ impl Service {
             .iter()
             .map(|j| {
                 let mut v = view(j);
+                v.focused = focus == Some(j.id);
                 if let Some(n) = notes.get(&j.id) {
                     v.mirror_notes = lock(n).clone();
                 }
@@ -1872,6 +1885,7 @@ impl Service {
     }
 
     pub fn pause(self: &Arc<Self>, id: i64) -> Result<(), UiError> {
+        self.forget_held(id);
         if let Some(r) = lock(&self.running).get(&id) {
             r.cancel.cancel(); // the task records the pause once progress is saved
             return Ok(());
@@ -2208,6 +2222,10 @@ impl Service {
             return Ok(());
         }
         runner::remove(&self.store, id).map_err(|_| not_found(id))?;
+        self.forget_held(id);
+        if self.focused() == Some(id) {
+            self.unfocus();
+        }
         self.publish_jobs();
         Ok(())
     }
@@ -2278,7 +2296,7 @@ impl Service {
             if running.len() >= self.max_running() {
                 break;
             }
-            if running.contains_key(&job.id) {
+            if running.contains_key(&job.id) || !self.focus_allows(job.id) {
                 continue;
             }
             let cancel = Cancel::new();
@@ -2394,6 +2412,12 @@ impl Service {
         let removed = lock(&self.running)
             .remove(&id)
             .is_some_and(|r| r.remove_after);
+        if let Some(f) = self.focused().filter(|f| *f != id)
+            && let Ok(j) = self.store.get(f)
+        {
+            self.note_held(&job_name(&j));
+        }
+        self.focus_ended(id);
         if removed {
             let _ = runner::remove(&self.store, id);
         }
@@ -2867,6 +2891,80 @@ mod tests {
             h.job(ia).status == "completed" && h.job(ib).status == "completed"
         })
         .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn do_this_one_now_holds_the_others_then_they_carry_on() {
+        let slow = |seed| async move {
+            let s = RangeServer::start(Content::new(1024 * KB, seed))
+                .await
+                .unwrap();
+            s.add_rule(Rule {
+                skip: 1,
+                times: u32::MAX,
+                fault: Fault::Throttle(400 * KB),
+            });
+            s
+        };
+        let (sa, sb, sc) = (slow(141).await, slow(142).await, slow(143).await);
+        let h = harness(2);
+        let ia = h.svc.add(&link(&sa), None).unwrap();
+        let ib = h.svc.add(&link(&sb), None).unwrap();
+        let ic = h.svc.add(&link(&sc), None).unwrap();
+        h.wait("two running", |h| {
+            h.job(ia).status == "running" && h.job(ib).status == "running"
+        })
+        .await;
+        assert_eq!(h.job(ic).status, "queued");
+
+        h.svc.focus(ic).unwrap();
+        h.wait("only the focused one runs", |h| {
+            h.job(ic).status == "running"
+                && h.job(ia).status == "paused"
+                && h.job(ib).status == "paused"
+        })
+        .await;
+        assert!(h.job(ic).focused);
+        assert_eq!(h.svc.running(), 1, "it has every network to itself");
+        assert!(h.job(ia).error.unwrap_or_default().contains("goes first"));
+        assert_eq!(h.job(ia).error_action.as_deref(), Some("focus"));
+
+        h.wait("all done, the held ones by themselves", |h| {
+            [ia, ib, ic].iter().all(|i| h.job(*i).status == "completed")
+        })
+        .await;
+        assert_eq!(h.svc.focused(), None);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_download_paused_by_hand_while_held_stays_paused() {
+        let sa = RangeServer::start(Content::new(1024 * KB, 151))
+            .await
+            .unwrap();
+        sa.add_rule(Rule {
+            skip: 1,
+            times: u32::MAX,
+            fault: Fault::Throttle(300 * KB),
+        });
+        let sb = RangeServer::start(Content::new(256 * KB, 152))
+            .await
+            .unwrap();
+        sb.add_rule(Rule {
+            skip: 1,
+            times: u32::MAX,
+            fault: Fault::Throttle(128 * KB),
+        });
+        let h = harness(2);
+        let ia = h.svc.add(&link(&sa), None).unwrap();
+        h.wait("running", |h| h.job(ia).status == "running").await;
+        let ib = h.svc.add(&link(&sb), None).unwrap();
+        h.svc.focus(ib).unwrap();
+        h.wait("held", |h| h.job(ia).status == "paused").await;
+        h.svc.pause(ia).unwrap();
+        h.wait("focus done", |h| h.job(ib).status == "completed")
+            .await;
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert_eq!(h.job(ia).status, "paused", "a pause by hand is kept");
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -3770,6 +3868,7 @@ mod tests {
             start_at: None,
             mirrors: vec![],
             mirror_notes: vec![],
+            ..JobView::default()
         };
         let net = NetView {
             name: "en0".into(),

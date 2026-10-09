@@ -133,6 +133,7 @@ mod tests {
             start_at: None,
             mirrors: vec![],
             mirror_notes: vec![],
+            ..JobView::default()
         }
     }
 

@@ -55,6 +55,9 @@ export interface Backend {
   setJobLimit(id: number, rate: number): Promise<void>
   /** Puts these downloads first in the queue, in this order. */
   reorder(ids: number[]): Promise<void>
+  /** Gives one download every network; the others wait and carry on after it. */
+  focus(id: number): Promise<void>
+  unfocus(): Promise<void>
   automation(): Promise<AutomationView>
   setAutomation(settings: Automation): Promise<AutomationView>
   /** Stops a pending sleep, shut-down or quit. */
@@ -207,6 +210,8 @@ async function tauriBackend(): Promise<Backend> {
     maxRunning: () => call('max_running'),
     setMaxRunning: (n) => call('set_max_running', { n }),
     reorder: (ids) => call('reorder', { ids }),
+    focus: (id) => call('focus', { id }),
+    unfocus: () => call('unfocus'),
     setJobLimit: (id, rate) => call('set_job_limit', { id, rate }),
     automation: () => call('automation'),
     setAutomation: (settings) => call('set_automation', { settings }),

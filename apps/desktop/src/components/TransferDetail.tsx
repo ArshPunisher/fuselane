@@ -4,6 +4,7 @@ import {
   ArrowClockwise,
   ArrowSquareOut,
   FolderOpen,
+  Lightning,
   Pause,
   ArrowLineUp,
   Play,
@@ -274,6 +275,14 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
   const sum = nets.reduce((a, n) => a + n.bytes, 0)
   const maxRate = Math.max(1, ...nets.map((n) => n.rate))
   const canPause = job.status === 'running' || job.status === 'queued'
+  // "Do this one now" only means something while something else wants the networks.
+  const others = useApp(
+    (s) =>
+      s.jobs.filter((j) => j.id !== job.id && (j.status === 'running' || j.status === 'queued'))
+        .length,
+  )
+  const canFocus =
+    !job.focused && others > 0 && (canPause || (job.resumable && job.errorAction !== 'fix-link'))
   const left = eta((total ?? 0) - written, live?.rate ?? 0)
 
   return (
@@ -300,6 +309,25 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
               onClick={() => act((b) => b.reorder([job.id]))}
             >
               <ArrowLineUp size={16} aria-hidden /> Start next
+            </button>
+          )}
+          {canFocus && (
+            <button
+              className="btn"
+              title="Every network goes to this download; the others wait and carry on after it"
+              onClick={() => act((b) => b.focus(job.id))}
+            >
+              <Lightning size={16} aria-hidden /> Do this now
+            </button>
+          )}
+          {job.focused && (
+            <button
+              className="btn btn-focus"
+              aria-pressed="true"
+              title="Let the other downloads run again"
+              onClick={() => act((b) => b.unfocus())}
+            >
+              <Lightning size={16} weight="fill" aria-hidden /> Every network
             </button>
           )}
           {canPause && (
@@ -335,7 +363,15 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
         </div>
       </header>
 
-      {job.error && job.status !== 'running' && <ErrorPanel job={job} />}
+      {job.error && job.status !== 'running' && job.errorAction === 'focus' && (
+        <p className="notice notice-wait" role="status">
+          <Lightning size={18} aria-hidden />
+          <span>{job.error}</span>
+        </p>
+      )}
+      {job.error && job.status !== 'running' && job.errorAction !== 'focus' && (
+        <ErrorPanel job={job} />
+      )}
 
       <p className="sr-only" aria-live="polite">
         {announce}

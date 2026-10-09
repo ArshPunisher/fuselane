@@ -5,7 +5,15 @@ export type JobStatus =
 
 /** The fix the UI offers for a download's error. */
 export type ErrorAction =
-  'fix-link' | 'retry' | 'start-over' | 'free-space' | 'allowance' | 'schedule' | 'unpack' | null
+  | 'fix-link'
+  | 'retry'
+  | 'start-over'
+  | 'free-space'
+  | 'allowance'
+  | 'schedule'
+  | 'unpack'
+  | 'focus'
+  | null
 
 export interface JobView {
   id: number
@@ -32,6 +40,8 @@ export interface JobView {
   /** Hosts of its mirrors, and why any of them wasn't used. */
   mirrors: string[]
   mirrorNotes: string[]
+  /** It has every network to itself ("Do this one now"). */
+  focused: boolean
 }
 
 export interface NetView {

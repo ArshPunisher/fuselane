@@ -148,6 +148,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       startAt: null,
       mirrors: [],
       mirrorNotes: [],
+      focused: false,
       fill,
       owner,
       inflight: [-1, -1, -1],
@@ -277,9 +278,26 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         j.finalPath = `${j.dir}/${j.name}`
         j.inflight = [-1, -1, -1]
         listener?.({ type: 'live', ...live(j) }) // the final picture, as the engine sends
+        if (j.focused) endFocus(j)
         emitJobs()
       }
     }
+  }
+
+  // "Do this one now": the held downloads carry on when the focused one ends.
+  const held = new Set<number>()
+  function endFocus(j: SimJob) {
+    j.focused = false
+    for (const id of held) {
+      const h = jobs.find((x) => x.id === id)
+      if (h?.status === 'paused') {
+        h.status = 'running'
+        h.resumable = false
+        h.error = null
+        h.errorAction = null
+      }
+    }
+    held.clear()
   }
 
   /** A download's own limit scales every lane down to fit it (wobble included). */
@@ -578,7 +596,36 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       })
       emitJobs()
     },
+    focus: async (id) => {
+      const j = find(id)
+      if (j.status === 'completed')
+        throw err('not-resumable', "This download can't run, so it can't go first.", null)
+      for (const o of jobs) {
+        if (o.focused && o.id !== id) o.focused = false
+        if (o.id !== id && o.status === 'running') {
+          held.add(o.id)
+          o.status = 'paused'
+          o.resumable = true
+          o.inflight = [-1, -1, -1]
+          o.error = `Waiting: ${j.name} goes first. This carries on after it.`
+          o.errorAction = 'focus'
+        }
+      }
+      j.focused = true
+      j.status = 'running'
+      j.resumable = false
+      j.error = null
+      j.errorAction = null
+      j.startAt = null
+      emitJobs()
+    },
+    unfocus: async () => {
+      const j = jobs.find((x) => x.focused)
+      if (j) endFocus(j)
+      emitJobs()
+    },
     pause: async (id) => {
+      held.delete(id)
       const j = find(id)
       if (j.status === 'running' || j.status === 'queued') {
         j.status = 'paused'

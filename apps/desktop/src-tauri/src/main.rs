@@ -225,6 +225,17 @@ async fn set_max_running(svc: State<'_>, n: usize) -> Result<usize, UiError> {
 }
 
 #[tauri::command]
+async fn focus(svc: State<'_>, id: i64) -> Result<(), UiError> {
+    svc.focus(id)
+}
+
+#[tauri::command]
+async fn unfocus(svc: State<'_>) -> Result<(), UiError> {
+    svc.unfocus();
+    Ok(())
+}
+
+#[tauri::command]
 async fn reorder(svc: State<'_>, ids: Vec<i64>) -> Result<(), UiError> {
     svc.reorder(&ids)
 }
@@ -1459,6 +1470,8 @@ fn main() {
             max_running,
             set_max_running,
             reorder,
+            focus,
+            unfocus,
             set_job_limit,
             trash_file,
             pause,

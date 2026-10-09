@@ -939,6 +939,37 @@ test('a finished file can go to the Trash from the remove dialog', async ({ page
   await expect(page.getByText('Blender-5.1-macos-arm64.dmg')).toHaveCount(0)
 })
 
+test('Do this now gives one download every network, and the others carry on after', async ({
+  page,
+}) => {
+  await page.goto('/?drop=0')
+  await page
+    .getByRole('button', { name: /dataset-shard-0042/ })
+    .first()
+    .click()
+  await page.getByRole('button', { name: 'Do this now' }).click()
+  const every = page.getByRole('button', { name: 'Every network', exact: true })
+  await expect(every).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('button', { name: 'Do this now' })).toHaveCount(0)
+  await expect(page.getByLabel('Has every network')).toBeVisible()
+  // The one that was running waits, and says why.
+  await page
+    .getByRole('button', { name: /ubuntu-26\.04/ })
+    .first()
+    .click()
+  await expect(page.getByRole('status').filter({ hasText: 'goes first' })).toBeVisible()
+  await page
+    .getByRole('button', { name: /dataset-shard-0042/ })
+    .first()
+    .click()
+  await every.click()
+  await page
+    .getByRole('button', { name: /ubuntu-26\.04/ })
+    .first()
+    .click()
+  await expect(page.locator('article.detail .speed')).toContainText('MB/s', { timeout: 5000 })
+})
+
 test('Download later adds it paused, ready to start', async ({ page }) => {
   await page.goto('/?empty=1')
   const dialog = await openDialog(page)

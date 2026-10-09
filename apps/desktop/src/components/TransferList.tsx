@@ -4,6 +4,7 @@ import {
   CheckCircle,
   MagnifyingGlass,
   DownloadSimple,
+  Lightning,
   Pause,
   Play,
   WarningCircle,
@@ -94,6 +95,16 @@ function Row({ job }: { job: JobView }) {
           </span>
           <span className="row-meta">
             <span className="row-state">
+              {job.focused && (
+                <>
+                  <Lightning
+                    size={12}
+                    weight="fill"
+                    className="row-focus"
+                    aria-label="Has every network"
+                  />{' '}
+                </>
+              )}
               {job.startAt ? startsAt(job.startAt) : STATUS_WORD[job.status]}
             </span>
             <span className="num">{meta(job, showLive)}</span>
