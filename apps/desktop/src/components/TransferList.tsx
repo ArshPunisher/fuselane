@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import {
+  Funnel,
   CheckCircle,
   MagnifyingGlass,
   DownloadSimple,
@@ -12,6 +13,7 @@ import {
   UploadSimple,
 } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
+import { fileType, TYPE_LABEL, type FileType } from '../lib/categories'
 import { bytes, percent, rateText, startsAt } from '../lib/format'
 import { assignLanes } from '../lib/lanes'
 import type { JobView, Live, TorrentView } from '../lib/types'
@@ -219,6 +221,7 @@ export function TransferList() {
   const allTorrents = useApp((s) => s.torrents)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
+  const [type, setType] = useState<FileType | 'all'>('all')
   const ready = useApp((s) => s.ready)
   const setAdding = useApp((s) => s.setAdding)
   if (!ready) {
@@ -257,11 +260,20 @@ export function TransferList() {
     counts.all++
     counts[k]++
   }
+  // Types present, with how many of each, for the type filter (B8.8).
+  const typeCounts = new Map<FileType, number>()
+  for (const j of allJobs)
+    typeCounts.set(fileType(j.name), (typeCounts.get(fileType(j.name)) ?? 0) + 1)
+  if (allTorrents.length) typeCounts.set('torrents', allTorrents.length)
+  const typeOk = (t: FileType) => type === 'all' || type === t
   const jobs = allJobs.filter(
-    (j) => (filter === 'all' || jobKind(j) === filter) && (matches(j.name) || matches(j.url)),
+    (j) =>
+      (filter === 'all' || jobKind(j) === filter) &&
+      typeOk(fileType(j.name)) &&
+      (matches(j.name) || matches(j.url)),
   )
   const torrents = allTorrents.filter(
-    (t) => (filter === 'all' || torrentKind(t) === filter) && matches(t.name),
+    (t) => (filter === 'all' || torrentKind(t) === filter) && typeOk('torrents') && matches(t.name),
   )
   // Running first, then the queue in the order it will start.
   const active = jobs
@@ -305,6 +317,26 @@ export function TransferList() {
               {f.label} <span className="num">{counts[f.id]}</span>
             </button>
           ))}
+          {typeCounts.size > 1 && (
+            <label className="type-filter">
+              <span className="sr-only">Type</span>
+              <Funnel size={14} aria-hidden />
+              <select
+                value={type}
+                aria-label="Type"
+                onChange={(e) => setType(e.target.value as FileType | 'all')}
+              >
+                <option value="all">All types</option>
+                {(Object.keys(TYPE_LABEL) as FileType[])
+                  .filter((t) => typeCounts.has(t))
+                  .map((t) => (
+                    <option key={t} value={t}>
+                      {TYPE_LABEL[t]} ({typeCounts.get(t)})
+                    </option>
+                  ))}
+              </select>
+            </label>
+          )}
         </div>
       </div>
       {nothing && (
@@ -315,6 +347,7 @@ export function TransferList() {
             onClick={() => {
               setQuery('')
               setFilter('all')
+              setType('all')
             }}
           >
             Show everything

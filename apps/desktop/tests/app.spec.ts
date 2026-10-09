@@ -1239,3 +1239,22 @@ test('settings: when a download finishes, and if the name is taken', async ({ pa
   await dialog.getByLabel('Link').fill('https://example.com/x.iso')
   await expect(dialog.getByRole('group', { name: /is already in this folder/ })).toHaveCount(0)
 })
+
+test('the list can show one type of file', async ({ page }) => {
+  await page.goto('/?freeze=3')
+  const type = page.getByRole('combobox', { name: 'Type' })
+  await expect(type.locator('option')).toContainText(['All types'])
+  await type.selectOption('disk-images')
+  // Only disk images (iso, dmg) remain; the torrent and the zip are hidden.
+  await expect(
+    page.locator('.row-name', { hasText: 'ubuntu-26.04-desktop-amd64.iso' }),
+  ).toBeVisible()
+  await expect(page.locator('.row-name', { hasText: 'Blender-5.1-macos-arm64.dmg' })).toBeVisible()
+  await expect(page.locator('.row-name', { hasText: 'nightly-build-2026-10-07.zip' })).toHaveCount(
+    0,
+  )
+  await expect(page.locator('.row-name', { hasText: 'Sprite Fright' })).toHaveCount(0)
+  await type.selectOption('torrents')
+  await expect(page.locator('.row-name', { hasText: 'Sprite Fright' })).toBeVisible()
+  await expect(page.locator('.row-name', { hasText: 'ubuntu' })).toHaveCount(0)
+})

@@ -2935,3 +2935,36 @@ html[data-hidden] *::after {
 .dup #nd-dup {
   flex: 1;
 }
+
+/* ---------- Type filter (B8.8) ---------- */
+
+.type-filter {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  color: var(--body);
+}
+
+.type-filter svg {
+  position: absolute;
+  left: 9px;
+  pointer-events: none;
+}
+
+.type-filter select {
+  min-height: 28px;
+  padding: 0 26px 0 28px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--body);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.type-filter select:focus-visible {
+  outline: 2px solid var(--fuse);
+  outline-offset: 1px;
+}
