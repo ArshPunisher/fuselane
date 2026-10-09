@@ -129,9 +129,9 @@ function Transfers({ layout }: { layout: Layout }) {
         </div>
         <div className="pane-detail">
           {job ? (
-            <TransferDetail job={job} onBack={null} />
+            <TransferDetail key={job.id} job={job} onBack={null} />
           ) : torrent ? (
-            <TorrentDetail t={torrent} onBack={null} />
+            <TorrentDetail key={torrent.id} t={torrent} onBack={null} />
           ) : (
             <div className="detail-empty muted">Pick a download to see it fuse.</div>
           )}
@@ -139,8 +139,9 @@ function Transfers({ layout }: { layout: Layout }) {
       </div>
     )
   }
-  if (job) return <TransferDetail job={job} onBack={() => select(null)} />
-  if (torrent) return <TorrentDetail t={torrent} onBack={() => selectTorrent(null)} />
+  if (job) return <TransferDetail key={job.id} job={job} onBack={() => select(null)} />
+  if (torrent)
+    return <TorrentDetail key={torrent.id} t={torrent} onBack={() => selectTorrent(null)} />
   return <TransferList />
 }
 
