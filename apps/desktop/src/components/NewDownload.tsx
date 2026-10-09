@@ -3,6 +3,7 @@ import { ArrowLeft, FileArrowUp, X } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { toUiError } from '../lib/backend'
 import type { ListingView, PreviewView, UiError } from '../lib/types'
+import { isSendLink } from './SendView'
 import { FilePicker } from './FilePicker'
 import { bytes } from '../lib/format'
 
@@ -185,6 +186,12 @@ export function NewDownload() {
     if (!backend || busy || finding) return
     if (isMagnet(url)) {
       await inspect((b) => b.inspectMagnet(url.trim(), dir.trim() || null))
+      return
+    }
+    // A Fuse Send link isn't a download: receive it on the Send page.
+    if (isSendLink(url)) {
+      reset()
+      useApp.getState().openReceive(url.trim())
       return
     }
     setBusy(true)

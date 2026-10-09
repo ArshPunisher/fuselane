@@ -7,6 +7,7 @@
 // drop=0 (the phone never drops out), portal=en0 (that network shows a sign-in page).
 import type { Backend } from './backend'
 import { createDemoTorrents } from './demoTorrents'
+import { createDemoSends } from './demoSends'
 import type {
   AllowanceView,
   Automation,
@@ -96,6 +97,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
   let clock = 0
   let listener: ((e: UiEvent) => void) | null = null
   const torrents = createDemoTorrents(params, () => (e) => listener?.(e))
+  const sends = createDemoSends(params, () => (e) => listener?.(e))
   let limits: LimitsView = { global: 0, networks: [], slow: false, slowRate: 1024 * 1024 }
   let prefs: NetPref[] = []
   let perNetDns = false
@@ -297,6 +299,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
   function tick() {
     step(0.2 * speed)
     if (torrents.step(0.2 * speed)) torrents.send()
+    sends.step(0.2 * speed)
     for (const j of jobs) if (j.status === 'running') listener?.({ type: 'live', ...live(j) })
   }
 
@@ -713,6 +716,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       emitJobs()
     },
     ...torrents.methods,
+    ...sends.methods,
     subscribe: async (onEvent) => {
       listener = onEvent
       // Tests stand in for the OS handing over a magnet or .torrent (demo only).
@@ -722,6 +726,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       ;(window as unknown as { __demoEvent?: (e: UiEvent) => void }).__demoEvent = onEvent
       emitJobs()
       torrents.send()
+      sends.send()
       if (freeze !== null) {
         for (let t = 0; t < freeze; t += 0.2) {
           step(0.2)

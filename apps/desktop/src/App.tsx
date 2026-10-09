@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { DownloadSimple, Gear, Plus, ShareNetwork } from '@phosphor-icons/react'
+import { DownloadSimple, Gear, PaperPlaneTilt, Plus, ShareNetwork } from '@phosphor-icons/react'
 import { useApp, type View } from './lib/store'
 import { TransferList } from './components/TransferList'
 import { TransferDetail } from './components/TransferDetail'
@@ -7,6 +7,7 @@ import { TorrentDetail } from './components/TorrentDetail'
 import { NewDownload } from './components/NewDownload'
 import { NetworkList, NetworksView } from './components/NetworksView'
 import { SettingsView } from './components/SettingsView'
+import { SendView, isSendLink } from './components/SendView'
 import { Toast } from './components/Toast'
 import { UpdateBanner, UpdatedBanner } from './components/UpdateBanner'
 import { WhenDoneBanner } from './components/WhenDoneBanner'
@@ -28,6 +29,7 @@ function useLayout(): Layout {
 
 const NAV: { id: View; label: string; Icon: typeof DownloadSimple }[] = [
   { id: 'transfers', label: 'Downloads', Icon: DownloadSimple },
+  { id: 'send', label: 'Send', Icon: PaperPlaneTilt },
   { id: 'networks', label: 'Networks', Icon: ShareNetwork },
   { id: 'settings', label: 'Settings', Icon: Gear },
 ]
@@ -160,9 +162,13 @@ export function App() {
         setAdding(true)
         return
       }
-      if (mod && (k === ',' || k === '1' || k === '2' || k === '3')) {
+      if (mod && (k === ',' || k === '1' || k === '2' || k === '3' || k === '4')) {
         e.preventDefault()
-        useApp.getState().setView(k === '2' ? 'networks' : k === '1' ? 'transfers' : 'settings')
+        useApp
+          .getState()
+          .setView(
+            k === '2' ? 'networks' : k === '1' ? 'transfers' : k === '4' ? 'send' : 'settings',
+          )
         return
       }
       // The rest only apply outside text fields and dialogs.
@@ -203,7 +209,8 @@ export function App() {
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
       const text = e.clipboardData?.getData('text') ?? ''
-      if (/^(https?:\/\/|magnet:\?)/i.test(text.trim())) setAdding(true, text.trim())
+      if (isSendLink(text)) useApp.getState().openReceive(text.trim())
+      else if (/^(https?:\/\/|magnet:\?)/i.test(text.trim())) setAdding(true, text.trim())
     }
     // Dropping a link (from a browser's address bar or a page) starts one too.
     const over = (e: DragEvent) => {
@@ -231,7 +238,10 @@ export function App() {
         .split('\n')
         .map((l) => l.trim())
         .find((l) => l && !l.startsWith('#'))
-      if (text && /^(https?:\/\/|magnet:\?)/i.test(text)) {
+      if (text && isSendLink(text)) {
+        e.preventDefault()
+        useApp.getState().openReceive(text)
+      } else if (text && /^(https?:\/\/|magnet:\?)/i.test(text)) {
         e.preventDefault()
         setAdding(true, text)
       }
@@ -259,6 +269,8 @@ export function App() {
     <NetworksView />
   ) : view === 'settings' ? (
     <SettingsView />
+  ) : view === 'send' ? (
+    <SendView />
   ) : (
     <Transfers layout={layout} />
   )

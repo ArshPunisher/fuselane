@@ -10,6 +10,8 @@ import type {
   LimitsView,
   Live,
   NetPref,
+  ReceiveView,
+  ShareView,
   TorrentView,
   NetView,
   UiError,
@@ -24,7 +26,7 @@ export interface History {
 }
 const HISTORY = 300
 
-export type View = 'transfers' | 'networks' | 'settings'
+export type View = 'transfers' | 'send' | 'networks' | 'settings'
 export type Theme = 'system' | 'light' | 'dark'
 
 interface State {
@@ -33,6 +35,13 @@ interface State {
   info: AppInfo | null
   jobs: JobView[]
   torrents: TorrentView[]
+  /** Fuse Send: files shared from here, and files arriving from links. */
+  shares: ShareView[]
+  receives: ReceiveView[]
+  /** A Fuse Send link handed to the Send page by paste or drop. */
+  receiveDraft: string
+  /** Opens the Send page with a link ready to receive. */
+  openReceive(link: string): void
   /** The torrent shown in the detail pane (torrents and downloads share it). */
   selectedTorrent: string | null
   live: Record<number, Live>
@@ -114,6 +123,9 @@ export const useApp = create<State>((set, get) => ({
   info: null,
   jobs: [],
   torrents: [],
+  shares: [],
+  receives: [],
+  receiveDraft: '',
   selectedTorrent: null,
   live: {},
   history: {},
@@ -144,6 +156,7 @@ export const useApp = create<State>((set, get) => ({
   select: (id) => set({ selected: id, selectedTorrent: null }),
   selectTorrent: (id) => set({ selectedTorrent: id, selected: null }),
   setView: (view) => set({ view }),
+  openReceive: (link) => set({ view: 'send', receiveDraft: link, adding: false }),
   setAdding: (adding, draft) =>
     set((s) => ({
       adding,
@@ -301,6 +314,13 @@ async function startOnce(): Promise<void> {
       .catch(() => {})
     // The first list fills the page until the first event; it never overwrites a newer event.
     let heard = false
+    let heardSends = false
+    backend
+      .sendsState()
+      .then(([shares, receives]) => {
+        if (!heardSends) set({ shares, receives })
+      })
+      .catch(() => {})
     backend
       .listTorrents()
       .then((torrents) => {
@@ -331,6 +351,11 @@ async function startOnce(): Promise<void> {
           selectedTorrent:
             s.selectedTorrent !== null && !ids.has(s.selectedTorrent) ? null : s.selectedTorrent,
         }))
+        return
+      }
+      if (e.type === 'sends') {
+        heardSends = true
+        set({ shares: e.shares, receives: e.receives })
         return
       }
       if (e.type === 'whenDone') {

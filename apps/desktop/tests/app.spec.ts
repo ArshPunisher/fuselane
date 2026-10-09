@@ -551,6 +551,8 @@ test('keyboard: views, list movement, Space to pause and resume', async ({ page 
   await page.locator('body').click({ position: { x: 600, y: 890 } })
   await page.keyboard.press('Control+2')
   await expect(page.getByRole('heading', { level: 1, name: 'Networks' })).toBeVisible()
+  await page.keyboard.press('Control+4')
+  await expect(page.getByRole('heading', { level: 1, name: 'Send' })).toBeVisible()
   await page.keyboard.press('Control+3')
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
   await expect(page.getByText('Pause or resume the selected download')).toBeVisible()
@@ -828,4 +830,118 @@ test('start at login and keep running are switches that stick', async ({ page })
     await s.click()
     await expect(s).toHaveAttribute('aria-checked', 'true')
   }
+})
+
+test.describe('Fuse Send', () => {
+  const LINK = 'https://arshpunisher.github.io/fuselane/s#v1.AbCdEfGhIjKlMnOpQrStUv'
+
+  async function openSend(page: Page) {
+    await page
+      .getByRole('navigation', { name: 'Main' })
+      .getByRole('button', { name: 'Send' })
+      .click()
+    await expect(page.getByRole('heading', { level: 1, name: 'Send' })).toBeVisible()
+  }
+
+  test('choosing a file prepares it and gives a link to copy', async ({
+    page,
+    context,
+    browserName,
+  }) => {
+    await page.goto('/?empty=1&speed=4')
+    await openSend(page)
+    await page.getByRole('button', { name: /Choose a file to send/ }).click()
+    const list = page.getByRole('list', { name: "Files you're sending" })
+    await expect(list).toContainText('Holiday video.mov')
+    const link = list.getByLabel('Link for Holiday video.mov')
+    await expect(link).toHaveValue(/^https:\/\/arshpunisher\.github\.io\/fuselane\/s#v1\./)
+    await expect(list).toContainText('Waiting for the receiver')
+    if (browserName === 'chromium') {
+      await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+      await list.getByRole('button', { name: 'Copy link' }).click()
+      await expect(list.getByRole('button', { name: 'Copied' })).toBeVisible()
+      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+        await link.inputValue(),
+      )
+    }
+    await list.getByRole('button', { name: 'Stop sending Holiday video.mov' }).click()
+    await expect(list).toHaveCount(0)
+  })
+
+  test('cancelling the file picker does nothing', async ({ page }) => {
+    await page.goto('/?empty=1&pick=cancel')
+    await openSend(page)
+    await page.getByRole('button', { name: /Choose a file to send/ }).click()
+    await expect(page.getByRole('list', { name: "Files you're sending" })).toHaveCount(0)
+  })
+
+  test('a link is received, checked, and can be shown or cleared', async ({ page }) => {
+    await page.goto('/?empty=1&speed=6')
+    await openSend(page)
+    const field = page.getByLabel('Link someone sent you')
+    const receive = page.getByRole('button', { name: 'Receive', exact: true })
+    await receive.click()
+    await expect(page.getByRole('alert')).toContainText('Paste the link someone sent you')
+    await expect(field).toBeFocused()
+    await field.fill('https://example.com/not-a-share')
+    await receive.click()
+    await expect(page.getByRole('alert')).toContainText("isn't a whole Fuse Send link")
+    await expect(field).toHaveAttribute('aria-invalid', 'true')
+    await field.fill(LINK)
+    await receive.click()
+    await expect(field).toHaveValue('')
+    const list = page.getByRole('list', { name: "Files you're receiving" })
+    await expect(list).toContainText('Arrived and checked', { timeout: 10_000 })
+    await expect(list).toContainText('Holiday video.mov')
+    await list.getByRole('button', { name: 'Show' }).click()
+    await list.getByRole('button', { name: 'Remove Holiday video.mov from the list' }).click()
+    await expect(list).toHaveCount(0)
+  })
+
+  test('an offline sender is explained', async ({ page }) => {
+    await page.goto('/?empty=1&speed=6')
+    await openSend(page)
+    await page.getByLabel('Link someone sent you').fill(`${LINK}offline`)
+    await page.getByRole('button', { name: 'Receive', exact: true }).click()
+    const list = page.getByRole('list', { name: "Files you're receiving" })
+    await expect(list).toContainText("Didn't arrive", { timeout: 10_000 })
+    await expect(list).toContainText('keep it open until the file arrives')
+  })
+
+  test('pasting a Send link anywhere opens it on the Send page', async ({ page }) => {
+    await page.goto('/?empty=1')
+    await expect(page.getByRole('button', { name: 'New download' }).first()).toBeEnabled()
+    await page.evaluate((text) => {
+      const data = new DataTransfer()
+      data.setData('text/plain', text)
+      document.body.dispatchEvent(
+        new ClipboardEvent('paste', { clipboardData: data, bubbles: true }),
+      )
+    }, LINK)
+    await expect(page.getByRole('heading', { level: 1, name: 'Send' })).toBeVisible()
+    await expect(page.getByLabel('Link someone sent you')).toHaveValue(LINK)
+    await expect(page.getByLabel('Link someone sent you')).toBeFocused()
+    await expect(page.getByRole('dialog', { name: 'New download' })).toBeHidden()
+  })
+
+  test('a Send link in the download dialog goes to the Send page instead', async ({ page }) => {
+    await page.goto('/?empty=1')
+    const dialog = await openDialog(page)
+    await dialog.getByLabel('Link').fill(LINK)
+    await dialog.getByRole('button', { name: 'Download' }).click()
+    await expect(dialog).toBeHidden()
+    await expect(page.getByLabel('Link someone sent you')).toHaveValue(LINK)
+  })
+
+  test('the Send page fits a phone', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 })
+    await page.goto('/?sends=1')
+    await page
+      .getByRole('navigation', { name: 'Main' })
+      .getByRole('button', { name: 'Send' })
+      .click()
+    await expect(page.getByText('Wedding photos.zip')).toBeVisible()
+    await expect(page.getByText('Band demo.wav')).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0)
+  })
 })

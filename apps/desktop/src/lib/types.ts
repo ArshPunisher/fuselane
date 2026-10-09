@@ -62,6 +62,36 @@ export type UiEvent =
   | { type: 'whenDone'; action: WhenDone; seconds: number }
   | { type: 'whenDoneCancelled' }
   | { type: 'automation'; view: AutomationView }
+  | { type: 'sends'; shares: ShareView[]; receives: ReceiveView[] }
+
+/** A file this computer is sending with Fuse Send. */
+export interface ShareView {
+  /** The info-hash once ready; a temporary id while preparing. */
+  id: string
+  name: string
+  size: number
+  /** The link to give the receiver, once ready. */
+  link: string | null
+  state: 'preparing' | 'sharing' | 'changed' | 'failed'
+  /** How far preparing has got, 0 to 1. */
+  prepared: number
+  /** Bytes sent to receivers so far. */
+  sent: number
+  peers: number
+  error: string | null
+}
+
+/** A file arriving from someone's Fuse Send link. */
+export interface ReceiveView {
+  id: string
+  name: string
+  size: number
+  done: number
+  state: 'finding' | 'receiving' | 'checking' | 'done' | 'failed'
+  /** Where it was saved, once done. */
+  path: string | null
+  error: string | null
+}
 
 export type WhenDone = 'nothing' | 'sleep' | 'shut-down' | 'quit'
 

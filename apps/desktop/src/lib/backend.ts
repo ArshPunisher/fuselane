@@ -16,7 +16,9 @@ import type {
   NetPref,
   NetView,
   PreviewView,
+  ReceiveView,
   SeedSettings,
+  ShareView,
   TorrentFileView,
   TorrentView,
   UiError,
@@ -100,6 +102,19 @@ export interface Backend {
   stopSharing(id: string): Promise<void>
   /** A dropped .torrent's contents (the page can't see its path). */
   inspectTorrentBytes(bytes: Uint8Array, dir: string | null): Promise<ListingView>
+  /** Fuse Send: a file the user picked to send, or null if they cancelled. */
+  pickSendFile(): Promise<string | null>
+  /** Starts sharing a file; progress and the link arrive as `sends` events. */
+  sendFile(path: string): Promise<string>
+  sendsState(): Promise<[ShareView[], ReceiveView[]]>
+  /** Stops sharing; the file itself stays. */
+  stopSend(id: string): Promise<void>
+  /** Starts receiving from a link into `dir` (or the download folder). */
+  receiveLink(link: string, dir: string | null): Promise<string>
+  /** Removes a finished or failed receive from the list; the file stays. */
+  dismissReceive(id: string): Promise<void>
+  /** Shows a received file in the file manager. */
+  revealReceived(id: string): Promise<void>
 }
 
 /** Turns anything thrown across IPC into a UiError the UI can show. */
@@ -184,6 +199,13 @@ async function tauriBackend(): Promise<Backend> {
     seedSettings: () => call('torrent_seed_settings'),
     setSeedSettings: (settings) => call('set_torrent_seed_settings', { settings }),
     stopSharing: (id) => call('torrent_stop_sharing', { id }),
+    pickSendFile: () => call('send_pick'),
+    sendFile: (path) => call('send_file', { path }),
+    sendsState: () => call('sends_state'),
+    stopSend: (id) => call('stop_send', { id }),
+    receiveLink: (link, dir) => call('receive_link', { link, dir }),
+    dismissReceive: (id) => call('dismiss_receive', { id }),
+    revealReceived: (id) => call('reveal_received', { id }),
     subscribe: async (onEvent) => {
       const channel = new Channel<UiEvent>()
       channel.onmessage = onEvent
