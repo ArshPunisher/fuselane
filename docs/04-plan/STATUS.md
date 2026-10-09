@@ -27,6 +27,16 @@
 
 ## Log
 
+### 2026-10-10 (beta.9 round: Send redesign, site on fuselane.app, ten download features)
+
+- **Done (tested, committed; not released):**
+  - Send page as a radar (B and C hybrid) with motion: sweep, devices spring in, drop files on a device, transfer beams, progress rings, activity column; receiver Cancel; check words removed. Wide layouts for Networks and Settings; motion on Downloads.
+  - Site: served at fuselane.app through Cloudflare Pages (`tools/deploy-site.sh`); canonical, FAQPage, breadcrumbs, WebSite data, dated sitemap, 404, headers. GitHub Pages stays for installed apps: its sign-in check and update feed must not move (a custom domain there would redirect the probe and every installed app would see a sign-in page).
+  - B9.1–B9.10: do this one now, groups, find files on a page, ready by, the phone only for long downloads, what each network saved, checksums found by themselves, already downloaded, continue on another computer, low battery. Store schema v10–v13.
+  - Fixed on the way: receiver cancel could reach the sender as a network error; refused phone-page uploads reset the connection; WebKit sent clicks during a View Transition to the page root (screens now animate with plain CSS).
+- **Next:** owner presses Activate for fuselane.app in Cloudflare (Workers & Pages → fuselane → Custom domains); owner reviews the features; then release beta.9 when asked.
+- **Blocked:** nothing.
+
 ### 2026-10-09 (beta.8 round, from the approved Figma designs)
 - Owner approved the Figma designs (local file "Fuselane", built through the local Talk-to-Figma bridge) and asked for all of it in one release. B8.1-B8.12 done, each tested; B8.13 (screenshots, then release) waits on the owner.
 - The four reported fixes: speeds add up (torrent speed = sum of its networks; sidebar total labelled), Remove asks in a dialog that waits (torrent files to the Trash), a one-line link box with magnets as a card, updates with size and a progress bar over every network (minisign-verified before install; the live beta.7 package verified after a bonded fetch).
