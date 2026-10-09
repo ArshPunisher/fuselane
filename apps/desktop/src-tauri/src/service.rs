@@ -437,6 +437,8 @@ pub struct AddRequest {
     pub name: Option<String>,
     pub sha256: Option<String>,
     pub allow_duplicate: bool,
+    /// Add it paused ("Download later"): it waits in the list until started.
+    pub later: bool,
     /// A browser session's cookies and referrer (from the extension, never the window).
     #[serde(skip)]
     pub headers: Vec<(String, String)>,
@@ -1116,6 +1118,11 @@ impl Service {
             .store
             .create_with(url, &dir, &fuselane_core::NewJob { name, sha256 })
             .map_err(store_error)?;
+        if req.later {
+            self.store
+                .apply(id, Event::Pause, None)
+                .map_err(store_error)?;
+        }
         if !session.is_empty() {
             lock(&self.sessions).insert(id, session);
         }
@@ -1131,6 +1138,7 @@ impl Service {
         self: &Arc<Self>,
         text: &str,
         dir: Option<&str>,
+        later: bool,
     ) -> Result<BatchResult, UiError> {
         let mut links = Vec::new();
         for found in fuselane_core::batch::links_in(text) {
@@ -1163,7 +1171,11 @@ impl Service {
         }
         let mut result = BatchResult::default();
         for link in links {
-            match self.add_with(&link, dir, &AddRequest::default()) {
+            let req = AddRequest {
+                later,
+                ..AddRequest::default()
+            };
+            match self.add_with(&link, dir, &req) {
                 Ok(id) => result.added.push(id),
                 Err(e) => result.skipped.push(Skipped {
                     url: link,
@@ -2133,6 +2145,32 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn download_later_waits_until_started_and_then_finishes() {
+        let content = Content::new(256 * KB, 95);
+        let server = RangeServer::start(content).await.unwrap();
+        let h = harness(3);
+        let req = AddRequest {
+            later: true,
+            ..AddRequest::default()
+        };
+        let id = h.svc.add_with(&link(&server), None, &req).unwrap();
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert_eq!(h.job(id).status, "paused");
+        assert!(h.job(id).resumable);
+        assert_eq!(h.svc.running(), 0);
+        h.svc.resume(id).unwrap();
+        h.wait("completion", |h| h.job(id).status == "completed")
+            .await;
+        // A batch can wait too.
+        let text = format!("{0}?a\n{0}?b", link(&server));
+        let r = h.svc.add_batch(&text, None, true).unwrap();
+        assert_eq!(r.added.len(), 2);
+        for id in r.added {
+            assert_eq!(h.job(id).status, "paused");
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn a_download_limit_applies_while_running_and_is_kept() {
         let content = Content::new(2 * 1024 * KB, 94);
         let server = RangeServer::start(content).await.unwrap();
@@ -2318,6 +2356,7 @@ mod tests {
                     .collect(),
             ),
             allow_duplicate: false,
+            later: false,
             headers: vec![],
         };
         let id = h.svc.add_with(&link(&server), None, &good).unwrap();
@@ -2377,24 +2416,24 @@ mod tests {
     async fn pasted_text_and_patterns_add_many_downloads_at_once() {
         let h = harness(1);
         let text = "Parts:\nhttp://127.0.0.1:9/part[1-3].bin\nhttp://127.0.0.1:9/extra.bin, http://127.0.0.1:9/part2.bin";
-        let r = h.svc.add_batch(text, None).unwrap();
+        let r = h.svc.add_batch(text, None, false).unwrap();
         assert_eq!(r.added.len(), 4, "{r:?}");
         assert!(
             r.skipped.is_empty(),
             "the repeat of part2 was merged: {r:?}"
         );
         // Again: everything is already in the list.
-        let again = h.svc.add_batch(text, None).unwrap();
+        let again = h.svc.add_batch(text, None, false).unwrap();
         assert!(again.added.is_empty());
         assert_eq!(again.skipped.len(), 4);
         assert!(again.skipped.iter().all(|s| s.reason.contains("already")));
         assert_eq!(
-            h.svc.add_batch("no links", None).unwrap_err().code,
+            h.svc.add_batch("no links", None, false).unwrap_err().code,
             "bad-link"
         );
         assert_eq!(
             h.svc
-                .add_batch("http://127.0.0.1:9/[1-5000]", None)
+                .add_batch("http://127.0.0.1:9/[1-5000]", None, false)
                 .unwrap_err()
                 .code,
             "too-many"

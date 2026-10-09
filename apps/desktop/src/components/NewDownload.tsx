@@ -181,8 +181,11 @@ export function NewDownload() {
     setSkipped([])
   }
 
-  async function submit(e: React.FormEvent | null, allowDuplicate = false) {
+  // "Download later" adds paused; a duplicate's "Download again" keeps that choice.
+  const later = useRef(false)
+  async function submit(e: React.FormEvent | null, allowDuplicate = false, wait?: boolean) {
     e?.preventDefault()
+    if (wait !== undefined) later.current = wait
     if (!backend || busy || finding) return
     if (isMagnet(url)) {
       await inspect((b) => b.inspectMagnet(url.trim(), dir.trim() || null))
@@ -199,7 +202,7 @@ export function NewDownload() {
     setSkipped([])
     try {
       if (batch) {
-        const r = await backend.addBatch(url, dir.trim() || null)
+        const r = await backend.addBatch(url, dir.trim() || null, later.current)
         if (r.skipped.length === 0) {
           reset()
           setAdding(false)
@@ -215,6 +218,7 @@ export function NewDownload() {
         name: more ? name.trim() || null : null,
         sha256: more ? sha256.trim() || null : null,
         allowDuplicate,
+        later: later.current,
       })
       reset()
       setAdding(false)
@@ -538,7 +542,23 @@ export function NewDownload() {
             >
               Cancel
             </button>
-            <button type="submit" className="btn btn-primary" disabled={busy || finding}>
+            {!isMagnet(url) && (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => void submit(null, false, true)}
+                disabled={busy || finding}
+                title="Add it to the list without starting it"
+              >
+                Download later
+              </button>
+            )}
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={busy || finding}
+              onClick={() => (later.current = false)}
+            >
               {finding
                 ? 'Finding files…'
                 : busy

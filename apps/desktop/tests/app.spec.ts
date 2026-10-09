@@ -42,7 +42,7 @@ test('bad links are refused inline with what to do', async ({ page }) => {
   await page.goto('/?empty=1')
   const dialog = await openDialog(page)
   const link = dialog.getByLabel('Link')
-  const submit = dialog.getByRole('button', { name: 'Download' })
+  const submit = dialog.getByRole('button', { name: 'Download', exact: true })
   for (const [bad, says] of [
     ['ftp://example.com/file', 'ftp: links aren'],
     ['javascript:alert(1)', 'javascript: links aren'],
@@ -74,7 +74,7 @@ test('adding a link starts it and opens its detail', async ({ page }) => {
   await dialog
     .getByLabel('Link')
     .fill('  https://mirror.example.net/pub/linux%20image.iso?token=abc  ')
-  await dialog.getByRole('button', { name: 'Download' }).click()
+  await dialog.getByRole('button', { name: 'Download', exact: true }).click()
   await expect(dialog).toBeHidden()
   await expect(page.getByRole('heading', { level: 1, name: 'linux image.iso' })).toBeVisible()
   await expect(page.locator('.speed')).toContainText('MB/s', { timeout: 5000 })
@@ -85,7 +85,7 @@ test('hostile file names render as text, never markup', async ({ page }) => {
   const dialog = await openDialog(page)
   const evil = '<img src=x onerror="window.pwned=1">‮gpj.exe'
   await dialog.getByLabel('Link').fill(`https://example.com/${encodeURIComponent(evil)}`)
-  await dialog.getByRole('button', { name: 'Download' }).click()
+  await dialog.getByRole('button', { name: 'Download', exact: true }).click()
   await expect(page.locator('.row-name').first()).toContainText('<img')
   expect(await page.evaluate(() => (window as unknown as { pwned?: number }).pwned)).toBeUndefined()
   expect(await page.locator('img').count()).toBe(0)
@@ -338,7 +338,7 @@ test('the dialog previews a link before downloading it', async ({ page }) => {
   await link.fill('https://example.org/missing.bin')
   await expect(help).toContainText("doesn't exist (404)")
   // A preview failure warns but doesn't block: the backend decides on Download.
-  await expect(dialog.getByRole('button', { name: 'Download' })).toBeEnabled()
+  await expect(dialog.getByRole('button', { name: 'Download', exact: true })).toBeEnabled()
 })
 
 test('pasting or dropping a link anywhere opens the dialog with it', async ({ page }) => {
@@ -700,12 +700,12 @@ test('a chosen name and SHA-256 are offered under More options and checked', asy
   await dialog.getByLabel('Link').fill('https://example.com/file.bin')
   await dialog.getByText('More options').click()
   await dialog.getByLabel('SHA-256 to check').fill('abc')
-  await dialog.getByRole('button', { name: 'Download' }).click()
+  await dialog.getByRole('button', { name: 'Download', exact: true }).click()
   await expect(dialog.locator('#nd-sha-help')).toContainText('64 hex digits')
   await expect(dialog.getByLabel('SHA-256 to check')).toHaveAttribute('aria-invalid', 'true')
   await dialog.getByLabel('SHA-256 to check').fill('a'.repeat(64))
   await dialog.getByLabel('Save as').fill('renamed.bin')
-  await dialog.getByRole('button', { name: 'Download' }).click()
+  await dialog.getByRole('button', { name: 'Download', exact: true }).click()
   await expect(dialog).toBeHidden()
   await expect(page.getByRole('heading', { level: 1, name: 'renamed.bin' })).toBeVisible()
 })
@@ -714,7 +714,7 @@ test('adding a link twice asks first, and Download again adds it anyway', async 
   await page.goto('/?empty=1')
   let dialog = await openDialog(page)
   await dialog.getByLabel('Link').fill('https://example.com/twice.iso')
-  await dialog.getByRole('button', { name: 'Download' }).click()
+  await dialog.getByRole('button', { name: 'Download', exact: true }).click()
   await expect(dialog).toBeHidden()
   await expect(page.getByText('twice.iso').first()).toBeVisible()
   const before = await page.getByText('twice.iso').count()
@@ -830,6 +830,22 @@ test('start at login and keep running are switches that stick', async ({ page })
     await s.click()
     await expect(s).toHaveAttribute('aria-checked', 'true')
   }
+})
+
+test('Download later adds it paused, ready to start', async ({ page }) => {
+  await page.goto('/?empty=1')
+  const dialog = await openDialog(page)
+  await dialog.getByLabel('Link').fill('https://example.com/later.iso')
+  await dialog.getByRole('button', { name: 'Download later' }).click()
+  await expect(dialog).toBeHidden()
+  await expect(page.getByRole('heading', { level: 1, name: 'later.iso' })).toBeVisible()
+  await expect(page.locator('.facts')).toContainText('Paused')
+  await page.getByRole('button', { name: 'Resume', exact: true }).click()
+  await expect(page.locator('.facts')).toContainText('Time left')
+  // A magnet goes through its file list first, so it has no "later" button.
+  const again = await openDialog(page)
+  await again.getByLabel('Link').fill('magnet:?xt=urn:btih:' + 'a'.repeat(40))
+  await expect(again.getByRole('button', { name: 'Download later' })).toHaveCount(0)
 })
 
 test('a download can have its own speed limit, changed while it runs', async ({ page }) => {
@@ -957,7 +973,7 @@ test.describe('Fuse Send', () => {
     await page.goto('/?empty=1')
     const dialog = await openDialog(page)
     await dialog.getByLabel('Link').fill(LINK)
-    await dialog.getByRole('button', { name: 'Download' }).click()
+    await dialog.getByRole('button', { name: 'Download', exact: true }).click()
     await expect(dialog).toBeHidden()
     await expect(page.getByLabel('Link someone sent you')).toHaveValue(LINK)
   })

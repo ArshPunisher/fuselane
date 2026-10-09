@@ -132,6 +132,8 @@ export interface AddOptions {
   sha256?: string | null
   /** Add a link that is already in the list (after the person confirms). */
   allowDuplicate?: boolean
+  /** Add it paused, to start later. */
+  later?: boolean
 }
 
 export interface BatchResult {

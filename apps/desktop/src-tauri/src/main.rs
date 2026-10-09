@@ -90,6 +90,7 @@ async fn add_batch(
     svc: State<'_>,
     text: String,
     dir: Option<String>,
+    later: Option<bool>,
 ) -> Result<service::BatchResult, UiError> {
     if text.len() > 1024 * 1024 {
         return Err(UiError::new_public(
@@ -98,7 +99,7 @@ async fn add_batch(
             Some("Paste the links in smaller groups."),
         ));
     }
-    svc.add_batch(&text, dir.as_deref())
+    svc.add_batch(&text, dir.as_deref(), later.unwrap_or(false))
 }
 
 #[tauri::command]

@@ -428,14 +428,18 @@ export function createDemoBackend(params: URLSearchParams): Backend {
           `You already added this link (${existing.name}).`,
           'Download it again anyway, or open the one in your list.',
         )
-      const j = make(name || nameFromUrl(url), (180 + random() * 700) * MB, 'running')
+      const j = make(
+        name || nameFromUrl(url),
+        (180 + random() * 700) * MB,
+        options?.later ? 'paused' : 'running',
+      )
       j.url = url.href
       j.verify = Boolean(sha)
       if (dir?.trim()) j.dir = dir.trim()
       emitJobs()
       return j.id
     },
-    addBatch: async (text, dir) => {
+    addBatch: async (text, dir, later) => {
       const found = [...new Set(text.match(/https?:\/\/[^\s"<>]+/gi) ?? [])].map((l) =>
         l.replace(/[.,;)']+$/, ''),
       )
@@ -473,7 +477,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       const result: BatchResult = { added: [], skipped: [] }
       for (const l of [...new Set(links)]) {
         try {
-          result.added.push(await backend.add(l, dir))
+          result.added.push(await backend.add(l, dir, { later: later ?? false }))
         } catch (e) {
           result.skipped.push({ url: l, reason: (e as UiError).message })
         }

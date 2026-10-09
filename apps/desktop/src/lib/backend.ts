@@ -32,7 +32,7 @@ export interface Backend {
   listNetworks(): Promise<NetView[]>
   add(url: string, dir: string | null, options?: AddOptions): Promise<number>
   /** Adds every link in pasted text (patterns like file[01-20].zip expanded). */
-  addBatch(text: string, dir: string | null): Promise<BatchResult>
+  addBatch(text: string, dir: string | null, later?: boolean): Promise<BatchResult>
   /** How many downloads run at once (1–8). */
   maxRunning(): Promise<number>
   setMaxRunning(n: number): Promise<number>
@@ -152,7 +152,7 @@ async function tauriBackend(): Promise<Backend> {
     listJobs: () => call('list_jobs'),
     listNetworks: () => call('list_networks'),
     add: (url, dir, options) => call('add_download', { url, dir, options: options ?? null }),
-    addBatch: (text, dir) => call('add_batch', { text, dir }),
+    addBatch: (text, dir, later) => call('add_batch', { text, dir, later: later ?? false }),
     maxRunning: () => call('max_running'),
     setMaxRunning: (n) => call('set_max_running', { n }),
     reorder: (ids) => call('reorder', { ids }),
