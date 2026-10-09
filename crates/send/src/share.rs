@@ -46,6 +46,10 @@ pub enum ShareError {
         "The received file didn't match what the sender shared, so it was deleted. Ask the sender for a new link."
     )]
     Mismatch,
+    #[error(
+        "Not enough free space in {dir}: this file needs {needed} MB and {free} MB is free. Free up space or pick another folder."
+    )]
+    NoSpace { dir: String, needed: u64, free: u64 },
     #[error(transparent)]
     Torrent(#[from] TorrentError),
 }
@@ -247,6 +251,18 @@ pub async fn receive(
     };
     let head = dir.join(format!(".fuselane-{id}.head"));
     let part = dir.join(format!(".fuselane-{id}.part"));
+    // What already arrived (a restart) needn't fit again.
+    let have = std::fs::metadata(&part).map_or(0, |m| m.len());
+    if let Ok(free) = fuselane_storage::free::free_space(dir)
+        && free < size.saturating_sub(have)
+    {
+        let mb = |b: u64| b.div_ceil(1024 * 1024);
+        return Err(ShareError::NoSpace {
+            dir: dir.display().to_string(),
+            needed: mb(size.saturating_sub(have)),
+            free: mb(free),
+        });
+    }
     let open = |p: &Path| {
         OpenOptions::new()
             .read(true)
