@@ -11,7 +11,10 @@ async function audit(page: Page, what: string) {
       .getAnimations()
       .filter((a) => {
         const t = (a.effect as KeyframeEffect | null)?.target
-        return t instanceof Element && t.closest('dialog, .row, .send-item, .peer-row, .notice')
+        return (
+          t instanceof Element &&
+          t.closest('dialog, .row, .send-item, .peer-row, .notice, .page, .detail')
+        )
       })
       .filter((a) => a.effect?.getTiming().iterations !== Infinity)
       // Progress bars keep easing their width; only fades and rises matter here.
