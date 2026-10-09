@@ -1197,6 +1197,9 @@ test('starting a scheduled download by hand drops its start time', async ({ page
   await dialog.getByRole('button', { name: /^Download at / }).click()
   const row = page.locator('.row', { hasText: 'later.iso' })
   await expect(row.locator('.row-state')).toHaveText(/^Starts /)
+  await expect(
+    page.locator('article.detail').getByRole('button', { name: 'Start now' }),
+  ).toBeVisible()
   await row.getByRole('button', { name: 'Resume later.iso' }).click()
   await expect(row.locator('.row-state')).toHaveText('Downloading')
 })

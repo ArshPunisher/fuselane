@@ -318,7 +318,7 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
               ) : (
                 <Play size={16} aria-hidden />
               )}
-              {job.status === 'failed' ? 'Try again' : 'Resume'}
+              {job.status === 'failed' ? 'Try again' : job.startAt ? 'Start now' : 'Resume'}
             </button>
           )}
           {job.status === 'completed' && (
