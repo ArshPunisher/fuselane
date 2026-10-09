@@ -70,6 +70,8 @@ const MIGRATIONS: &[&str] = &[
      ALTER TABLE jobs ADD COLUMN expected_sha256 TEXT;",
     // v6: a download's own speed limit (bytes per second; 0 = none).
     "ALTER TABLE jobs ADD COLUMN speed_limit INTEGER NOT NULL DEFAULT 0;",
+    // v7: start at a set time (unix seconds); the job waits paused until then.
+    "ALTER TABLE jobs ADD COLUMN start_at INTEGER;",
 ];
 
 /// What a person can set when adding a download, beyond the link and folder.
@@ -123,6 +125,8 @@ pub struct Job {
     pub expected_sha256: Option<String>,
     /// This download's own speed limit in bytes per second; 0 = none.
     pub speed_limit: u64,
+    /// When it starts by itself (unix seconds); it waits paused until then.
+    pub start_at: Option<i64>,
 }
 
 impl Job {
@@ -452,6 +456,18 @@ impl Store {
         Ok(())
     }
 
+    /// Sets (or clears) when a download starts by itself.
+    pub fn set_start_at(&self, id: i64, at: Option<i64>) -> Result<(), StoreError> {
+        let n = self.lock().execute(
+            "UPDATE jobs SET start_at = ?2 WHERE id = ?1",
+            params![id, at],
+        )?;
+        if n == 0 {
+            return Err(StoreError::NotFound(id));
+        }
+        Ok(())
+    }
+
     pub fn set_finished(&self, id: i64, path: &Path, total: u64) -> Result<(), StoreError> {
         self.lock().execute(
             "UPDATE jobs SET final_path = ?2, staging_path = NULL, total = ?3 WHERE id = ?1",
@@ -512,6 +528,7 @@ fn row_to_job(r: &rusqlite::Row<'_>) -> rusqlite::Result<Job> {
         chosen_name: r.get("chosen_name")?,
         expected_sha256: r.get("expected_sha256")?,
         speed_limit: u64::try_from(r.get::<_, i64>("speed_limit")?).unwrap_or(0),
+        start_at: r.get("start_at")?,
     })
 }
 
@@ -543,6 +560,26 @@ mod tests {
         assert!(b.lock_job(8).unwrap().is_some(), "other downloads are free");
         drop(held);
         assert!(b.lock_job(7).unwrap().is_some(), "free again once released");
+    }
+
+    #[test]
+    fn a_start_time_is_kept_and_cleared() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = Store::open(&dir.path().join("jobs.db")).unwrap();
+        let a = s.create("https://example.com/a", dir.path()).unwrap();
+        assert_eq!(s.get(a).unwrap().start_at, None);
+        s.set_start_at(a, Some(1_791_590_400)).unwrap();
+        assert_eq!(s.get(a).unwrap().start_at, Some(1_791_590_400));
+        // Survives reopening (it is a column, not memory).
+        drop(s);
+        let s = Store::open(&dir.path().join("jobs.db")).unwrap();
+        assert_eq!(s.get(a).unwrap().start_at, Some(1_791_590_400));
+        s.set_start_at(a, None).unwrap();
+        assert_eq!(s.get(a).unwrap().start_at, None);
+        assert!(matches!(
+            s.set_start_at(999, None),
+            Err(StoreError::NotFound(999))
+        ));
     }
 
     #[test]
