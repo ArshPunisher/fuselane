@@ -2720,3 +2720,113 @@ html[data-hidden] *::after {
 .dialog-foot {
   flex-wrap: wrap;
 }
+
+/* ---------- Link box without a scrollbar (B8.3) ---------- */
+
+.btn-sm {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.link-line-wrap {
+  position: relative;
+  display: grid;
+}
+
+/* One link is one line: no wrapping, no scrollbar (B8.3). */
+.field textarea.link-input:not([data-multi]) {
+  height: 36px;
+  min-height: 36px;
+  padding-block: 0;
+  line-height: 34px;
+  overflow: hidden;
+  white-space: pre;
+}
+
+/* While a long link shows cut in the middle, the real text stays for selection
+   and screen readers but isn't painted. */
+.link-line-wrap[data-cut] textarea {
+  color: transparent;
+}
+
+.link-cut {
+  position: absolute;
+  inset: 1px 12px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.link-cut .head {
+  flex: 0 1 auto;
+  min-width: 2ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.link-cut .tail {
+  flex: none;
+  color: var(--body);
+}
+
+.link-card {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 10px 10px 12px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+}
+
+@starting-style {
+  .link-card {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+}
+
+.link-card {
+  transition:
+    opacity var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
+}
+
+.link-card-ic {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-control);
+  background: var(--fuse-soft);
+  color: var(--fuse-text);
+}
+
+.link-card-text {
+  display: grid;
+  min-width: 0;
+}
+
+.link-card-name {
+  overflow: hidden;
+  color: var(--ink);
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.link-card-meta {
+  overflow: hidden;
+  color: var(--mute);
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

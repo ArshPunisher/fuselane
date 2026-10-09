@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, FileArrowUp, X } from '@phosphor-icons/react'
+import { ArrowLeft, FileArrowUp, Magnet, X } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { toUiError } from '../lib/backend'
 import { isSendLink } from '../lib/sendLink'
@@ -25,6 +25,32 @@ function batchInfo(s: string): { count: number; pattern: boolean } {
   }
 }
 
+/** A magnet with a real info hash, shown as a card instead of a long string (B8.3). */
+export function magnetCard(s: string): { name: string; hash: string } | null {
+  const t = s.trim()
+  if (!isMagnet(t) || /\s/.test(t)) return null
+  const m = /[?&]xt=urn:bt(?:ih|mh):([0-9a-z]{32,68})/i.exec(t)
+  if (!m || !m[1]) return null
+  const dn = /[?&]dn=([^&]*)/i.exec(t)?.[1]
+  let name = ''
+  try {
+    name = dn ? decodeURIComponent(dn.replace(/\+/g, ' ')).trim() : ''
+  } catch {
+    name = dn ?? ''
+  }
+  const hash = m[1].slice(0, 8).toLowerCase()
+  return { name: name || `Torrent ${hash}`, hash }
+}
+
+/** A long single link split so the end (the file name) always shows. */
+export function middleCut(s: string): { head: string; tail: string } | null {
+  const t = s.trim()
+  if (t.length < 48 || !looksLikeLink(t)) return null
+  const slash = t.lastIndexOf('/', t.length - 2)
+  const tail = slash > 8 && t.length - slash < 60 ? t.slice(slash) : t.slice(-28)
+  return { head: t.slice(0, t.length - tail.length), tail }
+}
+
 /** A dropped or opened file path (not a link). */
 function isTorrentPath(s: string): boolean {
   return /\.torrent$/i.test(s.trim()) && !looksLikeLink(s) && !isMagnet(s)
@@ -46,6 +72,9 @@ export function NewDownload() {
   const linkInput = useRef<HTMLTextAreaElement>(null)
   const dirInput = useRef<HTMLInputElement>(null)
   const [url, setUrl] = useState('')
+  const [focused, setFocused] = useState(false)
+  // "Change" on a magnet card brings the text field back until it loses focus.
+  const [editing, setEditing] = useState(false)
   const [dir, setDir] = useState('')
   const [more, setMore] = useState(false)
   const [name, setName] = useState('')
@@ -235,6 +264,7 @@ export function NewDownload() {
 
   const { count, pattern } = batchInfo(url)
   const batch = !isMagnet(url) && (count > 1 || pattern)
+
   const urlError =
     error &&
     (error.code === 'bad-link' || error.code === 'not-a-magnet' || error.code === 'too-many')
@@ -246,6 +276,9 @@ export function NewDownload() {
   const duplicate = error && error.code === 'duplicate' ? error : null
   const otherError =
     error && !urlError && !dirError && !nameError && !shaError && !duplicate ? error : null
+  const multi = batch || url.includes('\n')
+  const card = !editing && !urlError ? magnetCard(url) : null
+  const cut = !multi ? middleCut(url) : null
 
   return (
     <dialog
@@ -320,31 +353,74 @@ export function NewDownload() {
           </header>
           <div className="field">
             <label htmlFor="nd-url">{batch ? 'Links' : 'Link'}</label>
-            <textarea
-              id="nd-url"
-              name="url"
-              inputMode="url"
-              autoComplete="off"
-              spellCheck={false}
-              ref={linkInput}
-              value={url}
-              rows={batch ? Math.min(8, Math.max(3, url.split('\n').length)) : 1}
-              className="link-input"
-              placeholder="https://example.com/file.iso or magnet:?…"
-              aria-invalid={urlError ? true : undefined}
-              aria-describedby={urlError ? 'nd-url-err' : 'nd-url-help'}
-              onChange={(e) => {
-                setUrl(e.target.value)
-                if (urlError || duplicate) setError(null)
-              }}
-              onKeyDown={(e) => {
-                // Enter starts the download; Shift+Enter adds another line for more links.
-                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                  e.preventDefault()
-                  e.currentTarget.form?.requestSubmit()
-                }
-              }}
-            />
+            {card ? (
+              <div className="link-card">
+                <span className="link-card-ic" aria-hidden>
+                  <Magnet size={18} weight="fill" />
+                </span>
+                <span className="link-card-text">
+                  <span className="link-card-name" translate="no" title={card.name}>
+                    {card.name}
+                  </span>
+                  <span className="link-card-meta num">Magnet link, {card.hash}</span>
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  aria-label="Change the link"
+                  onClick={() => {
+                    setEditing(true)
+                    requestAnimationFrame(() => linkInput.current?.focus())
+                  }}
+                >
+                  Change
+                </button>
+              </div>
+            ) : (
+              <div className="link-line-wrap" data-cut={cut && !focused ? '' : undefined}>
+                <textarea
+                  id="nd-url"
+                  name="url"
+                  inputMode="url"
+                  autoComplete="off"
+                  spellCheck={false}
+                  ref={linkInput}
+                  value={url}
+                  // One line for one link (no wrapping, no scrollbar); a list of
+                  // links grows to show them, one per line.
+                  rows={multi ? Math.min(8, Math.max(3, url.split('\n').length)) : 1}
+                  wrap={multi ? 'soft' : 'off'}
+                  className="link-input"
+                  data-multi={multi ? '' : undefined}
+                  placeholder="https://example.com/file.iso or magnet:?…"
+                  aria-invalid={urlError ? true : undefined}
+                  aria-describedby={urlError ? 'nd-url-err' : 'nd-url-help'}
+                  onFocus={() => setFocused(true)}
+                  onBlur={() => {
+                    setFocused(false)
+                    setEditing(false)
+                  }}
+                  onChange={(e) => {
+                    setUrl(e.target.value)
+                    if (urlError || duplicate) setError(null)
+                  }}
+                  onKeyDown={(e) => {
+                    // Enter starts the download; Shift+Enter adds another line for more links.
+                    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                      e.preventDefault()
+                      e.currentTarget.form?.requestSubmit()
+                    }
+                  }}
+                />
+                {cut && !focused && (
+                  // Long links are cut in the middle so the file name stays in view.
+                  <span className="link-cut" aria-hidden>
+                    <span className="head">{cut.head}</span>
+                    <span className="tail">{cut.tail}</span>
+                  </span>
+                )}
+              </div>
+            )}
             {urlError ? (
               <p id="nd-url-err" className="field-error" aria-live="polite">
                 {urlError.message} {urlError.hint}

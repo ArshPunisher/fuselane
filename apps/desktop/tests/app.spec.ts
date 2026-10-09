@@ -1091,3 +1091,39 @@ test.describe('Fuse Send', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0)
   })
 })
+
+test('the link box is one line: no scrollbar, long links cut in the middle, magnets become a card', async ({
+  page,
+}) => {
+  await page.goto('/?empty=1')
+  const dialog = await openDialog(page)
+  const link = dialog.getByLabel('Link')
+  const long =
+    'https://releases.ubuntu.com/26.04/daily-live/current/builds/2026-10-09/ubuntu-26.04-desktop-amd64.iso'
+  await link.fill(long)
+  // One row, nothing to scroll vertically, however long the link.
+  const box = await link.evaluate((el) => ({
+    rows: (el as HTMLTextAreaElement).rows,
+    scrolls: el.scrollHeight > el.clientHeight + 1,
+    overflowY: getComputedStyle(el).overflowY,
+  }))
+  expect(box).toEqual({ rows: 1, scrolls: false, overflowY: 'hidden' })
+  // Away from the field, the file name stays visible at the end.
+  await dialog.getByLabel('Save to').focus()
+  await expect(dialog.locator('.link-cut .tail')).toHaveText('/ubuntu-26.04-desktop-amd64.iso')
+  await link.focus()
+  await expect(dialog.locator('.link-cut')).toHaveCount(0)
+  // A magnet becomes a card named from its dn=, with Change to edit it.
+  await link.fill(
+    'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&dn=Sprite+Fright+%282021%29+4K&tr=udp%3A%2F%2Ftracker.example%3A1337',
+  )
+  await expect(dialog.locator('.link-card-name')).toHaveText('Sprite Fright (2021) 4K')
+  await expect(dialog.locator('.link-card-meta')).toContainText('01234567')
+  await dialog.getByRole('button', { name: 'Change the link' }).click()
+  await expect(link).toBeFocused()
+  await link.fill('https://example.com/a.iso')
+  // Shift+Enter starts a list; a list shows its lines.
+  await link.press('Shift+Enter')
+  await link.pressSequentially('https://example.com/b.iso')
+  await expect(dialog.getByLabel('Links')).toHaveAttribute('rows', '3')
+})

@@ -104,9 +104,11 @@ test('pasting a magnet anywhere opens the dialog with it', async ({ page }) => {
     e.clipboardData?.setData('text', m)
     window.dispatchEvent(e)
   }, magnet)
-  await expect(page.getByRole('dialog', { name: 'New download' }).getByLabel('Link')).toHaveValue(
-    magnet,
-  )
+  // A magnet with a hash shows as a card; Change reveals the link itself.
+  const nd = page.getByRole('dialog', { name: 'New download' })
+  await expect(nd.locator('.link-card')).toContainText('Torrent 01234567')
+  await nd.getByRole('button', { name: 'Change the link' }).click()
+  await expect(nd.getByLabel('Link')).toHaveValue(magnet)
 })
 
 test('files can be changed mid-download and the torrent removed keeping files', async ({
@@ -244,7 +246,7 @@ test('the OS opening a magnet replaces whatever the dialog was showing', async (
     ;(window as unknown as { __demoOpen: (t: string) => void }).__demoOpen(m)
   }, magnet)
   const nd = page.getByRole('dialog', { name: 'New download' })
-  await expect(nd.getByLabel('Link')).toHaveValue(magnet)
+  await expect(nd.locator('.link-card-name')).toHaveText('debian')
   await nd.getByRole('button', { name: 'Next' }).click()
   await expect(
     page
