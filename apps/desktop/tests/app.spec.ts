@@ -787,3 +787,45 @@ test('the when-done countdown can be cancelled', async ({ page }) => {
   await banner.getByRole('button', { name: 'Cancel' }).click()
   await expect(banner).toBeHidden()
 })
+
+test('the list can be searched and filtered, with counts', async ({ page }) => {
+  await page.goto('/')
+  const search = page.getByRole('searchbox', { name: 'Search downloads' })
+  const filters = page.getByRole('radiogroup', { name: 'Show' })
+  await expect(filters.getByRole('radio', { name: /^All/ })).toHaveAttribute('aria-checked', 'true')
+  await search.fill('ubuntu')
+  await expect(page.locator('.row-name', { hasText: 'ubuntu' })).toBeVisible()
+  await expect(page.locator('.row-name', { hasText: 'Blender' })).toHaveCount(0)
+  await search.fill('no such file anywhere')
+  await expect(page.getByText('Nothing matches "no such file anywhere".')).toBeVisible()
+  await page.getByRole('button', { name: 'Show everything' }).click()
+  await expect(search).toHaveValue('')
+  await filters.getByRole('radio', { name: /^Finished/ }).click()
+  await expect(page.locator('.row-name', { hasText: 'Blender' })).toBeVisible()
+  await expect(page.locator('.row-name', { hasText: 'ubuntu' })).toHaveCount(0)
+  await filters.getByRole('radio', { name: /^Failed/ }).click()
+  await expect(page.locator('.row[data-status="failed"]').first()).toBeVisible()
+})
+
+test('speeds can show in Mbps as well as MB/s', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.locator('.speed')).toContainText('MB/s', { timeout: 5000 })
+  await page.getByRole('button', { name: 'Settings' }).click()
+  const unit = page.getByRole('radiogroup', { name: 'Speed unit' })
+  await unit.getByRole('radio', { name: 'Mbps' }).click()
+  await page.getByRole('button', { name: 'Downloads' }).first().click()
+  await expect(page.locator('.speed')).toContainText('Mbps', { timeout: 5000 })
+  await page.reload()
+  await expect(page.locator('.speed')).toContainText('Mbps', { timeout: 5000 })
+})
+
+test('start at login and keep running are switches that stick', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Settings' }).click()
+  for (const name of ['Start at login', 'Keep running when the window closes']) {
+    const s = page.getByRole('switch', { name })
+    await expect(s).toHaveAttribute('aria-checked', 'false')
+    await s.click()
+    await expect(s).toHaveAttribute('aria-checked', 'true')
+  }
+})
