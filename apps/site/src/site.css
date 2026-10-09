@@ -1035,6 +1035,48 @@ section {
   border: 1px solid var(--line);
   border-radius: 12px;
   background: oklch(0.12 0.01 262 / 0.8);
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.odo {
+  display: inline-flex;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.odo-d {
+  display: inline-block;
+  height: 1em;
+  overflow: hidden;
+  /* Soft top and bottom edges, so digits roll in and out of view. */
+  mask-image: linear-gradient(transparent, #000 18%, #000 82%, transparent);
+}
+
+.odo-strip {
+  /* "0123456789" one character wide: each digit wraps onto its own 1em line. */
+  display: block;
+  transform: translateY(calc(var(--n, 0) * -1em));
+  transition: transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+  word-break: break-all;
+  width: 1ch;
+}
+
+.odo-sep {
+  display: inline-block;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .odo-strip {
+    transition: none;
+  }
+}
+
   color: var(--body);
   font-family: var(--font-mono);
   font-size: 13px;

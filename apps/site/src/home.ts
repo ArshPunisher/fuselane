@@ -41,6 +41,42 @@ function hero() {
   })
 }
 
+/**
+ * A rolling-digit counter: each digit is a 0-9 strip that slides to its value.
+ * Separators stay put. Columns are reused while the number keeps its shape.
+ */
+export function odometer(el: HTMLElement) {
+  let shape = ''
+  return (text: string) => {
+    const next = text.replace(/\d/g, '0')
+    if (next !== shape) {
+      shape = next
+      el.replaceChildren(
+        ...[...text].map((ch) => {
+          const cell = document.createElement('span')
+          if (!/\d/.test(ch)) {
+            cell.className = 'odo-sep'
+            cell.textContent = ch
+            return cell
+          }
+          cell.className = 'odo-d'
+          const strip = document.createElement('span')
+          strip.className = 'odo-strip'
+          strip.textContent = '0123456789'
+          cell.append(strip)
+          return cell
+        }),
+      )
+    }
+    const strips = el.querySelectorAll<HTMLElement>('.odo-strip')
+    let i = 0
+    for (const ch of text) {
+      if (!/\d/.test(ch)) continue
+      strips[i++]?.style.setProperty('--n', ch)
+    }
+  }
+}
+
 /** Turn networks on and off; the combined speed and the time for a 4.7 GB file follow. */
 function combine() {
   const toggles = [...document.querySelectorAll<HTMLButtonElement>('.net-toggle')]
@@ -50,7 +86,24 @@ function combine() {
   const fused = $('#time-all')
   const bars = [...document.querySelectorAll<HTMLElement>('.stack span')]
   const caption = $('#combined-caption')
+  const odo = document.querySelector<HTMLElement>('.odo')
+  const roll = odo ? odometer(odo) : () => {}
+  const rowSpeed = toggles.map((t) => t.querySelector<HTMLElement>('.speed'))
   const SIZE_MB = 4.7 * 1024
+  // Real networks never sit still: while the section is on screen, each speed
+  // drifts a few percent and the total runs with them. The exact figures (for
+  // screen readers and the times) stay on the nominal speeds.
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches
+  let drift = toggles.map(() => 1)
+  const show = () => {
+    const on = toggles.map((t) => t.getAttribute('aria-checked') === 'true')
+    const speeds = toggles.map((t) => Number(t.dataset.speed))
+    const live = speeds.map((v, i) => v * drift[i]!)
+    rowSpeed.forEach((el, i) => {
+      if (el) el.textContent = `${fmt.format(live[i]!)} MB/s`
+    })
+    roll(fmt.format(live.reduce((a, v, i) => a + (on[i] ? v : 0), 0)))
+  }
   const update = () => {
     const on = toggles.map((t) => t.getAttribute('aria-checked') === 'true')
     const speeds = toggles.map((t) => Number(t.dataset.speed))
@@ -74,6 +127,16 @@ function combine() {
           : count === 1
             ? 'One network: as fast as it goes, no faster.'
             : `${count} networks at once: their speeds add up.`
+    show()
+  }
+  if (!still && odo) {
+    let visible = false
+    new IntersectionObserver(([e]) => (visible = Boolean(e?.isIntersecting))).observe(odo)
+    setInterval(() => {
+      if (!visible || document.hidden) return
+      drift = drift.map((d) => Math.min(1.05, Math.max(0.95, d + (Math.random() - 0.5) * 0.04)))
+      show()
+    }, 900)
   }
   toggles.forEach((t) =>
     t.addEventListener('click', () => {
