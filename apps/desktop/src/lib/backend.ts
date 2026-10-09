@@ -2,6 +2,7 @@
 // plain browser (pnpm dev, Playwright) it uses the demo engine in ./demo.ts,
 // and the UI says so.
 import type {
+  FilePriority,
   AddOptions,
   AllowanceRequest,
   AllowanceView,
@@ -106,6 +107,10 @@ export interface Backend {
   pauseTorrent(id: string): Promise<void>
   resumeTorrent(id: string): Promise<void>
   selectTorrentFiles(id: string, files: number[]): Promise<void>
+  /** High fetches first, Low waits for the rest, Skip leaves the file out. */
+  setFilePriority(id: string, file: number, priority: FilePriority): Promise<void>
+  /** Plays a file while it downloads; returns the local stream link. */
+  playTorrentFile(id: string, file: number): Promise<string>
   removeTorrent(id: string, deleteFiles: boolean): Promise<void>
   revealTorrent(id: string): Promise<void>
   seedSettings(): Promise<SeedSettings>
@@ -220,6 +225,8 @@ async function tauriBackend(): Promise<Backend> {
     pauseTorrent: (id) => call('torrent_pause', { id }),
     resumeTorrent: (id) => call('torrent_resume', { id }),
     selectTorrentFiles: (id, files) => call('torrent_select', { id, files }),
+    setFilePriority: (id, file, priority) => call('torrent_set_priority', { id, file, priority }),
+    playTorrentFile: (id, file) => call('torrent_play', { id, file }),
     removeTorrent: (id, deleteFiles) => call('torrent_remove', { id, deleteFiles }),
     revealTorrent: (id) => call('torrent_reveal', { id }),
     seedSettings: () => call('torrent_seed_settings'),

@@ -117,18 +117,13 @@ test('files can be changed mid-download and the torrent removed keeping files', 
   await page.goto('/?freeze=3')
   await page.getByRole('button', { name: /^Sprite Fright \(2021\) 4K/ }).click()
   await page.getByRole('tab', { name: 'Files' }).click()
-  const files = page.getByRole('region', { name: 'Files' })
-  await files.getByRole('checkbox', { name: /poster\.jpg/ }).check()
-  await files.getByRole('button', { name: 'Save choice' }).click()
-  await expect(page.getByText('3 of 5', { exact: true })).toBeVisible()
-  await expect(files.getByRole('button', { name: 'Save choice' })).toBeHidden()
-  // A mixed "All files" selects everything first; unchecking then clears all, which can't be saved.
-  const all = files.getByRole('checkbox', { name: /^All files/ })
-  await all.check()
-  await expect(files.getByText(/5 of 5/)).toBeVisible()
-  await all.uncheck()
-  await expect(files.getByRole('button', { name: 'Save choice' })).toBeDisabled()
-  await files.getByRole('button', { name: 'Undo' }).click()
+  const files = page.getByRole('region', { name: /^Files/ })
+  // The demo torrent starts with 2 of 5; poster.jpg joins by giving it a priority.
+  await files.getByRole('combobox', { name: 'Priority of poster.jpg' }).selectOption('normal')
+  await expect(page.locator('.facts')).toContainText('3 of 5')
+  await expect(files.locator('.files-head')).toContainText('3 of 5')
+  await files.getByRole('combobox', { name: 'Priority of poster.jpg' }).selectOption('skip')
+  await expect(page.locator('.facts')).toContainText('2 of 5')
 
   await page.getByRole('button', { name: 'Remove' }).click()
   const ask = page.getByRole('dialog', { name: 'Remove this torrent?' })
@@ -309,4 +304,36 @@ test('the big speed is the sum of the networks under it, and the sidebar says wh
   // Sidebar: a total, labelled as every download together.
   await expect(page.locator('.sidebar .net-total')).toContainText('MB/s')
   await expect(page.locator('.sidebar')).toContainText('All downloads together')
+})
+
+test('torrent files have priorities, per-file progress and Play while downloading', async ({
+  page,
+}) => {
+  await page.goto('/?freeze=3')
+  await page.getByRole('button', { name: /^Sprite Fright \(2021\) 4K/ }).click()
+  await page.getByRole('tab', { name: 'Files' }).click()
+  const files = page.getByRole('region', { name: /^Files/ })
+  const table = files.getByRole('table', { name: 'Files in this torrent' })
+  await expect(table.getByRole('columnheader', { name: 'Here' })).toBeVisible()
+  // High goes first: the 4K file fills before the others.
+  await files
+    .getByRole('combobox', { name: 'Priority of Sprite Fright 4K.mkv' })
+    .selectOption('high')
+  const row = table.getByRole('row', { name: /Sprite Fright 4K\.mkv/ })
+  await expect(row.locator('.here')).toContainText('%')
+  // Only audio and video can be played; Play gives a link for other players too.
+  await expect(table.getByRole('button', { name: 'Play English.srt' })).toHaveCount(0)
+  await table.getByRole('button', { name: 'Play Sprite Fright 4K.mkv' }).click()
+  await expect(files.getByRole('textbox', { name: 'Stream link' })).toHaveValue(
+    /^http:\/\/127\.0\.0\.1:\d+\//,
+  )
+  // The last wanted file can't be skipped.
+  for (const n of ['Sprite Fright 1080p.mkv', 'English.srt', 'Deutsch.srt', 'poster.jpg']) {
+    const sel = files.getByRole('combobox', { name: `Priority of ${n}` })
+    if ((await sel.inputValue()) !== 'skip') await sel.selectOption('skip')
+  }
+  await files
+    .getByRole('combobox', { name: 'Priority of Sprite Fright 4K.mkv' })
+    .selectOption('skip')
+  await expect(page.getByRole('alert').filter({ hasText: 'At least one file' })).toBeVisible()
 })

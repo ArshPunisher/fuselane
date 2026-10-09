@@ -1814,6 +1814,7 @@ dependencies = [
  "fuselane-storage",
  "fuselane-testkit",
  "fuselane-transport",
+ "getrandom 0.3.4",
  "librqbit",
  "minisign-verify",
  "semver",

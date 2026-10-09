@@ -13,6 +13,7 @@ mod power;
 mod selftest;
 mod sends;
 mod service;
+mod stream;
 mod torrents;
 mod unpack;
 mod update;
@@ -639,6 +640,60 @@ async fn torrent_resume(tor: Tor<'_>, id: String) -> Result<(), UiError> {
 #[tauri::command]
 async fn torrent_select(tor: Tor<'_>, id: String, files: Vec<usize>) -> Result<(), UiError> {
     tor.select(&id, files).await
+}
+
+#[tauri::command]
+async fn torrent_set_priority(
+    tor: Tor<'_>,
+    id: String,
+    file: usize,
+    priority: torrents::Priority,
+) -> Result<(), UiError> {
+    tor.set_priority(&id, file, priority).await
+}
+
+/// The local stream server for Play, started the first time it's needed.
+static STREAMS: tokio::sync::OnceCell<stream::StreamServer> = tokio::sync::OnceCell::const_new();
+
+/// Plays a torrent file while it downloads (B8.10): it goes to High priority,
+/// and the system opens a local stream link (read in order as it arrives).
+/// Returns the link, so it can also be pasted into a player such as VLC.
+#[tauri::command]
+async fn torrent_play(
+    app: tauri::AppHandle,
+    tor: Tor<'_>,
+    id: String,
+    file: usize,
+) -> Result<String, UiError> {
+    use tauri_plugin_opener::OpenerExt;
+    let name = tor.file_name(&id, file).await.ok_or_else(|| {
+        ui_error(
+            "not-playable",
+            "This torrent isn't downloading now, so it can't be played from here. Open the finished file instead.".into(),
+        )
+    })?;
+    if !stream::playable(&name) {
+        return Err(ui_error(
+            "not-playable",
+            format!("{name} isn't audio or video, so there's nothing to play."),
+        ));
+    }
+    tor.set_priority(&id, file, torrents::Priority::High)
+        .await?;
+    let torrents = tor.inner().clone();
+    let server = STREAMS
+        .get_or_try_init(|| async move {
+            let open: stream::OpenFn = Arc::new(move |id, file| {
+                let t = torrents.clone();
+                Box::pin(async move { t.open_stream(&id, file).await })
+            });
+            stream::StreamServer::start(open).await
+        })
+        .await
+        .map_err(|e| ui_error("play-failed", format!("Couldn't start playing: {e}")))?;
+    let url = server.url(&id, file, &name);
+    let _ = app.opener().open_url(&url, None::<&str>);
+    Ok(url)
 }
 
 #[tauri::command]
@@ -1321,6 +1376,8 @@ fn main() {
             torrent_select,
             torrent_remove,
             torrent_reveal,
+            torrent_set_priority,
+            torrent_play,
             torrent_seed_settings,
             set_torrent_seed_settings,
             torrent_stop_sharing,

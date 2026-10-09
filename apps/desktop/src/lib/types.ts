@@ -292,11 +292,16 @@ export interface TorrentNetView {
   credited: number
 }
 
+export type FilePriority = 'skip' | 'low' | 'normal' | 'high'
+
 export interface TorrentFileView {
   index: number
   path: string
   size: number
   selected: boolean
+  /** Bytes of it that have arrived and passed their check. */
+  done: number
+  priority: FilePriority
 }
 
 /** What a torrent holds before it starts; the user picks files from this. */

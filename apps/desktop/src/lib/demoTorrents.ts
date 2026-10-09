@@ -3,6 +3,7 @@
 // URL parameters: torrents=0 (none at start), torrents=1 (the sample even with empty=1),
 // magnet=slow (inspect never ends).
 import type {
+  FilePriority,
   ListingView,
   PeerView,
   SeedSettings,
@@ -78,6 +79,8 @@ export function createDemoTorrents(params: URLSearchParams, emit: () => (e: UiEv
       path,
       size: Math.round(size),
       selected: true,
+      done: 0,
+      priority: 'normal' as const,
     }))
     const base = dir || '~/Downloads'
     const l: ListingView = {
@@ -92,7 +95,11 @@ export function createDemoTorrents(params: URLSearchParams, emit: () => (e: UiEv
   }
 
   function start(l: ListingView, chosen: number[], status: TorrentView['status'], done = 0) {
-    const files = l.files.map((f) => ({ ...f, selected: chosen.includes(f.index) }))
+    const files = l.files.map((f) => ({
+      ...f,
+      selected: chosen.includes(f.index),
+      priority: chosen.includes(f.index) ? ('normal' as const) : ('skip' as const),
+    }))
     const wanted = files.filter((f) => f.selected).reduce((a, f) => a + f.size, 0)
     const t: SimTorrent = {
       files,
@@ -218,7 +225,45 @@ export function createDemoTorrents(params: URLSearchParams, emit: () => (e: UiEv
         return token
       },
       listTorrents: async () => list.map((t) => ({ ...t.view })),
-      torrentFiles: async (id: string) => find(id).files.map((f) => ({ ...f })),
+      torrentFiles: async (id: string) => {
+        // Arrival per file: High first, then Normal, then Low, like the app (B8.10).
+        const t = find(id)
+        const rank = { high: 0, normal: 1, low: 2, skip: 3 }
+        let left = t.view.done
+        const out = t.files.map((f) => ({ ...f, done: 0 }))
+        for (const f of [...out].sort((a, b) => rank[a.priority] - rank[b.priority])) {
+          if (f.priority === 'skip') continue
+          f.done = Math.min(f.size, left)
+          left -= f.done
+        }
+        return out
+      },
+      setFilePriority: async (id: string, file: number, priority: FilePriority) => {
+        const t = find(id)
+        const f = t.files.find((x) => x.index === file)
+        if (!f) throw err('no-such-file', "That file isn't in this torrent.", null)
+        if (priority === 'skip' && t.files.filter((x) => x.priority !== 'skip').length <= 1)
+          throw err(
+            'nothing-selected',
+            'At least one file has to be downloaded.',
+            'Pick another file first, or remove the torrent.',
+          )
+        f.priority = priority
+        f.selected = priority !== 'skip'
+        t.wanted = t.files.filter((x) => x.selected).reduce((a, x) => a + x.size, 0)
+        t.view.total = t.wanted
+        t.view.done = Math.min(t.view.done, t.wanted)
+        t.view.selectedCount = t.files.filter((x) => x.selected).length
+        send()
+      },
+      playTorrentFile: async (id: string, file: number) => {
+        const t = find(id)
+        const f = t.files.find((x) => x.index === file)
+        if (!f) throw err('no-such-file', "That file isn't in this torrent.", null)
+        f.priority = 'high'
+        f.selected = true
+        return `http://127.0.0.1:41873/9f2c4e1a/${id}/${file}/${encodeURIComponent(f.path.split('/').pop() ?? '')}`
+      },
       torrentPeers: async (id: string): Promise<PeerView[]> => {
         const t = find(id)
         if (t.view.status !== 'downloading' && t.view.status !== 'seeding') return []
@@ -271,7 +316,11 @@ export function createDemoTorrents(params: URLSearchParams, emit: () => (e: UiEv
         const t = find(id)
         if (!files.length)
           throw err('nothing-selected', 'Pick at least one file to download.', null)
-        for (const f of t.files) f.selected = files.includes(f.index)
+        for (const f of t.files) {
+          f.selected = files.includes(f.index)
+          if (!f.selected) f.priority = 'skip'
+          else if (f.priority === 'skip') f.priority = 'normal'
+        }
         t.wanted = t.files.filter((f) => f.selected).reduce((a, f) => a + f.size, 0)
         t.view.total = t.wanted
         t.view.done = Math.min(t.view.done, t.wanted)

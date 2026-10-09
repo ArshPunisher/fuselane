@@ -3,6 +3,7 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  Copy,
   FolderOpen,
   HandPalm,
   Pause,
@@ -14,14 +15,13 @@ import { useApp } from '../lib/store'
 import { bytes, eta, percent, rate, rateText } from '../lib/format'
 import { assignLanes, kindLabel, netTitle } from '../lib/lanes'
 import { usePoll } from '../lib/poll'
-import { FilePicker } from './FilePicker'
 import { LiveRate } from './LiveRate'
 import { SpeedSplit } from './SpeedSplit'
 import { BIN, RemoveDialog } from './RemoveDialog'
 import { Orb } from './Orb'
 import { PiecesMap } from './PiecesMap'
 import { REVEAL_LABEL } from './TransferDetail'
-import type { NetView, PeerView, TorrentFileView, TorrentNetView, TorrentView } from '../lib/types'
+import type { FilePriority, NetView, PeerView, TorrentNetView, TorrentView } from '../lib/types'
 
 export const TORRENT_WORD: Record<TorrentView['status'], string> = {
   checking: 'Checking',
@@ -135,54 +135,148 @@ function Peers({
 
 type Tab = 'networks' | 'peers' | 'files'
 
+const PRIORITIES: { id: FilePriority; label: string; hint: string }[] = [
+  { id: 'high', label: 'High', hint: 'Fetched before the others' },
+  { id: 'normal', label: 'Normal', hint: '' },
+  { id: 'low', label: 'Low', hint: 'Waits until the rest is done' },
+  { id: 'skip', label: 'Skip', hint: 'Not downloaded' },
+]
+
+const MEDIA = /\.(mp4|m4v|mkv|webm|mov|avi|ts|mp3|m4a|flac|ogg|opus|wav)$/i
+
+/** A torrent's files: how much of each is here, its priority, and Play (B8.10). */
 function Files({ t }: { t: TorrentView }) {
   const backend = useApp((s) => s.backend)
   const act = useApp((s) => s.act)
-  const [files, setFiles] = useState<TorrentFileView[] | null>(null)
-  const [chosen, setChosen] = useState<Set<number>>(new Set())
-  const [failed, setFailed] = useState(false)
-  const shownFor = useRef<string | null>(null)
-  useEffect(() => {
-    let live = true
-    // A new torrent starts from a skeleton; a refresh keeps the old list visible.
-    if (shownFor.current !== t.id) setFiles(null)
-    shownFor.current = t.id
-    backend
-      ?.torrentFiles(t.id)
-      .then((f) => {
-        if (!live) return
-        setFiles(f)
-        setChosen(new Set(f.filter((x) => x.selected).map((x) => x.index)))
-      })
-      .catch(() => live && setFailed(true))
-    return () => {
-      live = false
-    }
-  }, [backend, t.id, t.selectedCount])
-  if (failed) return <p className="field-help">The file list couldn't be loaded.</p>
+  const files = usePoll(() => backend?.torrentFiles(t.id) ?? Promise.resolve(null), 1500, [
+    backend,
+    t.id,
+    t.selectedCount,
+  ])
+  const [playing, setPlaying] = useState<{ file: number; url: string } | null>(null)
+  const [copied, setCopied] = useState(false)
   if (!files) return <div className="sk sk-line" aria-busy="true" aria-label="Loading files" />
   if (!files.length) return null
-  const saved = new Set(files.filter((f) => f.selected).map((f) => f.index))
-  const changed = saved.size !== chosen.size || [...chosen].some((i) => !saved.has(i))
+  const wanted = files.filter((f) => f.priority !== 'skip')
+  const wantedBytes = wanted.reduce((a, f) => a + f.size, 0)
+  const live = t.status === 'downloading' || t.status === 'paused' || t.status === 'checking'
   return (
     <section aria-labelledby="tf-title" className="torrent-files">
-      <h2 id="tf-title" className="group">
-        Files
-      </h2>
-      <FilePicker files={files} chosen={chosen} onChange={setChosen} idPrefix={`tf-${t.id}`} />
-      {changed && (
-        <div className="pick-actions">
-          <button className="btn btn-ghost" onClick={() => setChosen(saved)}>
-            Undo
-          </button>
-          <button
-            className="btn btn-primary"
-            disabled={chosen.size === 0}
-            onClick={() => act((b) => b.selectTorrentFiles(t.id, [...chosen]))}
-          >
-            Save choice
-          </button>
+      <div className="files-head">
+        <h2 id="tf-title" className="group">
+          Files{' '}
+          <span className="num">
+            {wanted.length} of {files.length}
+          </span>
+        </h2>
+        <span className="num muted">{bytes(wantedBytes)} to download</span>
+      </div>
+      <table className="files">
+        <caption className="sr-only">Files in this torrent</caption>
+        <thead>
+          <tr>
+            <th scope="col">Name</th>
+            <th scope="col" className="r">
+              Size
+            </th>
+            <th scope="col" className="r">
+              Here
+            </th>
+            <th scope="col" className="r">
+              Priority
+            </th>
+            <th scope="col">
+              <span className="sr-only">Play</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {files.map((f) => {
+            const pct = f.size ? Math.floor((f.done / f.size) * 100) : 100
+            const name = f.path.split('/').pop() ?? f.path
+            return (
+              <tr key={f.index} data-skip={f.priority === 'skip' || undefined}>
+                <td>
+                  <span className="file-name" translate="no" title={f.path}>
+                    {f.path}
+                  </span>
+                </td>
+                <td className="r num">{bytes(f.size)}</td>
+                <td className="r">
+                  <span className="here num">
+                    {f.priority === 'skip' ? '' : `${pct}%`}
+                    <span className="mini-bar" aria-hidden>
+                      <span style={{ width: `${f.priority === 'skip' ? 0 : pct}%` }} />
+                    </span>
+                  </span>
+                </td>
+                <td className="r">
+                  <select
+                    className="prio"
+                    data-level={f.priority}
+                    aria-label={`Priority of ${name}`}
+                    value={f.priority}
+                    onChange={(e) =>
+                      void act((b) =>
+                        b.setFilePriority(t.id, f.index, e.target.value as FilePriority),
+                      )
+                    }
+                  >
+                    {PRIORITIES.map((p) => (
+                      <option key={p.id} value={p.id} title={p.hint || undefined}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td className="r">
+                  {live && MEDIA.test(f.path) && f.priority !== 'skip' && (
+                    <button
+                      className="btn btn-sm"
+                      aria-label={`Play ${name}`}
+                      onClick={async () => {
+                        if (!backend) return
+                        try {
+                          const url = await backend.playTorrentFile(t.id, f.index)
+                          setCopied(false)
+                          setPlaying({ file: f.index, url })
+                        } catch (err) {
+                          await act(() => Promise.reject(err))
+                        }
+                      }}
+                    >
+                      <Play size={14} weight="fill" aria-hidden /> Play
+                    </button>
+                  )}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      {playing ? (
+        <div className="play-note" role="status">
+          <p>
+            Playing from the start while the rest arrives. If it doesn&apos;t open in your player,
+            paste this link into one (VLC, IINA, mpv):
+          </p>
+          <div className="field-row">
+            <input readOnly className="num" value={playing.url} aria-label="Stream link" />
+            <button
+              className="btn"
+              onClick={() => {
+                void navigator.clipboard?.writeText(playing.url).then(() => setCopied(true))
+              }}
+            >
+              <Copy size={16} aria-hidden /> {copied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
         </div>
+      ) : (
+        <p className="field-help">
+          High files come first and Low ones wait for the rest. Play fetches the start of a video or
+          song first, so it can begin while the rest arrives.
+        </p>
       )}
     </section>
   )

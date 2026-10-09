@@ -6,7 +6,7 @@
 //! P5 5.7): chosen files stay, edge-piece bytes in unchosen files are deleted
 //! (L-69), and the row stays as "completed".
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -45,6 +45,53 @@ pub struct TorrentView {
     pub selected_count: usize,
     pub networks: Vec<TorrentNetView>,
     pub added_at: i64,
+}
+
+/// How soon a torrent file is fetched (B8.10).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Priority {
+    /// Not downloaded.
+    Skip,
+    /// Waits until everything else is done.
+    Low,
+    Normal,
+    /// Fetched before the others (and what Play asks for).
+    High,
+}
+
+/// Which of the wanted files the engine fetches now: every finished one stays
+/// selected, and of the unfinished only the highest priority present. Low files
+/// therefore wait for the rest, High ones go first.
+pub fn tiered(
+    wanted: &HashSet<usize>,
+    prio: &HashMap<usize, Priority>,
+    done: &dyn Fn(usize) -> bool,
+) -> HashSet<usize> {
+    let level = |i: usize| prio.get(&i).copied().unwrap_or(Priority::Normal);
+    match wanted
+        .iter()
+        .filter(|i| !done(**i))
+        .map(|i| level(*i))
+        .max()
+    {
+        None => wanted.clone(),
+        Some(top) => wanted
+            .iter()
+            .copied()
+            .filter(|i| done(*i) || level(*i) >= top)
+            .collect(),
+    }
+}
+
+/// "Has this file fully arrived?" for [`tiered`], from the torrent's progress.
+fn done_fn(t: &Torrent) -> impl Fn(usize) -> bool + use<> {
+    let have = t.file_progress();
+    let lens: Vec<u64> = t.listing().files.iter().map(|f| f.len).collect();
+    move |i| {
+        lens.get(i)
+            .is_some_and(|len| have.get(i).is_some_and(|h| h >= len))
+    }
 }
 
 /// When a torrent's peers were last read, and each one's bytes received and sent.
@@ -86,6 +133,9 @@ pub struct TorrentFileView {
     pub path: String,
     pub size: u64,
     pub selected: bool,
+    /// Bytes of it that have arrived and passed their check.
+    pub done: u64,
+    pub priority: Priority,
 }
 
 /// What a torrent holds, before it starts: the user picks files from this.
@@ -154,6 +204,9 @@ struct Saved {
     added_at: i64,
     /// Set once finished and released: the final view, shown as is.
     completed: Option<TorrentView>,
+    /// File priorities other than Normal (B8.10).
+    #[serde(default)]
+    priorities: Vec<(usize, Priority)>,
 }
 
 struct Entry {
@@ -166,6 +219,11 @@ struct Entry {
     added_at: i64,
     last: TorrentView,
     prev: (u64, Instant),
+    /// The files the person wants, once priorities are in play (else the
+    /// engine's selection is the whole story).
+    wanted: Option<HashSet<usize>>,
+    /// Priorities other than Normal.
+    prio: HashMap<usize, Priority>,
 }
 
 pub type NetSource = Arc<dyn Fn() -> Result<Vec<Interface>, String> + Send + Sync>;
@@ -469,6 +527,8 @@ impl Torrents {
                     path: f.parts.join("/"),
                     size: f.len,
                     selected: true,
+                    done: 0,
+                    priority: Priority::Normal,
                 })
                 .collect(),
         };
@@ -616,6 +676,8 @@ impl Torrents {
             added_at,
             last,
             prev: (0, Instant::now()),
+            wanted: None,
+            prio: HashMap::new(),
         });
         self.save().await;
         self.publish().await;
@@ -640,7 +702,8 @@ impl Torrents {
         let Some(t) = &e.torrent else {
             return Ok(Vec::new());
         };
-        let sel = t.selected();
+        let sel = e.wanted.clone().unwrap_or_else(|| t.selected());
+        let have = t.file_progress();
         Ok(t.listing()
             .files
             .iter()
@@ -651,6 +714,12 @@ impl Torrents {
                 path: f.parts.join("/"),
                 size: f.len,
                 selected: sel.contains(&i),
+                done: have.get(i).copied().unwrap_or(0).min(f.len),
+                priority: if sel.contains(&i) {
+                    e.prio.get(&i).copied().unwrap_or(Priority::Normal)
+                } else {
+                    Priority::Skip
+                },
             })
             .collect())
     }
@@ -751,10 +820,92 @@ impl Torrents {
 
     pub async fn select(&self, id: &str, files: Vec<usize>) -> Result<(), UiError> {
         let (engine, t) = self.live(id).await?;
+        let files: HashSet<usize> = files.into_iter().collect();
+        let tiers = {
+            let mut entries = self.entries.lock().await;
+            let e = entries
+                .iter_mut()
+                .find(|e| e.last.id == id)
+                .ok_or_else(not_found)?;
+            if e.wanted.is_some() {
+                e.prio.retain(|i, _| files.contains(i));
+                e.wanted = Some(files.clone());
+                Some(tiered(&files, &e.prio, &done_fn(&t)))
+            } else {
+                None
+            }
+        };
         engine
-            .select(&t, files.into_iter().collect())
+            .select(&t, tiers.unwrap_or(files))
             .await
             .map_err(ui)?;
+        self.after_change().await;
+        Ok(())
+    }
+
+    /// One file of a live torrent, read in order as it arrives (for Play).
+    pub async fn open_stream(
+        &self,
+        id: &str,
+        file: usize,
+    ) -> Option<(Box<dyn fuselane_engine_torrent::FileReader>, u64, String)> {
+        let (engine, t) = self.live(id).await.ok()?;
+        let f = t.listing().files.get(file)?.clone();
+        let reader = engine.stream(&t, file).await.ok()?;
+        Some((reader, f.len, f.parts.last().cloned().unwrap_or_default()))
+    }
+
+    /// The name of file `file` in a live torrent, if there is one.
+    pub async fn file_name(&self, id: &str, file: usize) -> Option<String> {
+        let (_, t) = self.live(id).await.ok()?;
+        t.listing()
+            .files
+            .get(file)
+            .and_then(|f| f.parts.last().cloned())
+    }
+
+    /// Sets one file's priority (B8.10). Skip leaves it out; at least one file
+    /// must stay wanted.
+    pub async fn set_priority(&self, id: &str, file: usize, p: Priority) -> Result<(), UiError> {
+        let (engine, t) = self.live(id).await?;
+        if t.listing().files.get(file).is_none_or(|f| f.padding) {
+            return Err(UiError {
+                code: "no-such-file",
+                message: "That file isn't in this torrent.".into(),
+                hint: None,
+            });
+        }
+        let next = {
+            let mut entries = self.entries.lock().await;
+            let e = entries
+                .iter_mut()
+                .find(|e| e.last.id == id)
+                .ok_or_else(not_found)?;
+            let mut wanted = e.wanted.clone().unwrap_or_else(|| t.selected());
+            match p {
+                Priority::Skip => {
+                    wanted.remove(&file);
+                }
+                _ => {
+                    wanted.insert(file);
+                }
+            }
+            if wanted.is_empty() {
+                return Err(UiError {
+                    code: "nothing-selected",
+                    message: "At least one file has to be downloaded.".into(),
+                    hint: Some("Pick another file first, or remove the torrent.".into()),
+                });
+            }
+            if matches!(p, Priority::Skip | Priority::Normal) {
+                e.prio.remove(&file);
+            } else {
+                e.prio.insert(file, p);
+            }
+            e.wanted = Some(wanted.clone());
+            tiered(&wanted, &e.prio, &done_fn(&t))
+        };
+        engine.select(&t, next).await.map_err(ui)?;
         self.after_change().await;
         Ok(())
     }
@@ -894,6 +1045,32 @@ impl Torrents {
                 .collect();
             e.last = view_of(&t, e.added_at, 0);
             e.last.rate = lane_rates(&mut e.last.networks, &before, verified_delta, elapsed);
+            // Priorities (B8.10): move on to the next tier as one finishes, and the
+            // torrent counts as done only once every wanted file is.
+            let mut more_to_come = false;
+            if let Some(wanted) = e.wanted.clone() {
+                let done = done_fn(&t);
+                let next = tiered(&wanted, &e.prio, &done);
+                if next != t.selected()
+                    && let Some(engine) = &engine
+                {
+                    let _ = engine.select(&t, next).await;
+                }
+                if wanted.iter().any(|i| !done(*i)) {
+                    more_to_come = true;
+                    let have = t.file_progress();
+                    let files = &t.listing().files;
+                    let len = |i: &usize| files.get(*i).map_or(0, |f| f.len);
+                    e.last.total = wanted.iter().map(len).sum();
+                    e.last.done = wanted
+                        .iter()
+                        .map(|i| have.get(*i).copied().unwrap_or(0).min(len(i)))
+                        .sum();
+                    if e.last.status == "completed" {
+                        e.last.status = "downloading".into();
+                    }
+                }
+            }
             let starved = self.all_networks_used_up(&e.last);
             // An allowance was raised or reset: reconnect now instead of waiting out
             // librqbit's growing retry timers.
@@ -911,8 +1088,8 @@ impl Torrents {
                         .into(),
                 );
             }
-            active |= matches!(p.phase, Phase::Checking | Phase::Downloading);
-            let finished = p.phase == Phase::Seeding && p.done == p.total;
+            active |= more_to_come || matches!(p.phase, Phase::Checking | Phase::Downloading);
+            let finished = !more_to_come && p.phase == Phase::Seeding && p.done == p.total;
             if finished {
                 let at = *e.finished_at.get_or_insert_with(Instant::now);
                 let share = &seed;
@@ -929,7 +1106,7 @@ impl Torrents {
                     released = true;
                 }
             }
-            downloading |= matches!(p.phase, Phase::Checking | Phase::Downloading);
+            downloading |= more_to_come || matches!(p.phase, Phase::Checking | Phase::Downloading);
         }
         // Metered guard: while torrents only share, phone tethers and cellular take
         // no new peers. While something downloads, every network helps (bonding).
@@ -1009,11 +1186,12 @@ impl Torrents {
             .map(|e| Saved {
                 id: e.last.id.clone(),
                 base: e.base.clone(),
-                selected: e
-                    .torrent
-                    .as_ref()
-                    .map(|t| t.selected().into_iter().collect())
-                    .unwrap_or_default(),
+                selected: match (&e.wanted, &e.torrent) {
+                    (Some(w), _) => w.iter().copied().collect(),
+                    (None, Some(t)) => t.selected().into_iter().collect(),
+                    (None, None) => vec![],
+                },
+                priorities: e.prio.iter().map(|(i, p)| (*i, *p)).collect(),
                 paused: e.last.status == "paused",
                 added_at: e.added_at,
                 completed: e.torrent.is_none().then(|| e.last.clone()),
@@ -1052,6 +1230,8 @@ impl Torrents {
                     added_at: s.added_at,
                     last: done,
                     prev: (0, Instant::now()),
+                    wanted: None,
+                    prio: HashMap::new(),
                 });
                 continue;
             }
@@ -1081,6 +1261,9 @@ impl Torrents {
                         added_at: s.added_at,
                         last,
                         prev: (0, Instant::now()),
+                        wanted: (!s.priorities.is_empty())
+                            .then(|| s.selected.iter().copied().collect()),
+                        prio: s.priorities.iter().copied().collect(),
                     });
                 }
                 Err(e) => eprintln!("fuselane: couldn't bring back a torrent: {e}"),
@@ -1150,6 +1333,8 @@ pub(crate) mod tests {
             path: "a".into(),
             size: 1,
             selected: true,
+            done: 0,
+            priority: Priority::Normal,
         };
         let view = TorrentView {
             id: "a".repeat(40),
@@ -1559,6 +1744,109 @@ pub(crate) mod tests {
         assert!(t.join("mine.txt").exists());
         assert!(again.tor.list().await.is_empty());
         assert!(!again.state.join(format!("{id}.torrent")).exists());
+    }
+
+    #[test]
+    fn priorities_fetch_high_first_and_low_last() {
+        let wanted: HashSet<usize> = [0, 1, 2, 3].into();
+        let prio: HashMap<usize, Priority> = [(0, Priority::High), (3, Priority::Low)].into();
+        let none_done = |_: usize| false;
+        assert_eq!(tiered(&wanted, &prio, &none_done), [0].into());
+        // The High file is done: the Normal ones (1, 2) join, Low still waits.
+        let first_done = |i: usize| i == 0;
+        assert_eq!(tiered(&wanted, &prio, &first_done), [0, 1, 2].into());
+        let all_but_low = |i: usize| i != 3;
+        assert_eq!(tiered(&wanted, &prio, &all_but_low), [0, 1, 2, 3].into());
+        // Everything done: the whole choice stays selected (for sharing).
+        let all = |_: usize| true;
+        assert_eq!(tiered(&wanted, &prio, &all), wanted);
+        // No priorities: exactly the choice, so nothing changes for most people.
+        assert_eq!(tiered(&wanted, &HashMap::new(), &none_done), wanted);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn priorities_and_skip_still_end_with_every_wanted_file_exact() {
+        logs();
+        let seed = tempfile::tempdir().unwrap();
+        let (_seeder, addr, file) = seeder(seed.path()).await;
+        let s = setup();
+        let id = add(&s, &file, addr, &["a.bin", "b.bin", "c.bin"]).await;
+        let listed = s.tor.files(&id).await.unwrap();
+        let index = |name: &str| listed.iter().find(|f| f.path == name).map(|f| f.index);
+        let (a, b, c) = (index("a.bin"), index("b.bin"), index("c.bin"));
+        // Raced with the download on purpose: whatever was fetched already, the
+        // end state must hold. (A finished torrent has no live files to change.)
+        if let (Some(a), Some(b), Some(c)) = (a, b, c) {
+            let _ = s.tor.set_priority(&id, c, Priority::High).await;
+            let _ = s.tor.set_priority(&id, a, Priority::Low).await;
+            let _ = s.tor.set_priority(&id, b, Priority::Skip).await;
+            if let Ok(files) = s.tor.files(&id).await
+                && !files.is_empty()
+            {
+                let p = |i| files.iter().find(|f| f.index == i).unwrap().priority;
+                assert_eq!(
+                    (p(a), p(b), p(c)),
+                    (Priority::Low, Priority::Skip, Priority::High)
+                );
+                // Nothing left to want is refused.
+                let _ = s.tor.set_priority(&id, a, Priority::Skip).await;
+                let err = s
+                    .tor
+                    .set_priority(&id, c, Priority::Skip)
+                    .await
+                    .unwrap_err();
+                assert_eq!(err.code, "nothing-selected");
+                s.tor.set_priority(&id, a, Priority::Low).await.unwrap();
+            }
+        }
+        let done = until(&s.tor, &id, "completed").await;
+        assert_eq!(done.done, done.total);
+        let t = s.downloads.join("T");
+        for n in ["a.bin", "c.bin"] {
+            assert_eq!(
+                std::fs::read(t.join(n)).unwrap(),
+                std::fs::read(seed.path().join("T").join(n)).unwrap(),
+                "{n}"
+            );
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_file_streams_in_order_while_it_downloads() {
+        use tokio::io::{AsyncReadExt, AsyncSeekExt};
+        logs();
+        let seed = tempfile::tempdir().unwrap();
+        let (_seeder, addr, file) = seeder(seed.path()).await;
+        let s = setup();
+        let id = add(&s, &file, addr, &["a.bin", "b.bin", "c.bin"]).await;
+        let c = s
+            .tor
+            .files(&id)
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|f| f.path == "c.bin")
+            .map(|f| f.index);
+        let want = std::fs::read(seed.path().join("T").join("c.bin")).unwrap();
+        // It may already have finished (a local seeder is quick): then there is
+        // nothing live to stream, which the app answers with "open the file".
+        if let Some(c) = c
+            && let Some((mut r, len, name)) = s.tor.open_stream(&id, c).await
+        {
+            assert_eq!((len, name.as_str()), (want.len() as u64, "c.bin"));
+            let mut got = vec![];
+            tokio::time::timeout(Duration::from_secs(30), r.read_to_end(&mut got))
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(got, want);
+            // Seeking (what a player does) reads from there on.
+            r.seek(std::io::SeekFrom::Start(1000)).await.unwrap();
+            let mut tail = vec![0u8; 100];
+            r.read_exact(&mut tail).await.unwrap();
+            assert_eq!(&tail[..], &want[1000..1100]);
+        }
+        until(&s.tor, &id, "completed").await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

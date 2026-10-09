@@ -2996,3 +2996,105 @@ html[data-hidden] *::after {
 .field-help.warn {
   color: var(--warning);
 }
+
+/* ---------- Torrent files: priorities and Play (B8.10) ---------- */
+
+.files-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.files {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.files th {
+  padding: 0 6px 8px;
+  color: var(--mute);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.files th.r,
+.files td.r {
+  text-align: right;
+}
+
+.files td {
+  height: 46px;
+  padding: 0 6px;
+  border-top: 1px solid var(--hairline);
+  vertical-align: middle;
+}
+
+.files .file-name {
+  display: block;
+  max-width: 34ch;
+  overflow: hidden;
+  color: var(--ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.files tr[data-skip] .file-name,
+.files tr[data-skip] .num {
+  color: var(--mute);
+}
+
+.here {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  color: var(--body);
+  font-size: 12px;
+}
+
+.mini-bar {
+  display: inline-block;
+  width: 64px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+}
+
+.mini-bar span {
+  display: block;
+  height: 100%;
+  background: var(--fuse);
+  transition: width var(--dur-base) var(--ease-out);
+}
+
+select.prio {
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+select.prio[data-level='high'] {
+  color: var(--fuse-text);
+}
+
+select.prio[data-level='skip'] {
+  color: var(--mute);
+}
+
+.play-note {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--body);
+  font-size: 13px;
+}
