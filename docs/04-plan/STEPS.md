@@ -150,12 +150,12 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [x] 6.2 Encryption: seekable XChaCha20 at byte offsets + sealed header (name, size, BLAKE3); vectors; tamper and wrong-key tests
 - [x] 6.3 Encrypting `StorageFactory` for librqbit: encrypt on read (sender), decrypt on write (receiver), no temp copy
 - [x] 6.4 Sender: build the torrent over ciphertext and seed it through the engine (`share::prepare`, `share::seed`); a file changed after sharing is caught by the check
-  - [ ] 6.4b "Arrived" when a peer has every piece; stop sharing; optional stop after the first full download; re-seed after a restart from the saved header and torrent
+  - [x] 6.4b Stop sharing; optional stop after one full copy is sent; re-seed after a restart from the saved header and torrent (a moved or changed file is shown and forgotten). Per-peer "arrived" is still open
 - [x] 6.5 Receiver: pasted links, lookup by info-hash, shape check, hidden side files that survive a restart, BLAKE3 check, real name without overwriting (`share::receive`, `Receiving::finish`)
-  - [ ] 6.5b Open `fuselane://send/…` from the OS (URL scheme on macOS, Windows, Linux); public UDP trackers as a DHT fallback; the rest of FUSE-SEND §5 (sender offline after 60 s, can't reach each other, not enough disk)
-- [ ] 6.6 Incoming peers per network (L-71) and UPnP per network, so senders are reachable
-- [ ] 6.7 Static link page on GitHub Pages (`/s#…`): hands the link to the app, install help, never sends the fragment anywhere
-- [ ] 6.8 Send UI in the desktop app (drop zone, link + QR, "keep Fuselane open", progress per network, stop sharing, first-download-only option)
+  - [ ] 6.5b Open `fuselane://send/…` from the OS (**done**: macOS plist, Windows installer, Linux desktop entry; real-machine check pending); sender offline after 60 s (**done**); public UDP trackers as a DHT fallback; can't reach each other; not enough disk
+- [ ] 6.6 Incoming peers per network (L-71) and UPnP per network, so senders are reachable (Fuse Send's own engine now listens on all addresses with UPnP and local discovery; per-network is open)
+- [x] 6.7 Static link page on GitHub Pages (`/s#…`): hands the link to the app, install help, never sends the fragment anywhere (noindex, no-referrer; tested)
+- [x] 6.8 Send UI in the desktop app: choose a file, copy link, "keep Fuselane open", sent and receivers, stop sharing, stop after one full copy; receive with progress, check, Show. QR and drag-and-drop are open
 - [ ] 6.9 netlab e2e: sender and receiver each with 2 networks; summed throughput recorded; one side behind simulated NAT
 
 ## P7 Browser extension (0.4)
@@ -176,8 +176,9 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [ ] 8.2 Throttle detection and auto-move
 - [ ] 8.3 Mirrors / multi-source + Metalink
 - [ ] 8.4 Proxy per network / per download (HTTP, SOCKS5)
-- [ ] 8.5 Categories and auto-folders, search, sort
-- [ ] 8.6 Per-job speed limit
+- [x] 8.5 Categories and auto-folders, search, sort (sort by type into folders; search and filters)
+- [x] 8.6 Per-job speed limit (live, kept with the job)
+- [x] 8.10 IDM parity, small things: Download later, export/import the list, catch copied links (opt-in), logins in links (HTTP Basic), redirects followed (up to 5, credentials never cross sites)
 - [ ] 8.7 Remote control: local web UI + aria2-compatible JSON-RPC (with auth)
 - [ ] 8.8 i18n framework + Hindi
 - [ ] 8.9 Bring-your-own S3 bucket for uploads (keychain credentials)

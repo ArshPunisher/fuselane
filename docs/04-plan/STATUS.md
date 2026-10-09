@@ -27,6 +27,13 @@
 
 ## Log
 
+### 2026-10-09 (overnight, owner away)
+- **Fuse Send in the app** (6.4b, 6.7, 6.8 and most of 6.5b): a Sends service with its own reachable engine (DHT, UPnP, local discovery), the Send page, the `/s` link page on the site, `fuselane://send/` registered on all three OSes, shares restored after a restart, optional stop after one full copy. End-to-end test: one Fuselane sends 3 MB to another over loopback, byte-exact.
+- **Real bug fixed:** HTTP redirects weren't followed at all, so links like GitHub release assets failed with "status 302". Now followed (5 hops, http/https only, cookies and logins dropped on another site). Verified against GitHub: the beta.4 DMG through its 302, split over en0 + en1, SHA-256 matched.
+- IDM-style features: a speed limit per download (live), Download later, export/import the list, catch copied download links (opt-in, off by default), logins in links as HTTP Basic, passwords masked in the window.
+- Site: Fuse Send band, "small things" grid, Send in the nav, three FAQ answers, and the `/s` page. **Not deployed yet**: it advertises Fuse Send, which ships in the next release.
+- Fixed a flaky site test (hero speeds read across frames). BSL-1.0 allowed in cargo-deny (Windows clipboard crates).
+
 ### 2026-10-09
 - Native-messaging host: the app registers itself with installed browsers on every launch; `fuselane browsers`; e2e with a real Chromium. Chrome Web Store item submitted for review.
 - Published `v0.1.0-beta.4`. Fuse Send started: link format (6.1) and encryption (6.2).

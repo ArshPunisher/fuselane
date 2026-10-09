@@ -7,6 +7,7 @@ says what is waiting and on whom. Last updated 2026-10-09.
 
 | What | Why it's needed | How |
 |---|---|---|
+| **Release beta.5** (new since beta.4: Fuse Send, redirects fix, per-download limits, Download later, export/import, copied links) | Ships the overnight work; the site deploy follows the release | Say "publish beta.5": bump versions, tag, check the draft, publish, update the Homebrew cask |
 | Firefox Add-ons and Edge Add-ons listings (free) | Same, for Firefox and Edge users | Same zip flow; Firefox gets its own build (`build:firefox`) |
 | Google Search Console verification (postponed) | Search indexing of the download page | Owner adds the site in Search Console and sends the verification tag |
 | SignPath approval (applied 2026-10-08) | Signed Windows installers | Wait for their email, then add the secrets |
@@ -23,9 +24,9 @@ says what is waiting and on whom. Last updated 2026-10-09.
 ## Next for the agent (no owner action needed)
 
 1. **Extension:** Alt-click to skip (needs a content script); forward cookies once the engine can send them. Rebuild the store zip so the listing ships the settings page.
-2. **Engine:** send request headers and cookies (lets the extension hand over logged-in downloads).
+2. **Extension media grabber** (IDM's video button): list direct video/audio files a page loads and offer them to Fuselane.
 3. **Edge Add-ons id:** add it to `fuselane_api::hosts` if an Edge listing is made (Chrome and Firefox ids are done; Edge users can install from the Chrome Web Store meanwhile).
-4. **Fuse Send (P6):** direct sharing with no cloud ([FUSE-SEND.md](../03-architecture/FUSE-SEND.md)). Spike S7 (can two home or phone connections reach each other over DHT?) first, then link format, encryption, encrypting storage, sender, receiver, link page and UI.
+4. **Fuse Send (P6):** built end to end on loopback. Left: a real two-computer test over the internet (DHT + UPnP), UDP trackers as a fallback, per-peer "arrived", QR code and drag-and-drop on the Send page, folders (zip on the fly), 6.9 netlab e2e.
 5. **Torrents:** a fixed connector in librqbit (5.9 part 2) so DHT and UDP trackers also go through Fuselane; incoming peers (L-71).
 6. **P2/P3 leftovers:** sleep and wake, network change watcher per OS (torrents already follow changes), a stable network id, macOS friendly names, event deltas, guided setup and speed test.
 7. **Real-machine checks:** Windows and Linux installers with the new "Open with" registration (CI builds them; never run on a real PC yet).
