@@ -20,6 +20,7 @@ fuselane-engine-torrent = { path = "crates/engine-torrent" }
 fuselane-core = { path = "crates/core" }
 fuselane-api = { path = "crates/api" }
 fuselane-send = { path = "crates/send" }
+fuselane-nearby = { path = "crates/nearby" }
 fuselane-testkit = { path = "crates/testkit" }
 
 [workspace.lints.rust]
