@@ -365,6 +365,8 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     whenDone: 'nothing',
     keepAwake: true,
     sortByType: false,
+    nameTaken: 'ask',
+    afterDownload: 'nothing',
   }
   const automationView = (): AutomationView => {
     const s = automation.schedule
@@ -663,6 +665,8 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     cancelUpdate: async () => {
       updateCancelled = true
     },
+    // Taken when a download of that name is in the list (the demo has no folder).
+    nameTaken: async (_dir, name) => jobs.some((j) => j.name === name.trim()),
     getLimits: async () => structuredClone(limits),
     perNetworkDns: async () => perNetDns,
     setPerNetworkDns: async (on) => (perNetDns = on),

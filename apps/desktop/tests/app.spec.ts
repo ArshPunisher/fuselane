@@ -1191,3 +1191,51 @@ test('starting a scheduled download by hand drops its start time', async ({ page
   await row.getByRole('button', { name: 'Resume later.iso' }).click()
   await expect(row.locator('.row-state')).toHaveText('Downloading')
 })
+
+test('a taken name is asked about in New download: keep both, replace, or skip', async ({
+  page,
+}) => {
+  await page.goto('/?freeze=3')
+  const dialog = await openDialog(page)
+  // The demo list already has this file.
+  await dialog.getByLabel('Link').fill('https://mirror.example.net/ubuntu-26.04-desktop-amd64.iso')
+  const ask = dialog.getByRole('group', { name: /is already in this folder/ })
+  await expect(ask).toBeVisible()
+  await expect(ask.getByRole('radio', { name: 'Keep both' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  )
+  await ask.getByRole('radio', { name: 'Replace' }).click()
+  await expect(ask.getByRole('radio', { name: 'Replace' })).toHaveAttribute('aria-checked', 'true')
+  // A name that isn't taken asks nothing.
+  await dialog.getByLabel('Link').fill('https://example.com/brand-new.iso')
+  await expect(ask).toHaveCount(0)
+  await dialog.getByLabel('Link').fill('https://mirror.example.net/ubuntu-26.04-desktop-amd64.iso')
+  await ask.getByRole('button', { name: "Don't download" }).click()
+  await expect(dialog).toBeHidden()
+})
+
+test('settings: when a download finishes, and if the name is taken', async ({ page }) => {
+  await page.goto('/?empty=1')
+  await page.getByRole('button', { name: 'Settings' }).click()
+  const after = page.getByRole('radiogroup', { name: 'When a download finishes' })
+  await after.getByRole('radio', { name: 'Unpack it' }).click()
+  await expect(after.getByRole('radio', { name: 'Unpack it' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  )
+  await expect(page.getByText(/Zip and tar archives unpack into a folder/)).toBeVisible()
+  const taken = page.getByRole('radiogroup', { name: 'If the name is taken' })
+  await taken.getByRole('radio', { name: 'Ask' }).focus()
+  await page.keyboard.press('ArrowRight')
+  await expect(taken.getByRole('radio', { name: 'Keep both' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  )
+  await expect(taken.getByRole('radio', { name: 'Keep both' })).toBeFocused()
+  // With Keep both chosen, New download no longer asks.
+  await page.getByRole('button', { name: 'New download' }).first().click()
+  const dialog = page.getByRole('dialog', { name: 'New download' })
+  await dialog.getByLabel('Link').fill('https://example.com/x.iso')
+  await expect(dialog.getByRole('group', { name: /is already in this folder/ })).toHaveCount(0)
+})

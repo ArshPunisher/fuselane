@@ -2893,3 +2893,45 @@ html[data-hidden] *::after {
 .more-options[open] > .field + .field {
   margin-top: 16px;
 }
+
+/* ---------- If the name is taken (B8.6) ---------- */
+
+.dup {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid color-mix(in oklch, var(--warning) 40%, transparent);
+  border-radius: var(--radius-control);
+  background: color-mix(in oklch, var(--warning) 9%, transparent);
+  color: var(--ink);
+}
+
+.dup-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.dup svg {
+  color: var(--warning);
+}
+
+.dup #nd-dup {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.dup-row:first-child {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+}
+
+.dup-row:first-child svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.dup #nd-dup {
+  flex: 1;
+}

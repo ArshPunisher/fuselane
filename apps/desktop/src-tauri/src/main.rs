@@ -14,6 +14,7 @@ mod selftest;
 mod sends;
 mod service;
 mod torrents;
+mod unpack;
 mod update;
 
 use std::sync::Arc;
@@ -562,6 +563,13 @@ fn reveal(app: tauri::AppHandle, svc: State<'_>, id: i64) -> Result<(), UiError>
         .map_err(|e| ui_error("open-failed", format!("Couldn't show the file: {e}")))
 }
 
+/// Whether `name` is already taken in the folder a new download would save to,
+/// so the New download dialog can ask (B8.6).
+#[tauri::command]
+fn name_taken(svc: State<'_>, dir: Option<String>, name: String) -> bool {
+    svc.name_taken(dir.as_deref(), &name)
+}
+
 /// Opens a finished file with its default app.
 #[tauri::command]
 fn open_file(app: tauri::AppHandle, svc: State<'_>, id: i64) -> Result<(), UiError> {
@@ -1083,6 +1091,7 @@ fn main() {
         svc.open_request(t.as_draft());
     }
     let for_open = svc.clone();
+    let for_opener = svc.clone();
     // Data allowances: count usage and apply allowances every few seconds.
     {
         let weak = Arc::downgrade(&svc);
@@ -1176,6 +1185,14 @@ fn main() {
         .manage(tor.clone())
         .manage(snd.clone())
         .setup(move |app| {
+            // "Open it" when a download finishes uses the system's default app.
+            {
+                use tauri_plugin_opener::OpenerExt;
+                let handle = app.handle().clone();
+                for_opener.set_opener(Arc::new(move |p: &std::path::Path| {
+                    let _ = handle.opener().open_path(p.to_string_lossy(), None::<&str>);
+                }));
+            }
             let show = MenuItem::with_id(app, "show", "Show Fuselane", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &quit])?;
@@ -1285,6 +1302,7 @@ fn main() {
             open_release_notes,
             install_update,
             cancel_update,
+            name_taken,
             set_limits,
             fix_link,
             start_over,

@@ -3,6 +3,10 @@
 export type JobStatus =
   'queued' | 'running' | 'paused' | 'failed' | 'failed-final' | 'completed' | 'cancelled'
 
+/** The fix the UI offers for a download's error. */
+export type ErrorAction =
+  'fix-link' | 'retry' | 'start-over' | 'free-space' | 'allowance' | 'schedule' | 'unpack' | null
+
 export interface JobView {
   id: number
   url: string
@@ -14,7 +18,7 @@ export interface JobView {
   total: number | null
   error: string | null
   /** The fix to offer for `error`. */
-  errorAction: 'fix-link' | 'retry' | 'start-over' | 'free-space' | 'allowance' | null
+  errorAction: ErrorAction
   finalPath: string | null
   createdAt: number
   position: number
@@ -114,11 +118,18 @@ export interface Schedule {
   days: boolean[]
 }
 
+export type NameTaken = 'ask' | 'keep-both' | 'replace'
+export type AfterDownload = 'nothing' | 'open' | 'unpack'
+
 export interface Automation {
   schedule: Schedule
   whenDone: WhenDone
   keepAwake: boolean
   sortByType: boolean
+  /** When a file of the same name is already there (B8.6). */
+  nameTaken: NameTaken
+  /** What happens to each finished download (B8.7). */
+  afterDownload: AfterDownload
 }
 
 export interface AutomationView {
@@ -144,6 +155,8 @@ export interface AddOptions {
   later?: boolean
   /** Start by itself at this time (unix seconds). */
   startAt?: number | null
+  /** The name is taken: true replaces the old file, false keeps both; unset follows Settings. */
+  replace?: boolean | null
 }
 
 export interface BatchResult {

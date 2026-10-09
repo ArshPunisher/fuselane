@@ -450,6 +450,10 @@ pub struct AddRequest {
     /// Start by itself at this time (unix seconds, B8.5); it waits paused until then.
     #[serde(default)]
     pub start_at: Option<i64>,
+    /// A file with the same name is already there: true replaces it (to the Trash)
+    /// once this one is complete, false keeps both. None follows the setting.
+    #[serde(default)]
+    pub replace: Option<bool>,
     /// A browser session's cookies and referrer (from the extension, never the window).
     #[serde(skip)]
     pub headers: Vec<(String, String)>,
@@ -548,7 +552,12 @@ pub struct Service {
     /// Offer copied download links (opt-in), and the last clipboard text seen.
     watch_clipboard: std::sync::atomic::AtomicBool,
     last_clip: Mutex<Option<String>>,
+    /// Opens a finished file with its usual app ("Open it" when done); set by the app.
+    opener: Mutex<OpenFn>,
 }
+
+/// Opens a file with the system's default app.
+pub type OpenFn = Arc<dyn Fn(&Path) + Send + Sync>;
 
 /// Seconds people get to cancel a sleep or shut-down.
 pub const COUNTDOWN: u32 = 60;
@@ -814,6 +823,7 @@ impl Service {
             default_dir,
             max_running: std::sync::atomic::AtomicUsize::new(max_running),
             retry_scale: None,
+            opener: Mutex::new(Arc::new(|_| {})),
             retries: Mutex::new(HashMap::new()),
             limiter,
             saved_limits: Mutex::new(saved_limits),
@@ -1257,6 +1267,14 @@ impl Service {
         if let Some(at) = req.start_at {
             self.store.set_start_at(id, Some(at)).map_err(store_error)?;
         }
+        let replace = req
+            .replace
+            .unwrap_or(lock(&self.automation).name_taken == crate::automation::NameTaken::Replace);
+        if replace {
+            self.store
+                .set_replace_existing(id, true)
+                .map_err(store_error)?;
+        }
         if !session.is_empty() {
             lock(&self.sessions).insert(id, session);
         }
@@ -1533,6 +1551,109 @@ impl Service {
     /// Moves a finished file into Video, Music, Documents… when the person turned
     /// that on and the download went to the default folder (a chosen folder is
     /// respected). Never replaces a file; a failed move leaves it where it was.
+    /// Whether a file named `name` (as the engine would clean it) is already in
+    /// `dir` (or the default folder), or in its type folder when sorting is on.
+    pub fn name_taken(&self, dir: Option<&str>, name: &str) -> bool {
+        let clean = fuselane_storage::names::sanitize(name);
+        if clean.is_empty() {
+            return false;
+        }
+        let base = dir
+            .map(str::trim)
+            .filter(|d| !d.is_empty())
+            .map_or_else(|| self.default_dir.clone(), PathBuf::from);
+        let mut places = vec![base.join(&clean)];
+        if lock(&self.automation).sort_by_type
+            && dir.is_none_or(|d| d.trim().is_empty())
+            && let Some(folder) = crate::automation::category(&clean)
+        {
+            places.push(self.default_dir.join(folder).join(&clean));
+        }
+        places.iter().any(|p| p.symlink_metadata().is_ok())
+    }
+
+    /// Sets how finished files are opened ("Open it" when done).
+    pub fn set_opener(&self, f: OpenFn) {
+        *lock(&self.opener) = f;
+    }
+
+    /// "Replace" for a name that was taken (B8.6): the engine never overwrites, so
+    /// it saved "name (1).ext"; the old file goes to the Trash and the new one
+    /// takes its name. Only a regular file is replaced, never a folder or a link.
+    fn replace_if_asked(&self, id: i64, path: &Path, total: u64) -> PathBuf {
+        let Ok(job) = self.store.get(id) else {
+            return path.to_path_buf();
+        };
+        // The name it was meant to have: the one chosen when adding (cleaned the
+        // way the engine cleans it), else the server's.
+        let wanted = job
+            .chosen_name
+            .as_deref()
+            .map(fuselane_storage::names::sanitize)
+            .filter(|n| !n.is_empty())
+            .or_else(|| job.filename.clone());
+        let (Some(dir), Some(wanted)) = (path.parent(), wanted) else {
+            return path.to_path_buf();
+        };
+        let target = dir.join(wanted);
+        if !job.replace_existing || target == path {
+            return path.to_path_buf();
+        }
+        let is_file = target
+            .symlink_metadata()
+            .is_ok_and(|m| m.file_type().is_file());
+        if !is_file {
+            return path.to_path_buf();
+        }
+        // Tests delete outright: they must never fill a real Trash.
+        let gone = if cfg!(test) {
+            std::fs::remove_file(&target).is_ok()
+        } else {
+            trash::delete(&target).is_ok()
+        };
+        if gone && std::fs::rename(path, &target).is_ok() {
+            let _ = self.store.set_finished(id, &target, total);
+            return target;
+        }
+        path.to_path_buf()
+    }
+
+    /// "When a download finishes" (B8.7): open it, or unpack an archive next to it.
+    fn after_download(self: &Arc<Self>, id: i64) {
+        use crate::automation::AfterDownload;
+        let action = lock(&self.automation).after_download;
+        let Some(path) = self.store.get(id).ok().and_then(|j| j.final_path) else {
+            return;
+        };
+        match action {
+            AfterDownload::Nothing => {}
+            AfterDownload::Open => {
+                let open = lock(&self.opener).clone();
+                open(&path);
+            }
+            AfterDownload::Unpack => {
+                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if !crate::unpack::is_archive(name) {
+                    return;
+                }
+                let me = Arc::clone(self);
+                std::thread::spawn(move || {
+                    let len = std::fs::metadata(&path).map_or(0, |m| m.len());
+                    if let Err(why) =
+                        crate::unpack::unpack(&path, crate::unpack::Limits::for_archive(len))
+                    {
+                        let _ = me.store.set_error(
+                            id,
+                            &format!("Downloaded, but it couldn't be unpacked: {why}."),
+                            "unpack",
+                        );
+                        me.publish_jobs();
+                    }
+                });
+            }
+        }
+    }
+
     fn sort_finished(&self, id: i64, dir: &Path, path: &Path, total: u64) {
         if !lock(&self.automation).sort_by_type {
             return;
@@ -2166,7 +2287,9 @@ impl Service {
             Ok(Outcome::Completed { .. } | Outcome::Paused | Outcome::Failed { .. }) => {}
         }
         if let Ok(Outcome::Completed { report, .. }) = &outcome {
-            self.sort_finished(id, &job.dir, &report.path, report.total);
+            let path = self.replace_if_asked(id, &report.path, report.total);
+            self.sort_finished(id, &job.dir, &path, report.total);
+            self.after_download(id);
         }
         if lock(&self.schedule_paused).contains(&id) {
             let next = self.automation_view().next.unwrap_or_default();
@@ -2772,6 +2895,7 @@ mod tests {
             allow_duplicate: false,
             later: false,
             start_at: None,
+            replace: None,
             headers: vec![],
         };
         let id = h.svc.add_with(&link(&server), None, &good).unwrap();
@@ -3047,6 +3171,137 @@ mod tests {
                 .iter()
                 .any(|e| matches!(e, UiEvent::WhenDoneCancelled))
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_taken_name_keeps_both_or_replaces_the_old_file() {
+        let content = Content::new(64 * KB, 141);
+        let server = RangeServer::start(content).await.unwrap();
+        let h = harness(3);
+        let old = h.dir.path().join("report.bin");
+        std::fs::write(&old, b"the old one").unwrap();
+        assert!(h.svc.name_taken(None, "report.bin"));
+        assert!(!h.svc.name_taken(None, "other.bin"));
+        let req = |replace| AddRequest {
+            name: Some("report.bin".into()),
+            allow_duplicate: true,
+            replace,
+            ..AddRequest::default()
+        };
+        // Keep both (the default when nobody chose): the new one is numbered.
+        let a = h.svc.add_with(&link(&server), None, &req(None)).unwrap();
+        h.wait("a", |h| h.job(a).status == "completed").await;
+        let pa = PathBuf::from(h.job(a).final_path.unwrap());
+        assert_eq!(pa.file_name().unwrap(), "report (1).bin");
+        assert_eq!(std::fs::read(&old).unwrap(), b"the old one");
+        // Replace: the old file goes (to the Trash in the app) and the new one takes its name.
+        let b = h
+            .svc
+            .add_with(&link(&server), None, &req(Some(true)))
+            .unwrap();
+        h.wait("b", |h| {
+            h.job(b)
+                .final_path
+                .is_some_and(|p| p.ends_with("report.bin"))
+        })
+        .await;
+        assert_eq!(
+            fuselane_testkit::sha256_file(&old).unwrap(),
+            content.sha256()
+        );
+        assert!(!h.dir.path().join("report (2).bin").exists());
+        // A folder with the name is never replaced.
+        std::fs::create_dir(h.dir.path().join("folder.bin")).unwrap();
+        let c = h
+            .svc
+            .add_with(
+                &link(&server),
+                None,
+                &AddRequest {
+                    name: Some("folder.bin".into()),
+                    allow_duplicate: true,
+                    replace: Some(true),
+                    ..AddRequest::default()
+                },
+            )
+            .unwrap();
+        h.wait("c", |h| h.job(c).status == "completed").await;
+        assert!(h.dir.path().join("folder.bin").is_dir());
+        assert!(h.job(c).final_path.unwrap().ends_with("folder (1).bin"));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_finished_download_can_open_or_unpack() {
+        let content = Content::new(16 * KB, 142);
+        let server = RangeServer::start(content).await.unwrap();
+        let h = harness(3);
+        let opened = Arc::new(Mutex::new(Vec::<PathBuf>::new()));
+        {
+            let opened = opened.clone();
+            h.svc.set_opener(Arc::new(move |p: &Path| {
+                opened.lock().unwrap().push(p.into())
+            }));
+        }
+        h.svc
+            .set_automation(crate::automation::Automation {
+                after_download: crate::automation::AfterDownload::Open,
+                ..crate::automation::Automation::default()
+            })
+            .unwrap();
+        let a = h.svc.add(&link(&server), None).unwrap();
+        h.wait("a", |h| h.job(a).status == "completed").await;
+        h.wait("opened", |_| !opened.lock().unwrap().is_empty())
+            .await;
+        assert_eq!(
+            opened.lock().unwrap()[0],
+            PathBuf::from(h.job(a).final_path.unwrap())
+        );
+
+        // Unpack: a finished zip unpacks next to itself; anything else is left alone.
+        h.svc
+            .set_automation(crate::automation::Automation {
+                after_download: crate::automation::AfterDownload::Unpack,
+                ..crate::automation::Automation::default()
+            })
+            .unwrap();
+        let zip_path = h.dir.path().join("pack.zip");
+        {
+            use std::io::Write;
+            let mut z = zip::ZipWriter::new(std::fs::File::create(&zip_path).unwrap());
+            z.start_file("inside.txt", zip::write::SimpleFileOptions::default())
+                .unwrap();
+            z.write_all(b"unpacked").unwrap();
+            z.finish().unwrap();
+        }
+        let id = h
+            .svc
+            .store
+            .create("https://example.com/pack.zip", h.dir.path())
+            .unwrap();
+        h.svc.store.set_finished(id, &zip_path, 1).unwrap();
+        h.svc.after_download(id);
+        let inside = h.dir.path().join("pack").join("inside.txt");
+        h.wait("unpacked", |_| inside.exists()).await;
+        assert_eq!(std::fs::read(&inside).unwrap(), b"unpacked");
+        // A damaged archive says so on the download, in plain words.
+        let bad = h.dir.path().join("broken.zip");
+        std::fs::write(&bad, b"not a zip at all").unwrap();
+        let id = h
+            .svc
+            .store
+            .create("https://example.com/broken.zip", h.dir.path())
+            .unwrap();
+        h.svc.store.set_finished(id, &bad, 16).unwrap();
+        h.svc.after_download(id);
+        h.wait("unpack error", |h| {
+            h.svc
+                .store
+                .get(id)
+                .unwrap()
+                .error
+                .is_some_and(|e| e.contains("couldn't be unpacked"))
+        })
+        .await;
     }
 
     #[tokio::test(flavor = "multi_thread")]

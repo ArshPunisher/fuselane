@@ -41,6 +41,31 @@ pub enum WhenDone {
     Quit,
 }
 
+/// What to do when a file with the same name is already in the folder (B8.6).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NameTaken {
+    /// The New download dialog asks; downloads added elsewhere keep both.
+    #[default]
+    Ask,
+    /// Save as "name (1).ext" next to the old one.
+    KeepBoth,
+    /// Move the old file to the Trash once the new one is complete.
+    Replace,
+}
+
+/// What happens to each download once it has finished (B8.7).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AfterDownload {
+    #[default]
+    Nothing,
+    /// Open it with its usual app.
+    Open,
+    /// Unpack zip and tar archives into a folder next to them.
+    Unpack,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Automation {
@@ -50,6 +75,8 @@ pub struct Automation {
     pub keep_awake: bool,
     /// Move finished files into Video, Music, Documents… under the downloads folder.
     pub sort_by_type: bool,
+    pub name_taken: NameTaken,
+    pub after_download: AfterDownload,
 }
 
 impl Default for Automation {
@@ -59,6 +86,8 @@ impl Default for Automation {
             when_done: WhenDone::Nothing,
             keep_awake: true,
             sort_by_type: false,
+            name_taken: NameTaken::Ask,
+            after_download: AfterDownload::Nothing,
         }
     }
 }

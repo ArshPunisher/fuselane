@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, FileArrowUp, Magnet, X } from '@phosphor-icons/react'
+import { ArrowLeft, FileArrowUp, Magnet, Warning, X } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { toUiError } from '../lib/backend'
 import { isSendLink } from '../lib/sendLink'
@@ -82,6 +82,10 @@ export function NewDownload() {
   // Start at a set time (B8.5): off, or the next time the clock shows `startTime`.
   const [startLater, setStartLater] = useState(false)
   const [startTime, setStartTime] = useState('02:00')
+  // A file of this name is already in the folder (B8.6): keep both or replace.
+  const [taken, setTaken] = useState(false)
+  const [replace, setReplace] = useState(false)
+  const nameRule = useApp((s) => s.automation?.settings.nameTaken ?? 'ask')
   /** What a batch add skipped, shown until the dialog closes. */
   const [skipped, setSkipped] = useState<{ url: string; reason: string }[]>([])
   const [error, setError] = useState<UiError | null>(null)
@@ -143,6 +147,26 @@ export function NewDownload() {
       setSkipped([])
     }
   }, [open, draft, draftTorrent])
+
+  // Ask whether the name is taken once the name is known (Settings: Ask).
+  const wantedName = (more && name.trim()) || (preview.state === 'ok' ? preview.data.filename : '')
+  useEffect(() => {
+    if (!open || !backend || nameRule !== 'ask' || !wantedName) {
+      setTaken(false)
+      return
+    }
+    let live = true
+    const t = setTimeout(() => {
+      backend
+        .nameTaken(dir.trim() || null, wantedName)
+        .then((v) => live && setTaken(v))
+        .catch(() => live && setTaken(false))
+    }, 200)
+    return () => {
+      live = false
+      clearTimeout(t)
+    }
+  }, [open, backend, nameRule, wantedName, dir])
 
   // Every hand-off (paste, drop, the OS opening a file or magnet) applies, even
   // when the dialog is already open with something else.
@@ -210,6 +234,7 @@ export function NewDownload() {
     setName('')
     setSha256('')
     setStartLater(false)
+    setReplace(false)
     setMore(false)
     setSkipped([])
   }
@@ -253,6 +278,7 @@ export function NewDownload() {
         allowDuplicate,
         later: later.current,
         startAt: scheduled,
+        replace: taken ? replace : null,
       })
       reset()
       setAdding(false)
@@ -469,6 +495,44 @@ export function NewDownload() {
               </p>
             )}
           </div>
+          {taken && !batch && !isMagnet(url) && (
+            <div className="dup" role="group" aria-labelledby="nd-dup">
+              <div className="dup-row">
+                <Warning size={16} weight="fill" aria-hidden />
+                <span id="nd-dup">A file named {wantedName} is already in this folder.</span>
+              </div>
+              <div className="dup-row">
+                <div className="segmented" role="radiogroup" aria-labelledby="nd-dup">
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={!replace}
+                    onClick={() => setReplace(false)}
+                  >
+                    Keep both
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={replace}
+                    onClick={() => setReplace(true)}
+                  >
+                    Replace
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => {
+                    reset()
+                    setAdding(false)
+                  }}
+                >
+                  Don&apos;t download
+                </button>
+              </div>
+            </div>
+          )}
           <div className="field">
             <label htmlFor="nd-dir">Save to</label>
             <div className="field-row">

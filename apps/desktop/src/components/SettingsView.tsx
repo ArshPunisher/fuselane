@@ -8,6 +8,8 @@ import {
   DownloadsAtOnceSetting,
   KeepAwakeSetting,
   ScheduleSetting,
+  AfterDownloadSetting,
+  NameTakenSetting,
   SortSetting,
   WhenDoneSetting,
   WindowSettings,
@@ -557,6 +559,8 @@ export function SettingsView() {
         </div>
       </div>
       <SortSetting />
+      <AfterDownloadSetting />
+      <NameTakenSetting />
       <SlowModeSetting />
       <ScheduleSetting />
       <WhenDoneSetting />

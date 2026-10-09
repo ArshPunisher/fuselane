@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../lib/store'
-import type { Automation, WhenDone, WindowPrefs } from '../lib/types'
+import type { AfterDownload, Automation, NameTaken, WhenDone, WindowPrefs } from '../lib/types'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -305,6 +305,117 @@ export function KeepAwakeSetting() {
       help="While something downloads, your computer won't go to sleep. The screen can still turn off."
       on={settings.keepAwake}
       onChange={(keepAwake) => void save({ ...settings, keepAwake })}
+    />
+  )
+}
+
+/** One setting with a few choices, as a segmented control (arrow keys move). */
+function ChoiceSetting<T extends string>({
+  id,
+  name,
+  help,
+  choices,
+  value,
+  onChange,
+}: {
+  id: string
+  name: string
+  help: string
+  choices: { id: T; label: string }[]
+  value: T
+  onChange: (v: T) => void
+}) {
+  return (
+    <div className="setting">
+      <div>
+        <p className="setting-name" id={`${id}-label`}>
+          {name}
+        </p>
+        <p className="muted">{help}</p>
+      </div>
+      <div
+        className="segmented"
+        role="radiogroup"
+        aria-labelledby={`${id}-label`}
+        onKeyDown={(e) => {
+          const i = choices.findIndex((c) => c.id === value)
+          const step =
+            e.key === 'ArrowRight' || e.key === 'ArrowDown'
+              ? 1
+              : e.key === 'ArrowLeft' || e.key === 'ArrowUp'
+                ? -1
+                : 0
+          if (!step) return
+          e.preventDefault()
+          const next = choices[(i + step + choices.length) % choices.length]
+          if (next) {
+            onChange(next.id)
+            e.currentTarget.querySelector<HTMLButtonElement>(`[data-id="${next.id}"]`)?.focus()
+          }
+        }}
+      >
+        {choices.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            data-id={c.id}
+            role="radio"
+            aria-checked={value === c.id}
+            tabIndex={value === c.id ? 0 : -1}
+            onClick={() => onChange(c.id)}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function NameTakenSetting() {
+  const [settings, save] = useAutomation()
+  if (!settings) return null
+  const help: Record<NameTaken, string> = {
+    ask: 'New download asks when a file with the same name is already in the folder.',
+    'keep-both': 'The new file is saved as "name (1)" next to the old one.',
+    replace: `The old file goes to the ${/Win/i.test(navigator.platform) ? 'Recycle Bin' : 'Trash'} once the new one is complete.`,
+  }
+  return (
+    <ChoiceSetting<NameTaken>
+      id="name-taken"
+      name="If the name is taken"
+      help={help[settings.nameTaken]}
+      choices={[
+        { id: 'ask', label: 'Ask' },
+        { id: 'keep-both', label: 'Keep both' },
+        { id: 'replace', label: 'Replace' },
+      ]}
+      value={settings.nameTaken}
+      onChange={(nameTaken) => void save({ ...settings, nameTaken })}
+    />
+  )
+}
+
+export function AfterDownloadSetting() {
+  const [settings, save] = useAutomation()
+  if (!settings) return null
+  const help: Record<AfterDownload, string> = {
+    nothing: 'Finished files stay where they are.',
+    open: 'Each finished file opens with its usual app.',
+    unpack: 'Zip and tar archives unpack into a folder next to them. The archive is kept.',
+  }
+  return (
+    <ChoiceSetting<AfterDownload>
+      id="after-download"
+      name="When a download finishes"
+      help={help[settings.afterDownload]}
+      choices={[
+        { id: 'nothing', label: 'Nothing' },
+        { id: 'open', label: 'Open it' },
+        { id: 'unpack', label: 'Unpack it' },
+      ]}
+      value={settings.afterDownload}
+      onChange={(afterDownload) => void save({ ...settings, afterDownload })}
     />
   )
 }
