@@ -292,3 +292,56 @@ test('with reduced motion, nothing waits to appear', async ({ browser }) => {
   await expect(page.locator('#total')).not.toHaveText('')
   await ctx.close()
 })
+
+test.describe('the Fuse Send link page', () => {
+  // 53 bytes (info-hash, key, flags) in base64url: 71 characters.
+  const TOKEN = 'v1.' + 'A'.repeat(70) + 'w'
+
+  test('a whole link opens in the app and never leaves the tab', async ({ page }) => {
+    const seen: string[] = []
+    page.on('request', (r) => seen.push(`${r.url()} ${r.headers()['referer'] ?? ''}`))
+    await stub(page)
+    await page.goto(`/s/#${TOKEN}`)
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Someone sent you a file')
+    await expect(page.getByRole('link', { name: 'Open in Fuselane' })).toHaveAttribute(
+      'href',
+      `fuselane://send/${TOKEN}`,
+    )
+    await expect(page.getByRole('button', { name: 'Copy link' })).toBeVisible()
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/)
+    expect(seen.filter((s) => s.includes(TOKEN.slice(3, 20)))).toEqual([])
+  })
+
+  for (const [hash, title] of [
+    ['', 'This link is missing its key'],
+    ['#v1.abc', 'This link is incomplete'],
+    ['#hello', 'This link is incomplete'],
+    [`#v2.${'A'.repeat(71)}`, 'This link needs a newer Fuselane'],
+  ] as const) {
+    test(`"${hash || 'no key'}" explains what went wrong`, async ({ page }) => {
+      await stub(page)
+      await page.goto(`/s/${hash}`)
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(title)
+      await expect(page.getByRole('link', { name: 'Open in Fuselane' })).toBeHidden()
+    })
+  }
+
+  test('fixing the link in place shows the right page again', async ({ page }) => {
+    await stub(page)
+    await page.goto('/s/#v1.abc')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('This link is incomplete')
+    await page.evaluate((t) => (location.hash = t), TOKEN)
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Someone sent you a file')
+    await expect(page.getByText('It comes straight from their computer')).toBeVisible()
+  })
+
+  test('fits a phone', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 })
+    await stub(page)
+    await page.goto(`/s/#${TOKEN}`)
+    await expect(page.getByRole('link', { name: 'Open in Fuselane' })).toBeVisible()
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth - innerWidth),
+    ).toBeLessThanOrEqual(0)
+  })
+})

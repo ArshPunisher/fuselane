@@ -12,6 +12,7 @@ export default defineConfig({
         download: resolve(import.meta.dirname, 'download/index.html'),
         faq: resolve(import.meta.dirname, 'faq/index.html'),
         support: resolve(import.meta.dirname, 'support/index.html'),
+        send: resolve(import.meta.dirname, 's/index.html'),
       },
     },
   },

@@ -25,6 +25,7 @@ import puzzle from '@phosphor-icons/core/assets/regular/puzzle-piece.svg?raw'
 import magnet from '@phosphor-icons/core/assets/regular/magnet.svg?raw'
 import list from '@phosphor-icons/core/assets/regular/list-numbers.svg?raw'
 import plug from '@phosphor-icons/core/assets/regular/plugs-connected.svg?raw'
+import copy from '@phosphor-icons/core/assets/regular/copy.svg?raw'
 
 export const REPO = 'https://github.com/ArshPunisher/fuselane'
 
@@ -53,6 +54,7 @@ const ICONS: Record<string, string> = {
   magnet,
   list,
   plug,
+  copy,
 }
 
 /** `<i data-icon="star"></i>` becomes the icon, hidden from screen readers. */
