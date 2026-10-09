@@ -2418,3 +2418,190 @@ kbd {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ---------- Motion foundations ----------
+   Looping animations rest while the window is hidden; new rows and items enter
+   with a short rise (transform and opacity only, so it stays on the GPU). */
+
+html[data-hidden] *,
+html[data-hidden] *::before,
+html[data-hidden] *::after {
+  animation-play-state: paused !important;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .row,
+  .send-item,
+  .peer-row,
+  .notice {
+    transition:
+      opacity 0.32s var(--ease-out),
+      transform 0.32s var(--ease-out),
+      background-color var(--dur-quick) var(--ease-out);
+  }
+
+  @starting-style {
+    .row,
+    .send-item,
+    .peer-row,
+    .notice {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+
+  .btn:active:not(:disabled),
+  .icon-btn:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+}
+
+/* ---------- Torrent: pieces, tabs, peers ---------- */
+
+.pieces {
+  display: block;
+  width: 100%;
+  height: 10px;
+}
+
+.tab-count {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--mute);
+  font-size: 11px;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.tabs button {
+  position: relative;
+  padding: 9px 12px;
+  border: 0;
+  background: none;
+  color: var(--mute);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--dur-quick) var(--ease-out);
+}
+
+.tabs button:hover {
+  color: var(--ink);
+}
+
+.tabs button[aria-selected='true'] {
+  color: var(--ink);
+}
+
+.tabs button::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--fuse);
+  transform: scaleX(0);
+  transition: transform 0.3s var(--ease-out);
+}
+
+.tabs button[aria-selected='true']::after {
+  transform: scaleX(1);
+}
+
+.tabs button:focus-visible {
+  outline: 2px solid var(--fuse);
+  outline-offset: -2px;
+  border-radius: var(--radius-control);
+}
+
+.peers {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.peer-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) 92px 92px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 6px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.peer-who {
+  display: grid;
+  min-width: 0;
+}
+
+.peer-client {
+  overflow: hidden;
+  color: var(--ink);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.peer-addr {
+  overflow: hidden;
+  color: var(--mute);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.peer-net {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--body);
+  font-size: 13px;
+}
+
+.peer-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.peer-rate {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.peer-rate.up {
+  color: var(--mute);
+}
+
+.peers-empty {
+  padding: 18px 6px;
+}
+
+@media (max-width: 640px) {
+  .peer-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .peer-net {
+    display: none;
+  }
+
+  .peer-rate.up {
+    display: none;
+  }
+}

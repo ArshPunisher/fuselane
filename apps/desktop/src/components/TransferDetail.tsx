@@ -19,6 +19,7 @@ import { Stream } from './Stream'
 import { Orb } from './Orb'
 import { STATUS_WORD } from './status'
 import { LimitField } from './LimitField'
+import { LiveRate } from './LiveRate'
 import type { JobView, Live } from '../lib/types'
 
 /** The platform's own words for showing a file in its folder. */
@@ -30,7 +31,6 @@ export const REVEAL_LABEL = /Mac/i.test(navigator.platform)
 
 function Center({ job, live }: { job: JobView; live: Live | undefined }) {
   if (job.status === 'running' && live) {
-    const r = rate(live.rate)
     const live1 = live.networks.filter((n) => !n.dead)
     const best = live1.reduce<(typeof live1)[number] | null>(
       (a, n) => (!a || n.rate > a.rate ? n : a),
@@ -39,10 +39,7 @@ function Center({ job, live }: { job: JobView; live: Live | undefined }) {
     const faster = live1.length > 1 && best && best.rate > 0 ? live.rate / best.rate : 0
     return (
       <>
-        <p className="speed num">
-          {r.value}
-          <span className="unit">{r.unit}</span>
-        </p>
+        <LiveRate value={live.rate} />
         <p className="speed-sub">
           {faster >= 1.1 && best
             ? `${faster.toFixed(1)}x faster than ${netTitle(best)}`

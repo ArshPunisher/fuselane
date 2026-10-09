@@ -4,11 +4,24 @@ import { expect, test, type Page } from '@playwright/test'
 // Accessibility checks (P3): every main screen and dialog, in light and dark,
 // must have no serious or critical axe-core violations (WCAG 2.2 A and AA).
 async function audit(page: Page, what: string) {
-  // Measure a dialog once it has finished fading in (live orbs elsewhere keep animating).
-  await page.waitForFunction(() => {
-    const d = document.querySelector('dialog[open]')
-    return !d || d.getAnimations({ subtree: true }).every((a) => a.playState !== 'running')
-  })
+  // Measure once rows and dialogs have finished fading in (live orbs and
+  // spinners elsewhere keep moving and are left out).
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .filter((a) => {
+        const t = (a.effect as KeyframeEffect | null)?.target
+        return t instanceof Element && t.closest('dialog, .row, .send-item, .peer-row, .notice')
+      })
+      .filter((a) => a.effect?.getTiming().iterations !== Infinity)
+      // Progress bars keep easing their width; only fades and rises matter here.
+      .filter(
+        (a) =>
+          !('transitionProperty' in a) ||
+          ['opacity', 'transform'].includes(String(a.transitionProperty)),
+      )
+      .every((a) => a.playState !== 'running'),
+  )
   const r = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     .analyze()
