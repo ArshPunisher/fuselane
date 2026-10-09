@@ -22,6 +22,7 @@ fn plain(id: u32) -> Network {
         id,
         name: format!("net{id}"),
         connect,
+        mirror: None,
     }
 }
 
@@ -38,6 +39,7 @@ fn dead(id: u32) -> Network {
         id,
         name: format!("dead{id}"),
         connect,
+        mirror: None,
     }
 }
 
@@ -57,6 +59,7 @@ fn slow(id: u32, bps: u64) -> Network {
         id,
         name: format!("slow{id}"),
         connect,
+        mirror: None,
     }
 }
 
@@ -909,4 +912,105 @@ async fn a_file_bigger_than_the_disk_fails_before_anything_is_written() {
         0,
         "no partial file left behind"
     );
+}
+
+fn mirror_lane(
+    id: u32,
+    mirror: &RangeServer,
+    probe: &fuselane_engine_http::download::Probe,
+) -> Network {
+    Network {
+        mirror: Some(Arc::new(fuselane_engine_http::download::Mirror {
+            source: source(mirror),
+            if_range: probe.raw_etag.clone(),
+            etag: probe.etag.clone(),
+        })),
+        ..plain(id)
+    }
+}
+
+#[tokio::test]
+async fn a_mirror_carries_part_of_the_file_and_it_stays_exact() {
+    let content = Content::new(2 * 1024 * KB + 5, 31);
+    let main = RangeServer::start(content).await.unwrap();
+    let mirror = RangeServer::start(content).await.unwrap();
+    let t = tuning();
+    let mp = fuselane_engine_http::download::probe(&source(&mirror), &[plain(9)], &t)
+        .await
+        .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let report = tokio::time::timeout(
+        Duration::from_secs(60),
+        download(
+            source(&main),
+            vec![plain(1), mirror_lane(2, &mirror, &mp)],
+            dir.path(),
+            t,
+        ),
+    )
+    .await
+    .expect("download hung")
+    .unwrap();
+    assert_exact(&report, content);
+    assert!(
+        report.bytes_by_network.get(&2).copied().unwrap_or(0) > 0,
+        "the mirror did no work"
+    );
+    assert!(!mirror.requests().is_empty());
+    // The mirror is asked with its own validator, never the main server's.
+    assert!(
+        mirror
+            .requests()
+            .iter()
+            .all(|r| r.if_range == mp.raw_etag || r.if_range.is_none())
+    );
+    // The spot check reads the same bytes from both.
+    let a = fuselane_engine_http::download::read_range(
+        &source(&main),
+        &plain(1),
+        &tuning(),
+        1000,
+        1999,
+    )
+    .await
+    .unwrap();
+    let b = fuselane_engine_http::download::read_range(
+        &source(&mirror),
+        &plain(2),
+        &tuning(),
+        1000,
+        1999,
+    )
+    .await
+    .unwrap();
+    assert_eq!(a, b);
+}
+
+#[tokio::test]
+async fn a_mirror_with_a_different_file_is_dropped_and_the_file_stays_exact() {
+    let content = Content::new(1024 * KB, 32);
+    let main = RangeServer::start(content).await.unwrap();
+    // Same name, different size: every answer it gives fails the size check.
+    let other = RangeServer::start(Content::new(1024 * KB + 1, 33))
+        .await
+        .unwrap();
+    let t = tuning();
+    let op = fuselane_engine_http::download::probe(&source(&other), &[plain(9)], &t)
+        .await
+        .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let report = tokio::time::timeout(
+        Duration::from_secs(60),
+        download(
+            source(&main),
+            vec![plain(1), mirror_lane(2, &other, &op)],
+            dir.path(),
+            t,
+        ),
+    )
+    .await
+    .expect("download hung")
+    .unwrap();
+    assert_exact(&report, content);
+    assert_eq!(report.bytes_by_network.get(&2).copied().unwrap_or(0), 0);
 }

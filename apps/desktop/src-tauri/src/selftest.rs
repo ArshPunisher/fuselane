@@ -103,11 +103,13 @@ async fn loopback_download() -> Result<String, String> {
             id: 1,
             name: "a".into(),
             connect: connect.clone(),
+            mirror: None,
         },
         Network {
             id: 2,
             name: "b".into(),
             connect,
+            mirror: None,
         },
     ];
     let dir = std::env::temp_dir().join(format!("fuselane-selftest-{}", std::process::id()));

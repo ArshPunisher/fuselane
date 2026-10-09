@@ -46,6 +46,21 @@ pub struct Network {
     pub id: NetId,
     pub name: String,
     pub connect: Connect,
+    /// This lane fetches from a mirror instead of the main source (B8.9). Mirror
+    /// lanes come after the main ones; `connect` reaches the mirror's server.
+    pub mirror: Option<Arc<Mirror>>,
+}
+
+/// Another server with the same file (B8.9). Every response from it must match
+/// the main file's exact size; a mismatch, a refusal or a changed file only
+/// retires the lanes using it, never the download.
+#[derive(Debug, Clone)]
+pub struct Mirror {
+    pub source: Source,
+    /// Its own validator for If-Range (validators differ from server to server).
+    pub if_range: Option<String>,
+    /// Its own normalized ETag, checked on each of its responses.
+    pub etag: Option<String>,
 }
 
 impl std::fmt::Debug for Network {
@@ -287,6 +302,11 @@ impl Headers {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+
+    /// Carries something that proves who you are (a cookie or a login).
+    pub fn has_credentials(&self) -> bool {
+        self.without_credentials().0.len() != self.0.len()
+    }
 }
 
 /// Every tunable in one place (CLAUDE.md coding conventions).
@@ -512,6 +532,27 @@ fn now_unix() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
+/// Reads bytes `first..=last` of the file from `src` through `net`, or None if
+/// the server doesn't answer with exactly that range. Used to spot-check that a
+/// mirror serves the same bytes as the main server before it may help (B8.9).
+pub async fn read_range(
+    src: &Source,
+    net: &Network,
+    t: &Tuning,
+    first: u64,
+    last: u64,
+) -> Option<Vec<u8>> {
+    let mut c = connect(net, src, t).await.ok()?;
+    let res = send(&mut c, request(src, t, Some((first, Some(last))), None), t)
+        .await
+        .ok()?;
+    if res.status().as_u16() != 206 {
+        return None;
+    }
+    let body = res.into_body().collect().await.ok()?.to_bytes();
+    (body.len() as u64 == last - first + 1).then(|| body.to_vec())
+}
+
 /// Busy answers the probe waits out before reporting the status.
 const PROBE_BUSY_RETRIES: u32 = 3;
 /// Longest Retry-After the probe honours (a server asking for an hour is answered later).
@@ -520,7 +561,7 @@ const PROBE_RETRY_AFTER_CAP_MS: u64 = 30_000;
 /// Probes with `Range: bytes=0-0` on the first network that answers (L-01, L-04).
 pub async fn probe(src: &Source, networks: &[Network], t: &Tuning) -> Result<Probe, JobError> {
     let mut last = String::from("no networks");
-    for net in networks {
+    for net in networks.iter().filter(|n| n.mirror.is_none()) {
         let mut busy = 0;
         let res = loop {
             let mut conn = match connect(net, src, t).await {
@@ -890,6 +931,25 @@ async fn run_stream(ctx: Arc<Ctx>, net: Network, stream: StreamId) {
                     silent && ctx.live_networks > 1,
                     jitter,
                 );
+                // A mirror that refuses, or whose file looks different, just stops
+                // helping: its lanes retire and the main server carries on (B8.9).
+                if net.mirror.is_some()
+                    && (signals.link_refused.is_some()
+                        || matches!(
+                            decision,
+                            Decision::FailAndDiscard
+                                | Decision::ConfirmBytes
+                                | Decision::FailNetwork
+                        ))
+                {
+                    let mut s = ctx.lock();
+                    s.retries += 1;
+                    s.last_error = format!("{} (mirror): {failure:?}", net.name);
+                    s.dead_networks.insert(net.id);
+                    drop(s);
+                    ctx.wake.notify_waiters();
+                    return;
+                }
                 {
                     let mut s = ctx.lock();
                     s.retries += 1;
@@ -1235,9 +1295,14 @@ async fn fetch_block(
             s.if_range.clone(),
         )
     };
+    // A mirror lane asks its own server with that server's validators.
+    let (src, etag, if_range) = match &net.mirror {
+        Some(m) => (&m.source, m.etag.clone(), m.if_range.clone()),
+        None => (&ctx.src, etag, if_range),
+    };
     if conn.is_none() {
         *conn = Some(
-            connect(net, &ctx.src, &ctx.tuning)
+            connect(net, src, &ctx.tuning)
                 .await
                 .map_err(Outcome::Failed)?,
         );
@@ -1260,7 +1325,7 @@ async fn fetch_block(
     };
     let res = send(
         c,
-        request(&ctx.src, &ctx.tuning, range, if_range.as_deref()),
+        request(src, &ctx.tuning, range, if_range.as_deref()),
         &ctx.tuning,
     )
     .await

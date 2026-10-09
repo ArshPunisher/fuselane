@@ -19,6 +19,7 @@ fn plain(id: u32) -> Network {
         id,
         name: format!("net{id}"),
         connect,
+        mirror: None,
     }
 }
 
