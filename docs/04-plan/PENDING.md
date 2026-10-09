@@ -29,8 +29,7 @@ says what is waiting and on whom. Last updated 2026-10-09.
 4. **Fuse Send (P6):** built end to end on loopback. Left: a real two-computer test over the internet (DHT + UPnP), UDP trackers as a fallback, per-peer "arrived", QR code and drag-and-drop on the Send page, folders (zip on the fly), 6.9 netlab e2e.
 5. **Torrents:** a fixed connector in librqbit (5.9 part 2) so DHT and UDP trackers also go through Fuselane; incoming peers (L-71).
 6. **P2/P3 leftovers:** sleep and wake, network change watcher per OS (torrents already follow changes), a stable network id, macOS friendly names, event deltas, guided setup and speed test.
-7. **Flaky test:** `torrents::tests::a_paused_torrent_comes_back_paused_with_its_file_choice` once saw "downloading" right after a pause issued while the torrent was still checking (1 in many runs; passes on rerun). Look at pause-during-initialise in librqbit.
-8. **Real-machine checks:** Windows and Linux installers with the new "Open with" registration (CI builds them; never run on a real PC yet).
+7. **Real-machine checks:** Windows and Linux installers with the new "Open with" registration (CI builds them; never run on a real PC yet).
 
 ## Decided 2026-10-09
 
