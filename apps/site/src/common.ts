@@ -227,6 +227,12 @@ function faqTopics() {
     { rootMargin: '-30% 0px -60% 0px' },
   )
   document.querySelectorAll('.faq-group').forEach((g) => io.observe(g))
+  // A pick is marked at once: the last topic may never reach the middle band.
+  links.forEach((l) =>
+    l.addEventListener('click', () =>
+      links.forEach((a) => a.setAttribute('aria-current', String(a === l))),
+    ),
+  )
 }
 
 /** Panels with .spot light up where the pointer is (CSS reads --mx/--my). */
