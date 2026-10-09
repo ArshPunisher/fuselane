@@ -63,3 +63,54 @@ a:focus-visible {
   outline: 2px solid var(--fuse);
   outline-offset: 2px;
 }
+
+h2 {
+  margin: 4px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in oklch, var(--mute), transparent 70%);
+  font-size: 13px;
+}
+#media {
+  display: grid;
+  gap: 6px;
+  max-height: 260px;
+  margin: 6px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+#media li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+.m-name {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.m-kind {
+  display: block;
+  color: var(--mute);
+  font-size: 11px;
+}
+button {
+  padding: 4px 10px;
+  border: 1px solid color-mix(in oklch, var(--fuse), transparent 40%);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fuse);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+button:focus-visible {
+  outline: 2px solid var(--fuse);
+  outline-offset: 2px;
+}

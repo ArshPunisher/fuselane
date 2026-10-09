@@ -1,5 +1,8 @@
 import { normalizeRules } from '@fuselane/capture'
 import { appStatus } from '../../lib/status.ts'
+import { offerLink } from '../../lib/handoff.ts'
+import { findOnPage, mediaList, type MediaItem } from '../../lib/media.ts'
+import { getSession } from '../../lib/session.ts'
 import './style.css'
 
 const status = document.querySelector<HTMLParagraphElement>('#status')!
@@ -25,4 +28,62 @@ document.querySelector('#settings')!.addEventListener('click', (e) => {
   window.close()
 })
 
+const KIND = { video: 'Video', audio: 'Audio', link: 'File' } as const
+
+/** Lists the tab's videos, audio and file links (activeTab: only now, only this tab). */
+async function onThisPage() {
+  const section = document.querySelector<HTMLElement>('#page')!
+  const list = document.querySelector<HTMLUListElement>('#media')!
+  const said = document.querySelector<HTMLParagraphElement>('#media-status')!
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true })
+  if (!tab?.id || !tab.url || !/^https?:/.test(tab.url)) return
+  let items: MediaItem[] = []
+  try {
+    const [res] = await browser.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: findOnPage,
+    })
+    items = mediaList((res?.result as Parameters<typeof mediaList>[0]) ?? [], tab.url)
+  } catch {
+    return // a page the browser doesn't let extensions read
+  }
+  section.hidden = false
+  if (!items.length) {
+    said.textContent = 'No videos or file links here.'
+    return
+  }
+  for (const m of items) {
+    const li = document.createElement('li')
+    const text = document.createElement('span')
+    text.className = 'm-name'
+    text.title = m.url
+    text.textContent = m.name
+    const kind = document.createElement('span')
+    kind.className = 'm-kind'
+    kind.textContent = m.label ? `${KIND[m.kind]} · ${m.label}` : KIND[m.kind]
+    text.append(kind)
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.textContent = 'Download'
+    button.setAttribute('aria-label', `Download ${m.name}`)
+    button.addEventListener('click', async () => {
+      button.disabled = true
+      const took = await offerLink(
+        m.url,
+        tab.url,
+        (msg) => browser.runtime.sendNativeMessage('app.fuselane.host', msg as object),
+        getSession,
+        (u) => browser.downloads.download({ url: u }),
+      )
+      button.textContent = took ? 'Sent' : 'In browser'
+      said.textContent = took
+        ? `${m.name} is downloading in Fuselane.`
+        : `Fuselane isn't running, so the browser is downloading ${m.name}.`
+    })
+    li.append(text, button)
+    list.append(li)
+  }
+}
+
 void load()
+void onThisPage()

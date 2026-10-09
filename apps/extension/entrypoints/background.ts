@@ -1,5 +1,5 @@
 import { normalizeRules, type Rules } from '@fuselane/capture'
-import { handOff, offerFor, type Item } from '../lib/handoff.ts'
+import { handOff, offerLink, type Item } from '../lib/handoff.ts'
 import { getSession } from '../lib/session.ts'
 
 const HOST = 'app.fuselane.host'
@@ -50,20 +50,8 @@ export default defineBackground(() => {
   browser.contextMenus.onClicked.addListener(async (info) => {
     const url = info.linkUrl ?? info.srcUrl
     if (info.menuItemId !== 'fuselane-download' || !url) return
-    const session = await getSession(url).catch(() => null)
-    const offer = offerFor(
-      { id: -1, state: 'in_progress', url, referrer: info.pageUrl },
-      'contextMenu',
-      session,
+    await offerLink(url, info.pageUrl, ask, getSession, (u) =>
+      browser.downloads.download({ url: u }),
     )
-    let accepted = false
-    try {
-      const reply = (await ask(offer)) as { type?: string } | undefined
-      accepted = reply?.type === 'download.accepted'
-    } catch {
-      accepted = false
-    }
-    // The app couldn't take it: the browser downloads it instead.
-    if (!accepted) await browser.downloads.download({ url })
   })
 })

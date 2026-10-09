@@ -9,7 +9,7 @@ Built with WXT 0.21 (MV3) for Chrome, Edge, Brave and Opera, and Firefox. Safari
 | Automatic capture | `downloads.onCreated` (+ `onDeterminingFilename` on Chromium) → match rules → `downloads.cancel` + `erase` → send to the app |
 | Rules | Minimum size (default 1 MB), extensions, include/exclude domains, MIME types. Holding **Alt** while clicking skips capture (a content-script click listener). |
 | Context menu | "Download with Fuselane" on links, video and audio; "Send to Fuselane share link" (P1) |
-| Popup | App status (connected or not), recent jobs, a capture on/off switch, pairing |
+| Popup | App status (connected or not), a capture on/off switch, and **On this page**: the tab's `<video>`/`<audio>` sources and links to files (via `activeTab` + `scripting`, only when the popup opens), each with Download (to the app, or the browser if the app can't take it). `blob:` streams are skipped |
 | Auth forwarding | `cookies.getAll({url})` **plus partitioned cookies** (`partitionKey`), Referer, User-Agent, Accept-Language; auth headers captured with `webRequest.onSendHeaders` (`extraHeaders`), held only in `storage.session` |
 | Things it must not capture | `blob:` and `data:` URLs, POST-initiated downloads and single-use tokens: let the browser handle these |
 

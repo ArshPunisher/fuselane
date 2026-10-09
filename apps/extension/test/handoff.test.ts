@@ -127,3 +127,47 @@ test('with permission, the site session goes with the offer; without it, nothing
   }
   assert.equal(offers.length, 4)
 })
+
+test('a picked link goes to the app, or to the browser when the app says no', async () => {
+  const { offerLink } = await import('../lib/handoff.ts')
+  const browserGot: string[] = []
+  const toBrowser = async (u: string) => void browserGot.push(u)
+  const sent: unknown[] = []
+  const yes = async (m: unknown) => {
+    sent.push(m)
+    return { v: 1, type: 'download.accepted', jobId: '9' }
+  }
+  const took = await offerLink(
+    'https://cdn.example.org/talk.mp4',
+    'https://videos.example.org/watch/42',
+    yes,
+    async () => ({ cookies: 'a=1', userAgent: null }),
+    toBrowser,
+  )
+  assert.equal(took, true)
+  assert.deepEqual(browserGot, [])
+  const offer = sent[0] as { source: string; referrer: string; cookies: string }
+  assert.equal(offer.source, 'contextMenu')
+  assert.equal(offer.referrer, 'https://videos.example.org/watch/42')
+  assert.equal(offer.cookies, 'a=1')
+  // Not installed, a refusal, or silence: the browser downloads it.
+  for (const ask of [
+    async () => {
+      throw new Error('no host')
+    },
+    async () => ({ v: 1, type: 'download.declined', reason: 'x' }),
+    () => new Promise(() => {}),
+  ]) {
+    browserGot.length = 0
+    const r = await offerLink(
+      'https://e.org/a.zip',
+      undefined,
+      ask,
+      async () => null,
+      toBrowser,
+      50,
+    )
+    assert.equal(r, false)
+    assert.deepEqual(browserGot, ['https://e.org/a.zip'])
+  }
+})

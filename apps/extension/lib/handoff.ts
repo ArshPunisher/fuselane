@@ -91,3 +91,29 @@ export async function handOff(
   await downloads.resume(item.id).catch(() => {})
   return 'returned'
 }
+
+/**
+ * Hands a link the person picked (context menu, the popup's list) to the app; if
+ * the app can't take it, the browser downloads it instead. True when the app took it.
+ */
+export async function offerLink(
+  url: string,
+  referrer: string | undefined,
+  ask: AskApp,
+  getSession: GetSession,
+  browserDownload: (url: string) => Promise<unknown>,
+  waitMs = ANSWER_WITHIN_MS,
+): Promise<boolean> {
+  const session = await getSession(url).catch(() => null)
+  const offer = offerFor({ id: -1, state: 'in_progress', url, referrer }, 'contextMenu', session)
+  let accepted = false
+  try {
+    const reply = await Promise.race([ask(offer), timeout(waitMs)])
+    const checked = checkReply(reply)
+    accepted = checked.ok && checked.value.type === 'download.accepted'
+  } catch {
+    accepted = false
+  }
+  if (!accepted) await browserDownload(url)
+  return accepted
+}

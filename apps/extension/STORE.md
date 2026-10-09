@@ -33,14 +33,16 @@ Hand downloads from the browser to the Fuselane desktop app on the same computer
 
 ## Why each permission is needed
 
-| Permission | Why |
-|---|---|
-| `downloads` | To see when a download starts, pause it while asking the app, and cancel it if the app takes it over (or resume it if not). |
-| `nativeMessaging` | To talk to the Fuselane app on this computer. This is the only place the extension sends anything. |
-| `storage` | To remember whether hand-off is switched on. |
-| `contextMenus` | To add "Download with Fuselane" to the right-click menu on links. |
+| Permission        | Why                                                                                                                         |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `downloads`       | To see when a download starts, pause it while asking the app, and cancel it if the app takes it over (or resume it if not). |
+| `nativeMessaging` | To talk to the Fuselane app on this computer. This is the only place the extension sends anything.                          |
+| `storage`         | To remember whether hand-off is switched on.                                                                                |
+| `contextMenus`    | To add "Download with Fuselane" to the right-click menu on links.                                                           |
+| `activeTab`       | When the person opens the popup, to list the videos and file links on the tab they're looking at (0.2.0).                   |
+| `scripting`       | To run that one read-only look at the page when the popup opens. Nothing runs in the background or on other tabs.           |
 
-No host permissions are requested at install. "Signed-in downloads" is off by default: when the person turns it on in settings, the extension asks for the optional `cookies` permission and access to sites (`<all_urls>`), so it can read the cookies for a download's own site and pass them to the Fuselane app on the same computer. Turning it off removes both. The extension never reads pages or browsing history.
+No host permissions are requested at install. "Signed-in downloads" is off by default: when the person turns it on in settings, the extension asks for the optional `cookies` permission and access to sites (`<all_urls>`), so it can read the cookies for a download's own site and pass them to the Fuselane app on the same computer. Turning it off removes both. The extension never reads browsing history; it looks at a page only when the person opens the popup on it, to list its videos and file links, and keeps nothing.
 
 - **cookies (optional):** with the person's opt-in, reads the cookies for the site a download comes from, so the Fuselane app on this computer can download files that need a sign-in. Never sent anywhere else.
 - **Host access `<all_urls>` (optional):** needed by `cookies` to read a download's site cookies. Asked for only when signed-in downloads are switched on.
