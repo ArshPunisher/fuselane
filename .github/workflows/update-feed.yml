@@ -71,5 +71,5 @@ jobs:
         run: |
           curl -fsS -X POST https://api.indexnow.org/indexnow \
             -H 'Content-Type: application/json; charset=utf-8' \
-            -d '{"host":"arshpunisher.github.io","key":"ecf82e17baf091ac8a4c27c96d02085b","keyLocation":"https://arshpunisher.github.io/fuselane/ecf82e17baf091ac8a4c27c96d02085b.txt","urlList":["https://arshpunisher.github.io/fuselane/","https://arshpunisher.github.io/fuselane/download/","https://arshpunisher.github.io/fuselane/faq/","https://arshpunisher.github.io/fuselane/support/"]}' \
+            -d '{"host":"fuselane.app","key":"ecf82e17baf091ac8a4c27c96d02085b","keyLocation":"https://fuselane.app/ecf82e17baf091ac8a4c27c96d02085b.txt","urlList":["https://fuselane.app/","https://fuselane.app/download/","https://fuselane.app/faq/","https://fuselane.app/support/"]}' \
             -w 'IndexNow: HTTP %{http_code}\n' -o /dev/null

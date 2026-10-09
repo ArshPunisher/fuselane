@@ -23,7 +23,7 @@ This extension connects your browser to the Fuselane desktop app:
 - The toolbar button shows whether the app is connected, with a switch to turn hand-off off.
 - A settings page lets you choose the smallest download to hand over, only or never certain sites, and which file types.
 
-You need the Fuselane app on the same computer (macOS, Windows or Linux): https://arshpunisher.github.io/fuselane/
+You need the Fuselane app on the same computer (macOS, Windows or Linux): https://fuselane.app/
 
 The extension sends nothing to the internet. It only talks to the Fuselane app on your own computer.
 
