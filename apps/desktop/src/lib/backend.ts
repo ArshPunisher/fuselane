@@ -15,6 +15,7 @@ import type {
   LimitsView,
   NetPref,
   NetView,
+  PeerView,
   PreviewView,
   ReceiveView,
   SeedSettings,
@@ -107,6 +108,10 @@ export interface Backend {
   seedSettings(): Promise<SeedSettings>
   /** Saves sharing settings (validated by the backend); returns what was saved. */
   setSeedSettings(s: SeedSettings): Promise<SeedSettings>
+  /** The peers connected to a torrent now, fastest first. */
+  torrentPeers(id: string): Promise<PeerView[]>
+  /** How complete each of `cells` slices of a torrent is (0 to 100). */
+  torrentPieces(id: string, cells: number): Promise<number[]>
   /** Stops sharing a finished torrent now; its files stay. */
   stopSharing(id: string): Promise<void>
   /** A dropped .torrent's contents (the page can't see its path). */
@@ -215,6 +220,8 @@ async function tauriBackend(): Promise<Backend> {
     seedSettings: () => call('torrent_seed_settings'),
     setSeedSettings: (settings) => call('set_torrent_seed_settings', { settings }),
     stopSharing: (id) => call('torrent_stop_sharing', { id }),
+    torrentPeers: (id) => call('torrent_peers', { id }),
+    torrentPieces: (id, cells) => call('torrent_pieces', { id, cells }),
     pickSendFile: () => call('send_pick'),
     sendFile: (path) => call('send_file', { path }),
     sendsState: () => call('sends_state'),

@@ -4,6 +4,7 @@
 // magnet=slow (inspect never ends).
 import type {
   ListingView,
+  PeerView,
   SeedSettings,
   TorrentFileView,
   TorrentView,
@@ -13,6 +14,14 @@ import type {
 
 const MB = 1024 * 1024
 const NETS = ['en0', 'en7', 'en5']
+/** Sample peers: app, address, which of our networks, share of the speed. */
+const DEMO_PEERS: [string | null, string, string, number][] = [
+  ['qBittorrent 5.0.4', '84.17.52.10:51413', 'en5', 0.34],
+  ['Transmission 4.0.6', '193.32.126.214:6881', 'en0', 0.27],
+  ['Deluge 2.1.1', '45.134.212.88:58237', 'en7', 0.18],
+  ['libtorrent 2.0.10', '[2a02:8109:1140::7]:6889', 'en5', 0.12],
+  [null, '102.165.48.31:41975', 'en0', 0.09],
+]
 const SHARE = [0.38, 0.17, 0.45]
 
 interface SimTorrent {
@@ -209,6 +218,41 @@ export function createDemoTorrents(params: URLSearchParams, emit: () => (e: UiEv
       },
       listTorrents: async () => list.map((t) => ({ ...t.view })),
       torrentFiles: async (id: string) => find(id).files.map((f) => ({ ...f })),
+      torrentPeers: async (id: string): Promise<PeerView[]> => {
+        const t = find(id)
+        if (t.view.status !== 'downloading' && t.view.status !== 'seeding') return []
+        const clock = Date.now() / 1000
+        return DEMO_PEERS.map(([client, addr, net, share], i) => {
+          const wobble = 0.75 + 0.25 * Math.sin(clock * 0.9 + i * 1.7)
+          const down =
+            t.view.status === 'downloading' ? Math.round(t.view.rate * share * wobble) : 0
+          return {
+            addr,
+            client,
+            network: net,
+            down,
+            up: Math.round(down * 0.08),
+            received: Math.round(t.view.done * share),
+            sent: Math.round(t.view.done * share * 0.05),
+            kind: i === 3 ? 'utp' : 'tcp',
+          }
+        }).sort((a, b) => b.down - a.down)
+      },
+      torrentPieces: async (id: string, cells: number) => {
+        const t = find(id)
+        const n = Math.max(1, Math.min(2048, cells))
+        const frac = t.view.total ? t.view.done / t.view.total : 0
+        // Pieces arrive out of order: a fixed shuffle decides which come first.
+        return Array.from({ length: n }, (_, i) => {
+          // Pieces come in runs (several peers each sending a stretch), not evenly.
+          const run = Math.floor(i / 6)
+          const order = (Math.sin(run * 12.9898 + 78.233) * 43758.5453) % 1
+          const k = order < 0 ? order + 1 : order
+          if (k < frac - 0.02) return 100
+          if (k < frac) return 50
+          return 0
+        })
+      },
       pauseTorrent: async (id: string) => {
         const t = find(id)
         if (t.view.status === 'completed') throw err('finished', 'This torrent has finished.', null)

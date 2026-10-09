@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  ArrowDown,
   ArrowLeft,
+  ArrowUp,
   FolderOpen,
   HandPalm,
   Pause,
@@ -11,10 +13,13 @@ import {
 import { useApp } from '../lib/store'
 import { bytes, eta, percent, rate } from '../lib/format'
 import { assignLanes, kindLabel, netTitle } from '../lib/lanes'
+import { usePoll } from '../lib/poll'
 import { FilePicker } from './FilePicker'
+import { LiveRate } from './LiveRate'
 import { Orb } from './Orb'
+import { PiecesMap } from './PiecesMap'
 import { REVEAL_LABEL } from './TransferDetail'
-import type { NetView, TorrentFileView, TorrentNetView, TorrentView } from '../lib/types'
+import type { NetView, PeerView, TorrentFileView, TorrentNetView, TorrentView } from '../lib/types'
 
 export const TORRENT_WORD: Record<TorrentView['status'], string> = {
   checking: 'Checking',
@@ -60,6 +65,67 @@ function RemoveTorrent({ t }: { t: TorrentView }) {
 }
 
 /** Which files to download, changeable while the torrent runs. */
+/** Who the torrent is talking to: app, address, which network, speed both ways. */
+function Peers({
+  t,
+  peers,
+  known,
+}: {
+  t: TorrentView
+  peers: PeerView[] | null
+  known: NetView[]
+}) {
+  const nets = torrentNets(t.networks, known)
+  const lanes = assignLanes(nets)
+  if (!peers) return <div className="sk sk-line" aria-busy="true" aria-label="Loading peers" />
+  if (!peers.length)
+    return (
+      <p className="muted peers-empty">
+        {t.status === 'downloading' || t.status === 'checking'
+          ? 'Looking for peers…'
+          : 'No peers connected right now.'}
+      </p>
+    )
+  return (
+    <ul className="peers" aria-label="Connected peers">
+      {peers.map((p) => {
+        const i = nets.findIndex((n) => n.name === p.network)
+        const net = i >= 0 ? nets[i] : undefined
+        return (
+          <li key={p.addr} className="peer-row">
+            <span className="peer-who">
+              <span className="peer-client">{p.client ?? 'Unknown app'}</span>
+              <span className="peer-addr num" translate="no">
+                {p.addr}
+              </span>
+            </span>
+            <span className="peer-net">
+              {net ? (
+                <>
+                  <span className="peer-dot" style={{ background: `var(--lane-${lanes[i]})` }} />
+                  {netTitle(net)}
+                </>
+              ) : (
+                'Came to you'
+              )}
+            </span>
+            <span className="peer-rate num" title="From this peer">
+              <ArrowDown size={12} aria-label="Down" />
+              {p.down > 0 ? rate(p.down).value + ' ' + rate(p.down).unit : '0'}
+            </span>
+            <span className="peer-rate num up" title="To this peer">
+              <ArrowUp size={12} aria-label="Up" />
+              {p.up > 0 ? rate(p.up).value + ' ' + rate(p.up).unit : '0'}
+            </span>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+type Tab = 'networks' | 'peers' | 'files'
+
 function Files({ t }: { t: TorrentView }) {
   const backend = useApp((s) => s.backend)
   const act = useApp((s) => s.act)
@@ -120,11 +186,29 @@ export function TorrentDetail({ t, onBack }: { t: TorrentView; onBack: (() => vo
   const lanes = assignLanes(nets)
   const pct =
     t.status === 'completed' || t.status === 'seeding' ? 100 : (percent(t.done, t.total) ?? 0)
-  const r = rate(t.rate)
   const canPause = t.status === 'downloading' || t.status === 'checking'
   const canResume = t.status === 'paused' || t.status === 'failed'
   const left = eta(t.total - t.done, t.rate)
   const maxPeers = Math.max(1, ...nets.map((n) => n.peers))
+  const backend = useApp((s) => s.backend)
+  const [tab, setTab] = useState<Tab>('networks')
+  const filesOk = t.status !== 'completed' && t.status !== 'seeding'
+  const shownTab = tab === 'files' && !filesOk ? 'networks' : tab
+  const cells = usePoll(() => backend?.torrentPieces(t.id, 256) ?? Promise.resolve([]), 1000, [
+    backend,
+    t.id,
+  ])
+  const peers = usePoll(
+    () => (shownTab === 'peers' && backend ? backend.torrentPeers(t.id) : Promise.resolve(null)),
+    1000,
+    [backend, t.id, shownTab],
+  )
+  const peerCount = nets.reduce((a, n) => a + n.peers, 0)
+  const tabs: [Tab, string][] = [
+    ['networks', 'Networks'],
+    ['peers', 'Peers'],
+    ...(filesOk ? ([['files', 'Files']] as [Tab, string][]) : []),
+  ]
 
   return (
     <article className="detail" aria-labelledby="td-title">
@@ -176,10 +260,14 @@ export function TorrentDetail({ t, onBack }: { t: TorrentView; onBack: (() => vo
 
       <div className="torrent-body">
         <div className="torrent-head">
-          <p className="speed num">
-            {t.status === 'downloading' ? r.value : Math.floor(pct)}
-            <span className="unit">{t.status === 'downloading' ? r.unit : '%'}</span>
-          </p>
+          {t.status === 'downloading' ? (
+            <LiveRate value={t.rate} />
+          ) : (
+            <p className="speed num">
+              {Math.floor(pct)}
+              <span className="unit">%</span>
+            </p>
+          )}
           <div
             className="bar torrent-bar"
             data-status={t.status === 'completed' ? 'completed' : 'running'}
@@ -231,56 +319,89 @@ export function TorrentDetail({ t, onBack }: { t: TorrentView; onBack: (() => vo
           </dl>
         </div>
 
-        {nets.length > 0 && (
-          <table className="nets">
-            <caption className="sr-only">Networks in this torrent</caption>
-            <thead>
-              <tr>
-                <th scope="col">Network</th>
-                <th scope="col" className="r">
-                  Peers
-                </th>
-                <th scope="col" className="r">
-                  Share
-                </th>
-                <th scope="col" className="r">
-                  Verified
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {nets.map((n, i) => (
-                <tr key={n.name}>
-                  <td>
-                    <span className="net-cell">
-                      <Orb
-                        lane={lanes[i] ?? 'steel'}
-                        speed={n.peers / maxPeers}
-                        state={t.status === 'downloading' && n.peers > 0 ? 'live' : 'idle'}
-                      />
-                      <span>
-                        <span className="net-name">{netTitle(n)}</span>
-                        <span className="net-kind">
-                          {kindLabel(n.kind)}, {n.name}
-                        </span>
-                      </span>
-                    </span>
-                  </td>
-                  <td className="r num">{n.peers}</td>
-                  <td className="r num">
-                    {t.done > 0 ? `${Math.round((n.credited / t.done) * 100)}%` : ''}
-                  </td>
-                  <td className="r num">{bytes(n.credited)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {cells && cells.length > 0 && (
+          <PiecesMap cells={cells} label={`Pieces: ${Math.floor(pct)}% here`} />
         )}
-        <p className="field-help">
-          Each network is credited only with pieces that passed their checksum.
-        </p>
-        {/* A finished torrent has let go of its files; its choice can't change. */}
-        {t.status !== 'completed' && t.status !== 'seeding' && <Files t={t} />}
+
+        <div className="tabs" role="tablist" aria-label="Torrent details">
+          {tabs.map(([id, label]) => (
+            <button
+              key={id}
+              role="tab"
+              type="button"
+              id={`tt-${id}`}
+              aria-selected={shownTab === id}
+              aria-controls={`tp-${id}`}
+              onClick={() => setTab(id)}
+            >
+              {label}
+              {id === 'peers' && peerCount > 0 && (
+                <span className="tab-count num">{peerCount}</span>
+              )}
+            </button>
+          ))}
+        </div>
+        <div
+          className="tab-panel"
+          role="tabpanel"
+          id={`tp-${shownTab}`}
+          aria-labelledby={`tt-${shownTab}`}
+        >
+          {shownTab === 'networks' && (
+            <>
+              {nets.length > 0 && (
+                <table className="nets">
+                  <caption className="sr-only">Networks in this torrent</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Network</th>
+                      <th scope="col" className="r">
+                        Peers
+                      </th>
+                      <th scope="col" className="r">
+                        Share
+                      </th>
+                      <th scope="col" className="r">
+                        Verified
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {nets.map((n, i) => (
+                      <tr key={n.name}>
+                        <td>
+                          <span className="net-cell">
+                            <Orb
+                              lane={lanes[i] ?? 'steel'}
+                              speed={n.peers / maxPeers}
+                              state={t.status === 'downloading' && n.peers > 0 ? 'live' : 'idle'}
+                            />
+                            <span>
+                              <span className="net-name">{netTitle(n)}</span>
+                              <span className="net-kind">
+                                {kindLabel(n.kind)}, {n.name}
+                              </span>
+                            </span>
+                          </span>
+                        </td>
+                        <td className="r num">{n.peers}</td>
+                        <td className="r num">
+                          {t.done > 0 ? `${Math.round((n.credited / t.done) * 100)}%` : ''}
+                        </td>
+                        <td className="r num">{bytes(n.credited)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              <p className="field-help">
+                Each network is credited only with pieces that passed their checksum.
+              </p>
+            </>
+          )}
+          {shownTab === 'peers' && <Peers t={t} peers={peers} known={known} />}
+          {shownTab === 'files' && <Files t={t} />}
+        </div>
       </div>
     </article>
   )

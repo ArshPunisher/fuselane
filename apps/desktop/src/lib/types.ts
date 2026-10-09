@@ -232,6 +232,21 @@ export interface TorrentView {
   addedAt: number
 }
 
+/** One peer connected to a torrent. */
+export interface PeerView {
+  addr: string
+  /** The app it says it is, when it tells. */
+  client: string | null
+  /** Device name of our network it's on; null when it connected to us. */
+  network: string | null
+  /** Bytes per second from it and to it. */
+  down: number
+  up: number
+  received: number
+  sent: number
+  kind: string
+}
+
 export interface TorrentNetView {
   name: string
   peers: number
