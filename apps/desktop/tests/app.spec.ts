@@ -1203,6 +1203,28 @@ test('after a crash Fuselane offers once to report it, and problems can be repor
   await expect(page.getByRole('button', { name: 'Report a problem' })).toBeVisible()
 })
 
+test('a network check measures each network, shows outages and makes a report', async ({
+  page,
+}) => {
+  await page.goto('/?drop=0')
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('button', { name: 'Networks' })
+    .click()
+  const check = page.getByRole('region', { name: 'Network check' })
+  await expect(check).toContainText('Wi-Fi: no internet 2 times this week')
+  await check.getByRole('button', { name: 'Run a check' }).click()
+  await expect(check.getByRole('status')).toContainText('Testing')
+  await expect(check.getByRole('row', { name: /Every network together/ })).toContainText('262.0', {
+    timeout: 8000,
+  })
+  await expect(check.getByRole('row', { name: /Ethernet/ })).toContainText('138.0')
+  await expect(check.getByRole('row', { name: /Wi-Fi/ })).toContainText('Slows down while busy')
+  await expect(check.getByRole('status')).toContainText('Last checked')
+  await check.getByRole('button', { name: 'Report for your provider' }).click()
+  await expect(check.getByRole('button', { name: 'Check again' })).toBeVisible()
+})
+
 test('Download later adds it paused, ready to start', async ({ page }) => {
   await page.goto('/?empty=1')
   const dialog = await openDialog(page)

@@ -165,6 +165,15 @@ The owner asked for all ten ideas from the feature list. Each one is tested at t
 - [x] B9.9 Hand off over Nearby: a paused download (its partial file and progress) goes to another Fuselane and continues there
 - [x] B9.10 Battery aware: on low battery (not charging), keep going, leave out the phone, or pause
 
+## Beta.10 round: free tools built in (2026-10-10)
+
+The owner asked for more built-in features that cost nothing to run (no paid tiers, no hosted service) and save installing separate apps.
+
+- [x] B10.1 Network check: per-network speed, latency, jitter, bufferbloat grade and DNS time, every network together, an outage log from the minute-by-minute reach checks, and a dated report for the internet provider
+- [ ] B10.2 Clipboard between your computers: copy on one Fuselane computer, paste on another (Nearby, LAN only, encrypted)
+- [ ] B10.3 Shared folders between your own computers over Nearby (no cloud)
+- [ ] B10.4 Video and audio from pages: hand pages to a yt-dlp the person installs (detected, never bundled), downloads run over every network
+
 ## P5 Torrents (0.2)
 
 - [x] 5.1 `engine-torrent` crate with librqbit; uTP/UPnP/LSD/web seeds off (librqbit 9 has no web seeds)

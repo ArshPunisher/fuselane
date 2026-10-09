@@ -5,6 +5,7 @@ import { setSpeedUnit, type SpeedUnit } from './format'
 import { isSendLink } from './sendLink'
 import type {
   NearbyView,
+  NetCheckView,
   AppInfo,
   Automation,
   AutomationView,
@@ -42,6 +43,7 @@ interface State {
   shares: ShareView[]
   /** Nearby: devices, visibility, requests and transfers (null until started). */
   nearby: NearbyView | null
+  netCheck: NetCheckView | null
   receives: ReceiveView[]
   /** A Fuse Send link handed to the Send page by paste or drop. */
   receiveDraft: string
@@ -139,6 +141,7 @@ export const useApp = create<State>((set, get) => ({
   torrents: [],
   shares: [],
   nearby: null,
+  netCheck: null,
   receives: [],
   receiveDraft: '',
   sendTab: 'nearby',
@@ -405,6 +408,10 @@ async function startOnce(): Promise<void> {
       }
       if (e.type === 'nearby') {
         set({ nearby: e.view })
+        return
+      }
+      if (e.type === 'netCheck') {
+        set({ netCheck: e.view })
         return
       }
       if (e.type === 'update') {

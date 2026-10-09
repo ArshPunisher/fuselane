@@ -21,6 +21,7 @@ mod focus;
 mod grab;
 mod groups;
 pub mod handoff;
+pub mod netcheck;
 
 pub use grab::PageFiles;
 mod power_aware;
@@ -419,6 +420,10 @@ pub enum UiEvent {
     Update {
         progress: crate::update::UpdateProgress,
     },
+    /// Network check progress and results, and outages (B10.1).
+    NetCheck {
+        view: netcheck::NetCheckView,
+    },
     /// Nearby: devices, who can see this computer, requests, transfers (B8.11).
     Nearby {
         view: Box<crate::nearby::NearbyView>,
@@ -619,6 +624,9 @@ pub struct Service {
     /// The battery as last read, and downloads it paused (B9.10).
     battery: Mutex<Option<crate::battery::Battery>>,
     battery_paused: Mutex<std::collections::HashSet<i64>>,
+    /// Network check (B10.1): the running check, and outages seen by the reach checks.
+    netcheck: Mutex<netcheck::NetCheckState>,
+    outages: Mutex<Vec<netcheck::Outage>>,
 }
 
 /// Opens a file with the system's default app.
@@ -859,6 +867,12 @@ impl Service {
         let store_flag = store.setting("per_network_dns").ok().flatten().as_deref() == Some("true");
         let find_checksums =
             store.setting("find_checksums").ok().flatten().as_deref() != Some("false");
+        let saved_outages: Vec<netcheck::Outage> = store
+            .setting("outages")
+            .ok()
+            .flatten()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default();
         let long_minutes = store
             .setting("long_minutes")
             .ok()
@@ -947,6 +961,8 @@ impl Service {
             net_rates: Mutex::default(),
             battery: Mutex::new(None),
             battery_paused: Mutex::default(),
+            netcheck: Mutex::default(),
+            outages: Mutex::new(saved_outages),
             retries: Mutex::new(HashMap::new()),
             limiter,
             saved_limits: Mutex::new(saved_limits),
@@ -1266,6 +1282,8 @@ impl Service {
         while let Some(Ok((name, r))) = set.join_next().await {
             found.insert(name, r);
         }
+        let before = lock(&self.reach).clone();
+        self.note_reach(&before, &found);
         let mut reach = lock(&self.reach);
         let changed = *reach != found;
         *reach = found;
@@ -3643,6 +3661,40 @@ mod tests {
 
         // A download still running can't be handed over; nor can plain files.
         assert_eq!(b.svc.import_handoff(&[path]), None);
+    }
+
+    #[test]
+    fn outages_start_when_a_network_drops_and_end_when_it_returns() {
+        use fuselane_transport::probe::Reach;
+        let h = harness(1);
+        let map = |r: Reach| HashMap::from([("en9".to_string(), r)]);
+        // First sight of a network that's already down isn't an outage.
+        h.svc
+            .note_reach(&HashMap::new(), &map(Reach::Offline("x".into())));
+        assert!(h.svc.netcheck_view().outages.is_empty());
+        h.svc
+            .note_reach(&map(Reach::Online), &map(Reach::Offline("no route".into())));
+        let o = h.svc.netcheck_view().outages;
+        assert_eq!(o.len(), 1);
+        assert_eq!((o[0].kind.as_str(), o[0].to), ("offline", None));
+        // Still down: the same outage, not a new one.
+        h.svc.note_reach(
+            &map(Reach::Offline("x".into())),
+            &map(Reach::Offline("x".into())),
+        );
+        assert_eq!(h.svc.netcheck_view().outages.len(), 1);
+        h.svc
+            .note_reach(&map(Reach::Offline("x".into())), &map(Reach::Online));
+        assert!(h.svc.netcheck_view().outages[0].to.is_some());
+        // Kept across restarts.
+        assert!(
+            h.svc
+                .store
+                .setting("outages")
+                .unwrap()
+                .unwrap()
+                .contains("en9")
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

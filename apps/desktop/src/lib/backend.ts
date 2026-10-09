@@ -3,6 +3,7 @@
 // and the UI says so.
 import type {
   HaveView,
+  NetCheckView,
   PageFiles,
   NearbyView,
   FilePriority,
@@ -110,6 +111,12 @@ export interface Backend {
   setNetworkPref(pref: NetPref): Promise<NetPref[]>
   /** A privacy-safe report for bug reports. */
   diagnostics(): Promise<string>
+  /** Network check (B10.1): results so far, start, stop, and the report. */
+  netCheckState(): Promise<NetCheckView>
+  netCheckStart(): Promise<NetCheckView>
+  netCheckCancel(): Promise<void>
+  /** Writes the report for an internet provider, opens it, returns its path. */
+  netCheckReport(): Promise<string>
   /** A crash report from last time, offered once; null when there was none. */
   unseenCrash(): Promise<string | null>
   /** Opens a filled-in GitHub issue for the person to read and submit. */
@@ -279,6 +286,10 @@ async function tauriBackend(): Promise<Backend> {
     setNetworkPref: (pref) => call('set_network_pref', { pref }),
     diagnostics: () => call('diagnostics'),
     unseenCrash: () => call('unseen_crash'),
+    netCheckState: () => call('netcheck_state'),
+    netCheckStart: () => call('netcheck_start'),
+    netCheckCancel: () => call('netcheck_cancel'),
+    netCheckReport: () => call('netcheck_report'),
     reportProblem: (crash) => call('report_problem', { crash }),
     checkUpdate: () => call('check_update'),
     installUpdate: () => call('install_update'),

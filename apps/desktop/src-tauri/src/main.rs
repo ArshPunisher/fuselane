@@ -55,6 +55,31 @@ fn app_info(svc: State<'_>) -> AppInfo {
     }
 }
 
+#[tauri::command]
+fn netcheck_state(svc: State<'_>) -> service::netcheck::NetCheckView {
+    svc.netcheck_view()
+}
+
+/// Measures every network (latency, speed, bufferbloat, DNS), then all together.
+#[tauri::command]
+async fn netcheck_start(svc: State<'_>) -> Result<service::netcheck::NetCheckView, UiError> {
+    svc.start_netcheck(None)
+}
+
+#[tauri::command]
+fn netcheck_cancel(svc: State<'_>) {
+    svc.cancel_netcheck();
+}
+
+/// Writes the report for an internet provider and opens it in the browser.
+#[tauri::command]
+fn netcheck_report(app: tauri::AppHandle, svc: State<'_>) -> Result<String, UiError> {
+    use tauri_plugin_opener::OpenerExt;
+    let path = svc.netcheck_report()?;
+    let _ = app.opener().open_path(path.to_string_lossy(), None::<&str>);
+    Ok(path.to_string_lossy().into_owned())
+}
+
 /// A crash report from last time, offered once (then forgotten).
 #[tauri::command]
 fn unseen_crash() -> Option<String> {
@@ -1247,7 +1272,8 @@ fn watch_for_shell(app: tauri::AppHandle, svc: &Arc<Service>) {
                     ))
                     .show();
             }
-            UiEvent::Torrents { .. }
+            UiEvent::NetCheck { .. }
+            | UiEvent::Torrents { .. }
             | UiEvent::Sends { .. }
             | UiEvent::Open { .. }
             | UiEvent::Networks { .. }
@@ -1652,6 +1678,10 @@ fn main() {
             unfocus,
             already_have,
             unseen_crash,
+            netcheck_state,
+            netcheck_start,
+            netcheck_cancel,
+            netcheck_report,
             report_problem,
             nearby_handoff,
             set_ready_by,

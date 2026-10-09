@@ -4324,3 +4324,131 @@ html[data-hidden] .orb b {
   min-width: 140px;
   max-width: 260px;
 }
+
+/* ---------- Network check (B10.1) ---------- */
+
+.nc-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 24px;
+}
+
+.nc-head > div:first-child {
+  display: grid;
+  gap: 6px;
+  max-width: 62ch;
+}
+
+.nc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.nc-table-wrap {
+  overflow-x: auto;
+}
+
+.nc-table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.nc-table th,
+.nc-table td {
+  padding: 10px 10px;
+  border-bottom: 1px solid var(--hairline);
+  text-align: left;
+  vertical-align: top;
+}
+
+.nc-table thead th {
+  color: var(--mute);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.nc-table tbody th {
+  display: grid;
+  gap: 2px;
+  font-weight: 400;
+}
+
+.nc-name {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.nc-verdict {
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.nc-speed {
+  display: block;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.nc-bar {
+  display: block;
+  width: 110px;
+  height: 4px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+}
+
+.nc-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--lane-tide, var(--fuse));
+  transition: width 600ms var(--ease-out);
+}
+
+.nc-all .nc-bar span {
+  background: var(--fuse);
+}
+
+.nc-grade {
+  display: inline-grid;
+  place-items: center;
+  min-width: 26px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  background: color-mix(in oklch, var(--success) 18%, transparent);
+  color: var(--success);
+}
+
+.nc-grade[data-grade='B'],
+.nc-grade[data-grade='C'] {
+  background: color-mix(in oklch, var(--warning) 20%, transparent);
+  color: var(--warning);
+}
+
+.nc-grade[data-grade='D'],
+.nc-grade[data-grade='F'] {
+  background: color-mix(in oklch, var(--danger) 18%, transparent);
+  color: var(--danger);
+}
+
+.nc-outages summary {
+  color: var(--body);
+  cursor: pointer;
+}
+
+.nc-outages ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--mute);
+  font-size: 13px;
+}

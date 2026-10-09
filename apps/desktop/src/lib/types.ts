@@ -108,6 +108,7 @@ export type UiEvent =
   | { type: 'sends'; shares: ShareView[]; receives: ReceiveView[] }
   | { type: 'update'; progress: UpdateProgress }
   | { type: 'nearby'; view: NearbyView }
+  | { type: 'netCheck'; view: NetCheckView }
 
 /** A device on the network (Nearby, B8.11). */
 export interface DeviceView {
@@ -440,4 +441,44 @@ export interface HaveView {
 export interface PageFiles {
   title: string | null
   files: { url: string; name: string }[]
+}
+
+/** One network's numbers from a network check (B10.1). */
+export interface NetResult {
+  name: string
+  label: string
+  kind: string
+  /** Bytes per second. */
+  downBps: number | null
+  idleMs: number | null
+  jitterMs: number | null
+  /** 0..1 */
+  loss: number | null
+  loadedMs: number | null
+  /** Bufferbloat, A+ to F. */
+  grade: string | null
+  dnsMs: number | null
+  problem: string | null
+}
+
+export interface CheckRun {
+  at: number
+  results: NetResult[]
+  togetherBps: number | null
+}
+
+export interface Outage {
+  name: string
+  label: string
+  kind: 'offline' | 'sign-in'
+  from: number
+  to: number | null
+}
+
+export interface NetCheckView {
+  running: boolean
+  phase: string | null
+  current: CheckRun | null
+  history: CheckRun[]
+  outages: Outage[]
 }

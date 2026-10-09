@@ -19,6 +19,7 @@ import type {
   LimitsView,
   Live,
   LiveNet,
+  NetCheckView,
   NetPref,
   NetView,
   PreviewView,
@@ -429,6 +430,28 @@ export function createDemoBackend(params: URLSearchParams): Backend {
 
   let maxRunning = 3
   let findSums = true
+  const netCheck: NetCheckView = {
+    running: false,
+    phase: null,
+    current: null,
+    history: [],
+    outages: [
+      {
+        name: 'en0',
+        label: 'Wi-Fi',
+        kind: 'offline',
+        from: now() - 5 * 3600,
+        to: now() - 5 * 3600 + 420,
+      },
+      {
+        name: 'en0',
+        label: 'Wi-Fi',
+        kind: 'offline',
+        from: now() - 26 * 3600,
+        to: now() - 26 * 3600 + 95,
+      },
+    ],
+  }
   let nextGroup = 1
   let longMinutes = 5
   const windowPrefs = { startAtLogin: false, closeToTray: false, watchClipboard: false }
@@ -936,6 +959,98 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         prefs.push({ name: pref.name, label, lane: pref.lane, useFor })
       return structuredClone(prefs)
     },
+    netCheckState: async () => structuredClone(netCheck),
+    netCheckStart: async () => {
+      if (netCheck.running) return structuredClone(netCheck)
+      // A check that walks the three networks like the real one, a little faster.
+      const sample = [
+        {
+          name: 'en0',
+          label: 'Wi-Fi',
+          kind: 'wifi',
+          mbps: 92,
+          idle: 18,
+          jitter: 3,
+          loaded: 142,
+          dns: 21,
+        },
+        {
+          name: 'en7',
+          label: 'iPhone USB',
+          kind: 'tether',
+          mbps: 41,
+          idle: 46,
+          jitter: 11,
+          loaded: 88,
+          dns: 38,
+        },
+        {
+          name: 'en5',
+          label: 'Ethernet',
+          kind: 'ethernet',
+          mbps: 138,
+          idle: 9,
+          jitter: 1,
+          loaded: 14,
+          dns: 12,
+        },
+      ]
+      netCheck.running = true
+      netCheck.current = { at: Math.floor(Date.now() / 1000), results: [], togetherBps: null }
+      const send = () => listener?.({ type: 'netCheck', view: structuredClone(netCheck) })
+      sample.forEach((n, i) => {
+        setTimeout(() => {
+          netCheck.phase = `Testing ${n.label}…`
+          send()
+        }, i * 700)
+        setTimeout(
+          () => {
+            const add = n.loaded - n.idle
+            const grade =
+              add < 5
+                ? 'A+'
+                : add < 30
+                  ? 'A'
+                  : add < 60
+                    ? 'B'
+                    : add < 200
+                      ? 'C'
+                      : add < 400
+                        ? 'D'
+                        : 'F'
+            netCheck.current!.results.push({
+              name: n.name,
+              label: n.label,
+              kind: n.kind,
+              downBps: (n.mbps * 1e6) / 8,
+              idleMs: n.idle,
+              jitterMs: n.jitter,
+              loss: 0,
+              loadedMs: n.loaded,
+              grade,
+              dnsMs: n.dns,
+              problem: null,
+            })
+            send()
+          },
+          i * 700 + 600,
+        )
+      })
+      setTimeout(() => {
+        netCheck.phase = 'Testing every network together…'
+        send()
+      }, 2200)
+      setTimeout(() => {
+        netCheck.current!.togetherBps = (262 * 1e6) / 8
+        netCheck.history.unshift(structuredClone(netCheck.current!))
+        netCheck.running = false
+        netCheck.phase = null
+        send()
+      }, 2900)
+      return structuredClone(netCheck)
+    },
+    netCheckCancel: async () => {},
+    netCheckReport: async () => '/Users/demo/Downloads/Fuselane network report.html',
     // crash=1 shows the banner offered after a crash.
     unseenCrash: async () =>
       params.get('crash') === '1'
