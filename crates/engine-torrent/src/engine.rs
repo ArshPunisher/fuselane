@@ -235,6 +235,9 @@ pub struct Torrent {
     handle: Arc<ManagedTorrent>,
     layout: Arc<Layout>,
     balancer: Arc<Balancer>,
+    /// The person paused it. librqbit can lose a pause asked for at the very end
+    /// of the first check; until it's put back, the torrent still reads as paused.
+    held: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl std::fmt::Debug for Torrent {
@@ -264,6 +267,9 @@ impl Torrent {
             TorrentStatsState::Initializing { .. } => Phase::Checking,
             TorrentStatsState::Paused => Phase::Paused,
             TorrentStatsState::Error => Phase::Failed,
+            TorrentStatsState::Live if self.held.load(std::sync::atomic::Ordering::SeqCst) => {
+                Phase::Paused
+            }
             TorrentStatsState::Live if s.finished => Phase::Seeding,
             TorrentStatsState::Live => Phase::Downloading,
         };
@@ -486,6 +492,7 @@ impl TorrentEngine {
             Some(set) => check_selection(&listing.files, set)?,
             None => listing.wanted_indices(),
         };
+        let held = Arc::new(std::sync::atomic::AtomicBool::new(add.paused));
         let opts = AddTorrentOptions {
             output_folder: Some(listing.folder.to_string_lossy().into_owned()),
             initial_peers: (!listing.peers.is_empty()).then(|| listing.peers.clone()),
@@ -513,6 +520,7 @@ impl TorrentEngine {
                     selected: Mutex::new(selected),
                 }),
                 balancer: self.balancer.clone(),
+                held,
             }),
             AddTorrentResponse::AlreadyManaged(..) => Err(TorrentError::AlreadyAdded),
             AddTorrentResponse::ListOnly(_) => Err(engine("download did not start")),
@@ -531,7 +539,27 @@ impl TorrentEngine {
     }
 
     pub async fn pause(&self, t: &Torrent) -> Result<(), TorrentError> {
-        self.session.pause(&t.handle).await.map_err(engine)
+        t.held.store(true, std::sync::atomic::Ordering::SeqCst);
+        self.session.pause(&t.handle).await.map_err(engine)?;
+        // During the first check a pause is only a request, and librqbit starts the
+        // torrent anyway if the check ends at that moment. Watch until the check is
+        // over and pause again if it went live while still held.
+        let (session, t) = (self.session.clone(), t.clone());
+        tokio::spawn(async move {
+            loop {
+                match t.handle.stats().state {
+                    TorrentStatsState::Initializing { .. } => {
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    }
+                    TorrentStatsState::Live if t.held.load(std::sync::atomic::Ordering::SeqCst) => {
+                        let _ = session.pause(&t.handle).await;
+                        break;
+                    }
+                    _ => break,
+                }
+            }
+        });
+        Ok(())
     }
 
     /// Starts the torrent's peers afresh. librqbit waits 10 s, then 60 s, then 6
@@ -547,6 +575,7 @@ impl TorrentEngine {
     }
 
     pub async fn resume(&self, t: &Torrent) -> Result<(), TorrentError> {
+        t.held.store(false, std::sync::atomic::Ordering::SeqCst);
         self.session.unpause(&t.handle).await.map_err(engine)
     }
 
