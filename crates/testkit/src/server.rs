@@ -98,6 +98,8 @@ struct State {
     max_concurrent: Option<u32>,
     /// Swap to this file (and ETag) atomically when request number N arrives (1-based).
     swap_at: Option<(usize, Content, String)>,
+    /// Small extra files at their own paths (a SHA256SUMS next to the file).
+    extra: std::collections::HashMap<String, Vec<u8>>,
 }
 
 /// A running server; stops when dropped (the runtime task is aborted).
@@ -128,6 +130,7 @@ impl RangeServer {
             peak: 0,
             max_concurrent: None,
             swap_at: None,
+            extra: std::collections::HashMap::new(),
         }));
         let st = state.clone();
         let task = tokio::spawn(async move {
@@ -154,6 +157,12 @@ impl RangeServer {
 
     pub fn path(&self) -> &'static str {
         "/file.bin"
+    }
+
+    /// Serves `body` whole at `path` (not logged, no faults): a checksum list
+    /// published next to the file.
+    pub fn serve_file(&self, path: &str, body: impl Into<Vec<u8>>) {
+        self.lock().extra.insert(path.to_string(), body.into());
     }
 
     pub fn add_rule(&self, rule: Rule) {
@@ -230,6 +239,23 @@ async fn handle(
             .and_then(|v: &HeaderValue| v.to_str().ok())
             .map(str::to_string)
     };
+    let extra = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .extra
+        .get(req.uri().path())
+        .cloned();
+    if let Some(body) = extra {
+        return Ok(Response::builder()
+            .status(200)
+            .header(CONTENT_LENGTH, body.len())
+            .body(
+                http_body_util::Full::new(Bytes::from(body))
+                    .map_err(|n| match n {})
+                    .boxed(),
+            )
+            .unwrap_or_else(|_| Response::new(empty())));
+    }
     let (content, etag, fault) = {
         let mut s = state
             .lock()

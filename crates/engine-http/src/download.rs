@@ -553,6 +553,31 @@ pub async fn read_range(
     (body.len() as u64 == last - first + 1).then(|| body.to_vec())
 }
 
+/// Reads a whole small file (at most `max` bytes) from `src` through `net`, or
+/// None if it isn't there, is bigger, or the server misbehaves. Used for the
+/// checksum lists published next to downloads (B9.7).
+pub async fn read_small(src: &Source, net: &Network, t: &Tuning, max: usize) -> Option<Vec<u8>> {
+    let mut c = connect(net, src, t).await.ok()?;
+    let res = send(&mut c, request(src, t, None, None), t).await.ok()?;
+    if res.status().as_u16() != 200 {
+        return None;
+    }
+    let declared = res
+        .headers()
+        .get(hyper::header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok());
+    if declared.is_some_and(|n| n > max as u64) {
+        return None;
+    }
+    let body = http_body_util::Limited::new(res.into_body(), max)
+        .collect()
+        .await
+        .ok()?
+        .to_bytes();
+    Some(body.to_vec())
+}
+
 /// Busy answers the probe waits out before reporting the status.
 const PROBE_BUSY_RETRIES: u32 = 3;
 /// Longest Retry-After the probe honours (a server asking for an hour is answered later).

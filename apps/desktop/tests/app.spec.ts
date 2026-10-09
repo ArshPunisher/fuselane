@@ -970,6 +970,27 @@ test('Do this now gives one download every network, and the others carry on afte
   await expect(page.locator('article.detail .speed')).toContainText('MB/s', { timeout: 5000 })
 })
 
+test('a download checked against a published checksum says Verified, and it can be turned off', async ({
+  page,
+}) => {
+  await page.goto('/?drop=0')
+  await page
+    .getByRole('button', { name: /Blender-5\.1/ })
+    .first()
+    .click()
+  const badge = page.locator('article.detail .checksum-badge')
+  await expect(badge).toContainText('Verified')
+  await expect(badge).toContainText('against SHA256SUMS')
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('button', { name: 'Settings' })
+    .click()
+  const sw = page.getByRole('switch', { name: 'Check downloads against published checksums' })
+  await expect(sw).toHaveAttribute('aria-checked', 'true')
+  await sw.click()
+  await expect(sw).toHaveAttribute('aria-checked', 'false')
+})
+
 test('Download later adds it paused, ready to start', async ({ page }) => {
   await page.goto('/?empty=1')
   const dialog = await openDialog(page)

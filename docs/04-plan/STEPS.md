@@ -160,7 +160,7 @@ The owner asked for all ten ideas from the feature list. Each one is tested at t
 - [ ] B9.4 Ready by: a deadline per download; earliest deadline first, runs outside the schedule when it would otherwise miss, says On track or At risk
 - [ ] B9.5 The phone only when it's worth it: per network Always / Only for long downloads / Never, with a minutes threshold
 - [ ] B9.6 What each network saved: after a download, "Without iPhone USB it would have taken 6 min"
-- [ ] B9.7 Checksums found by themselves: `<file>.sha256` or `SHA256SUMS` next to the link is used, and the download shows Verified
+- [x] B9.7 Checksums found by themselves: `<file>.sha256` or `SHA256SUMS` next to the link is used, and the download shows Verified
 - [ ] B9.8 Already downloaded: the same file (name and size) already finished and still on disk is pointed out before downloading again
 - [ ] B9.9 Hand off over Nearby: a paused download (its partial file and progress) goes to another Fuselane and continues there
 - [ ] B9.10 Battery aware: on low battery (not charging), keep going, leave out the phone, or pause

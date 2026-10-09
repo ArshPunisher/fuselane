@@ -322,6 +322,16 @@ fn set_allowance(svc: State<'_>, req: AllowanceRequest) -> Result<Vec<AllowanceV
 }
 
 #[tauri::command]
+fn find_checksums(svc: State<'_>) -> bool {
+    svc.find_checksums()
+}
+
+#[tauri::command]
+fn set_find_checksums(svc: State<'_>, on: bool) -> Result<bool, UiError> {
+    svc.set_find_checksums(on)
+}
+
+#[tauri::command]
 fn per_network_dns(svc: State<'_>) -> bool {
     svc.per_network_dns()
 }
@@ -1482,6 +1492,8 @@ fn main() {
             get_limits,
             per_network_dns,
             set_per_network_dns,
+            find_checksums,
+            set_find_checksums,
             allowances,
             set_allowance,
             set_slow,

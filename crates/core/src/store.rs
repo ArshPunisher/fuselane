@@ -76,6 +76,8 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE jobs ADD COLUMN replace_existing INTEGER NOT NULL DEFAULT 0;",
     // v9: other links to the same file (one per line), checked before they help.
     "ALTER TABLE jobs ADD COLUMN mirrors TEXT NOT NULL DEFAULT '';",
+    // v10: where a checksum found by itself came from ('' = looked, none found).
+    "ALTER TABLE jobs ADD COLUMN sha256_from TEXT;",
 ];
 
 /// What a person can set when adding a download, beyond the link and folder.
@@ -135,6 +137,9 @@ pub struct Job {
     pub replace_existing: bool,
     /// Other links to the same file.
     pub mirrors: Vec<String>,
+    /// Where Fuselane found its checksum by itself ("SHA256SUMS"); Some("") when
+    /// it looked and found none; None when it hasn't looked (B9.7).
+    pub sha256_from: Option<String>,
 }
 
 impl Job {
@@ -464,6 +469,26 @@ impl Store {
         Ok(())
     }
 
+    /// Records a checksum looked up next to the file, or that none was found
+    /// (`None`), so the lookup isn't repeated on every resume.
+    pub fn set_found_sha256(&self, id: i64, found: Option<(&str, &str)>) -> Result<(), StoreError> {
+        let n = match found {
+            Some((hash, from)) => self.lock().execute(
+                "UPDATE jobs SET expected_sha256 = ?2, sha256_from = ?3
+                 WHERE id = ?1 AND expected_sha256 IS NULL",
+                params![id, hash, from],
+            )?,
+            None => self.lock().execute(
+                "UPDATE jobs SET sha256_from = '' WHERE id = ?1",
+                params![id],
+            )?,
+        };
+        if n == 0 && self.get(id).is_err() {
+            return Err(StoreError::NotFound(id));
+        }
+        Ok(())
+    }
+
     /// Other links to the same file (each one checked before it helps).
     pub fn set_mirrors(&self, id: i64, mirrors: &[String]) -> Result<(), StoreError> {
         let n = self.lock().execute(
@@ -569,6 +594,7 @@ fn row_to_job(r: &rusqlite::Row<'_>) -> rusqlite::Result<Job> {
             .filter(|l| !l.is_empty())
             .map(str::to_string)
             .collect(),
+        sha256_from: r.get("sha256_from")?,
     })
 }
 

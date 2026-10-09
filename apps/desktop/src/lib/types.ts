@@ -42,6 +42,10 @@ export interface JobView {
   mirrorNotes: string[]
   /** It has every network to itself ("Do this one now"). */
   focused: boolean
+  /** Where its checksum was found by itself ("SHA256SUMS"), if it was. */
+  checksumFrom: string | null
+  /** Finished and matched its SHA-256. */
+  verified: boolean
 }
 
 export interface NetView {

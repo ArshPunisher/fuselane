@@ -78,6 +78,9 @@ export interface Backend {
   pickFolder(): Promise<string | null>
   getLimits(): Promise<LimitsView>
   perNetworkDns(): Promise<boolean>
+  /** Look for a published SHA-256 next to each new download (on by default). */
+  findChecksums(): Promise<boolean>
+  setFindChecksums(on: boolean): Promise<boolean>
   setPerNetworkDns(on: boolean): Promise<boolean>
   allowances(): Promise<AllowanceView[]>
   setAllowance(req: AllowanceRequest): Promise<AllowanceView[]>
@@ -229,6 +232,8 @@ async function tauriBackend(): Promise<Backend> {
     pickFolder: () => call('pick_folder'),
     getLimits: () => call('get_limits'),
     perNetworkDns: () => call('per_network_dns'),
+    findChecksums: () => call('find_checksums'),
+    setFindChecksums: (on) => call('set_find_checksums', { on }),
     setPerNetworkDns: (on) => call('set_per_network_dns', { on }),
     allowances: () => call('allowances'),
     setAllowance: (req) => call('set_allowance', { req }),

@@ -652,6 +652,46 @@ pub async fn preview_with(link: &str, headers: Headers) -> Result<Preview, Strin
     })
 }
 
+/// Looks for a SHA-256 of `file` published next to `link` (B9.7): returns the
+/// hash and where it was found ("SHA256SUMS"). Quick and quiet: a few seconds
+/// per place, small files only, and None whenever anything is off.
+pub async fn find_checksum(link: &str, file: &str) -> Option<(String, String)> {
+    let tuning = Tuning {
+        connect_timeout: Duration::from_secs(4),
+        first_byte_timeout: Duration::from_secs(4),
+        ..Tuning::default()
+    };
+    for (i, (place, label)) in crate::checksums::candidates(link).into_iter().enumerate() {
+        let found = async {
+            let (place, _) = follow(
+                &place,
+                &[],
+                false,
+                Headers::default(),
+                Duration::from_secs(4),
+            )
+            .await
+            .ok()?;
+            let (source, networks, _) = connect_plan(&place, &[], false).await.ok()?;
+            let net = networks.first()?;
+            let body = fuselane_engine_http::download::read_small(
+                &source,
+                net,
+                &tuning,
+                crate::checksums::MAX_LIST,
+            )
+            .await?;
+            let text = String::from_utf8(body).ok()?;
+            // A lone hash counts only in a file named after this one (`os.iso.sha256`).
+            crate::checksums::find_in(&text, file, i < 2)
+        };
+        if let Ok(Some(hash)) = tokio::time::timeout(Duration::from_secs(10), found).await {
+            return Some((hash, label));
+        }
+    }
+    None
+}
+
 /// Lane ids for mirrors: device id + 100 per mirror (`live` folds them back
 /// onto their device, so a network shows once however many servers it reaches).
 pub const MIRROR_ID_STEP: u32 = 100;

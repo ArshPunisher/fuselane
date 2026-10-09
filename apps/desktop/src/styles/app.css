@@ -4025,3 +4025,23 @@ html[data-hidden] .orb b {
   color: var(--fuse-text);
   vertical-align: -2px;
 }
+
+/* ---------- Checksums (B9.7) ---------- */
+
+.checksum-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--body);
+  font-size: 12px;
+}
+
+.checksum-badge[data-verified] {
+  color: var(--success);
+  font-weight: 500;
+}
+
+.checksum-badge .muted {
+  font-weight: 400;
+}

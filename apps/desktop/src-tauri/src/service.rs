@@ -14,6 +14,7 @@ use fuselane_limits::{Date, LimitSettings, Limiter, Period, Usage, next_reset};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
+mod checksum;
 mod focus;
 
 /// Downloads that run at once; the rest wait their turn (L-53).
@@ -53,6 +54,10 @@ pub struct JobView {
     pub mirror_notes: Vec<String>,
     /// It has every network to itself ("Do this one now").
     pub focused: bool,
+    /// Where its checksum was found by itself ("SHA256SUMS"), if it was (B9.7).
+    pub checksum_from: Option<String>,
+    /// Finished and matched its SHA-256.
+    pub verified: bool,
 }
 
 /// One network the app can see.
@@ -574,6 +579,8 @@ pub struct Service {
     /// the ones it paused, which carry on after it.
     focus: Mutex<Option<i64>>,
     focus_held: Mutex<std::collections::HashSet<i64>>,
+    /// Look for a published SHA-256 next to each new download (B9.7). On by default.
+    find_checksums: std::sync::atomic::AtomicBool,
 }
 
 /// Opens a file with the system's default app.
@@ -696,6 +703,8 @@ fn view(job: &Job) -> JobView {
             .collect(),
         mirror_notes: vec![],
         focused: false,
+        checksum_from: job.sha256_from.clone().filter(|f| !f.is_empty()),
+        verified: job.status == Status::Completed && job.expected_sha256.is_some(),
     }
 }
 
@@ -800,6 +809,8 @@ impl Service {
         let updated_from = previous.filter(|p| p != current);
         let _ = store.set_setting("last_version", current);
         let store_flag = store.setting("per_network_dns").ok().flatten().as_deref() == Some("true");
+        let find_checksums =
+            store.setting("find_checksums").ok().flatten().as_deref() != Some("false");
         let automation: crate::automation::Automation = store
             .setting("automation")
             .ok()
@@ -875,6 +886,7 @@ impl Service {
             mirror_notes: Mutex::new(HashMap::new()),
             focus: Mutex::new(None),
             focus_held: Mutex::new(std::collections::HashSet::new()),
+            find_checksums: std::sync::atomic::AtomicBool::new(find_checksums),
             retries: Mutex::new(HashMap::new()),
             limiter,
             saved_limits: Mutex::new(saved_limits),
@@ -2324,6 +2336,7 @@ impl Service {
 
     async fn run(self: Arc<Self>, job: Job, cancel: Cancel, limit: Arc<fuselane_limits::JobLimit>) {
         let id = job.id;
+        let job = self.with_found_checksum(job).await;
         // Networks behind a sign-in page are left out (they'd serve the login page).
         let picked = self.download_networks().unwrap_or_default();
         let nets: Vec<(String, String, String)> = picked
@@ -2449,6 +2462,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = Store::open(&dir.path().join("fuselane.db")).unwrap();
         let svc = Service::with_max_running(store, dir.path().to_path_buf(), max).unwrap();
+        // Test servers count requests and script faults; a checksum lookup would
+        // use them up. The checksum test turns it back on.
+        svc.find_checksums
+            .store(false, std::sync::atomic::Ordering::Relaxed);
         let events: Arc<Mutex<Vec<UiEvent>>> = Arc::default();
         svc.subscribe({
             let events = events.clone();
@@ -3094,6 +3111,62 @@ mod tests {
             .await;
         let err = h.job(id2).error.unwrap_or_default();
         assert!(err.contains("SHA-256"), "{err}");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_checksum_published_next_to_the_file_is_found_and_checked() {
+        let hex =
+            |c: &Content| -> String { c.sha256().iter().map(|b| format!("{b:02x}")).collect() };
+        // Right: SHA256SUMS lists this file among others.
+        let content = Content::new(300 * KB, 161);
+        let server = RangeServer::start(content).await.unwrap();
+        server.serve_file(
+            "/SHA256SUMS",
+            format!(
+                "{}  other.bin\n{} *file.bin\n",
+                "a".repeat(64),
+                hex(&content)
+            ),
+        );
+        let h = harness(3);
+        h.svc.set_find_checksums(true).unwrap();
+        let id = h.svc.add(&link(&server), None).unwrap();
+        h.wait("completion", |h| h.job(id).status == "completed")
+            .await;
+        let j = h.job(id);
+        assert!(j.verified, "checked against the published hash");
+        assert_eq!(j.checksum_from.as_deref(), Some("SHA256SUMS"));
+
+        // Wrong: a damaged file is refused, never published.
+        let other = Content::new(200 * KB, 162);
+        let bad = RangeServer::start(other).await.unwrap();
+        bad.serve_file("/file.bin.sha256", "0".repeat(64));
+        let id2 = h.svc.add(&link(&bad), None).unwrap();
+        h.wait("failure", |h| h.job(id2).status.starts_with("failed"))
+            .await;
+        assert!(h.job(id2).error.unwrap_or_default().contains("SHA-256"));
+        assert_eq!(h.job(id2).checksum_from.as_deref(), Some("file.bin.sha256"));
+
+        // None published: it downloads as before, and the lookup isn't repeated.
+        let plain = RangeServer::start(Content::new(100 * KB, 163))
+            .await
+            .unwrap();
+        let id3 = h.svc.add(&link(&plain), None).unwrap();
+        h.wait("plain", |h| h.job(id3).status == "completed").await;
+        assert!(!h.job(id3).verified);
+        assert_eq!(
+            h.svc.store.get(id3).unwrap().sha256_from.as_deref(),
+            Some("")
+        );
+
+        // Off: nothing is looked up.
+        h.svc.set_find_checksums(false).unwrap();
+        let off = RangeServer::start(content).await.unwrap();
+        off.serve_file("/SHA256SUMS", format!("{}  file.bin\n", hex(&content)));
+        let id4 = h.svc.add(&link(&off), None).unwrap();
+        h.wait("off", |h| h.job(id4).status == "completed").await;
+        assert!(!h.job(id4).verified);
+        assert_eq!(h.svc.store.get(id4).unwrap().sha256_from, None);
     }
 
     #[tokio::test(flavor = "multi_thread")]

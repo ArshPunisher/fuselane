@@ -345,6 +345,38 @@ function SharingSetting() {
   )
 }
 
+function ChecksumSetting() {
+  const backend = useApp((s) => s.backend)
+  const act = useApp((s) => s.act)
+  const [on, setOn] = useState<boolean | null>(null)
+  useEffect(() => {
+    void backend
+      ?.findChecksums()
+      .then(setOn)
+      .catch(() => setOn(true))
+  }, [backend])
+  return (
+    <div className="setting">
+      <div>
+        <p className="setting-name">Check downloads against published checksums</p>
+        <p className="muted">
+          Many sites put a SHA-256 next to the file (a .sha256 file or SHA256SUMS). Fuselane looks
+          there before it starts and checks the finished file, so a damaged one is never saved.
+        </p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        className="switch"
+        aria-label="Check downloads against published checksums"
+        aria-checked={on === true}
+        disabled={on === null}
+        onClick={() => void act(async (b) => setOn(await b.setFindChecksums(!on)))}
+      />
+    </div>
+  )
+}
+
 function LookupSetting() {
   const backend = useApp((s) => s.backend)
   const act = useApp((s) => s.act)
@@ -582,6 +614,7 @@ export function SettingsView() {
           <SortSetting />
           <AfterDownloadSetting />
           <NameTakenSetting />
+          <ChecksumSetting />
           <ListSetting />
         </Group>
         <Group title="This computer">

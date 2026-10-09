@@ -149,6 +149,8 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       mirrors: [],
       mirrorNotes: [],
       focused: false,
+      checksumFrom: null,
+      verified: false,
       fill,
       owner,
       inflight: [-1, -1, -1],
@@ -181,7 +183,11 @@ export function createDemoBackend(params: URLSearchParams): Backend {
   }
 
   if (params.get('empty') !== '1') {
-    make('Blender-5.1-macos-arm64.dmg', 412 * MB, 'completed', 1)
+    Object.assign(make('Blender-5.1-macos-arm64.dmg', 412 * MB, 'completed', 1), {
+      verify: true,
+      verified: true,
+      checksumFrom: 'SHA256SUMS',
+    })
     make(
       'nightly-build-2026-10-07.zip',
       96 * MB,
@@ -376,6 +382,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
   }
 
   let maxRunning = 3
+  let findSums = true
   const windowPrefs = { startAtLogin: false, closeToTray: false, watchClipboard: false }
   let automation: Automation = {
     schedule: {
@@ -729,6 +736,8 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     nameTaken: async (_dir, name) => jobs.some((j) => j.name === name.trim()),
     getLimits: async () => structuredClone(limits),
     perNetworkDns: async () => perNetDns,
+    findChecksums: async () => findSums,
+    setFindChecksums: async (on) => (findSums = on),
     setPerNetworkDns: async (on) => (perNetDns = on),
     allowances: async () => structuredClone(allowances),
     setAllowance: async (req) => {

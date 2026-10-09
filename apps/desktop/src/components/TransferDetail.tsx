@@ -6,6 +6,7 @@ import {
   FolderOpen,
   Lightning,
   Pause,
+  ShieldCheck,
   ArrowLineUp,
   Play,
   Trash,
@@ -260,6 +261,25 @@ function RemoveButton({ job }: { job: JobView }) {
   )
 }
 
+/** Whether the file is (or will be) checked against a SHA-256, and from where. */
+function ChecksumBadge({ job }: { job: JobView }) {
+  const from = job.checksumFrom ? `the SHA-256 from ${job.checksumFrom}` : 'the SHA-256 you gave'
+  if (job.verified)
+    return (
+      <p className="checksum-badge" data-verified title={`The finished file matches ${from}.`}>
+        <ShieldCheck size={14} weight="fill" aria-hidden /> Verified
+        <span className="muted">against {job.checksumFrom ?? 'your SHA-256'}</span>
+      </p>
+    )
+  if (job.status === 'completed') return null
+  return (
+    <p className="checksum-badge" title={`When it finishes, the file is checked against ${from}.`}>
+      <ShieldCheck size={14} aria-hidden /> Checked when done
+      <span className="muted">against {job.checksumFrom ?? 'your SHA-256'}</span>
+    </p>
+  )
+}
+
 export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => void) | null }) {
   const liveAll = useApp((s) => s.live[job.id])
   const history = useApp((s) => s.history[job.id])
@@ -300,6 +320,7 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
           <p className="detail-sub" title={job.finalPath ?? job.dir} translate="no">
             {job.finalPath ?? job.dir}
           </p>
+          {job.verify && <ChecksumBadge job={job} />}
         </div>
         <div className="detail-actions">
           {job.status === 'queued' && (
