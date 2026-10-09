@@ -29,6 +29,9 @@ export interface JobView {
   retryIn: number | null
   /** When it starts by itself (unix seconds), while it waits paused. */
   startAt: number | null
+  /** Hosts of its mirrors, and why any of them wasn't used. */
+  mirrors: string[]
+  mirrorNotes: string[]
 }
 
 export interface NetView {
@@ -157,6 +160,8 @@ export interface AddOptions {
   startAt?: number | null
   /** The name is taken: true replaces the old file, false keeps both; unset follows Settings. */
   replace?: boolean | null
+  /** Other links to the same file. */
+  mirrors?: string[]
 }
 
 export interface BatchResult {

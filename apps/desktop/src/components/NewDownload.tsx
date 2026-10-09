@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, FileArrowUp, Magnet, Warning, X } from '@phosphor-icons/react'
+import { ArrowLeft, FileArrowUp, Magnet, Plus, Warning, X } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { toUiError } from '../lib/backend'
 import { isSendLink } from '../lib/sendLink'
@@ -85,6 +85,8 @@ export function NewDownload() {
   // A file of this name is already in the folder (B8.6): keep both or replace.
   const [taken, setTaken] = useState(false)
   const [replace, setReplace] = useState(false)
+  // Other links to the same file (B8.9).
+  const [mirrors, setMirrors] = useState<string[]>([])
   const nameRule = useApp((s) => s.automation?.settings.nameTaken ?? 'ask')
   /** What a batch add skipped, shown until the dialog closes. */
   const [skipped, setSkipped] = useState<{ url: string; reason: string }[]>([])
@@ -235,6 +237,7 @@ export function NewDownload() {
     setSha256('')
     setStartLater(false)
     setReplace(false)
+    setMirrors([])
     setMore(false)
     setSkipped([])
   }
@@ -279,6 +282,7 @@ export function NewDownload() {
         later: later.current,
         startAt: scheduled,
         replace: taken ? replace : null,
+        mirrors: more ? mirrors.map((m) => m.trim()).filter(Boolean) : [],
       })
       reset()
       setAdding(false)
@@ -304,9 +308,12 @@ export function NewDownload() {
   const dirError = error && error.code === 'folder-missing' ? error : null
   const nameError = error && error.code === 'bad-name' ? error : null
   const shaError = error && error.code === 'bad-checksum' ? error : null
+  const mirrorError = error && error.code === 'bad-mirror' ? error : null
   const duplicate = error && error.code === 'duplicate' ? error : null
   const otherError =
-    error && !urlError && !dirError && !nameError && !shaError && !duplicate ? error : null
+    error && !urlError && !dirError && !nameError && !shaError && !mirrorError && !duplicate
+      ? error
+      : null
   const multi = batch || url.includes('\n')
   const scheduled = more && startLater && !batch && !isMagnet(url) ? nextAt(startTime) : null
   const badTime = more && startLater && scheduled === null
@@ -627,6 +634,54 @@ export function NewDownload() {
                   {shaError
                     ? `${shaError.message} ${shaError.hint ?? ''}`
                     : "Fuselane checks the finished file and won't save it under its name if it differs."}
+                </p>
+              </div>
+              <div className="field">
+                <span className="label" id="nd-mirrors-label">
+                  Mirrors
+                </span>
+                <div className="mirrors" role="group" aria-labelledby="nd-mirrors-label">
+                  {mirrors.map((m, i) => (
+                    <div className="mirror" key={i}>
+                      <input
+                        autoComplete="off"
+                        spellCheck={false}
+                        inputMode="url"
+                        aria-label={`Mirror ${i + 1}`}
+                        placeholder="https://mirror.example.org/same-file.iso…"
+                        value={m}
+                        aria-invalid={mirrorError ? true : undefined}
+                        onChange={(e) => {
+                          const next = [...mirrors]
+                          next[i] = e.target.value
+                          setMirrors(next)
+                          if (mirrorError) setError(null)
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        aria-label={`Remove mirror ${i + 1}`}
+                        onClick={() => setMirrors(mirrors.filter((_, j) => j !== i))}
+                      >
+                        <X size={16} aria-hidden />
+                      </button>
+                    </div>
+                  ))}
+                  {mirrors.length < 8 && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm add-mirror"
+                      onClick={() => setMirrors([...mirrors, ''])}
+                    >
+                      <Plus size={16} aria-hidden /> Add a mirror
+                    </button>
+                  )}
+                </div>
+                <p className={mirrorError ? 'field-error' : 'field-help'}>
+                  {mirrorError
+                    ? `${mirrorError.message} ${mirrorError.hint ?? ''}`
+                    : 'The same file on other servers. Each is checked first, then every network fetches from all of them.'}
                 </p>
               </div>
               <div className="field">

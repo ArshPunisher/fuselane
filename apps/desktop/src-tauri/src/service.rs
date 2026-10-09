@@ -46,6 +46,9 @@ pub struct JobView {
     pub retry_in: Option<u64>,
     /// When it starts by itself (unix seconds), for "Starts at 02:00".
     pub start_at: Option<i64>,
+    /// Hosts of its mirrors (B8.9), and why any of them wasn't used.
+    pub mirrors: Vec<String>,
+    pub mirror_notes: Vec<String>,
 }
 
 /// One network the app can see.
@@ -454,6 +457,9 @@ pub struct AddRequest {
     /// once this one is complete, false keeps both. None follows the setting.
     #[serde(default)]
     pub replace: Option<bool>,
+    /// Other links to the same file (B8.9); up to 8, http or https.
+    #[serde(default)]
+    pub mirrors: Vec<String>,
     /// A browser session's cookies and referrer (from the extension, never the window).
     #[serde(skip)]
     pub headers: Vec<(String, String)>,
@@ -554,6 +560,8 @@ pub struct Service {
     last_clip: Mutex<Option<String>>,
     /// Opens a finished file with its usual app ("Open it" when done); set by the app.
     opener: Mutex<OpenFn>,
+    /// Why mirrors weren't used, per download, from its latest run.
+    mirror_notes: Mutex<HashMap<i64, Arc<Mutex<Vec<String>>>>>,
 }
 
 /// Opens a file with the system's default app.
@@ -664,6 +672,17 @@ fn view(job: &Job) -> JobView {
         speed_limit: job.speed_limit,
         retry_in: None,
         start_at: job.start_at.filter(|_| job.status == Status::Paused),
+        mirrors: job
+            .mirrors
+            .iter()
+            .map(|m| {
+                url::Url::parse(m)
+                    .ok()
+                    .and_then(|u| u.host_str().map(str::to_string))
+                    .unwrap_or_else(|| m.clone())
+            })
+            .collect(),
+        mirror_notes: vec![],
     }
 }
 
@@ -693,10 +712,19 @@ fn not_found(id: i64) -> UiError {
     )
 }
 
-/// Packs a snapshot for the window.
+/// Packs a snapshot for the window. Mirror lanes (id + 100 per mirror) are
+/// folded onto their network, so each network shows once (B8.9).
 fn live(id: i64, s: &Snapshot, nets: &[(String, String, String)]) -> Live {
-    let index = |net: Option<u32>| -> u16 {
-        net.and_then(|n| s.networks.iter().position(|x| x.id == n))
+    let device = |lane: u32| ((lane - 1) % runner::MIRROR_ID_STEP) + 1;
+    let mut order: Vec<u32> = Vec::new();
+    for n in &s.networks {
+        let d = device(n.id.max(1));
+        if !order.contains(&d) {
+            order.push(d);
+        }
+    }
+    let index = |lane: Option<u32>| -> u16 {
+        lane.and_then(|l| order.iter().position(|d| *d == device(l.max(1))))
             .map_or(0, |i| i as u16 + 1)
     };
     let mut ticks = Vec::with_capacity(s.ticks.len() * 3);
@@ -710,22 +738,29 @@ fn live(id: i64, s: &Snapshot, nets: &[(String, String, String)]) -> Live {
         written: s.written,
         total: s.total,
         rate: if s.rate.is_finite() { s.rate } else { 0.0 },
-        networks: s
-            .networks
+        networks: order
             .iter()
-            .map(|n| {
+            .map(|d| {
+                let lanes: Vec<_> = s
+                    .networks
+                    .iter()
+                    .filter(|n| device(n.id.max(1)) == *d)
+                    .collect();
                 let (name, label, kind) = nets
-                    .get(n.id.saturating_sub(1) as usize)
+                    .get(d.saturating_sub(1) as usize)
                     .cloned()
-                    .unwrap_or_else(|| (format!("net{}", n.id), String::new(), "other".into()));
+                    .unwrap_or_else(|| (format!("net{d}"), String::new(), "other".into()));
                 LiveNet {
                     name,
                     label,
                     kind,
-                    bytes: n.bytes,
-                    rate: if n.rate.is_finite() { n.rate } else { 0.0 },
-                    streams: n.streams,
-                    dead: n.dead,
+                    bytes: lanes.iter().map(|n| n.bytes).sum(),
+                    rate: lanes
+                        .iter()
+                        .map(|n| if n.rate.is_finite() { n.rate } else { 0.0 })
+                        .sum(),
+                    streams: lanes.iter().map(|n| n.streams).sum(),
+                    dead: lanes.iter().all(|n| n.dead),
                 }
             })
             .collect(),
@@ -824,6 +859,7 @@ impl Service {
             max_running: std::sync::atomic::AtomicUsize::new(max_running),
             retry_scale: None,
             opener: Mutex::new(Arc::new(|_| {})),
+            mirror_notes: Mutex::new(HashMap::new()),
             retries: Mutex::new(HashMap::new()),
             limiter,
             saved_limits: Mutex::new(saved_limits),
@@ -926,6 +962,7 @@ impl Service {
 
     pub fn jobs(&self) -> Result<Vec<JobView>, UiError> {
         let retries = lock(&self.retries).clone();
+        let notes = lock(&self.mirror_notes).clone();
         let now = std::time::Instant::now();
         Ok(self
             .store
@@ -934,6 +971,9 @@ impl Service {
             .iter()
             .map(|j| {
                 let mut v = view(j);
+                if let Some(n) = notes.get(&j.id) {
+                    v.mirror_notes = lock(n).clone();
+                }
                 if v.status == "failed" {
                     v.retry_in = retries
                         .get(&j.id)
@@ -1190,6 +1230,31 @@ impl Service {
         parse_link(url).map_err(|m| {
             UiError::new("bad-link", m, Some("Links start with http:// or https://."))
         })?;
+        let mut mirrors: Vec<String> = Vec::new();
+        for m in req
+            .mirrors
+            .iter()
+            .map(|m| m.trim())
+            .filter(|m| !m.is_empty())
+        {
+            parse_link(m).map_err(|why| {
+                UiError::new(
+                    "bad-mirror",
+                    format!("A mirror link isn't usable: {why}"),
+                    Some("Mirrors are http:// or https:// links to the same file."),
+                )
+            })?;
+            if m != url && !mirrors.iter().any(|x| x == m) {
+                mirrors.push(m.to_string());
+            }
+        }
+        if mirrors.len() > 8 {
+            return Err(UiError::new(
+                "bad-mirror",
+                "That's more than 8 mirrors.",
+                Some("Keep the fastest few; more rarely helps."),
+            ));
+        }
         let dir = match dir.map(str::trim).filter(|d| !d.is_empty()) {
             Some(d) => PathBuf::from(d),
             None => self.default_dir.clone(),
@@ -1274,6 +1339,9 @@ impl Service {
             self.store
                 .set_replace_existing(id, true)
                 .map_err(store_error)?;
+        }
+        if !mirrors.is_empty() {
+            self.store.set_mirrors(id, &mirrors).map_err(store_error)?;
         }
         if !session.is_empty() {
             lock(&self.sessions).insert(id, session);
@@ -2258,6 +2326,12 @@ impl Service {
                 .load(std::sync::atomic::Ordering::Relaxed),
             filename: job.chosen_name.clone(),
             headers: lock(&self.sessions).get(&id).cloned().unwrap_or_default(),
+            mirrors: job.mirrors.clone(),
+            mirror_notes: (!job.mirrors.is_empty()).then(|| {
+                let notes = Arc::new(Mutex::new(Vec::new()));
+                lock(&self.mirror_notes).insert(id, notes.clone());
+                notes
+            }),
             sha256: job
                 .expected_sha256
                 .as_deref()
@@ -2896,6 +2970,7 @@ mod tests {
             later: false,
             start_at: None,
             replace: None,
+            mirrors: vec![],
             headers: vec![],
         };
         let id = h.svc.add_with(&link(&server), None, &good).unwrap();
@@ -3171,6 +3246,102 @@ mod tests {
                 .iter()
                 .any(|e| matches!(e, UiEvent::WhenDoneCancelled))
         );
+    }
+
+    #[test]
+    fn mirror_lanes_show_as_their_network() {
+        use fuselane_engine_http::download::{NetSnapshot, TickSnapshot};
+        let lane = |id, bytes, rate, dead| NetSnapshot {
+            id,
+            bytes,
+            rate,
+            streams: 2,
+            dead,
+        };
+        let s = Snapshot {
+            written: 0,
+            total: Some(100),
+            rate: 0.0,
+            // Wi-Fi (1) and Ethernet (2), each also reaching one mirror (101, 102).
+            networks: vec![
+                lane(1, 10, 1.0, false),
+                lane(2, 20, 2.0, false),
+                lane(101, 5, 0.5, true),
+                lane(102, 7, 0.7, false),
+            ],
+            ticks: vec![TickSnapshot {
+                fill: 1.0,
+                owner: Some(102),
+                in_flight: Some(101),
+            }],
+            retries: 0,
+            hedges: 0,
+        };
+        let nets = vec![
+            ("en1".to_string(), "Wi-Fi".to_string(), "wifi".to_string()),
+            (
+                "en0".to_string(),
+                "Ethernet".to_string(),
+                "ethernet".to_string(),
+            ),
+        ];
+        let l = live(1, &s, &nets);
+        assert_eq!(l.networks.len(), 2);
+        assert_eq!(
+            (l.networks[0].name.as_str(), l.networks[0].bytes),
+            ("en1", 15)
+        );
+        assert_eq!(
+            (l.networks[1].name.as_str(), l.networks[1].bytes),
+            ("en0", 27)
+        );
+        assert!((l.networks[1].rate - 2.7).abs() < 1e-9);
+        assert_eq!(l.networks[0].streams, 4);
+        assert!(
+            !l.networks[0].dead,
+            "a dead mirror lane doesn't make the network dead"
+        );
+        // Ring ticks point at the network, not the lane.
+        assert_eq!(&l.ticks[..], &[100, 2, 1]);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn mirrors_are_checked_when_added_and_kept_with_the_download() {
+        let h = harness(3);
+        let req = |m: &[&str]| AddRequest {
+            later: true,
+            allow_duplicate: true,
+            mirrors: m.iter().map(|s| s.to_string()).collect(),
+            ..AddRequest::default()
+        };
+        let bad = h
+            .svc
+            .add_with(
+                "https://example.com/a.iso",
+                None,
+                &req(&["ftp://x.example/a.iso"]),
+            )
+            .unwrap_err();
+        assert_eq!(bad.code, "bad-mirror");
+        let id = h
+            .svc
+            .add_with(
+                "https://example.com/a.iso",
+                None,
+                // The main link and a repeat are dropped quietly.
+                &req(&[
+                    "https://m1.example/a.iso",
+                    " https://example.com/a.iso ",
+                    "https://m1.example/a.iso",
+                    "https://m2.example/pub/a.iso",
+                ]),
+            )
+            .unwrap();
+        assert_eq!(
+            h.svc.store.get(id).unwrap().mirrors,
+            vec!["https://m1.example/a.iso", "https://m2.example/pub/a.iso"]
+        );
+        assert_eq!(h.job(id).mirrors, vec!["m1.example", "m2.example"]);
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -3593,6 +3764,8 @@ mod tests {
             speed_limit: 0,
             retry_in: None,
             start_at: None,
+            mirrors: vec![],
+            mirror_notes: vec![],
         };
         let net = NetView {
             name: "en0".into(),

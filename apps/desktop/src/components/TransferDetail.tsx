@@ -377,6 +377,21 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
             )}
           </dl>
 
+          {job.mirrors.length > 0 && (
+            <div className="mirror-note">
+              <p className="field-help">
+                Also from {job.mirrors.length === 1 ? 'a mirror' : `${job.mirrors.length} mirrors`}:{' '}
+                <span translate="no">{job.mirrors.join(', ')}</span>. Each was checked for the same
+                file before helping.
+              </p>
+              {job.mirrorNotes.map((n) => (
+                <p key={n} className="field-help warn">
+                  {n}
+                </p>
+              ))}
+            </div>
+          )}
+
           {live && <Stream history={history} lanes={lanes} />}
 
           {nets.length > 0 && (

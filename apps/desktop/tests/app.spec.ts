@@ -1258,3 +1258,25 @@ test('the list can show one type of file', async ({ page }) => {
   await expect(page.locator('.row-name', { hasText: 'Sprite Fright' })).toBeVisible()
   await expect(page.locator('.row-name', { hasText: 'ubuntu' })).toHaveCount(0)
 })
+
+test('mirrors can be added to a download and are listed on it', async ({ page }) => {
+  await page.goto('/?empty=1')
+  const dialog = await openDialog(page)
+  await dialog.getByLabel('Link').fill('https://releases.example.org/os.iso')
+  await dialog.getByText('More options').click()
+  await dialog.getByRole('button', { name: 'Add a mirror' }).click()
+  await dialog.getByLabel('Mirror 1', { exact: true }).fill('ftp://old.example.net/os.iso')
+  await dialog.getByRole('button', { name: 'Download', exact: true }).click()
+  // A bad mirror is explained under the field, and the dialog stays.
+  await expect(dialog.getByText(/A mirror link isn't usable/)).toBeVisible()
+  await dialog.getByLabel('Mirror 1', { exact: true }).fill('https://mirror.example.net/os.iso')
+  await dialog.getByRole('button', { name: 'Add a mirror' }).click()
+  await dialog.getByLabel('Mirror 2', { exact: true }).fill('https://other.example.com/pub/os.iso')
+  await dialog.getByRole('button', { name: 'Remove mirror 2' }).click()
+  await expect(dialog.getByLabel('Mirror 2', { exact: true })).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Download', exact: true }).click()
+  await expect(dialog).toBeHidden()
+  await expect(page.locator('article.detail')).toContainText(
+    'Also from a mirror: mirror.example.net',
+  )
+})

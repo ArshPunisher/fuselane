@@ -144,6 +144,8 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       speedLimit: 0,
       retryIn: status === 'failed' && errorAction === 'retry' ? 95 : null,
       startAt: null,
+      mirrors: [],
+      mirrorNotes: [],
       fill,
       owner,
       inflight: [-1, -1, -1],
@@ -456,6 +458,15 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         options?.later || options?.startAt ? 'paused' : 'running',
       )
       j.startAt = options?.startAt ?? null
+      const ms = (options?.mirrors ?? []).map((m) => m.trim()).filter(Boolean)
+      for (const m of ms)
+        if (!/^https?:\/\//i.test(m))
+          throw err(
+            'bad-mirror',
+            `A mirror link isn't usable: "${m}" isn't a web link.`,
+            'Mirrors are http:// or https:// links to the same file.',
+          )
+      j.mirrors = ms.map((m) => new URL(m).hostname)
       j.url = url.href
       j.verify = Boolean(sha)
       if (dir?.trim()) j.dir = dir.trim()

@@ -2968,3 +2968,31 @@ html[data-hidden] *::after {
   outline: 2px solid var(--fuse);
   outline-offset: 1px;
 }
+
+/* ---------- Mirrors (B8.9) ---------- */
+
+.mirrors {
+  display: grid;
+  gap: 6px;
+}
+
+.mirror {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.add-mirror {
+  justify-self: start;
+}
+
+.mirror-note {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.field-help.warn {
+  color: var(--warning);
+}

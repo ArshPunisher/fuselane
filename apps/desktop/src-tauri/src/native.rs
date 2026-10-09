@@ -131,6 +131,8 @@ mod tests {
             speed_limit: 0,
             retry_in: None,
             start_at: None,
+            mirrors: vec![],
+            mirror_notes: vec![],
         }
     }
 
