@@ -265,6 +265,8 @@ pub struct RunOptions {
     pub retry_delay_scale: Option<f64>,
     /// Live speed limits shared with other downloads.
     pub limiter: Option<Arc<fuselane_limits::Limiter>>,
+    /// This download's own limit, changeable while it runs.
+    pub job_limit: Option<Arc<fuselane_limits::JobLimit>>,
     /// Look the server up through each network (public resolvers) as well as the
     /// system resolver. Off by default: those resolvers see the server's name.
     pub per_network_dns: bool,
@@ -598,6 +600,7 @@ pub async fn run(
         expected_sha256: opts.sha256,
         retry_delay_scale: opts.retry_delay_scale.unwrap_or(defaults.retry_delay_scale),
         limiter: opts.limiter,
+        job_limit: opts.job_limit,
         filename: opts.filename,
         headers: opts.headers,
         ..defaults

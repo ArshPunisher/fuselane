@@ -68,6 +68,8 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE jobs ADD COLUMN position INTEGER;
      ALTER TABLE jobs ADD COLUMN chosen_name TEXT;
      ALTER TABLE jobs ADD COLUMN expected_sha256 TEXT;",
+    // v6: a download's own speed limit (bytes per second; 0 = none).
+    "ALTER TABLE jobs ADD COLUMN speed_limit INTEGER NOT NULL DEFAULT 0;",
 ];
 
 /// What a person can set when adding a download, beyond the link and folder.
@@ -119,6 +121,8 @@ pub struct Job {
     pub position: i64,
     pub chosen_name: Option<String>,
     pub expected_sha256: Option<String>,
+    /// This download's own speed limit in bytes per second; 0 = none.
+    pub speed_limit: u64,
 }
 
 impl Job {
@@ -436,6 +440,18 @@ impl Store {
         Ok(())
     }
 
+    /// Sets a download's own speed limit (0 removes it); any state.
+    pub fn set_speed_limit(&self, id: i64, rate: u64) -> Result<(), StoreError> {
+        let n = self.lock().execute(
+            "UPDATE jobs SET speed_limit = ?2 WHERE id = ?1",
+            params![id, i64::try_from(rate).unwrap_or(i64::MAX)],
+        )?;
+        if n == 0 {
+            return Err(StoreError::NotFound(id));
+        }
+        Ok(())
+    }
+
     pub fn set_finished(&self, id: i64, path: &Path, total: u64) -> Result<(), StoreError> {
         self.lock().execute(
             "UPDATE jobs SET final_path = ?2, staging_path = NULL, total = ?3 WHERE id = ?1",
@@ -495,6 +511,7 @@ fn row_to_job(r: &rusqlite::Row<'_>) -> rusqlite::Result<Job> {
             .unwrap_or(r.get::<_, i64>("id")?),
         chosen_name: r.get("chosen_name")?,
         expected_sha256: r.get("expected_sha256")?,
+        speed_limit: u64::try_from(r.get::<_, i64>("speed_limit")?).unwrap_or(0),
     })
 }
 
@@ -526,6 +543,24 @@ mod tests {
         assert!(b.lock_job(8).unwrap().is_some(), "other downloads are free");
         drop(held);
         assert!(b.lock_job(7).unwrap().is_some(), "free again once released");
+    }
+
+    #[test]
+    fn a_speed_limit_is_kept_per_download() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = Store::open(&dir.path().join("db")).unwrap();
+        let a = s.create("https://e.x/a", Path::new("/tmp")).unwrap();
+        let b = s.create("https://e.x/b", Path::new("/tmp")).unwrap();
+        assert_eq!(s.get(a).unwrap().speed_limit, 0);
+        s.set_speed_limit(a, 500_000).unwrap();
+        assert_eq!(s.get(a).unwrap().speed_limit, 500_000);
+        assert_eq!(s.get(b).unwrap().speed_limit, 0);
+        s.set_speed_limit(a, 0).unwrap();
+        assert_eq!(s.get(a).unwrap().speed_limit, 0);
+        assert!(matches!(
+            s.set_speed_limit(999, 1),
+            Err(StoreError::NotFound(999))
+        ));
     }
 
     #[test]
