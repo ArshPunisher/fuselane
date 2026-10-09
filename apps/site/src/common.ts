@@ -193,6 +193,22 @@ function reveal() {
   els.forEach((e) => io.observe(e))
 }
 
+/** FAQ: the topic list marks the topic being read. */
+function faqTopics() {
+  const links = [...document.querySelectorAll<HTMLAnchorElement>('.faq-index a')]
+  if (!links.length || !('IntersectionObserver' in window)) return
+  const io = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue
+        links.forEach((a) => a.setAttribute('aria-current', String(a.hash === `#${e.target.id}`)))
+      }
+    },
+    { rootMargin: '-30% 0px -60% 0px' },
+  )
+  document.querySelectorAll('.faq-group').forEach((g) => io.observe(g))
+}
+
 /** Panels with .spot light up where the pointer is (CSS reads --mx/--my). */
 function spotlight() {
   if (matchMedia('(hover: none)').matches) return
@@ -268,3 +284,4 @@ reveal()
 spotlight()
 copyButtons()
 void stars()
+faqTopics()

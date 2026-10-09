@@ -258,11 +258,34 @@ test('the star count shows when there is one, and never as 0', async ({ page, br
   await ctx.close()
 })
 
+test('the FAQ is grouped by topic and the topic list jumps to each', async ({ page }) => {
+  await stub(page)
+  await page.goto('/faq/')
+  const topics = page.getByRole('navigation', { name: 'Topics' })
+  for (const t of ['How it works', 'Fuse Send', 'Installing and trust'])
+    await expect(page.getByRole('heading', { level: 2, name: t })).toBeVisible()
+  await topics.getByRole('link', { name: /Installing and trust/ }).click()
+  await expect(page).toHaveURL(/#trust$/)
+  await expect(topics.getByRole('link', { name: /Installing and trust/ })).toHaveAttribute(
+    'aria-current',
+    'true',
+  )
+  await expect(page.locator('.qa details')).toHaveCount(15)
+})
+
+test('without a known version the download page still reads well', async ({ page }) => {
+  await stub(page, { feed: false })
+  await page.goto('/download/')
+  const line = page.locator('.page-hero p').first()
+  await expect(line).toContainText('For macOS, Windows and Linux.', { useInnerText: true })
+  await expect(line).not.toContainText('Version', { useInnerText: true })
+})
+
 test('FAQ answers open and close', async ({ page }) => {
   await stub(page)
   await page.goto('/faq/')
   const q = page.getByText("Will it eat my phone's data?")
-  const a = page.getByText(/monthly allowance for each network/)
+  const a = page.getByText(/monthly allowance for each\s+network/)
   await q.click()
   await expect(a).toBeVisible()
   await q.click()
