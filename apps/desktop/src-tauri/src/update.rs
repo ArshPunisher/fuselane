@@ -161,6 +161,45 @@ mod tests {
         assert!(same_version("weird", "weird"));
     }
 
+    /// The real thing: the published package from the live feed, fetched with
+    /// the bonded engine and checked against the release key in tauri.conf.json.
+    /// Needs the internet: `cargo nextest run -p fuselane-desktop --run-ignored only real_feed`.
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "downloads the published update package"]
+    async fn the_real_feed_package_verifies() {
+        let conf: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let key = conf["plugins"]["updater"]["pubkey"].as_str().unwrap();
+        let feed = fuselane_core::runner::fetch(
+            "https://arshpunisher.github.io/fuselane/updates/latest.json",
+            tempfile::tempdir().unwrap().keep(),
+            fuselane_core::runner::RunOptions::default(),
+        )
+        .await
+        .unwrap();
+        let feed: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&feed.path).unwrap()).unwrap();
+        let version = feed["version"].as_str().unwrap();
+        let p = &feed["platforms"]["darwin-aarch64"];
+        let dir = tempfile::tempdir().unwrap();
+        let got = fuselane_core::runner::fetch(
+            p["url"].as_str().unwrap(),
+            dir.path().to_path_buf(),
+            fuselane_core::runner::RunOptions::default(),
+        )
+        .await
+        .unwrap();
+        let bytes = std::fs::read(&got.path).unwrap();
+        assert_eq!(
+            verify(&bytes, p["signature"].as_str().unwrap(), key, version),
+            Ok(())
+        );
+        let mut bad = bytes.clone();
+        let mid = bad.len() / 2;
+        bad[mid] ^= 0xff;
+        assert!(verify(&bad, p["signature"].as_str().unwrap(), key, version).is_err());
+    }
+
     #[test]
     fn the_meter_smooths_and_reports_four_times_a_second() {
         let t0 = Instant::now();
