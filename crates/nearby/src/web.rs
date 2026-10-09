@@ -226,6 +226,11 @@ impl<H: PageHost> Shared<H> {
         let last = name.rsplit(['/', '\\']).next().unwrap_or("").trim();
         let clean = fuselane_storage::names::sanitize(last);
         if last.is_empty() || last.starts_with('.') || clean.is_empty() {
+            // Read a small body first: closing with it unread resets the
+            // connection, and the browser would show that instead of the reason.
+            let _ = http_body_util::Limited::new(req.into_body(), 1 << 20)
+                .collect()
+                .await;
             return plain(StatusCode::BAD_REQUEST, "That file name can't be used.");
         }
         let Some(size) = req
