@@ -17,6 +17,7 @@ use std::time::Duration;
 mod already;
 mod checksum;
 mod focus;
+mod power_aware;
 pub mod savings;
 mod worth;
 
@@ -600,6 +601,9 @@ pub struct Service {
     long_minutes: std::sync::atomic::AtomicU32,
     known_long: Mutex<std::collections::HashSet<i64>>,
     net_rates: Mutex<HashMap<String, f64>>,
+    /// The battery as last read, and downloads it paused (B9.10).
+    battery: Mutex<Option<crate::battery::Battery>>,
+    battery_paused: Mutex<std::collections::HashSet<i64>>,
 }
 
 /// Opens a file with the system's default app.
@@ -922,6 +926,8 @@ impl Service {
             long_minutes: std::sync::atomic::AtomicU32::new(long_minutes),
             known_long: Mutex::default(),
             net_rates: Mutex::default(),
+            battery: Mutex::new(None),
+            battery_paused: Mutex::default(),
             retries: Mutex::new(HashMap::new()),
             limiter,
             saved_limits: Mutex::new(saved_limits),
@@ -2330,7 +2336,7 @@ impl Service {
 
     /// Starts queued jobs, oldest first, while there are free slots.
     fn pump(self: &Arc<Self>) {
-        if !self.schedule_allows() {
+        if !self.schedule_allows() || !self.battery_allows() {
             self.update_awake();
             return;
         }
@@ -2375,8 +2381,10 @@ impl Service {
         let job = self.with_found_checksum(job).await;
         // Networks behind a sign-in page are left out (they'd serve the login page),
         // and "long downloads only" networks wait until this one proves long (B9.5).
-        let (picked, held_back) =
-            self.networks_by_use(&job, self.download_networks().unwrap_or_default());
+        let (picked, held_back) = self.networks_by_use(
+            &job,
+            self.without_phone_if_low(self.download_networks().unwrap_or_default()),
+        );
         let nets: Vec<(String, String, String)> = picked
             .iter()
             .map(|i| (i.name.clone(), i.display_name.clone(), kind_word(i.kind)))
@@ -2472,6 +2480,13 @@ impl Service {
             let _ =
                 self.store
                     .set_error(id, &format!("Waiting for the schedule. {next}"), "schedule");
+        }
+        if lock(&self.battery_paused).contains(&id) {
+            let _ = self.store.set_error(
+                id,
+                "Paused: the battery is low. It carries on when you plug in.",
+                "battery",
+            );
         }
         if lock(&self.allowance_paused).remove(&id) {
             let _ = self.store.set_error(
@@ -3326,6 +3341,56 @@ mod tests {
             "byte-exact across the restart"
         );
         assert!(lock(&h.svc.known_long).is_empty(), "forgotten once done");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn on_low_battery_downloads_pause_until_plugged_in_when_asked() {
+        use crate::battery::Battery;
+        let content = Content::new(1024 * KB, 201);
+        let server = RangeServer::start(content).await.unwrap();
+        server.add_rule(Rule {
+            skip: 1,
+            times: u32::MAX,
+            fault: Fault::Throttle(200 * KB),
+        });
+        let h = harness(3);
+        let mut a = h.svc.automation_view().settings;
+        a.low_battery = crate::automation::LowBattery::Pause;
+        h.svc.set_automation(a).unwrap();
+        let id = h.svc.add(&link(&server), None).unwrap();
+        h.wait("running", |h| h.job(id).status == "running").await;
+
+        // Plugged in at 10%: nothing happens.
+        h.svc.tick_battery(Some(Battery {
+            percent: 10,
+            plugged_in: true,
+        }));
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert_eq!(h.job(id).status, "running");
+
+        // Unplugged at 15%: it pauses and says why; nothing new starts.
+        h.svc.tick_battery(Some(Battery {
+            percent: 15,
+            plugged_in: false,
+        }));
+        h.wait("paused", |h| h.job(id).status == "paused").await;
+        assert_eq!(h.job(id).error_action.as_deref(), Some("battery"));
+        let other = RangeServer::start(Content::new(64 * KB, 202))
+            .await
+            .unwrap();
+        let id2 = h.svc.add(&link(&other), None).unwrap();
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert_eq!(h.job(id2).status, "queued");
+
+        // Plugged in: both carry on by themselves.
+        h.svc.tick_battery(Some(Battery {
+            percent: 16,
+            plugged_in: true,
+        }));
+        h.wait("both done", |h| {
+            h.job(id).status == "completed" && h.job(id2).status == "completed"
+        })
+        .await;
     }
 
     #[tokio::test(flavor = "multi_thread")]

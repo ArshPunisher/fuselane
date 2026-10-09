@@ -426,6 +426,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     sortByType: false,
     nameTaken: 'ask',
     afterDownload: 'nothing',
+    lowBattery: 'keep-going',
   }
   const automationView = (): AutomationView => {
     const s = automation.schedule

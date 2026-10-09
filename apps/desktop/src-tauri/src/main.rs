@@ -7,6 +7,7 @@
 
 mod api_bridge;
 mod automation;
+mod battery;
 mod native;
 mod nearby;
 mod opens;
@@ -1307,9 +1308,15 @@ fn main() {
     {
         let weak = Arc::downgrade(&svc);
         std::thread::spawn(move || {
+            let mut round = 0u32;
             while let Some(svc) = weak.upgrade() {
                 svc.tick_usage(service::local_today());
                 svc.tick_schedule();
+                // The battery changes slowly: read it every 30 s (a process on macOS).
+                if round.is_multiple_of(6) {
+                    svc.tick_battery(battery::read());
+                }
+                round = round.wrapping_add(1);
                 svc.tick_retries();
                 svc.tick_starts(chrono::Utc::now().timestamp());
                 svc.update_awake();

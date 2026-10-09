@@ -13,6 +13,7 @@ export type ErrorAction =
   | 'schedule'
   | 'unpack'
   | 'focus'
+  | 'battery'
   | null
 
 export interface JobView {
@@ -219,7 +220,11 @@ export interface Automation {
   nameTaken: NameTaken
   /** What happens to each finished download (B8.7). */
   afterDownload: AfterDownload
+  /** On battery and low (B9.10). */
+  lowBattery: LowBattery
 }
+
+export type LowBattery = 'keep-going' | 'leave-out-phone' | 'pause'
 
 export interface AutomationView {
   settings: Automation

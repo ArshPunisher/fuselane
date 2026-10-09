@@ -7,6 +7,7 @@ import { SlowToggle } from './SlowMode'
 import {
   DownloadsAtOnceSetting,
   KeepAwakeSetting,
+  LowBatterySetting,
   ScheduleSetting,
   AfterDownloadSetting,
   NameTakenSetting,
@@ -620,6 +621,7 @@ export function SettingsView() {
         <Group title="This computer">
           <WhenDoneSetting />
           <KeepAwakeSetting />
+          <LowBatterySetting />
           <WindowSettings />
         </Group>
         <Group title="Torrents and lookups">

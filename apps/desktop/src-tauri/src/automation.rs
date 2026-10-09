@@ -66,6 +66,18 @@ pub enum AfterDownload {
     Unpack,
 }
 
+/// What happens on low battery, unplugged (B9.10).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LowBattery {
+    #[default]
+    KeepGoing,
+    /// Leave out tethered phones (they charge from the computer).
+    LeaveOutPhone,
+    /// Pause downloads until it's plugged in.
+    Pause,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Automation {
@@ -77,6 +89,7 @@ pub struct Automation {
     pub sort_by_type: bool,
     pub name_taken: NameTaken,
     pub after_download: AfterDownload,
+    pub low_battery: LowBattery,
 }
 
 impl Default for Automation {
@@ -88,6 +101,7 @@ impl Default for Automation {
             sort_by_type: false,
             name_taken: NameTaken::Ask,
             after_download: AfterDownload::Nothing,
+            low_battery: LowBattery::KeepGoing,
         }
     }
 }

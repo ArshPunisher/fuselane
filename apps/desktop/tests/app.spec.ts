@@ -1057,6 +1057,23 @@ test('a network can wait for long downloads, with the minutes that count as long
   )
 })
 
+test('what happens on low battery is a setting', async ({ page }) => {
+  await page.goto('/?drop=0')
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('button', { name: 'Settings' })
+    .click()
+  const choice = page.getByRole('radiogroup', { name: 'On low battery' })
+  await expect(choice.getByRole('radio', { name: 'Keep going' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  )
+  await choice.getByRole('radio', { name: 'Leave out the phone' }).click()
+  await expect(page.getByText(/a phone tethered by cable is left out/)).toBeVisible()
+  await choice.getByRole('radio', { name: 'Pause' }).click()
+  await expect(page.getByText(/downloads pause and carry on when you plug in/)).toBeVisible()
+})
+
 test('Download later adds it paused, ready to start', async ({ page }) => {
   await page.goto('/?empty=1')
   const dialog = await openDialog(page)

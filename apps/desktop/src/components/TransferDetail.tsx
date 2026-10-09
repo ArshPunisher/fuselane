@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   ArrowClockwise,
   ArrowSquareOut,
+  BatteryLow,
   FolderOpen,
   Lightning,
   Pause,
@@ -332,6 +333,8 @@ function ChecksumBadge({ job }: { job: JobView }) {
   )
 }
 
+const WAITS: JobView['errorAction'][] = ['focus', 'battery']
+
 export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => void) | null }) {
   const liveAll = useApp((s) => s.live[job.id])
   const history = useApp((s) => s.history[job.id])
@@ -436,13 +439,18 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
         </div>
       </header>
 
-      {job.error && job.status !== 'running' && job.errorAction === 'focus' && (
+      {/* Waiting for something that passes by itself: a calm note, not an error. */}
+      {job.error && job.status !== 'running' && WAITS.includes(job.errorAction) && (
         <p className="notice notice-wait" role="status">
-          <Lightning size={18} aria-hidden />
+          {job.errorAction === 'battery' ? (
+            <BatteryLow size={18} aria-hidden />
+          ) : (
+            <Lightning size={18} aria-hidden />
+          )}
           <span>{job.error}</span>
         </p>
       )}
-      {job.error && job.status !== 'running' && job.errorAction !== 'focus' && (
+      {job.error && job.status !== 'running' && !WAITS.includes(job.errorAction) && (
         <ErrorPanel job={job} />
       )}
 

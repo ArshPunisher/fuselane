@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../lib/store'
-import type { AfterDownload, Automation, NameTaken, WhenDone, WindowPrefs } from '../lib/types'
+import type {
+  AfterDownload,
+  Automation,
+  LowBattery,
+  NameTaken,
+  WhenDone,
+  WindowPrefs,
+} from '../lib/types'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -416,6 +423,31 @@ export function AfterDownloadSetting() {
       ]}
       value={settings.afterDownload}
       onChange={(afterDownload) => void save({ ...settings, afterDownload })}
+    />
+  )
+}
+
+export function LowBatterySetting() {
+  const [settings, save] = useAutomation()
+  if (!settings) return null
+  const help: Record<LowBattery, string> = {
+    'keep-going': 'Downloads carry on whatever the battery.',
+    'leave-out-phone':
+      'Under 20% and unplugged, a phone tethered by cable is left out (it charges from this computer).',
+    pause: 'Under 20% and unplugged, downloads pause and carry on when you plug in.',
+  }
+  return (
+    <ChoiceSetting<LowBattery>
+      id="low-battery"
+      name="On low battery"
+      help={help[settings.lowBattery]}
+      choices={[
+        { id: 'keep-going', label: 'Keep going' },
+        { id: 'leave-out-phone', label: 'Leave out the phone' },
+        { id: 'pause', label: 'Pause' },
+      ]}
+      value={settings.lowBattery}
+      onChange={(lowBattery) => void save({ ...settings, lowBattery })}
     />
   )
 }
