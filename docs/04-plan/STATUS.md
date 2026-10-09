@@ -33,6 +33,8 @@
 - IDM-style features: a speed limit per download (live), Download later, export/import the list, catch copied download links (opt-in, off by default), logins in links as HTTP Basic, passwords masked in the window.
 - Site: Fuse Send band, "small things" grid, Send in the nav, three FAQ answers, and the `/s` page. **Not deployed yet**: it advertises Fuse Send, which ships in the next release.
 - Fixed a flaky site test (hero speeds read across frames). BSL-1.0 allowed in cargo-deny (Windows clipboard crates).
+- **Fuse Send on a real network:** DHT found the sender but NAT (no UPnP on this router) blocked the connection, and librqbit's local discovery never asks, so a same-LAN receiver could wait 5 minutes. Fixed both ways: the receiver sends BEP 14 searches while looking (found in under a second), and the sender listens on IPv6 too (DHT-only, over IPv6: 4.3 s). Honest copy on the site and in the error message about UPnP/IPv6.
+- More: failed downloads retry by themselves (20 s → 60 min, at once when a network returns), Move to Trash for finished files, free-space check before receiving, extension popup lists a page's videos and file links (activeTab + scripting).
 
 ### 2026-10-09
 - Native-messaging host: the app registers itself with installed browsers on every launch; `fuselane browsers`; e2e with a real Chromium. Chrome Web Store item submitted for review.
