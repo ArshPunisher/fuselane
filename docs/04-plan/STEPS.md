@@ -158,7 +158,7 @@ The owner asked for all ten ideas from the feature list. Each one is tested at t
 - [ ] B9.2 Groups: links added together stay together (one row, one progress, pause or resume all, one notice when all are done)
 - [ ] B9.3 Find files on a page: paste a web page, pick its files by type, add them as a group
 - [ ] B9.4 Ready by: a deadline per download; earliest deadline first, runs outside the schedule when it would otherwise miss, says On track or At risk
-- [ ] B9.5 The phone only when it's worth it: per network Always / Only for long downloads / Never, with a minutes threshold
+- [x] B9.5 The phone only when it's worth it: per network Always / Only for long downloads / Never, with a minutes threshold
 - [x] B9.6 What each network saved: after a download, "Without iPhone USB it would have taken 6 min"
 - [x] B9.7 Checksums found by themselves: `<file>.sha256` or `SHA256SUMS` next to the link is used, and the download shows Verified
 - [x] B9.8 Already downloaded: the same file (name and size) already finished and still on disk is pointed out before downloading again

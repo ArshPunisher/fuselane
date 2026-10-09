@@ -1025,6 +1025,38 @@ test('a finished download says what each network saved', async ({ page }) => {
   await expect(page.getByRole('region', { name: 'What each network saved' })).toHaveCount(0)
 })
 
+test('a network can wait for long downloads, with the minutes that count as long', async ({
+  page,
+}) => {
+  await page.goto('/?drop=0')
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('button', { name: 'Networks' })
+    .click()
+  const phone = page.getByRole('radiogroup', { name: 'iPhone USB' })
+  await expect(phone.getByRole('radio', { name: 'Always' })).toHaveAttribute('aria-checked', 'true')
+  await expect(page.getByLabel('A long download takes more than')).toHaveCount(0)
+  await phone.getByRole('radio', { name: 'Long downloads' }).click()
+  await expect(phone.getByRole('radio', { name: 'Long downloads' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  )
+  const minutes = page.getByLabel('A long download takes more than')
+  await expect(minutes).toHaveValue('5')
+  await minutes.fill('12')
+  await page.locator('.long-minutes').getByRole('button', { name: 'Save' }).click()
+  await expect(page.locator('.long-minutes').getByRole('button', { name: 'Save' })).toBeDisabled()
+  // Its name and colour are kept when it's renamed later, and the choice survives.
+  await page
+    .getByRole('radiogroup', { name: 'Ethernet' })
+    .getByRole('radio', { name: 'Never' })
+    .click()
+  await expect(phone.getByRole('radio', { name: 'Long downloads' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  )
+})
+
 test('Download later adds it paused, ready to start', async ({ page }) => {
   await page.goto('/?empty=1')
   const dialog = await openDialog(page)

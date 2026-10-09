@@ -82,6 +82,9 @@ export interface Backend {
   getLimits(): Promise<LimitsView>
   perNetworkDns(): Promise<boolean>
   /** Look for a published SHA-256 next to each new download (on by default). */
+  /** "Long" for networks used only for long downloads, in minutes. */
+  longMinutes(): Promise<number>
+  setLongMinutes(minutes: number): Promise<number>
   findChecksums(): Promise<boolean>
   setFindChecksums(on: boolean): Promise<boolean>
   setPerNetworkDns(on: boolean): Promise<boolean>
@@ -237,6 +240,8 @@ async function tauriBackend(): Promise<Backend> {
     getLimits: () => call('get_limits'),
     perNetworkDns: () => call('per_network_dns'),
     findChecksums: () => call('find_checksums'),
+    longMinutes: () => call('long_minutes'),
+    setLongMinutes: (minutes) => call('set_long_minutes', { minutes }),
     setFindChecksums: (on) => call('set_find_checksums', { on }),
     setPerNetworkDns: (on) => call('set_per_network_dns', { on }),
     allowances: () => call('allowances'),

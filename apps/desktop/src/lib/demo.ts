@@ -412,6 +412,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
 
   let maxRunning = 3
   let findSums = true
+  let longMinutes = 5
   const windowPrefs = { startAtLogin: false, closeToTray: false, watchClipboard: false }
   let automation: Automation = {
     schedule: {
@@ -787,6 +788,12 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     getLimits: async () => structuredClone(limits),
     perNetworkDns: async () => perNetDns,
     findChecksums: async () => findSums,
+    longMinutes: async () => longMinutes,
+    setLongMinutes: async (m) => {
+      if (!Number.isInteger(m) || m < 1 || m > 600)
+        throw err('bad-value', 'Pick between 1 and 600 minutes.', null)
+      return (longMinutes = m)
+    },
     setFindChecksums: async (on) => (findSums = on),
     setPerNetworkDns: async (on) => (perNetDns = on),
     allowances: async () => structuredClone(allowances),
@@ -825,7 +832,11 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       )
         throw err('bad-network-color', "That colour isn't one of Fuselane's network colours.", null)
       prefs = prefs.filter((p) => p.name !== pref.name)
-      if (label || pref.lane) prefs.push({ name: pref.name, label, lane: pref.lane })
+      const useFor = pref.useFor ?? 'always'
+      if (!['always', 'long', 'never'].includes(useFor))
+        throw err('bad-value', "That isn't a way to use a network.", null)
+      if (label || pref.lane || useFor !== 'always')
+        prefs.push({ name: pref.name, label, lane: pref.lane, useFor })
       return structuredClone(prefs)
     },
     diagnostics: async () =>

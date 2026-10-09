@@ -322,6 +322,16 @@ fn set_allowance(svc: State<'_>, req: AllowanceRequest) -> Result<Vec<AllowanceV
 }
 
 #[tauri::command]
+fn long_minutes(svc: State<'_>) -> u32 {
+    svc.long_minutes()
+}
+
+#[tauri::command]
+fn set_long_minutes(svc: State<'_>, minutes: u32) -> Result<u32, UiError> {
+    svc.set_long_minutes(minutes)
+}
+
+#[tauri::command]
 fn find_checksums(svc: State<'_>) -> bool {
     svc.find_checksums()
 }
@@ -1508,6 +1518,8 @@ fn main() {
             set_per_network_dns,
             find_checksums,
             set_find_checksums,
+            long_minutes,
+            set_long_minutes,
             allowances,
             set_allowance,
             set_slow,

@@ -312,7 +312,11 @@ export interface NetPref {
   name: string
   label: string | null
   lane: string | null
+  /** When it helps: always, only for long downloads, or never. */
+  useFor: NetUse
 }
+
+export type NetUse = 'always' | 'long' | 'never'
 
 /** A network's monthly data allowance and its usage this period. */
 export interface AllowanceView {

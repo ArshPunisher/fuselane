@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { ArrowClockwise, PencilSimple } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { assignLanes, kindLabel, LANES, netTitle, type Lane } from '../lib/lanes'
-import type { AllowanceView, NetView } from '../lib/types'
+import type { AllowanceView, NetUse, NetView } from '../lib/types'
 import { bytes as bytesText, rateText } from '../lib/format'
 import { NetIcon } from './NetIcon'
 import { Orb } from './Orb'
@@ -76,7 +76,15 @@ function NetEditor({ net, lane, onDone }: { net: NetView; lane: Lane; onDone: ()
       onSubmit={async (e) => {
         e.preventDefault()
         if (tooLong) return
-        if (await save({ name: net.name, label: label.trim() || null, lane: color })) onDone()
+        if (
+          await save({
+            name: net.name,
+            label: label.trim() || null,
+            lane: color,
+            useFor: current?.useFor ?? 'always',
+          })
+        )
+          onDone()
       }}
     >
       <label htmlFor={id}>Name</label>
@@ -119,7 +127,15 @@ function NetEditor({ net, lane, onDone }: { net: NetView; lane: Lane; onDone: ()
           type="button"
           className="btn btn-ghost"
           onClick={async () => {
-            if (await save({ name: net.name, label: null, lane: null })) onDone()
+            if (
+              await save({
+                name: net.name,
+                label: null,
+                lane: null,
+                useFor: current?.useFor ?? 'always',
+              })
+            )
+              onDone()
           }}
         >
           Reset
@@ -132,6 +148,106 @@ function NetEditor({ net, lane, onDone }: { net: NetView; lane: Lane; onDone: ()
         </button>
       </div>
     </form>
+  )
+}
+
+const USES: { value: NetUse; label: string }[] = [
+  { value: 'always', label: 'Always' },
+  { value: 'long', label: 'Long downloads' },
+  { value: 'never', label: 'Never' },
+]
+
+/**
+ * When each network helps (B9.5): a phone on a data plan can wait for downloads
+ * where it makes a real difference.
+ */
+function NetworkUse() {
+  const networks = useApp((s) => s.networks).filter((n) => n.usable)
+  const prefs = useApp((s) => s.netPrefs)
+  const save = useApp((s) => s.saveNetPref)
+  const backend = useApp((s) => s.backend)
+  const act = useApp((s) => s.act)
+  const [minutes, setMinutes] = useState<number | null>(null)
+  const [draft, setDraft] = useState('')
+  useEffect(() => {
+    void backend?.longMinutes().then((m) => {
+      setMinutes(m)
+      setDraft(String(m))
+    })
+  }, [backend])
+  if (!networks.length) return null
+  const anyLong = networks.some((n) => prefs.find((p) => p.name === n.name)?.useFor === 'long')
+  return (
+    <section className="net-limits net-use" aria-labelledby="use-title">
+      <h2 id="use-title" className="section-title">
+        When each network helps
+      </h2>
+      <p className="muted">
+        A phone on a data plan can wait for the downloads where it makes a real difference.
+      </p>
+      <ul className="use-list">
+        {networks.map((n) => {
+          const p = prefs.find((x) => x.name === n.name)
+          const value = p?.useFor ?? 'always'
+          const id = `use-${n.name}`
+          return (
+            <li key={n.name}>
+              <span className="net-name" id={id} translate="no">
+                {netTitle(n)}
+              </span>
+              <div className="segmented" role="radiogroup" aria-labelledby={id}>
+                {USES.map((u) => (
+                  <button
+                    key={u.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={value === u.value}
+                    onClick={() =>
+                      void save({
+                        name: n.name,
+                        label: p?.label ?? null,
+                        lane: p?.lane ?? null,
+                        useFor: u.value,
+                      })
+                    }
+                  >
+                    {u.label}
+                  </button>
+                ))}
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+      {anyLong && minutes !== null && (
+        <form
+          className="long-minutes"
+          onSubmit={(e) => {
+            e.preventDefault()
+            const m = Number(draft)
+            void act(async (b) => setMinutes(await b.setLongMinutes(m)))
+          }}
+        >
+          <label htmlFor="long-min">A long download takes more than</label>
+          <input
+            id="long-min"
+            className="num"
+            inputMode="numeric"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value.replace(/\D/g, '').slice(0, 3))}
+            aria-describedby="long-help"
+          />
+          <span>minutes without them.</span>
+          <button type="submit" className="btn" disabled={draft === String(minutes) || !draft}>
+            Save
+          </button>
+          <p id="long-help" className="field-help">
+            Downloads start without them; once a download&apos;s speed shows it&apos;s long, they
+            join in and it carries on where it was.
+          </p>
+        </form>
+      )}
+    </section>
   )
 }
 
@@ -437,6 +553,7 @@ export function NetworksView() {
         <NetworkList />
         <div className="nets-side">
           <NetworkLimits />
+          <NetworkUse />
         </div>
         <div className="nets-wide">
           <Allowances />

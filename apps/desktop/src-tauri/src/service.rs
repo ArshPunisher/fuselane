@@ -18,6 +18,9 @@ mod already;
 mod checksum;
 mod focus;
 pub mod savings;
+mod worth;
+
+pub use worth::NetUse;
 
 pub use already::HaveView;
 
@@ -132,6 +135,9 @@ pub struct NetPref {
     pub name: String,
     pub label: Option<String>,
     pub lane: Option<String>,
+    /// When it helps: always, only for long downloads, or never (B9.5).
+    #[serde(default)]
+    pub use_for: NetUse,
 }
 
 const LANES: [&str; 8] = [
@@ -456,6 +462,8 @@ pub type Emit = Arc<dyn Fn(UiEvent) + Send + Sync>;
 struct Running {
     cancel: Cancel,
     remove_after: bool,
+    /// Stopped to start again with more networks (it turned out long, B9.5).
+    replan: bool,
     /// Its own speed limit, changed live from the window.
     limit: Arc<fuselane_limits::JobLimit>,
 }
@@ -587,6 +595,11 @@ pub struct Service {
     focus_held: Mutex<std::collections::HashSet<i64>>,
     /// Look for a published SHA-256 next to each new download (B9.7). On by default.
     find_checksums: std::sync::atomic::AtomicBool,
+    /// "Long" in minutes, downloads known to be long, and each network's recent
+    /// average speed (B9.5).
+    long_minutes: std::sync::atomic::AtomicU32,
+    known_long: Mutex<std::collections::HashSet<i64>>,
+    net_rates: Mutex<HashMap<String, f64>>,
 }
 
 /// Opens a file with the system's default app.
@@ -823,6 +836,13 @@ impl Service {
         let store_flag = store.setting("per_network_dns").ok().flatten().as_deref() == Some("true");
         let find_checksums =
             store.setting("find_checksums").ok().flatten().as_deref() != Some("false");
+        let long_minutes = store
+            .setting("long_minutes")
+            .ok()
+            .flatten()
+            .and_then(|v| v.parse::<u32>().ok())
+            .filter(|m| (1..=600).contains(m))
+            .unwrap_or(worth::LONG_MINUTES);
         let automation: crate::automation::Automation = store
             .setting("automation")
             .ok()
@@ -899,6 +919,9 @@ impl Service {
             focus: Mutex::new(None),
             focus_held: Mutex::new(std::collections::HashSet::new()),
             find_checksums: std::sync::atomic::AtomicBool::new(find_checksums),
+            long_minutes: std::sync::atomic::AtomicU32::new(long_minutes),
+            known_long: Mutex::default(),
+            net_rates: Mutex::default(),
             retries: Mutex::new(HashMap::new()),
             limiter,
             saved_limits: Mutex::new(saved_limits),
@@ -2167,7 +2190,7 @@ impl Service {
         let pref = pref.validated()?;
         let mut all = lock(&self.net_prefs).clone();
         all.retain(|p| p.name != pref.name);
-        if pref.label.is_some() || pref.lane.is_some() {
+        if worth::keep(&pref) {
             all.push(pref);
         }
         if all.len() > 64 {
@@ -2330,6 +2353,7 @@ impl Service {
                 Running {
                     cancel: cancel.clone(),
                     remove_after: false,
+                    replan: false,
                     limit: limit.clone(),
                 },
             );
@@ -2349,8 +2373,10 @@ impl Service {
     async fn run(self: Arc<Self>, job: Job, cancel: Cancel, limit: Arc<fuselane_limits::JobLimit>) {
         let id = job.id;
         let job = self.with_found_checksum(job).await;
-        // Networks behind a sign-in page are left out (they'd serve the login page).
-        let picked = self.download_networks().unwrap_or_default();
+        // Networks behind a sign-in page are left out (they'd serve the login page),
+        // and "long downloads only" networks wait until this one proves long (B9.5).
+        let (picked, held_back) =
+            self.networks_by_use(&job, self.download_networks().unwrap_or_default());
         let nets: Vec<(String, String, String)> = picked
             .iter()
             .map(|i| (i.name.clone(), i.display_name.clone(), kind_word(i.kind)))
@@ -2362,6 +2388,7 @@ impl Service {
             let last = last.clone();
             SnapshotFn(Arc::new(move |s: &Snapshot| {
                 let l = live(id, s, &nets);
+                me.note_rates(&l.networks);
                 *lock(&last) = Some(l.clone());
                 me.send(UiEvent::Live(l));
             }))
@@ -2390,6 +2417,9 @@ impl Service {
                 .and_then(|s| runner::parse_sha256(s).ok()),
             ..RunOptions::default()
         };
+        if !held_back.is_empty() {
+            self.watch_if_long(id, last.clone());
+        }
         let resume = job.resume();
         let outcome = runner::run(
             self.store.clone(),
@@ -2459,9 +2489,16 @@ impl Service {
             Ok(_) => false,
         };
         self.note_outcome(id, retry);
-        let removed = lock(&self.running)
+        let (removed, replan) = lock(&self.running)
             .remove(&id)
-            .is_some_and(|r| r.remove_after);
+            .map_or((false, false), |r| (r.remove_after, r.replan));
+        // It turned out long: carry on at once with the networks held back.
+        if replan && matches!(&outcome, Ok(Outcome::Paused)) {
+            let _ = self.store.apply(id, Event::Resume, None);
+        }
+        if !matches!(&outcome, Ok(Outcome::Paused)) || removed {
+            lock(&self.known_long).remove(&id);
+        }
         if let Some(f) = self.focused().filter(|f| *f != id)
             && let Ok(j) = self.store.get(f)
         {
@@ -3257,6 +3294,38 @@ mod tests {
         assert_eq!(r.nets.iter().map(|n| n.bytes).sum::<u64>(), 400 * KB);
         assert!(r.nets.iter().all(|n| !n.label.is_empty()));
         assert!(r.secs > 0.0);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_download_found_to_be_long_carries_on_by_itself_with_more_networks() {
+        let content = Content::new(1024 * KB, 191);
+        let server = RangeServer::start(content).await.unwrap();
+        server.add_rule(Rule {
+            skip: 1,
+            times: u32::MAX,
+            fault: Fault::Throttle(300 * KB),
+        });
+        let h = harness(3);
+        let id = h.svc.add(&link(&server), None).unwrap();
+        h.wait("running", |h| h.job(id).status == "running").await;
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        // What watch_if_long does once the speed shows the download is long.
+        lock(&h.svc.known_long).insert(id);
+        if let Some(r) = lock(&h.svc.running).get_mut(&id) {
+            r.replan = true;
+            r.cancel.cancel();
+        }
+        h.wait("finished without anyone resuming it", |h| {
+            h.job(id).status == "completed"
+        })
+        .await;
+        let path = PathBuf::from(h.job(id).final_path.unwrap());
+        assert_eq!(
+            fuselane_testkit::sha256_file(&path).unwrap(),
+            content.sha256(),
+            "byte-exact across the restart"
+        );
+        assert!(lock(&h.svc.known_long).is_empty(), "forgotten once done");
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -4101,6 +4170,7 @@ mod tests {
                     name: "en0".into(),
                     label: None,
                     lane: None,
+                    use_for: NetUse::Long,
                 }),
             ),
         ] {
@@ -4405,6 +4475,7 @@ mod tests {
             name: name.into(),
             label: label.map(Into::into),
             lane: lane.map(Into::into),
+            use_for: NetUse::Always,
         };
         let all = svc
             .set_network_pref(pref("en0", Some("  Home Wi-Fi  "), Some("mint")))

@@ -4124,3 +4124,42 @@ html[data-hidden] .orb b {
     order: 3;
   }
 }
+
+/* ---------- When each network helps (B9.5) ---------- */
+
+.use-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.use-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.use-list .segmented button {
+  white-space: nowrap;
+}
+
+.long-minutes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--body);
+}
+
+.long-minutes input {
+  width: 56px;
+  text-align: center;
+}
+
+.long-minutes .field-help {
+  flex-basis: 100%;
+}
