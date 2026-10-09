@@ -1747,7 +1747,7 @@ checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
 
 [[package]]
 name = "fuselane-api"
-version = "0.1.0-beta.6"
+version = "0.1.0-beta.7"
 dependencies = [
  "dirs 6.0.0",
  "libc",
@@ -1761,7 +1761,7 @@ dependencies = [
 
 [[package]]
 name = "fuselane-cli"
-version = "0.1.0-beta.6"
+version = "0.1.0-beta.7"
 dependencies = [
  "clap",
  "dirs 6.0.0",
@@ -1778,7 +1778,7 @@ dependencies = [
 
 [[package]]
 name = "fuselane-core"
-version = "0.1.0-beta.6"
+version = "0.1.0-beta.7"
 dependencies = [
  "dirs 6.0.0",
  "fuselane-engine-http",
@@ -1798,7 +1798,7 @@ dependencies = [
 
 [[package]]
 name = "fuselane-desktop"
-version = "0.1.0-beta.6"
+version = "0.1.0-beta.7"
 dependencies = [
  "chrono",
  "dirs 6.0.0",
@@ -1836,7 +1836,7 @@ dependencies = [
 
 [[package]]
 name = "fuselane-engine-http"
-version = "0.1.0-beta.6"
+version = "0.1.0-beta.7"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -1857,7 +1857,7 @@ dependencies = [
 
 [[package]]
 name = "fuselane-engine-torrent"
-version = "0.1.0-beta.6"
+version = "0.1.0-beta.7"
 dependencies = [
  "anyhow",
  "fuselane-limits",
@@ -1875,14 +1875,14 @@ dependencies = [
 
 [[package]]
 name = "fuselane-limits"
-version = "0.1.0-beta.6"
+version = "0.1.0-beta.7"
 dependencies = [
  "proptest",
 ]
 
 [[package]]
 name = "fuselane-netif"
-version = "0.1.0-beta.6"
+version = "0.1.0-beta.7"
 dependencies = [
  "core-foundation 0.9.4",
  "if-addrs",
@@ -1893,7 +1893,7 @@ dependencies = [
 
 [[package]]
 name = "fuselane-send"
-version = "0.1.0-beta.6"
+version = "0.1.0-beta.7"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1913,7 +1913,7 @@ dependencies = [
 
 [[package]]
 name = "fuselane-storage"
-version = "0.1.0-beta.6"
+version = "0.1.0-beta.7"
 dependencies = [
  "libc",
  "proptest",
@@ -1924,7 +1924,7 @@ dependencies = [
 
 [[package]]
 name = "fuselane-testkit"
-version = "0.1.0-beta.6"
+version = "0.1.0-beta.7"
 dependencies = [
  "bytes",
  "futures-core",
@@ -1938,7 +1938,7 @@ dependencies = [
 
 [[package]]
 name = "fuselane-transport"
-version = "0.1.0-beta.6"
+version = "0.1.0-beta.7"
 dependencies = [
  "fuselane-netif",
  "hickory-proto",
