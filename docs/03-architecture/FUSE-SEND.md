@@ -77,3 +77,11 @@ https://arshpunisher.github.io/fuselane/s#v1.<base64url(info-hash ‖ key ‖ fl
 - **Bring your own cloud**: bonded upload into the user's own Dropbox (concurrent upload
   sessions) or S3-compatible bucket, at their cost, for "voicemail" shares.
 - **Browser receiving**: WebRTC peers (WebTorrent), if librqbit or a sidecar ever supports it.
+
+## Measured on a real network (2026-10-09)
+
+- Two Fuselanes on one Mac, the app's real settings (DHT, UPnP, local discovery), no address given.
+- **DHT works:** the receiver found the sender's public address on each network within seconds.
+- **The connection didn't:** the router has no UPnP ("discovered 0 endpoints") and doesn't loop back to its own public address, so neither could connect. Across the internet this is the common case behind NAT: Fuse Send connects when the sender is reachable (UPnP, a forwarded port, or IPv6 without an inbound block). There is no relay by design (no hosted services).
+- **Local discovery was slow:** librqbit's BEP 14 support only announces (once at start, then every 5 minutes) and never asks. A receiver that starts after the announce waited up to 5 minutes. Fixed: while looking, the receiver sends a BEP 14 search out of each network every 3 s (`LocalSearch`); the sender answers at once. Result: found and received in under a second.
+- Still open: hole punching (librqbit has no uTP or BEP 55), public UDP trackers as a second discovery path, and telling the person whether their router is reachable.
