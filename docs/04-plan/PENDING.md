@@ -29,6 +29,7 @@ says what is waiting and on whom. Last updated 2026-10-09.
 5. **Torrents:** a fixed connector in librqbit (5.9 part 2) so DHT and UDP trackers also go through Fuselane; incoming peers (L-71).
 6. **P2/P3 leftovers:** sleep and wake, network change watcher per OS (torrents already follow changes), a stable network id, macOS friendly names, event deltas, guided setup and speed test.
 7. **Real-machine checks:** Windows and Linux installers with the new "Open with" registration (CI builds them; never run on a real PC yet).
+8. **Nearby on real devices:** two computers on one Wi-Fi, and a phone with LocalSend (interop is built from the protocol and tested between Fuselanes on loopback; never tried against the LocalSend apps yet). The phone page needs a real phone scan (checked in desktop Chromium and WebKit).
 
 ## Decided 2026-10-09
 

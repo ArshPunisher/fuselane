@@ -27,6 +27,13 @@
 
 ## Log
 
+### 2026-10-09 (beta.8 round, from the approved Figma designs)
+- Owner approved the Figma designs (local file "Fuselane", built through the local Talk-to-Figma bridge) and asked for all of it in one release. B8.1-B8.12 done, each tested; B8.13 (screenshots, then release) waits on the owner.
+- The four reported fixes: speeds add up (torrent speed = sum of its networks; sidebar total labelled), Remove asks in a dialog that waits (torrent files to the Trash), a one-line link box with magnets as a card, updates with size and a progress bar over every network (minisign-verified before install; the live beta.7 package verified after a bonded fetch).
+- Downloads: start at a set time, if the name is taken (Ask/Keep both/Replace), open or unpack when done (zip/tar, path-safe, zip-bomb cap), type filter, mirrors (checked for size, ranges and the same bytes; kernel.org CDN + mirror verified: 135 MB, 28 MB from the mirror).
+- Torrents: file priorities (tiers through the file selection) and Play while downloading (local stream server: 127.0.0.1, token, loopback Host check). A priority set during the check is applied after it (bug found by the test).
+- Nearby (ADR 0012, NEARBY.md): new `fuselane-nearby` crate speaking LocalSend v2; pinned TLS, verified sender fingerprints, four check words, trust, "who can see this computer"; a phone page with a QR code (checked in Chromium and WebKit, both directions byte-exact). The packaged self-test now sends a file with Nearby.
+
 ### 2026-10-09 (overnight, owner away)
 - **Fuse Send in the app** (6.4b, 6.7, 6.8 and most of 6.5b): a Sends service with its own reachable engine (DHT, UPnP, local discovery), the Send page, the `/s` link page on the site, `fuselane://send/` registered on all three OSes, shares restored after a restart, optional stop after one full copy. End-to-end test: one Fuselane sends 3 MB to another over loopback, byte-exact.
 - **Real bug fixed:** HTTP redirects weren't followed at all, so links like GitHub release assets failed with "status 302". Now followed (5 hops, http/https only, cookies and logins dropped on another site). Verified against GitHub: the beta.4 DMG through its 302, split over en0 + en1, SHA-256 matched.

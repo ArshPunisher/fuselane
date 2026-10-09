@@ -132,6 +132,24 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [x] 4.9 Local diagnostics bundle + privacy policy (no crash-reporting service, ADR 0009)
 - [ ] 4.10 Real-hardware matrix pass → tag `v0.1.0-beta.1`
 
+## Beta.8 round: approved Figma designs (2026-10-09)
+
+The owner approved the Figma designs (local file "Fuselane") and asked for all of it in one release. Each item is tested at the cheapest level, checked in the browser demo and, where it touches the OS or network, in the real app.
+
+- [x] B8.1 Speeds add up: torrent speed from received bytes per network (not the verified delta); the big number is the sum of the lanes under it; sidebar total labelled "All downloads together"
+- [x] B8.2 Remove asks and waits: a modal dialog (Cancel / Keep files / Move files to Bin) for downloads and torrents; Esc or outside click cancels; never closes on a timer
+- [x] B8.3 Link box without a scrollbar: one-line field; a pasted magnet or link becomes a card (name, size, files, Change); long links cut in the middle
+- [x] B8.4 Updates show size and progress: size before starting, a progress bar with MB, speed and time left, installing and failed states with a reason and Try again
+- [x] B8.5 Start at a set time (per download), shown in the list as "Starts at 02:00"
+- [x] B8.6 If the name is taken: Ask / Keep both / Replace (setting) and the inline choice in New download
+- [x] B8.7 When a download finishes: Nothing / Open it / Unpack it (zip, tar, tar.gz; inside the download folder only, path-safe)
+- [x] B8.8 Type filter in the list (Video, Music, Archives, Apps, Documents)
+- [x] B8.9 Mirrors: extra links for the same file; each is checked for the same size (and validator) before it is used; lanes spread over the sources (8.3)
+- [x] B8.10 Torrent files: priorities High / Normal / Low / Skip (Low waits until the rest is done) and Play while downloading (the start of the file first)
+- [x] B8.11 Nearby: device discovery on the local network, device keys, the four-word check, trusted devices, "who can see me" (everyone for 10 minutes, then trusted only), send and receive ([NEARBY.md](../03-architecture/NEARBY.md))
+- [x] B8.12 Nearby for phones: a page served by the app over the LAN (QR code) to send and receive in a phone browser; LocalSend v2 interop
+- [ ] B8.13 Screenshots for the owner, then release 0.1.0-beta.8
+
 ## P5 Torrents (0.2)
 
 - [x] 5.1 `engine-torrent` crate with librqbit; uTP/UPnP/LSD/web seeds off (librqbit 9 has no web seeds)
@@ -174,7 +192,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 
 - [ ] 8.1 Scheduler (time windows, per-network schedules, "before midnight", power actions)
 - [ ] 8.2 Throttle detection and auto-move
-- [ ] 8.3 Mirrors / multi-source + Metalink
+- [ ] 8.3 Mirrors / multi-source + Metalink (mirrors done in B8.9; Metalink open)
 - [ ] 8.4 Proxy per network / per download (HTTP, SOCKS5)
 - [x] 8.5 Categories and auto-folders, search, sort (sort by type into folders; search and filters)
 - [x] 8.6 Per-job speed limit (live, kept with the job)
