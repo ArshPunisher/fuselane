@@ -642,6 +642,41 @@ pub async fn preview_with(link: &str, headers: Headers) -> Result<Preview, Strin
     })
 }
 
+/// Downloads one file into `out` across every usable network, without a job in
+/// the list (the app's own update, B8.4): same redirects, network choice and
+/// bonded engine as [`run`], nothing saved to the store.
+pub async fn fetch(link: &str, out: PathBuf, opts: RunOptions) -> Result<Report, String> {
+    let (link, headers) = follow(
+        link,
+        &opts.networks,
+        opts.per_network_dns,
+        opts.headers,
+        Duration::from_secs(10),
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    let (source, networks, _) = connect_plan(&link, &opts.networks, opts.per_network_dns)
+        .await
+        .map_err(|e| e.to_string())?;
+    let defaults = Tuning::default();
+    let tuning = Tuning {
+        auto_streams: opts.streams.is_none(),
+        streams_per_network: opts.streams.unwrap_or(defaults.streams_per_network),
+        progress: opts.progress,
+        snapshot: opts.snapshot,
+        cancel: opts.cancel,
+        expected_sha256: opts.sha256,
+        retry_delay_scale: opts.retry_delay_scale.unwrap_or(defaults.retry_delay_scale),
+        limiter: opts.limiter,
+        filename: opts.filename,
+        headers,
+        ..defaults
+    };
+    download_with(source, networks, &out, tuning, None)
+        .await
+        .map_err(|e| describe(&e))
+}
+
 /// Runs (or continues) job `id` and records how it ended in the store.
 pub async fn run(
     store: Arc<Store>,
@@ -1072,6 +1107,54 @@ mod tests {
             mirror.requests().iter().all(|r| r.cookie.is_none()),
             "the cookie followed a redirect to another site"
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn fetch_downloads_a_file_with_progress_and_no_job() {
+        use fuselane_testkit::{Content, Fault, RangeServer, Rule};
+        let content = Content::new(400_000, 21);
+        let mirror = RangeServer::start(content).await.unwrap();
+        let front = RangeServer::start(Content::new(10, 22)).await.unwrap();
+        front.add_rule(Rule {
+            skip: 0,
+            times: u32::MAX,
+            fault: Fault::Redirect(
+                302,
+                format!("http://127.0.0.1:{}{}", mirror.addr().port(), mirror.path()),
+            ),
+        });
+        let dir = tempfile::tempdir().unwrap();
+        let seen = Arc::new(std::sync::Mutex::new((0u64, None::<u64>)));
+        let progress = {
+            let seen = seen.clone();
+            ProgressFn(Arc::new(move |done, total| {
+                *seen.lock().unwrap() = (done, total);
+            }))
+        };
+        let report = fetch(
+            &format!("http://{}{}", front.addr(), front.path()),
+            dir.path().to_path_buf(),
+            RunOptions {
+                progress: Some(progress),
+                ..RunOptions::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            fuselane_testkit::sha256_file(&report.path).unwrap(),
+            content.sha256()
+        );
+        assert_eq!(*seen.lock().unwrap(), (400_000, Some(400_000)));
+        // A dead link says why, in the same words as everywhere else.
+        let err = fetch(
+            "http://127.0.0.1:9/nothing-here.bin",
+            dir.path().to_path_buf(),
+            RunOptions::default(),
+        )
+        .await
+        .unwrap_err();
+        assert!(!err.is_empty());
     }
 
     #[tokio::test(flavor = "multi_thread")]
