@@ -10,16 +10,18 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-WRANGLER="npx --yes wrangler@4"
+# Run from the site's folder: wrangler refuses the workspace root.
+WRANGLER="npx --yes wrangler@4 --cwd apps/site"
 PROJECT=fuselane
 
 pnpm --filter @fuselane/site build
 
 if ! $WRANGLER pages project list 2>/dev/null | grep -q "│ $PROJECT "; then
-  $WRANGLER pages project create "$PROJECT" --production-branch main
+  # --force keeps classic Pages (static files) instead of converting to a Worker.
+  $WRANGLER pages project create "$PROJECT" --production-branch main --force
 fi
 
-$WRANGLER pages deploy apps/site/dist --project-name "$PROJECT" --branch main --commit-dirty=true
+$WRANGLER pages deploy dist --force --project-name "$PROJECT" --branch main --commit-dirty=true
 
 # Custom domains (no-op when already added). Cloudflare then shows them under
 # Workers & Pages -> fuselane -> Custom domains; press "Activate" there if it
