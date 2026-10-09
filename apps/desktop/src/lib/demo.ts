@@ -936,6 +936,12 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         prefs.push({ name: pref.name, label, lane: pref.lane, useFor })
       return structuredClone(prefs)
     },
+    // crash=1 shows the banner offered after a crash.
+    unseenCrash: async () =>
+      params.get('crash') === '1'
+        ? `Fuselane 0.1.0-beta.9 on macos aarch64\nWhere: src/service.rs:2417\nWhat: index out of bounds\n`
+        : null,
+    reportProblem: async () => {},
     diagnostics: async () =>
       [
         'Fuselane 0.0.0 on demo browser',

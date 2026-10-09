@@ -110,6 +110,10 @@ export interface Backend {
   setNetworkPref(pref: NetPref): Promise<NetPref[]>
   /** A privacy-safe report for bug reports. */
   diagnostics(): Promise<string>
+  /** A crash report from last time, offered once; null when there was none. */
+  unseenCrash(): Promise<string | null>
+  /** Opens a filled-in GitHub issue for the person to read and submit. */
+  reportProblem(crash: string | null): Promise<void>
   /** A newer signed version, or null when up to date. */
   checkUpdate(): Promise<UpdateInfo | null>
   /** Pauses downloads, installs the update and restarts the app. */
@@ -274,6 +278,8 @@ async function tauriBackend(): Promise<Backend> {
     networkPrefs: () => call('network_prefs'),
     setNetworkPref: (pref) => call('set_network_pref', { pref }),
     diagnostics: () => call('diagnostics'),
+    unseenCrash: () => call('unseen_crash'),
+    reportProblem: (crash) => call('report_problem', { crash }),
     checkUpdate: () => call('check_update'),
     installUpdate: () => call('install_update'),
     cancelUpdate: () => call('cancel_update'),

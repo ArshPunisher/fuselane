@@ -12,6 +12,7 @@ mod native;
 mod nearby;
 mod opens;
 mod power;
+mod reports;
 mod selftest;
 mod sends;
 mod service;
@@ -52,6 +53,50 @@ fn app_info(svc: State<'_>) -> AppInfo {
         default_dir: svc.default_dir().to_string_lossy().into_owned(),
         updated_from: svc.updated_from().map(str::to_string),
     }
+}
+
+/// A crash report from last time, offered once (then forgotten).
+#[tauri::command]
+fn unseen_crash() -> Option<String> {
+    reports::unseen_crash()
+}
+
+/// Opens a GitHub issue filled in with the diagnostics (and a crash report, if
+/// the window passes the one it was offered). The person reads it and submits
+/// it themselves; Fuselane sends nothing.
+#[tauri::command]
+async fn report_problem(
+    app: tauri::AppHandle,
+    svc: State<'_>,
+    crash: Option<String>,
+) -> Result<(), UiError> {
+    use tauri_plugin_opener::OpenerExt;
+    let svc = svc.inner().clone();
+    let diag = tauri::async_runtime::spawn_blocking(move || {
+        let checks: Vec<(String, bool, String)> = selftest::quick()
+            .into_iter()
+            .map(|c| (c.name.to_string(), c.ok, c.detail))
+            .collect();
+        svc.diagnostics(&checks)
+    })
+    .await
+    .unwrap_or_default();
+    // Only a crash report this app wrote is attached, and it's scrubbed again.
+    let crash = crash.filter(|c| c.starts_with("Fuselane ") && c.len() < 4000);
+    let title = if crash.is_some() {
+        "Crash report"
+    } else {
+        "Problem report"
+    };
+    let url = reports::issue_url(
+        title,
+        &diag,
+        crash.as_deref().map(reports::scrub).as_deref(),
+        &reports::recent_log(30),
+    );
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|e| ui_error("open-failed", format!("Couldn't open the browser: {e}")))
 }
 
 /// Opens this version's release notes in the browser. The URL is built here from
@@ -331,7 +376,15 @@ async fn diagnostics(svc: State<'_>) -> Result<String, UiError> {
             .into_iter()
             .map(|c| (c.name.to_string(), c.ok, c.detail))
             .collect();
-        svc.diagnostics(&checks)
+        let mut r = svc.diagnostics(&checks);
+        let log = reports::recent_log(30);
+        if !log.is_empty() {
+            r.push_str("\nRecent problems:\n");
+            for l in log {
+                r.push_str(&format!("  {l}\n"));
+            }
+        }
+        r
     })
     .await
     .map_err(|e| ui_error("diagnostics", format!("Couldn't build the report: {e}")))
@@ -1333,6 +1386,10 @@ fn main() {
         };
         std::process::exit(code);
     }
+    // Crash reports and the problem log live next to the database (no service).
+    if let Ok(home) = fuselane_core::home::home() {
+        reports::init(home);
+    }
     // Headless checks for the release workflow (L-75); never opens a window.
     if std::env::args().any(|a| a == "--self-test") {
         let checks = selftest::run();
@@ -1405,7 +1462,7 @@ fn main() {
                 && let Some(Err(why)) = svc.import_handoff(&files)
             {
                 // The two files stay in the downloads folder as they arrived.
-                eprintln!("fuselane: a hand-off from another computer wasn't usable: {why}");
+                reports::log(&format!("hand-off not usable: {why}"));
             }
         }));
     }
@@ -1594,6 +1651,8 @@ fn main() {
             focus,
             unfocus,
             already_have,
+            unseen_crash,
+            report_problem,
             nearby_handoff,
             set_ready_by,
             rename_group,

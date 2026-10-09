@@ -2545,6 +2545,17 @@ impl Service {
                 "allowance",
             );
         }
+        // The problem log keeps the download's number and error code only.
+        if let Ok(Outcome::Failed { error, resumable }) = &outcome {
+            crate::reports::log(&format!(
+                "download #{id} failed ({}{})",
+                runner::action_for(error),
+                if *resumable { "" } else { ", final" }
+            ));
+        } else if let Err(e) = &outcome {
+            let _ = e;
+            crate::reports::log(&format!("download #{id} couldn't start"));
+        }
         let retry = match &outcome {
             Err(_) => true,
             Ok(Outcome::Failed {

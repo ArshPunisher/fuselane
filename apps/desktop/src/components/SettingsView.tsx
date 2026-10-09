@@ -514,6 +514,7 @@ function ListSetting() {
 
 function DiagnosticsSetting() {
   const backend = useApp((s) => s.backend)
+  const act = useApp((s) => s.act)
   const [report, setReport] = useState('')
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
@@ -543,15 +544,25 @@ function DiagnosticsSetting() {
           <p className="setting-name">Diagnostics</p>
           <p className="muted">
             For bug reports. It never includes IP addresses, links or file names, and Fuselane sends
-            nothing by itself.
+            nothing by itself. Report a problem opens a GitHub issue with it filled in.
           </p>
           <p className="muted" role="status">
             {status}
           </p>
         </div>
-        <button type="button" className="btn" onClick={copy} disabled={busy}>
-          {busy ? 'Collecting…' : 'Copy diagnostics'}
-        </button>
+        <div className="setting-control">
+          <button type="button" className="btn" onClick={copy} disabled={busy}>
+            {busy ? 'Collecting…' : 'Copy diagnostics'}
+          </button>
+          <button
+            type="button"
+            className="btn"
+            title="Opens a bug report on GitHub with the diagnostics filled in; you read it before sending"
+            onClick={() => void act((b) => b.reportProblem(null))}
+          >
+            Report a problem
+          </button>
+        </div>
       </div>
       {report && (
         <textarea

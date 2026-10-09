@@ -12,6 +12,7 @@ import { SendView } from './components/SendView'
 import { isSendLink } from './lib/sendLink'
 import { Toast } from './components/Toast'
 import { UpdateBanner, UpdatedBanner } from './components/UpdateBanner'
+import { CrashBanner } from './components/CrashBanner'
 import { WhenDoneBanner } from './components/WhenDoneBanner'
 import { SlowToggle } from './components/SlowMode'
 
@@ -324,6 +325,7 @@ export function App() {
           <UpdatedBanner />
           <WhenDoneBanner />
           <UpdateBanner />
+          <CrashBanner />
           {page}
         </main>
         {layout === 'compact' && <Nav kind="tabs" />}

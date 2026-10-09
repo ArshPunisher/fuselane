@@ -1188,6 +1188,21 @@ test('a paused download can continue on another computer with Fuselane', async (
   await expect(page.getByRole('button', { name: 'Continue elsewhere' })).toHaveCount(0)
 })
 
+test('after a crash Fuselane offers once to report it, and problems can be reported from Settings', async ({
+  page,
+}) => {
+  await page.goto('/?drop=0&crash=1')
+  const banner = page.locator('.crash-banner')
+  await expect(banner).toContainText('closed unexpectedly')
+  await banner.getByRole('button', { name: 'Report it' }).click()
+  await expect(banner).toHaveCount(0)
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('button', { name: 'Settings' })
+    .click()
+  await expect(page.getByRole('button', { name: 'Report a problem' })).toBeVisible()
+})
+
 test('Download later adds it paused, ready to start', async ({ page }) => {
   await page.goto('/?empty=1')
   const dialog = await openDialog(page)
