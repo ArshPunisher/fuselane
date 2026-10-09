@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0b0d12" />
+    <title>Page not found | Fuselane</title>
+    <meta
+      name="description"
+      content="This page isn't on the Fuselane site. Go home, download Fuselane, or read the FAQ."
+    />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="https://fuselane.app/favicon.svg" type="image/svg+xml" />
+    <!-- Served at any depth, so everything here is absolute or inline. -->
+    <style>
+      :root {
+        --night: oklch(0.13 0.012 262);
+        --line: oklch(0.32 0.016 262 / 0.6);
+        --ink: oklch(0.97 0.004 262);
+        --body: oklch(0.82 0.01 262);
+        --fuse: oklch(0.74 0.17 50);
+        --fuse-ink: oklch(0.17 0.03 50);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        display: grid;
+        min-height: 100dvh;
+        margin: 0;
+        place-items: center;
+        padding: 24px 16px;
+        background:
+          radial-gradient(circle at 50% 30%, oklch(0.74 0.17 50 / 0.12), transparent 50%),
+          var(--night);
+        color: var(--body);
+        font:
+          16px/1.6 ui-sans-serif,
+          system-ui,
+          sans-serif;
+      }
+      main {
+        display: grid;
+        gap: 18px;
+        max-width: 520px;
+      }
+      .code {
+        color: var(--fuse);
+        font:
+          600 14px ui-monospace,
+          'SF Mono',
+          monospace;
+        letter-spacing: 0.08em;
+      }
+      h1 {
+        margin: 0;
+        color: var(--ink);
+        font-size: clamp(28px, 6vw, 40px);
+        line-height: 1.1;
+        letter-spacing: -0.02em;
+      }
+      p {
+        margin: 0;
+      }
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 6px;
+      }
+      a {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+        padding: 0 18px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--ink);
+        text-decoration: none;
+      }
+      a:first-child {
+        border-color: transparent;
+        background: var(--fuse);
+        color: var(--fuse-ink);
+        font-weight: 600;
+      }
+      a:focus-visible {
+        outline: 2px solid var(--fuse);
+        outline-offset: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <span class="code">404</span>
+      <h1>This page isn't here</h1>
+      <p>
+        The address may be mistyped, or the page has moved. Everything about Fuselane is a click
+        away.
+      </p>
+      <nav aria-label="Pages">
+        <a href="https://fuselane.app/">Home</a>
+        <a href="https://fuselane.app/download/">Download</a>
+        <a href="https://fuselane.app/faq/">FAQ</a>
+      </nav>
+    </main>
+  </body>
+</html>

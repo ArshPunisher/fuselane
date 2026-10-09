@@ -321,7 +321,7 @@ test('SEO: each page has its own title, description and canonical; shared files 
     expect(desc.length, path).toBeLessThanOrEqual(200)
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
       'href',
-      `https://arshpunisher.github.io/fuselane${path}`,
+      `https://fuselane.app${path}`,
     )
     await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
       'content',
@@ -331,11 +331,24 @@ test('SEO: each page has its own title, description and canonical; shared files 
       expect((await img.getAttribute('alt'))?.length ?? 0, path).toBeGreaterThan(10)
   }
   await page.goto('/')
-  const ld = JSON.parse(
-    (await page.locator('script[type="application/ld+json"]').textContent()) ?? '{}',
-  )
-  expect(ld['@type']).toBe('SoftwareApplication')
-  expect(ld.offers.price).toBe('0')
+  const blocks = await page.locator('script[type="application/ld+json"]').allTextContents()
+  const ld = blocks.map((b) => JSON.parse(b))
+  const app = ld.find((d) => d['@type'] === 'SoftwareApplication')
+  expect(app.offers.price).toBe('0')
+  expect(app.url).toBe('https://fuselane.app/')
+  expect(ld.some((d) => d['@type'] === 'WebSite')).toBe(true)
+  // The FAQ's questions are marked up for search results, and pages say where they sit.
+  await page.goto('/faq/')
+  const faq = (await page.locator('script[type="application/ld+json"]').allTextContents())
+    .map((b) => JSON.parse(b))
+    .find((d) => d['@type'] === 'FAQPage')
+  expect(faq.mainEntity.length).toBe(await page.locator('main details').count())
+  expect(faq.mainEntity[0].acceptedAnswer.text.length).toBeGreaterThan(40)
+  expect(
+    (await page.locator('script[type="application/ld+json"]').allTextContents()).some((b) =>
+      b.includes('BreadcrumbList'),
+    ),
+  ).toBe(true)
   for (const path of [
     'robots.txt',
     'sitemap.xml',
@@ -351,8 +364,7 @@ test('SEO: each page has its own title, description and canonical; shared files 
     expect(r.status(), path).toBe(200)
   }
   const sitemap = await (await request.get('/sitemap.xml')).text()
-  for (const path of PAGES)
-    expect(sitemap).toContain(`https://arshpunisher.github.io/fuselane${path}`)
+  for (const path of PAGES) expect(sitemap).toContain(`https://fuselane.app${path}`)
 })
 
 test('the logo draws itself in and ends fully drawn', async ({ page }) => {

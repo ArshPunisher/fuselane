@@ -1,7 +1,7 @@
 // Support page: Share uses the system's share sheet, or copies the link.
 import { toast } from './common'
 
-const url = 'https://arshpunisher.github.io/fuselane/'
+const url = 'https://fuselane.app/'
 
 document.querySelector<HTMLButtonElement>('[data-share]')?.addEventListener('click', async () => {
   const data = {
