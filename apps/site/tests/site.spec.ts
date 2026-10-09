@@ -151,9 +151,13 @@ test('the hero shows live sample speeds that add up', async ({ page }) => {
   await stub(page)
   await page.goto('/')
   await page.waitForTimeout(700)
-  const lanes = await page.locator('[data-lane-rate]').allTextContents()
-  const total = Number(await page.locator('#total').textContent())
-  const sum = lanes.map(Number).reduce((a, b) => a + b, 0)
+  // Read everything in one go: the numbers change every frame.
+  const { total, sum } = await page.evaluate(() => ({
+    total: Number(document.querySelector('#total')?.textContent),
+    sum: [...document.querySelectorAll('[data-lane-rate]')]
+      .map((e) => Number(e.textContent))
+      .reduce((a, b) => a + b, 0),
+  }))
   expect(total).toBeGreaterThan(70)
   expect(total).toBeLessThan(100)
   expect(Math.abs(total - sum)).toBeLessThan(0.25)
