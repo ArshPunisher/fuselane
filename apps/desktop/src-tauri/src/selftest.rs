@@ -141,18 +141,104 @@ async fn loopback_download() -> Result<String, String> {
     outcome
 }
 
+/// Accepts everything into one folder (the self-test's Nearby receiver).
+struct Inbox(std::path::PathBuf, fuselane_nearby::DeviceInfo);
+
+impl fuselane_nearby::Host for Inbox {
+    fn me(&self) -> fuselane_nearby::DeviceInfo {
+        self.1.clone()
+    }
+    fn seen(&self, _: std::net::SocketAddr, _: fuselane_nearby::DeviceInfo, _: Option<String>) {}
+    fn decide<'a>(
+        &'a self,
+        _: std::net::SocketAddr,
+        _: Option<String>,
+        _: &'a fuselane_nearby::PrepareUpload,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = fuselane_nearby::Decision> + Send + 'a>>
+    {
+        let dir = self.0.clone();
+        Box::pin(async move { fuselane_nearby::Decision::Accept { dir, only: None } })
+    }
+    fn started(&self, _: &str, _: &fuselane_nearby::DeviceInfo, _: &[String], _: u64) {}
+    fn progress(&self, _: &str, _: &str, _: u64) {}
+    fn file_done(&self, _: &str, _: &str, _: &std::path::Path) {}
+    fn ended(&self, _: &str, _: fuselane_nearby::Ended) {}
+}
+
+/// Nearby end to end on loopback: two identities, TLS pinned to the
+/// receiver's fingerprint, one file sent and checked.
+async fn loopback_nearby() -> Result<String, String> {
+    let root =
+        std::env::temp_dir().join(format!("fuselane-selftest-nearby-{}", std::process::id()));
+    let result = async {
+        let (a, b, inbox) = (root.join("a"), root.join("b"), root.join("inbox"));
+        std::fs::create_dir_all(&inbox).map_err(|e| e.to_string())?;
+        let ida = fuselane_nearby::Identity::load_or_create(&a).map_err(|e| e.to_string())?;
+        let idb = fuselane_nearby::Identity::load_or_create(&b).map_err(|e| e.to_string())?;
+        let info = |id: &fuselane_nearby::Identity| fuselane_nearby::DeviceInfo {
+            alias: "self-test".into(),
+            version: fuselane_nearby::proto::VERSION.into(),
+            device_model: Some("Fuselane".into()),
+            device_type: Some("desktop".into()),
+            fingerprint: id.fingerprint.clone(),
+            port: 0,
+            protocol: "https".into(),
+            download: false,
+        };
+        let server =
+            fuselane_nearby::Server::start(&ida, Arc::new(Inbox(inbox.clone(), info(&ida))), 0)
+                .await
+                .map_err(|e| e.to_string())?;
+        let body: Vec<u8> = (0..500_000u32).map(|i| (i % 251) as u8).collect();
+        let file = root.join("note.bin");
+        std::fs::write(&file, &body).map_err(|e| e.to_string())?;
+        let target = fuselane_nearby::Target {
+            addr: std::net::SocketAddr::from(([127, 0, 0, 1], server.addr.port())),
+            fingerprint: Some(ida.fingerprint.clone()),
+        };
+        let out = fuselane_nearby::Outgoing {
+            path: file,
+            name: "note.bin".into(),
+            size: body.len() as u64,
+            mime: "application/octet-stream".into(),
+        };
+        tokio::time::timeout(
+            Duration::from_secs(30),
+            fuselane_nearby::client::send(
+                &info(&idb),
+                &target,
+                &[out],
+                Arc::default(),
+                Arc::default(),
+            ),
+        )
+        .await
+        .map_err(|_| "timed out".to_string())?
+        .map_err(|e| e.to_string())?;
+        let got = std::fs::read(inbox.join("note.bin")).map_err(|e| e.to_string())?;
+        if got == body {
+            Ok(format!("{} bytes over pinned TLS, byte-exact", got.len()))
+        } else {
+            Err("received bytes differ".into())
+        }
+    }
+    .await;
+    let _ = std::fs::remove_dir_all(&root);
+    result
+}
+
 pub fn run() -> Vec<Check> {
     let mut out = quick();
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build();
-    out.push(check(
-        "download",
-        match rt {
-            Ok(rt) => rt.block_on(loopback_download()),
-            Err(e) => Err(e.to_string()),
-        },
-    ));
+    match rt {
+        Ok(rt) => {
+            out.push(check("download", rt.block_on(loopback_download())));
+            out.push(check("nearby", rt.block_on(loopback_nearby())));
+        }
+        Err(e) => out.push(check("download", Err(e.to_string()))),
+    }
     out
 }
 
@@ -202,5 +288,6 @@ mod tests {
             assert!(c.ok, "{}: {}", c.name, c.detail);
         }
         assert!(checks.iter().any(|c| c.name == "download"));
+        assert!(checks.iter().any(|c| c.name == "nearby"));
     }
 }
