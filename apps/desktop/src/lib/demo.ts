@@ -755,6 +755,13 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       emitJobs()
       return fresh.id
     },
+    trashFile: async (id) => {
+      const j = find(id)
+      if (j.status !== 'completed')
+        throw err('not-finished', "This download hasn't finished yet, so there's no file.", null)
+      jobs.splice(jobs.indexOf(j), 1)
+      emitJobs()
+    },
     remove: async (id) => {
       find(id)
       jobs.splice(

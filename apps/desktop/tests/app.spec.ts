@@ -873,6 +873,15 @@ test('a download that failed for a passing reason says it will try again', async
   await expect(page.getByText(/tries again by itself/)).toHaveCount(0)
 })
 
+test('a finished file can go to the Trash after a confirming click', async ({ page }) => {
+  await page.goto('/')
+  await page.getByText('Blender-5.1-macos-arm64.dmg').click()
+  const move = page.getByRole('button', { name: /^Move to (Trash|Recycle Bin)$/ })
+  await move.click()
+  await page.getByRole('button', { name: /^Move file to/ }).click()
+  await expect(page.getByText('Blender-5.1-macos-arm64.dmg')).toHaveCount(0)
+})
+
 test('Download later adds it paused, ready to start', async ({ page }) => {
   await page.goto('/?empty=1')
   const dialog = await openDialog(page)

@@ -1986,6 +1986,22 @@ impl Service {
         Ok(())
     }
 
+    /// Moves a finished download's file to the Trash (Recycle Bin) and removes it
+    /// from the list. Never deletes outright, so a slip can be undone.
+    pub fn trash_file(self: &Arc<Self>, id: i64) -> Result<(), UiError> {
+        let path = self.finished_file(id)?;
+        trash::delete(&path).map_err(|e| {
+            UiError::new(
+                "trash-failed",
+                format!("Couldn't move the file to the Trash: {e}"),
+                Some("Delete it from its folder instead, then remove it from the list."),
+            )
+        })?;
+        runner::remove(&self.store, id).map_err(|_| not_found(id))?;
+        self.publish_jobs();
+        Ok(())
+    }
+
     /// Where a finished download's file is, checked to still exist. The window
     /// passes an id, never a path, so it can't open arbitrary files (L-98).
     pub fn finished_file(&self, id: i64) -> Result<PathBuf, UiError> {
@@ -2455,6 +2471,22 @@ mod tests {
         }
         assert_eq!(h.job(id).retry_in, None);
         assert!(lock(&h.svc.retries).is_empty(), "success forgets the count");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn only_a_finished_file_can_go_to_the_trash() {
+        let h = harness(1);
+        let req = AddRequest {
+            later: true,
+            ..AddRequest::default()
+        };
+        let id = h
+            .svc
+            .add_with("http://127.0.0.1:9/a.iso", None, &req)
+            .unwrap();
+        assert_eq!(h.svc.trash_file(id).unwrap_err().code, "not-finished");
+        assert_eq!(h.job(id).status, "paused", "still listed");
+        assert_eq!(h.svc.trash_file(9999).unwrap_err().code, "not-found");
     }
 
     #[test]

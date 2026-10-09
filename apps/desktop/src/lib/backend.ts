@@ -57,6 +57,8 @@ export interface Backend {
   remove(id: number): Promise<void>
   /** Shows a finished file in the file manager. */
   reveal(id: number): Promise<void>
+  /** Moves a finished download's file to the Trash and removes it from the list. */
+  trashFile(id: number): Promise<void>
   openFile(id: number): Promise<void>
   /** A folder the user picked, or null if they cancelled. */
   pickFolder(): Promise<string | null>
@@ -177,6 +179,7 @@ async function tauriBackend(): Promise<Backend> {
     resume: (id) => call('resume', { id }),
     remove: (id) => call('remove', { id }),
     reveal: (id) => call('reveal', { id }),
+    trashFile: (id) => call('trash_file', { id }),
     openFile: (id) => call('open_file', { id }),
     pickFolder: () => call('pick_folder'),
     getLimits: () => call('get_limits'),

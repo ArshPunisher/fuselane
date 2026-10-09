@@ -231,6 +231,28 @@ function RemoveButton({ job }: { job: JobView }) {
   )
 }
 
+/** Finished downloads: the file goes to the Trash (never deleted outright). */
+function TrashButton({ job }: { job: JobView }) {
+  const act = useApp((s) => s.act)
+  const [confirm, setConfirm] = useState(false)
+  useEffect(() => {
+    if (!confirm) return
+    const t = setTimeout(() => setConfirm(false), 4000)
+    return () => clearTimeout(t)
+  }, [confirm])
+  const bin = /Win/i.test(navigator.platform) ? 'Recycle Bin' : 'Trash'
+  return (
+    <button
+      className={confirm ? 'btn btn-danger' : 'btn btn-ghost'}
+      onClick={() => (confirm ? act((b) => b.trashFile(job.id)) : setConfirm(true))}
+      aria-live="polite"
+    >
+      <Trash size={16} aria-hidden />
+      {confirm ? `Move file to ${bin}` : `Move to ${bin}`}
+    </button>
+  )
+}
+
 export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => void) | null }) {
   const liveAll = useApp((s) => s.live[job.id])
   const history = useApp((s) => s.history[job.id])
@@ -303,6 +325,7 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
               </button>
             </>
           )}
+          {job.status === 'completed' && <TrashButton job={job} />}
           <RemoveButton job={job} />
         </div>
       </header>
