@@ -19,7 +19,7 @@ use http_body_util::{BodyExt, Empty};
 use hyper::client::conn::http1::SendRequest;
 use hyper::header::{
     ACCEPT_ENCODING, CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, ETAG, HOST,
-    HeaderName, HeaderValue, IF_RANGE, LAST_MODIFIED, RANGE, RETRY_AFTER, USER_AGENT,
+    HeaderName, HeaderValue, IF_RANGE, LAST_MODIFIED, LOCATION, RANGE, RETRY_AFTER, USER_AGENT,
 };
 use hyper::{Request, Response};
 use hyper_util::rt::TokioIo;
@@ -231,6 +231,35 @@ const ALLOWED: &[&str] = &[
 const MAX_HEADER_BYTES: usize = 16 * 1024;
 
 impl Headers {
+    /// The same headers without the ones that prove who you are (cookies, a login),
+    /// for following a redirect to another site.
+    pub fn without_credentials(&self) -> Headers {
+        Headers(
+            self.0
+                .iter()
+                .filter(|(n, _)| n.as_str() != "cookie" && n.as_str() != "authorization")
+                .cloned()
+                .collect(),
+        )
+    }
+
+    /// The same headers with an HTTP Basic login (from a link like
+    /// `https://user:pass@host/file`), replacing any other login.
+    pub fn with_login(&self, user: &str, password: &str) -> Result<Headers, String> {
+        use base64::Engine;
+        let token = base64::engine::general_purpose::STANDARD.encode(format!("{user}:{password}"));
+        let value = HeaderValue::from_str(&format!("Basic {token}"))
+            .map_err(|_| "the login in the link isn't valid".to_string())?;
+        let mut out: Vec<_> = self
+            .0
+            .iter()
+            .filter(|(n, _)| n.as_str() != "authorization")
+            .cloned()
+            .collect();
+        out.push((hyper::header::AUTHORIZATION, value));
+        Ok(Headers(out))
+    }
+
     /// Keeps allowed headers with valid values; anything else is an error naming it.
     pub fn checked(raw: &[(String, String)]) -> Result<Headers, String> {
         let mut out = Vec::new();
@@ -337,6 +366,10 @@ pub enum JobError {
     Unreachable(String),
     #[error("the server answered the first request with status {0}")]
     ProbeStatus(u16),
+    /// The file is somewhere else (3xx with a Location); the caller follows it,
+    /// since a new host needs new connections.
+    #[error("the server moved the file (status {status})")]
+    Redirect { status: u16, location: String },
     #[error("this link stopped working (status {0}); paste a fresh link to continue")]
     LinkExpired(u16),
     #[error("the file on the server changed since the download started")]
@@ -521,6 +554,15 @@ pub async fn probe(src: &Source, networks: &[Network], t: &Tuning) -> Result<Pro
         };
         let Some(res) = res else { continue };
         let status = res.status().as_u16();
+        if (300..400).contains(&status)
+            && status != 304
+            && let Some(location) = header(&res, LOCATION).filter(|l| !l.trim().is_empty())
+        {
+            return Err(JobError::Redirect {
+                status,
+                location: location.trim().to_string(),
+            });
+        }
         let raw_etag = header(&res, ETAG)
             .map(|e| e.trim().to_string())
             .filter(|e| !e.is_empty());

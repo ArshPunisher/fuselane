@@ -43,6 +43,8 @@ pub enum Fault {
     Throttle(u64),
     /// Close the connection without answering.
     Reset,
+    /// Answer with this redirect status and Location.
+    Redirect(u16, String),
 }
 
 /// Skip `skip` matching requests, then apply `fault` to the next `times` requests.
@@ -77,6 +79,7 @@ pub struct RequestLog {
     pub if_range: Option<String>,
     pub accept_encoding: Option<String>,
     pub cookie: Option<String>,
+    pub authorization: Option<String>,
     pub user_agent: Option<String>,
     pub referer: Option<String>,
     pub fault: Option<Fault>,
@@ -261,6 +264,7 @@ async fn handle(
             if_range: header(hyper::header::IF_RANGE),
             accept_encoding: header(hyper::header::ACCEPT_ENCODING),
             cookie: header(hyper::header::COOKIE),
+            authorization: header(hyper::header::AUTHORIZATION),
             user_agent: header(hyper::header::USER_AGENT),
             referer: header(hyper::header::REFERER),
             fault: fault.clone(),
@@ -270,6 +274,13 @@ async fn handle(
 
     if fault == Some(Fault::Reset) {
         return Err(std::io::Error::other("reset by test server"));
+    }
+    if let Some(Fault::Redirect(code, location)) = &fault {
+        return Ok(Response::builder()
+            .status(*code)
+            .header(hyper::header::LOCATION, location)
+            .body(empty())
+            .unwrap_or_else(|_| Response::new(empty())));
     }
     if let Some(Fault::Status(code, retry_after)) = &fault {
         let mut res = Response::builder().status(*code).header(ETAG, &etag);

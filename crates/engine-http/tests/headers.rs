@@ -125,3 +125,40 @@ fn only_harmless_headers_with_clean_values_are_accepted() {
     assert!(!shown.contains("a=2"));
     assert!(Headers::checked(&[]).unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn a_redirect_is_reported_with_where_it_leads() {
+    use fuselane_engine_http::download::{JobError, probe};
+    use fuselane_testkit::{Fault, Rule};
+    let server = RangeServer::start(Content::new(KB, 61)).await.unwrap();
+    server.add_rule(Rule {
+        skip: 0,
+        times: 1,
+        fault: Fault::Redirect(307, "https://cdn.example.net/f.bin?sig=1".into()),
+    });
+    match probe(&source(&server), &[plain(1)], &Tuning::default()).await {
+        Err(JobError::Redirect { status, location }) => {
+            assert_eq!(status, 307);
+            assert_eq!(location, "https://cdn.example.net/f.bin?sig=1");
+        }
+        other => panic!("expected a redirect, got {other:?}"),
+    }
+    // Next time the file is there.
+    assert!(
+        probe(&source(&server), &[plain(1)], &Tuning::default())
+            .await
+            .is_ok()
+    );
+}
+
+#[test]
+fn credentials_never_follow_to_another_site() {
+    let all = Headers::checked(&h(&[
+        ("Cookie", "s=1"),
+        ("Authorization", "Basic eDp5"),
+        ("Referer", "https://example.org/"),
+    ]))
+    .unwrap();
+    let kept = all.without_credentials();
+    assert_eq!(format!("{kept:?}"), "[\"referer\"]");
+}
