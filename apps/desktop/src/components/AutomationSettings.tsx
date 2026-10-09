@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../lib/store'
-import type { Automation, WhenDone } from '../lib/types'
+import type { Automation, WhenDone, WindowPrefs } from '../lib/types'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -325,7 +325,7 @@ export function SortSetting() {
 
 export function WindowSettings() {
   const backend = useApp((s) => s.backend)
-  const [prefs, setPrefs] = useState<{ startAtLogin: boolean; closeToTray: boolean } | null>(null)
+  const [prefs, setPrefs] = useState<WindowPrefs | null>(null)
   const [status, setStatus] = useState('')
   useEffect(() => {
     void backend
@@ -370,6 +370,15 @@ export function WindowSettings() {
         onChange={async (on) => {
           const saved = await backend.setCloseToTray(on).catch(() => prefs.closeToTray)
           setPrefs({ ...prefs, closeToTray: saved })
+        }}
+      />
+      <ToggleSetting
+        name="Catch copied download links"
+        help="When you copy a link to a file (a .zip, .iso, video and so on) or a magnet, Fuselane offers to download it. The clipboard is only read on this computer while this is on."
+        on={prefs.watchClipboard}
+        onChange={async (on) => {
+          const saved = await backend.setWatchClipboard(on).catch(() => prefs.watchClipboard)
+          setPrefs({ ...prefs, watchClipboard: saved })
         }}
       />
     </>

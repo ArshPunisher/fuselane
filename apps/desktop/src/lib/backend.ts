@@ -47,6 +47,7 @@ export interface Backend {
   windowPrefs(): Promise<WindowPrefs>
   setStartAtLogin(on: boolean): Promise<boolean>
   setCloseToTray(on: boolean): Promise<boolean>
+  setWatchClipboard(on: boolean): Promise<boolean>
   pause(id: number): Promise<void>
   resume(id: number): Promise<void>
   remove(id: number): Promise<void>
@@ -163,6 +164,7 @@ async function tauriBackend(): Promise<Backend> {
     windowPrefs: () => call('window_prefs'),
     setStartAtLogin: (on) => call('set_start_at_login', { on }),
     setCloseToTray: (on) => call('set_close_to_tray', { on }),
+    setWatchClipboard: (on) => call('set_watch_clipboard', { on }),
     pause: (id) => call('pause', { id }),
     resume: (id) => call('resume', { id }),
     remove: (id) => call('remove', { id }),

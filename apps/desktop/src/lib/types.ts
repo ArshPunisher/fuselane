@@ -144,6 +144,8 @@ export interface BatchResult {
 export interface WindowPrefs {
   startAtLogin: boolean
   closeToTray: boolean
+  /** Offer download links copied anywhere (opt-in). */
+  watchClipboard: boolean
 }
 
 export interface AppInfo {

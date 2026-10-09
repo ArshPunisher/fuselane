@@ -334,7 +334,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
   }
 
   let maxRunning = 3
-  const windowPrefs = { startAtLogin: false, closeToTray: false }
+  const windowPrefs = { startAtLogin: false, closeToTray: false, watchClipboard: false }
   let automation: Automation = {
     schedule: {
       enabled: false,
@@ -506,6 +506,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     windowPrefs: async () => ({ ...windowPrefs }),
     setStartAtLogin: async (on) => (windowPrefs.startAtLogin = on),
     setCloseToTray: async (on) => (windowPrefs.closeToTray = on),
+    setWatchClipboard: async (on) => (windowPrefs.watchClipboard = on),
     maxRunning: async () => maxRunning,
     setMaxRunning: async (n) => {
       if (!Number.isInteger(n) || n < 1 || n > 8)

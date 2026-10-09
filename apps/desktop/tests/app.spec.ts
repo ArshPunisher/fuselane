@@ -821,15 +821,34 @@ test('speeds can show in Mbps as well as MB/s', async ({ page }) => {
   await expect(page.locator('.speed')).toContainText('Mbps', { timeout: 5000 })
 })
 
-test('start at login and keep running are switches that stick', async ({ page }) => {
+test('start at login, keep running and copied links are switches, off at first', async ({
+  page,
+}) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Settings' }).click()
-  for (const name of ['Start at login', 'Keep running when the window closes']) {
+  for (const name of [
+    'Start at login',
+    'Keep running when the window closes',
+    'Catch copied download links',
+  ]) {
     const s = page.getByRole('switch', { name })
     await expect(s).toHaveAttribute('aria-checked', 'false')
     await s.click()
     await expect(s).toHaveAttribute('aria-checked', 'true')
   }
+})
+
+test('a copied download link opens the dialog with it', async ({ page }) => {
+  await page.goto('/?empty=1')
+  await expect(page.getByText('Nothing downloading yet')).toBeVisible()
+  // The app's clipboard watcher hands links over like the OS does.
+  await page.evaluate(() =>
+    (window as unknown as { __demoOpen: (t: string) => void }).__demoOpen(
+      'https://example.com/copied.zip',
+    ),
+  )
+  const dialog = page.getByRole('dialog', { name: 'New download' })
+  await expect(dialog.getByLabel('Link')).toHaveValue('https://example.com/copied.zip')
 })
 
 test('Download later adds it paused, ready to start', async ({ page }) => {

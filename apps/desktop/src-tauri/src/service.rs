@@ -532,6 +532,9 @@ pub struct Service {
     countdown: std::sync::atomic::AtomicU32,
     /// Closing the window hides it; downloads carry on from the tray.
     close_to_tray: std::sync::atomic::AtomicBool,
+    /// Offer copied download links (opt-in), and the last clipboard text seen.
+    watch_clipboard: std::sync::atomic::AtomicBool,
+    last_clip: Mutex<Option<String>>,
 }
 
 /// Seconds people get to cancel a sleep or shut-down.
@@ -713,6 +716,8 @@ impl Service {
             .unwrap_or_default();
         let close_to_tray =
             store.setting("close_to_tray").ok().flatten().as_deref() == Some("true");
+        let watch_clipboard =
+            store.setting("watch_clipboard").ok().flatten().as_deref() == Some("true");
         let max_running = store
             .setting("max_running")
             .ok()
@@ -795,6 +800,8 @@ impl Service {
             busy_elsewhere: Mutex::new(None),
             countdown: std::sync::atomic::AtomicU32::new(COUNTDOWN),
             close_to_tray: std::sync::atomic::AtomicBool::new(close_to_tray),
+            watch_clipboard: std::sync::atomic::AtomicBool::new(watch_clipboard),
+            last_clip: Mutex::new(None),
         }))
     }
 
@@ -1414,6 +1421,56 @@ impl Service {
         self.close_to_tray
             .store(on, std::sync::atomic::Ordering::Relaxed);
         Ok(on)
+    }
+
+    pub fn watch_clipboard(&self) -> bool {
+        self.watch_clipboard
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub fn set_watch_clipboard(&self, on: bool) -> Result<bool, UiError> {
+        self.store
+            .set_setting("watch_clipboard", if on { "true" } else { "false" })
+            .map_err(store_error)?;
+        self.watch_clipboard
+            .store(on, std::sync::atomic::Ordering::Relaxed);
+        Ok(on)
+    }
+
+    /// What the clipboard holds when watching starts: never offered afterwards.
+    pub fn clipboard_baseline(&self, text: &str) {
+        *lock(&self.last_clip) = Some(
+            text.chars()
+                .take(fuselane_core::clip::MAX_LEN + 1)
+                .collect(),
+        );
+    }
+
+    /// The clipboard now holds `text` (polled about once a second). Returns the link
+    /// to offer when watching is on and a new download link was just copied that
+    /// isn't in the list yet. Text copied while watching was off never counts later.
+    pub fn clipboard_seen(&self, text: &str) -> Option<String> {
+        let mut last = lock(&self.last_clip);
+        if last.as_deref() == Some(text) {
+            return None;
+        }
+        // Remembered (capped) only to notice the next change; never stored or logged.
+        *last = Some(
+            text.chars()
+                .take(fuselane_core::clip::MAX_LEN + 1)
+                .collect(),
+        );
+        drop(last);
+        if !self.watch_clipboard() {
+            return None;
+        }
+        let link = fuselane_core::clip::download_link(text)?;
+        let known = self
+            .store
+            .list()
+            .map(|jobs| jobs.iter().any(|j| j.url == link))
+            .unwrap_or(false);
+        (!known).then_some(link)
     }
 
     pub fn max_running(&self) -> usize {
@@ -2142,6 +2199,34 @@ mod tests {
         // A finished download can't be resumed or paused.
         assert_eq!(h.svc.resume(id).unwrap_err().code, "not-resumable");
         assert_eq!(h.svc.pause(id).unwrap_err().code, "not-running");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn copied_download_links_are_offered_once_and_only_when_watching() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("fuselane.db");
+        let svc = Service::new(Store::open(&db).unwrap(), dir.path().to_path_buf()).unwrap();
+        // Nothing listens there, so the added download fails fast and harmlessly.
+        let iso = "http://127.0.0.1:9/os.iso";
+        // Off by default: nothing is offered, and what was copied meanwhile is old news.
+        assert!(!svc.watch_clipboard());
+        assert_eq!(svc.clipboard_seen(iso), None);
+        svc.set_watch_clipboard(true).unwrap();
+        assert_eq!(svc.clipboard_seen(iso), None, "copied before turning it on");
+        assert_eq!(svc.clipboard_seen("some text"), None);
+        assert_eq!(svc.clipboard_seen("https://example.com/blog"), None);
+        assert_eq!(svc.clipboard_seen(iso).as_deref(), Some(iso));
+        assert_eq!(svc.clipboard_seen(iso), None, "once per copy");
+        // A link already in the list isn't offered again.
+        svc.add(iso, None).unwrap();
+        svc.clipboard_seen("x");
+        assert_eq!(svc.clipboard_seen(iso), None);
+        // The choice is kept.
+        drop(svc);
+        let svc = Service::new(Store::open(&db).unwrap(), dir.path().to_path_buf()).unwrap();
+        assert!(svc.watch_clipboard());
+        svc.set_watch_clipboard(false).unwrap();
+        assert_eq!(svc.clipboard_seen("https://example.com/b.zip"), None);
     }
 
     #[tokio::test(flavor = "multi_thread")]

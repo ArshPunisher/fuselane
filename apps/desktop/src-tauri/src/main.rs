@@ -125,6 +125,7 @@ fn cancel_when_done(svc: State<'_>) {
 struct WindowPrefs {
     start_at_login: bool,
     close_to_tray: bool,
+    watch_clipboard: bool,
 }
 
 #[tauri::command]
@@ -133,6 +134,58 @@ fn window_prefs(app: tauri::AppHandle, svc: State<'_>) -> WindowPrefs {
     WindowPrefs {
         start_at_login: app.autolaunch().is_enabled().unwrap_or(false),
         close_to_tray: svc.close_to_tray(),
+        watch_clipboard: svc.watch_clipboard(),
+    }
+}
+
+#[tauri::command]
+fn set_watch_clipboard(app: tauri::AppHandle, svc: State<'_>, on: bool) -> Result<bool, UiError> {
+    use tauri_plugin_clipboard_manager::ClipboardExt;
+    if on {
+        // A link copied before turning this on isn't offered.
+        svc.clipboard_baseline(&app.clipboard().read_text().unwrap_or_default());
+    }
+    svc.set_watch_clipboard(on)
+}
+
+/// Copied download links (opt-in in Settings): the clipboard is read once a second
+/// while watching is on, only on this computer, and only a single download link
+/// opens the New download dialog. Nothing else copied is kept or acted on.
+fn watch_clipboard(app: tauri::AppHandle, svc: Arc<Service>) {
+    use tauri_plugin_clipboard_manager::ClipboardExt;
+    use tauri_plugin_notification::NotificationExt;
+    let mut watching = false;
+    loop {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        if !svc.watch_clipboard() {
+            watching = false;
+            continue;
+        }
+        let Ok(text) = app.clipboard().read_text() else {
+            continue;
+        };
+        if !watching {
+            // Launched with watching on: what was already copied isn't news.
+            watching = true;
+            svc.clipboard_baseline(&text);
+            continue;
+        }
+        let Some(link) = svc.clipboard_seen(&text) else {
+            continue;
+        };
+        svc.open_request(link);
+        let focused = app
+            .get_webview_window("main")
+            .and_then(|w| w.is_focused().ok())
+            .unwrap_or(false);
+        if !focused {
+            let _ = app
+                .notification()
+                .builder()
+                .title("Download link copied")
+                .body("Open Fuselane to download it. Turn this off in Settings.")
+                .show();
+        }
     }
 }
 
@@ -851,6 +904,7 @@ fn main() {
         // Remembers the window's size and position between launches.
         .plugin(tauri_plugin_window_state::Builder::default().build())
         // Start at login (off until chosen in Settings); then it opens in the tray.
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--minimized"]),
@@ -915,6 +969,11 @@ fn main() {
             }
             // Sign-in page checks (2.15): at launch, every minute, and on network changes.
             tauri::async_runtime::spawn(for_shell.clone().watch_reach());
+            {
+                let handle = app.handle().clone();
+                let svc = for_shell.clone();
+                std::thread::spawn(move || watch_clipboard(handle, svc));
+            }
             // Saved torrents come back (rechecked from disk), then a tick every second.
             let tor = tor.clone();
             tauri::async_runtime::spawn(async move {
@@ -944,6 +1003,7 @@ fn main() {
             window_prefs,
             set_start_at_login,
             set_close_to_tray,
+            set_watch_clipboard,
             automation,
             set_automation,
             cancel_when_done,
