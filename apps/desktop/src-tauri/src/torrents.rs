@@ -835,10 +835,13 @@ impl Torrents {
                 None
             }
         };
-        engine
-            .select(&t, tiers.unwrap_or(files))
-            .await
-            .map_err(ui)?;
+        let checking = t.progress().phase == Phase::Checking;
+        if !(checking && tiers.is_some()) {
+            engine
+                .select(&t, tiers.unwrap_or(files))
+                .await
+                .map_err(ui)?;
+        }
         self.after_change().await;
         Ok(())
     }
@@ -905,7 +908,11 @@ impl Torrents {
             e.wanted = Some(wanted.clone());
             tiered(&wanted, &e.prio, &done_fn(&t))
         };
-        engine.select(&t, next).await.map_err(ui)?;
+        // While the torrent is still checking, librqbit can't change its files;
+        // the choice is kept and the next tick applies it once checking ends.
+        if t.progress().phase != Phase::Checking {
+            engine.select(&t, next).await.map_err(ui)?;
+        }
         self.after_change().await;
         Ok(())
     }
@@ -1052,6 +1059,7 @@ impl Torrents {
                 let done = done_fn(&t);
                 let next = tiered(&wanted, &e.prio, &done);
                 if next != t.selected()
+                    && p.phase != Phase::Checking
                     && let Some(engine) = &engine
                 {
                     let _ = engine.select(&t, next).await;
