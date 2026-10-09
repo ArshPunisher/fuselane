@@ -3803,3 +3803,125 @@ html[data-hidden] .beam {
     stroke-dashoffset: 0;
   }
 }
+
+/* ---------- Downloads: motion ---------- */
+
+/* A light sheen runs along a bar that is moving. */
+.bar[data-status='running'] .bar-fill {
+  position: relative;
+}
+
+.bar[data-status='running'] .bar-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklch, white 55%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  background-position: -40% 0;
+  opacity: 0;
+}
+
+/* A row that has just arrived slides in; a finished download's check pops. */
+html[data-settled] .row {
+  transition:
+    opacity var(--dur-slow) var(--ease-out),
+    translate var(--dur-slow) var(--ease-out),
+    background var(--dur-quick) var(--ease-out);
+}
+
+html[data-settled] .row .ic-success {
+  transition:
+    scale 460ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity var(--dur-base) var(--ease-out);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .bar[data-status='running'] .bar-fill::after {
+    opacity: 1;
+    animation: sheen 2.2s var(--ease-out) infinite;
+  }
+
+  @starting-style {
+    html[data-settled] .row {
+      opacity: 0;
+      translate: 0 -8px;
+    }
+
+    html[data-settled] .row .ic-success {
+      opacity: 0;
+      scale: 0.2;
+    }
+  }
+
+  /* Idle networks breathe slowly: here and ready, not working. */
+  .orb[data-state='idle'] b {
+    animation: orb-breathe 3.6s ease-in-out infinite;
+  }
+
+  /* Picking another download: the detail slides and fades across. */
+  .detail {
+    view-transition-name: detail;
+  }
+
+  ::view-transition-old(detail) {
+    animation: vt-out 160ms var(--ease-out) both;
+  }
+
+  ::view-transition-new(detail) {
+    animation: vt-in 260ms var(--ease-out) both;
+  }
+
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 200ms;
+  }
+}
+
+html[data-hidden] .bar-fill::after,
+html[data-hidden] .orb b {
+  animation-play-state: paused;
+}
+
+@keyframes sheen {
+  0% {
+    background-position: -40% 0;
+  }
+
+  70%,
+  100% {
+    background-position: 140% 0;
+  }
+}
+
+@keyframes orb-breathe {
+  0%,
+  100% {
+    scale: 1;
+    opacity: 0.85;
+  }
+
+  50% {
+    scale: 0.7;
+    opacity: 0.5;
+  }
+}
+
+@keyframes vt-out {
+  to {
+    opacity: 0;
+    translate: -10px 0;
+  }
+}
+
+@keyframes vt-in {
+  from {
+    opacity: 0;
+    translate: 14px 0;
+  }
+}

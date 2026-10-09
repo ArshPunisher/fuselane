@@ -11,6 +11,9 @@ export function pauseWhenHidden() {
   const set = () => document.documentElement.toggleAttribute('data-hidden', document.hidden)
   document.addEventListener('visibilitychange', set)
   set()
+  // Arrival animations (a new row, a finished check) wait until the first
+  // screen has settled, so opening the window doesn't animate everything.
+  setTimeout(() => document.documentElement.setAttribute('data-settled', ''), 1500)
 }
 
 /**
