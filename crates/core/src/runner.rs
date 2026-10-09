@@ -220,6 +220,7 @@ pub fn describe(e: &JobError) -> String {
         JobError::ProbeStatus(429) => "The server is limiting downloads right now (429 Too Many Requests). Wait a few minutes, then resume.".into(),
         JobError::ProbeStatus(s) if fuselane_engine_http::retry::is_busy(*s) => format!("The server is busy (status {s}). Wait a minute, then resume."),
         JobError::ProbeStatus(s) => format!("The server answered with status {s}, so the download couldn't start."),
+        JobError::Redirect { status, .. } => format!("The server kept sending the download elsewhere (status {status}). Check the link."),
         JobError::LinkExpired(s) => format!("This link stopped working (the server said {s}). Get a fresh link to the same file and try again."),
         JobError::VersionChanged => "The file on the server changed during the download, so it was stopped to avoid a mixed file. Start it again.".into(),
         JobError::NoSpace { needed, free } => format!(
@@ -328,6 +329,7 @@ pub fn action_for(e: &JobError) -> &'static str {
         JobError::Disk(_) | JobError::Staging(_) | JobError::NoSpace { .. } => "free-space",
         JobError::Unreachable(_)
         | JobError::ProbeStatus(_)
+        | JobError::Redirect { .. }
         | JobError::AllNetworksFailed(_)
         | JobError::Paused => "retry",
     }
@@ -523,6 +525,82 @@ async fn connect_plan(
     Ok((source, networks, names))
 }
 
+/// Most servers hand a download on (a mirror, a signed CDN link); a few chain more.
+pub const MAX_REDIRECTS: usize = 5;
+
+fn same_origin(a: &url::Url, b: &url::Url) -> bool {
+    a.scheme() == b.scheme()
+        && a.host_str() == b.host_str()
+        && a.port_or_known_default() == b.port_or_known_default()
+}
+
+/// Where a redirect from `current` leads, if it's somewhere Fuselane may go.
+pub fn redirect_target(current: &str, location: &str) -> Result<url::Url, String> {
+    let next = url::Url::parse(current)
+        .and_then(|u| u.join(location))
+        .map_err(|_| "The server sent the download to something that isn't a link.".to_string())?;
+    match next.scheme() {
+        "http" | "https" => Ok(next),
+        other => Err(format!(
+            "The server sent the download to a {other}: link, which Fuselane doesn't open."
+        )),
+    }
+}
+
+/// Follows the server's redirects to where the file really is. The job keeps its
+/// original link, so each run starts from it again (signed links are short-lived).
+/// Cookies and logins never follow a redirect to another site.
+async fn follow(
+    link: &str,
+    chosen: &[String],
+    per_network_dns: bool,
+    mut headers: Headers,
+    wait: Duration,
+) -> Result<(String, Headers), StartError> {
+    let mut current = link.trim().to_string();
+    // A login in the link (https://user:pass@host/…) becomes HTTP Basic auth, as
+    // browsers do; the request itself never carries it in the address.
+    if let Ok(mut u) = url::Url::parse(&current)
+        && !u.username().is_empty()
+    {
+        let decode = |s: &str| {
+            percent_encoding::percent_decode_str(s)
+                .decode_utf8_lossy()
+                .into_owned()
+        };
+        headers = headers
+            .with_login(&decode(u.username()), &decode(u.password().unwrap_or("")))
+            .map_err(StartError::BadInput)?;
+        let _ = u.set_username("");
+        let _ = u.set_password(None);
+        current = u.to_string();
+    }
+    for _ in 0..=MAX_REDIRECTS {
+        let (source, networks, _) = connect_plan(&current, chosen, per_network_dns).await?;
+        let tuning = Tuning {
+            connect_timeout: wait,
+            first_byte_timeout: wait,
+            headers: headers.clone(),
+            ..Tuning::default()
+        };
+        let location =
+            match fuselane_engine_http::download::probe(&source, &networks, &tuning).await {
+                Err(JobError::Redirect { location, .. }) => location,
+                // Anything else is for the download itself to report.
+                _ => return Ok((current, headers)),
+            };
+        let next = redirect_target(&current, &location).map_err(StartError::Setup)?;
+        let here = url::Url::parse(&current).map_err(|e| StartError::BadInput(e.to_string()))?;
+        if !same_origin(&here, &next) {
+            headers = headers.without_credentials();
+        }
+        current = next.to_string();
+    }
+    Err(StartError::Setup(format!(
+        "The server redirected the download more than {MAX_REDIRECTS} times, so it may be broken. Check the link."
+    )))
+}
+
 /// What a link points at, without downloading it: for the New download dialog.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Preview {
@@ -541,7 +619,10 @@ pub async fn preview(link: &str) -> Result<Preview, String> {
 
 /// `preview` with a browser session's headers (what the extension handed over).
 pub async fn preview_with(link: &str, headers: Headers) -> Result<Preview, String> {
-    let (source, networks, _) = connect_plan(link, &[], false)
+    let (link, headers) = follow(link, &[], false, headers, Duration::from_secs(6))
+        .await
+        .map_err(|e| e.to_string())?;
+    let (source, networks, _) = connect_plan(&link, &[], false)
         .await
         .map_err(|e| e.to_string())?;
     let tuning = Tuning {
@@ -580,8 +661,16 @@ pub async fn run(
                     .into(),
             )
         })?;
+    let (link, headers) = follow(
+        link,
+        &opts.networks,
+        opts.per_network_dns,
+        opts.headers,
+        Duration::from_secs(10),
+    )
+    .await?;
     let (source, networks, names) =
-        connect_plan(link, &opts.networks, opts.per_network_dns).await?;
+        connect_plan(&link, &opts.networks, opts.per_network_dns).await?;
     let sink = {
         let store = store.clone();
         CheckpointFn(Arc::new(move |cp| {
@@ -602,7 +691,7 @@ pub async fn run(
         limiter: opts.limiter,
         job_limit: opts.job_limit,
         filename: opts.filename,
-        headers: opts.headers,
+        headers,
         ..defaults
     };
     let _ = store.apply(id, Event::Start, None);
@@ -903,6 +992,122 @@ mod tests {
                 .unwrap_err()
                 .contains("ftp")
         );
+    }
+
+    #[test]
+    fn redirects_go_only_to_web_links() {
+        let at = "https://example.com/dl/file?id=1";
+        assert_eq!(
+            redirect_target(at, "/mirror/file.iso").unwrap().as_str(),
+            "https://example.com/mirror/file.iso"
+        );
+        assert_eq!(
+            redirect_target(at, "https://cdn.example.net/x.iso?sig=abc")
+                .unwrap()
+                .as_str(),
+            "https://cdn.example.net/x.iso?sig=abc"
+        );
+        assert_eq!(
+            redirect_target(at, "other.iso").unwrap().as_str(),
+            "https://example.com/dl/other.iso"
+        );
+        for bad in [
+            "ftp://example.com/x",
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+        ] {
+            assert!(redirect_target(at, bad).is_err(), "{bad}");
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_redirected_link_downloads_from_where_it_leads() {
+        use fuselane_testkit::{Content, Fault, RangeServer, Rule};
+        let content = Content::new(300_000, 8);
+        let mirror = RangeServer::start(content).await.unwrap();
+        let front = RangeServer::start(Content::new(10, 9)).await.unwrap();
+        // The front server (127.0.0.1) hands every request on to the mirror (localhost):
+        // another origin, so the cookie must not follow.
+        let to = format!("http://localhost:{}{}", mirror.addr().port(), mirror.path());
+        front.add_rule(Rule {
+            skip: 0,
+            times: u32::MAX,
+            fault: Fault::Redirect(302, to),
+        });
+        let link = format!("http://{}{}", front.addr(), front.path());
+        let p = preview(&link).await.unwrap();
+        assert_eq!(p.total, Some(300_000), "the preview follows too");
+
+        let dir = tempfile::tempdir().unwrap();
+        let store = Arc::new(Store::open(&dir.path().join("jobs.db")).unwrap());
+        let id = store.create(&link, dir.path()).unwrap();
+        let headers = Headers::checked(&[("Cookie".into(), "session=secret".into())]).unwrap();
+        let out = run(
+            store.clone(),
+            id,
+            &link,
+            dir.path().to_path_buf(),
+            None,
+            RunOptions {
+                headers,
+                ..RunOptions::default()
+            },
+        )
+        .await
+        .unwrap();
+        let Outcome::Completed { report, .. } = out else {
+            panic!("{out:?}");
+        };
+        assert_eq!(
+            fuselane_testkit::sha256_file(&report.path).unwrap(),
+            content.sha256()
+        );
+        assert_eq!(
+            store.get(id).unwrap().url,
+            link,
+            "the job keeps its own link"
+        );
+        assert!(front.requests().iter().any(|r| r.cookie.is_some()));
+        assert!(
+            mirror.requests().iter().all(|r| r.cookie.is_none()),
+            "the cookie followed a redirect to another site"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_login_in_the_link_is_sent_as_basic_auth() {
+        use fuselane_testkit::{Content, RangeServer};
+        let server = RangeServer::start(Content::new(5_000, 11)).await.unwrap();
+        let link = format!(
+            "http://me:p%40ss@127.0.0.1:{}{}",
+            server.addr().port(),
+            server.path()
+        );
+        let p = preview(&link).await.unwrap();
+        assert_eq!(p.total, Some(5_000));
+        let reqs = server.requests();
+        assert!(!reqs.is_empty());
+        // "me:p@ss" in base64.
+        assert!(
+            reqs.iter()
+                .all(|r| r.authorization.as_deref() == Some("Basic bWU6cEBzcw==")),
+            "{:?}",
+            reqs.iter().map(|r| &r.authorization).collect::<Vec<_>>()
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_redirect_loop_stops_with_a_clear_message() {
+        use fuselane_testkit::{Content, Fault, RangeServer, Rule};
+        let server = RangeServer::start(Content::new(10, 10)).await.unwrap();
+        let link = format!("http://{}{}", server.addr(), server.path());
+        server.add_rule(Rule {
+            skip: 0,
+            times: u32::MAX,
+            fault: Fault::Redirect(301, format!("{link}?again")),
+        });
+        let e = preview(&link).await.unwrap_err();
+        assert!(e.contains("more than 5 times"), "{e}");
     }
 
     #[test]

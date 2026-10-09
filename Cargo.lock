@@ -1787,6 +1787,7 @@ dependencies = [
  "fuselane-storage",
  "fuselane-testkit",
  "fuselane-transport",
+ "percent-encoding",
  "proptest",
  "rusqlite",
  "tempfile",
@@ -1828,6 +1829,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tracing-subscriber",
+ "url",
  "windows-sys 0.61.2",
 ]
 
@@ -1835,6 +1837,7 @@ dependencies = [
 name = "fuselane-engine-http"
 version = "0.1.0-beta.4"
 dependencies = [
+ "base64 0.22.1",
  "bytes",
  "fuselane-limits",
  "fuselane-storage",
