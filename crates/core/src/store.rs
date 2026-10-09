@@ -72,6 +72,8 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE jobs ADD COLUMN speed_limit INTEGER NOT NULL DEFAULT 0;",
     // v7: start at a set time (unix seconds); the job waits paused until then.
     "ALTER TABLE jobs ADD COLUMN start_at INTEGER;",
+    // v8: replace a file of the same name once this one is complete (else keep both).
+    "ALTER TABLE jobs ADD COLUMN replace_existing INTEGER NOT NULL DEFAULT 0;",
 ];
 
 /// What a person can set when adding a download, beyond the link and folder.
@@ -127,6 +129,8 @@ pub struct Job {
     pub speed_limit: u64,
     /// When it starts by itself (unix seconds); it waits paused until then.
     pub start_at: Option<i64>,
+    /// Replace a file already there under the same name (moved to the Trash).
+    pub replace_existing: bool,
 }
 
 impl Job {
@@ -456,6 +460,18 @@ impl Store {
         Ok(())
     }
 
+    /// Whether a file already there under the same name is replaced when this finishes.
+    pub fn set_replace_existing(&self, id: i64, on: bool) -> Result<(), StoreError> {
+        let n = self.lock().execute(
+            "UPDATE jobs SET replace_existing = ?2 WHERE id = ?1",
+            params![id, i64::from(on)],
+        )?;
+        if n == 0 {
+            return Err(StoreError::NotFound(id));
+        }
+        Ok(())
+    }
+
     /// Sets (or clears) when a download starts by itself.
     pub fn set_start_at(&self, id: i64, at: Option<i64>) -> Result<(), StoreError> {
         let n = self.lock().execute(
@@ -529,6 +545,7 @@ fn row_to_job(r: &rusqlite::Row<'_>) -> rusqlite::Result<Job> {
         expected_sha256: r.get("expected_sha256")?,
         speed_limit: u64::try_from(r.get::<_, i64>("speed_limit")?).unwrap_or(0),
         start_at: r.get("start_at")?,
+        replace_existing: r.get::<_, i64>("replace_existing")? != 0,
     })
 }
 
@@ -576,6 +593,9 @@ mod tests {
         assert_eq!(s.get(a).unwrap().start_at, Some(1_791_590_400));
         s.set_start_at(a, None).unwrap();
         assert_eq!(s.get(a).unwrap().start_at, None);
+        assert!(!s.get(a).unwrap().replace_existing);
+        s.set_replace_existing(a, true).unwrap();
+        assert!(s.get(a).unwrap().replace_existing);
         assert!(matches!(
             s.set_start_at(999, None),
             Err(StoreError::NotFound(999))
