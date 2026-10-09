@@ -208,6 +208,16 @@ pub async fn receive(
     lookup: Duration,
 ) -> Result<Receiving, ShareError> {
     let id = hex(&link.info_hash);
+    // While looking, ask the local networks every few seconds: a sender in the same
+    // building answers at once (DHT finds senders elsewhere).
+    let asking = engine.local_search(&id).map(|search| {
+        tokio::spawn(async move {
+            loop {
+                search.send();
+                tokio::time::sleep(Duration::from_secs(3)).await;
+            }
+        })
+    });
     let listing = tokio::time::timeout(
         lookup,
         engine.inspect(
@@ -216,14 +226,18 @@ pub async fn receive(
             peers,
         ),
     )
-    .await
-    .map_err(|_| ShareError::SenderOffline)?
-    // The magnet is ours, so an engine failure here means nobody had the share:
-    // every address tried, none answered.
-    .map_err(|e| match e {
-        TorrentError::Engine(_) | TorrentError::Invalid(_) => ShareError::SenderOffline,
-        e => e.into(),
-    })?;
+    .await;
+    if let Some(a) = asking {
+        a.abort();
+    }
+    let listing = listing
+        .map_err(|_| ShareError::SenderOffline)?
+        // The magnet is ours, so an engine failure here means nobody had the share:
+        // every address tried, none answered.
+        .map_err(|e| match e {
+            TorrentError::Engine(_) | TorrentError::Invalid(_) => ShareError::SenderOffline,
+            e => e.into(),
+        })?;
     // Anything else under this info-hash is not ours to open.
     let size = match listing.files.as_slice() {
         [f] if !f.padding && f.parts == [torrent::NAME] && f.len >= HEADER_BLOCK as u64 => {
