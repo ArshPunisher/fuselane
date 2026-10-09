@@ -20,6 +20,7 @@ mod deadline;
 mod focus;
 mod grab;
 mod groups;
+pub mod handoff;
 
 pub use grab::PageFiles;
 mod power_aware;
@@ -3576,6 +3577,61 @@ mod tests {
             h.svc.files_on_page("ftp://x").await.unwrap_err().code,
             "bad-link"
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_paused_download_handed_to_another_computer_finishes_there_byte_exact() {
+        let content = Content::new(1536 * KB, 241);
+        let server = RangeServer::start(content).await.unwrap();
+        server.add_rule(Rule {
+            skip: 1,
+            times: u32::MAX,
+            fault: Fault::Throttle(160 * KB),
+        });
+        // Computer A gets part of it, then pauses.
+        let a = harness(3);
+        let id = a.svc.add(&link(&server), None).unwrap();
+        // Live progress (saved to disk on pause, not before).
+        a.wait("some bytes", |h| {
+            lock(&h.events)
+                .iter()
+                .any(|e| matches!(e, UiEvent::Live(l) if l.id == id && l.written > 128 * KB))
+        })
+        .await;
+        a.svc.pause(id).unwrap();
+        a.wait("paused", |h| h.job(id).status == "paused").await;
+        let had = a.job(id).written;
+        assert!(had > 0 && had < 1536 * KB);
+        let out = a.dir.path().join("handoff");
+        let files = a.svc.handoff_files(id, &out).unwrap();
+        assert_eq!(files.len(), 2);
+
+        // Nearby carries both files into computer B's downloads folder.
+        let b = harness(3);
+        let received: Vec<PathBuf> = files
+            .iter()
+            .map(|f| {
+                let to = b.dir.path().join(f.file_name().unwrap());
+                std::fs::copy(f, &to).unwrap();
+                to
+            })
+            .collect();
+        let new_id = b.svc.import_handoff(&received).unwrap().unwrap();
+        let j = b.job(new_id);
+        assert_eq!(j.status, "paused", "it waits for the person to resume");
+        assert_eq!(j.written, had, "the progress came along");
+        assert_eq!(j.error_action.as_deref(), Some("handoff"));
+        b.svc.resume(new_id).unwrap();
+        b.wait("finished on B", |h| h.job(new_id).status == "completed")
+            .await;
+        let path = PathBuf::from(b.job(new_id).final_path.unwrap());
+        assert_eq!(
+            fuselane_testkit::sha256_file(&path).unwrap(),
+            content.sha256()
+        );
+
+        // A download still running can't be handed over; nor can plain files.
+        assert_eq!(b.svc.import_handoff(&[path]), None);
     }
 
     #[tokio::test(flavor = "multi_thread")]

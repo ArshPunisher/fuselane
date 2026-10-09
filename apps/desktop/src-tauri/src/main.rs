@@ -968,6 +968,31 @@ async fn nearby_set_everyone(near: Near<'_>, on: bool) -> Result<nearby::NearbyV
     Ok(near.inner().set_everyone(on).await)
 }
 
+/// Hands a paused download to another Fuselane over Nearby (B9.9): its partial
+/// file and a manifest go there, and it carries on on that computer.
+#[tauri::command]
+async fn nearby_handoff(
+    svc: State<'_>,
+    near: Near<'_>,
+    id: i64,
+    fingerprint: String,
+) -> Result<nearby::NearbyView, UiError> {
+    let out = fuselane_core::home::home()
+        .unwrap_or_else(|_| std::env::temp_dir().join("fuselane"))
+        .join("handoff")
+        .join(id.to_string());
+    let files = svc.handoff_files(id, &out)?;
+    near.inner()
+        .send(
+            &fingerprint,
+            files
+                .iter()
+                .map(|p| p.to_string_lossy().into_owned())
+                .collect(),
+        )
+        .await
+}
+
 #[tauri::command]
 async fn nearby_send(
     near: Near<'_>,
@@ -1373,6 +1398,18 @@ fn main() {
     let snd = open_sends(&svc);
     let near = open_nearby(&svc);
     {
+        // A download handed over from another Fuselane continues here (B9.9).
+        let weak = Arc::downgrade(&svc);
+        near.set_on_received(Arc::new(move |files| {
+            if let Some(svc) = weak.upgrade()
+                && let Some(Err(why)) = svc.import_handoff(&files)
+            {
+                // The two files stay in the downloads folder as they arrived.
+                eprintln!("fuselane: a hand-off from another computer wasn't usable: {why}");
+            }
+        }));
+    }
+    {
         // Torrents and Fuse Send count as work: no sleep or shut-down meanwhile.
         let tor = Arc::downgrade(&tor);
         let snd = Arc::downgrade(&snd);
@@ -1557,6 +1594,7 @@ fn main() {
             focus,
             unfocus,
             already_have,
+            nearby_handoff,
             set_ready_by,
             rename_group,
             files_on_page,

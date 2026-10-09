@@ -158,7 +158,14 @@ pub struct Nearby {
     phone: tokio::sync::Mutex<Option<fuselane_nearby::web::PhonePage>>,
     phone_view: Mutex<Option<PhoneView>>,
     offers: Mutex<Vec<fuselane_nearby::web::Offer>>,
+    /// Files saved per incoming session, and who hears about them once it's done
+    /// (a download handed over from another Fuselane, B9.9).
+    received: Mutex<HashMap<String, Vec<PathBuf>>>,
+    on_received: Mutex<Option<Received>>,
 }
+
+/// Called with the files of a finished incoming transfer.
+pub type Received = Arc<dyn Fn(Vec<PathBuf>) + Send + Sync>;
 
 impl std::fmt::Debug for Nearby {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -253,6 +260,8 @@ impl Nearby {
             phone: tokio::sync::Mutex::new(None),
             phone_view: Mutex::new(None),
             offers: Mutex::new(Vec::new()),
+            received: Mutex::new(HashMap::new()),
+            on_received: Mutex::new(None),
         })
     }
 
@@ -506,6 +515,11 @@ impl Nearby {
     }
 
     /// Sends `paths` to a device on the list.
+    /// Hears about the files of each finished incoming transfer.
+    pub fn set_on_received(&self, f: Received) {
+        *lock(&self.on_received) = Some(f);
+    }
+
     pub async fn send(
         self: &Arc<Self>,
         fingerprint: &str,
@@ -919,11 +933,21 @@ impl Host for Receiver {
         }
         v.path = Some(path.display().to_string());
         drop(inc);
+        lock(&n.received)
+            .entry(session.to_string())
+            .or_default()
+            .push(path.to_path_buf());
         n.publish();
     }
 
     fn ended(&self, session: &str, how: Ended) {
         let Some(n) = self.0.upgrade() else { return };
+        let files = lock(&n.received).remove(session).unwrap_or_default();
+        if matches!(how, Ended::Done)
+            && let Some(f) = lock(&n.on_received).clone()
+        {
+            f(files);
+        }
         if let Some(v) = lock(&n.incoming).get_mut(session) {
             match how {
                 Ended::Done => {
@@ -1070,6 +1094,45 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(25)).await;
         }
         panic!("timed out waiting for {what}");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn the_files_of_a_finished_incoming_transfer_are_handed_on() {
+        let a = side("Maya's MacBook Air").await;
+        let b = side("STUDIO-PC").await;
+        introduce(&a, &b).await;
+        let fa = a.n.fingerprint();
+        until("b to list a", || {
+            b.n.view().devices.iter().any(|d| d.fingerprint == fa)
+        })
+        .await;
+        let got: Arc<Mutex<Vec<PathBuf>>> = Arc::default();
+        a.n.set_on_received({
+            let got = got.clone();
+            Arc::new(move |files| lock(&got).extend(files))
+        });
+        a.n.set_everyone(true).await;
+        let out = tempfile::tempdir().unwrap();
+        let part = out.path().join("os.iso.fuselane");
+        let manifest = out.path().join("os.iso.fuselane-handoff");
+        std::fs::write(&part, vec![1u8; 50_000]).unwrap();
+        std::fs::write(&manifest, b"{}").unwrap();
+        b.n.send(
+            &fa,
+            vec![part.display().to_string(), manifest.display().to_string()],
+        )
+        .await
+        .unwrap();
+        until("the request", || a.n.view().request.is_some()).await;
+        let req = a.n.view().request.unwrap();
+        a.n.answer(req.id, true, false).unwrap();
+        until("both files handed on", || lock(&got).len() == 2).await;
+        let names: Vec<String> = lock(&got)
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert!(names.contains(&"os.iso.fuselane".to_string()));
+        assert!(names.contains(&"os.iso.fuselane-handoff".to_string()));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

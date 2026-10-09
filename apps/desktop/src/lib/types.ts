@@ -14,6 +14,7 @@ export type ErrorAction =
   | 'unpack'
   | 'focus'
   | 'battery'
+  | 'handoff'
   | null
 
 export interface JobView {

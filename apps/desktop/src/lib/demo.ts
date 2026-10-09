@@ -741,6 +741,13 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       for (const j of jobs.filter((x) => x.groupId === id))
         if (j.resumable) await backend.resume(j.id)
     },
+    nearbyHandoff: async (id, fingerprint) => {
+      const j = find(id)
+      if (j.status !== 'paused' && j.status !== 'failed')
+        throw err('not-paused', 'Pause the download first, then send it.', null)
+      const name = (j.name.split('/').pop() ?? j.name) + '.fuselane'
+      return backend.nearbySend(fingerprint, [`/Users/demo/Downloads/${name}`])
+    },
     focus: async (id) => {
       const j = find(id)
       if (j.status === 'completed')

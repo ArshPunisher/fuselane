@@ -1154,6 +1154,30 @@ test('the files a page links to can be picked by type and added as a group', asy
   )
 })
 
+test('a paused download can continue on another computer with Fuselane', async ({ page }) => {
+  await page.goto('/?drop=0')
+  await page
+    .getByRole('button', { name: /dataset-shard-0042/ })
+    .first()
+    .click()
+  await page.getByRole('button', { name: 'Continue elsewhere' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Continue on another computer' })
+  await expect(dialog).toBeVisible()
+  // Only other Fuselane computers are offered (a phone with LocalSend isn't).
+  await expect(dialog.getByRole('button', { name: "Maya's MacBook Air" })).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Pixel 9' })).toHaveCount(0)
+  await dialog.getByRole('button', { name: "Maya's MacBook Air" }).click()
+  await expect(dialog.getByRole('status')).toContainText("Sent to Maya's MacBook Air")
+  await dialog.getByRole('button', { name: 'Done' }).click()
+  await expect(dialog).toBeHidden()
+  // A running download offers no hand-off.
+  await page
+    .getByRole('button', { name: /ubuntu-26\.04/ })
+    .first()
+    .click()
+  await expect(page.getByRole('button', { name: 'Continue elsewhere' })).toHaveCount(0)
+})
+
 test('Download later adds it paused, ready to start', async ({ page }) => {
   await page.goto('/?empty=1')
   const dialog = await openDialog(page)

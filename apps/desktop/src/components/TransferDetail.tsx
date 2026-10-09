@@ -7,6 +7,7 @@ import {
   FolderOpen,
   Lightning,
   Pause,
+  ShareFat,
   ShieldCheck,
   ArrowLineUp,
   Play,
@@ -24,6 +25,7 @@ import { STATUS_WORD } from './status'
 import { LimitField } from './LimitField'
 import { LiveRate } from './LiveRate'
 import { BIN, RemoveDialog } from './RemoveDialog'
+import { HandoffDialog } from './HandoffDialog'
 import type { JobView, Live, ReportView } from '../lib/types'
 
 /** The platform's own words for showing a file in its folder. */
@@ -277,6 +279,23 @@ function ReadyBy({ job }: { job: JobView }) {
   )
 }
 
+/** Continue on another computer (B9.9): a paused download with something saved. */
+function HandoffButton({ job }: { job: JobView }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <button
+        className="btn btn-ghost"
+        title="Send it, with what's downloaded so far, to another computer with Fuselane"
+        onClick={() => setOpen(true)}
+      >
+        <ShareFat size={16} aria-hidden /> Continue elsewhere
+      </button>
+      <HandoffDialog job={job} open={open} onClose={() => setOpen(false)} />
+    </>
+  )
+}
+
 function RemoveButton({ job }: { job: JobView }) {
   const act = useApp((s) => s.act)
   const [open, setOpen] = useState(false)
@@ -397,7 +416,7 @@ function ChecksumBadge({ job }: { job: JobView }) {
   )
 }
 
-const WAITS: JobView['errorAction'][] = ['focus', 'battery']
+const WAITS: JobView['errorAction'][] = ['focus', 'battery', 'handoff']
 
 export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => void) | null }) {
   const liveAll = useApp((s) => s.live[job.id])
@@ -499,6 +518,7 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
               </button>
             </>
           )}
+          {job.status === 'paused' && job.written > 0 && <HandoffButton job={job} />}
           <RemoveButton job={job} />
         </div>
       </header>
