@@ -292,6 +292,8 @@ pub struct Tuning {
     pub snapshot_every: Duration,
     /// Live speed limits shared with other downloads (by network name).
     pub limiter: Option<Arc<fuselane_limits::Limiter>>,
+    /// This download's own limit, changeable while it runs.
+    pub job_limit: Option<Arc<fuselane_limits::JobLimit>>,
     /// The name the person chose, instead of the server's (made safe first).
     pub filename: Option<String>,
     /// A browser session's cookies and referrer, sent on every request.
@@ -323,6 +325,7 @@ impl Default for Tuning {
             filename: None,
             headers: Headers::default(),
             limiter: None,
+            job_limit: None,
         }
     }
 }
@@ -1331,16 +1334,20 @@ async fn fetch_block(
             data.len() as u64,
         );
         // Speed limits: wait off the debt before reading more (TCP slows the server).
+        let mut wait = std::time::Duration::ZERO;
         if let Some(limiter) = &ctx.tuning.limiter {
-            let wait = limiter.take(&net.name, data.len() as u64);
+            wait = limiter.take(&net.name, data.len() as u64);
             // Allowance reached mid-block: hand the rest back to the other networks.
             if limiter.blocked(&net.name) {
                 *conn = None;
                 return Err(Outcome::Lost);
             }
-            if !wait.is_zero() {
-                tokio::time::sleep(wait).await;
-            }
+        }
+        if let Some(job) = &ctx.tuning.job_limit {
+            wait = wait.max(job.take(data.len() as u64));
+        }
+        if !wait.is_zero() {
+            tokio::time::sleep(wait).await;
         }
     }
     if let Some(exp) = expected

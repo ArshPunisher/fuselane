@@ -192,6 +192,48 @@ impl Limiter {
     }
 }
 
+/// One download's own speed limit, changeable while it runs; 0 means unlimited.
+/// Applies on top of the shared [`Limiter`] (the slower limit wins).
+#[derive(Debug)]
+pub struct JobLimit {
+    epoch: std::time::Instant,
+    bucket: std::sync::Mutex<Bucket>,
+}
+
+impl JobLimit {
+    pub fn new(rate: u64) -> JobLimit {
+        JobLimit {
+            epoch: std::time::Instant::now(),
+            bucket: std::sync::Mutex::new(Bucket::new(rate, 0)),
+        }
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, Bucket> {
+        self.bucket
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    fn now_ms(&self) -> u64 {
+        self.epoch.elapsed().as_millis() as u64
+    }
+
+    pub fn rate(&self) -> u64 {
+        self.lock().rate()
+    }
+
+    pub fn set_rate(&self, rate: u64) {
+        let now = self.now_ms();
+        self.lock().set_rate(rate, now);
+    }
+
+    /// Records `bytes` received for this download; returns how long to wait.
+    pub fn take(&self, bytes: u64) -> std::time::Duration {
+        let now = self.now_ms();
+        std::time::Duration::from_millis(self.lock().take(bytes, now))
+    }
+}
+
 /// Calendar period a data allowance applies to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Period {
@@ -357,6 +399,19 @@ impl Usage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_job_limit_slows_only_that_job_and_changes_live() {
+        let j = JobLimit::new(0);
+        assert_eq!(j.take(10_000_000), std::time::Duration::ZERO, "unlimited");
+        j.set_rate(1000);
+        assert_eq!(j.rate(), 1000);
+        // Starts empty: a second's worth of bytes means about a second's wait.
+        let wait = j.take(1000);
+        assert!(wait >= std::time::Duration::from_millis(990), "{wait:?}");
+        j.set_rate(0);
+        assert_eq!(j.take(1_000_000), std::time::Duration::ZERO, "lifted");
+    }
     use proptest::prelude::*;
 
     const fn d(year: i32, month: u8, day: u8) -> Date {

@@ -750,6 +750,37 @@ async fn a_speed_limit_holds_the_whole_download_near_the_limit() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_download_limit_holds_it_back_and_lifting_it_lets_it_finish() {
+    use fuselane_limits::JobLimit;
+    let content = Content::new(1536 * KB, 77);
+    let server = RangeServer::start(content).await.unwrap();
+    // 512 KiB/s for this download only: 1.5 MiB would take about 3 s.
+    let job = Arc::new(JobLimit::new(512 * KB));
+    let mut t = tuning();
+    t.job_limit = Some(job.clone());
+    let dir = tempfile::tempdir().unwrap();
+    let start = std::time::Instant::now();
+    let lift = {
+        let job = job.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(1200)).await;
+            job.set_rate(0);
+        })
+    };
+    let report = download(source(&server), vec![plain(1), plain(2)], dir.path(), t)
+        .await
+        .unwrap();
+    lift.await.unwrap();
+    assert_exact(&report, content);
+    let secs = start.elapsed().as_secs_f64();
+    assert!(secs > 1.0, "limit ignored: {secs:.2} s");
+    assert!(
+        secs < 2.8,
+        "lifting the limit didn't take effect: {secs:.2} s"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_capped_network_carries_less_while_the_other_takes_up_the_slack() {
     use fuselane_limits::{LimitSettings, Limiter};
     let content = Content::new(2 * 1024 * KB, 75);
