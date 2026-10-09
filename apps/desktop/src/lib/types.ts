@@ -21,6 +21,8 @@ export interface JobView {
   verify: boolean
   /** This download's own speed limit in bytes per second; 0 = none. */
   speedLimit: number
+  /** Seconds until Fuselane tries this failed download again by itself. */
+  retryIn: number | null
 }
 
 export interface NetView {

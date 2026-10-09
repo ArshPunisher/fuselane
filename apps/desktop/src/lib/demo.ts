@@ -141,6 +141,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       position: nextId,
       verify: false,
       speedLimit: 0,
+      retryIn: status === 'failed' && errorAction === 'retry' ? 95 : null,
       fill,
       owner,
       inflight: [-1, -1, -1],
@@ -191,6 +192,16 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       'start-over',
     )
     make('dataset-shard-0042.tar.zst', 2.4 * 1024 * MB, 'paused', 0.38)
+    if (params.get('offline') === '1') {
+      make(
+        'podcast-episode-212.mp3',
+        80 * MB,
+        'failed',
+        0.4,
+        'Every network failed. Last problem: no network could reach the server.',
+        'retry',
+      )
+    }
     if (params.get('allowance') === 'reached') {
       make(
         'conference-talk-4k.mp4',
@@ -573,6 +584,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       j.status = 'running'
       j.error = null
       j.resumable = false
+      j.retryIn = null
       emitJobs()
     },
     reveal: async (id) => finishedFile(id),

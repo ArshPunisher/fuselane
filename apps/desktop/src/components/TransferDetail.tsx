@@ -117,6 +117,15 @@ function ErrorPanel({ job }: { job: JobView }) {
       <WarningCircle size={18} weight="fill" aria-hidden className="ic-danger" />
       <div className="notice-body">
         <p>{job.error}</p>
+        {job.retryIn !== null && (
+          <p className="field-help">
+            Fuselane tries again by itself{' '}
+            {job.retryIn < 60
+              ? 'in under a minute'
+              : `in about ${Math.round(job.retryIn / 60)} min`}
+            , or as soon as a network comes back.
+          </p>
+        )}
         {action === 'fix-link' && job.resumable && (
           <form className="fix-link" onSubmit={fix} noValidate>
             <label htmlFor={`fix-${job.id}`}>New link to the same file</label>

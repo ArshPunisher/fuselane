@@ -865,6 +865,14 @@ test('a copied download link opens the dialog with it', async ({ page }) => {
   await expect(dialog.getByLabel('Link')).toHaveValue('https://example.com/copied.zip')
 })
 
+test('a download that failed for a passing reason says it will try again', async ({ page }) => {
+  await page.goto('/?offline=1')
+  await page.getByText('podcast-episode-212.mp3').click()
+  await expect(page.getByText(/Fuselane tries again by itself in about 2 min/)).toBeVisible()
+  await page.getByRole('button', { name: 'Try again' }).click()
+  await expect(page.getByText(/tries again by itself/)).toHaveCount(0)
+})
+
 test('Download later adds it paused, ready to start', async ({ page }) => {
   await page.goto('/?empty=1')
   const dialog = await openDialog(page)

@@ -129,6 +129,7 @@ mod tests {
             position: 0,
             verify: false,
             speed_limit: 0,
+            retry_in: None,
         }
     }
 

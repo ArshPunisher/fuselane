@@ -42,6 +42,8 @@ pub struct JobView {
     pub verify: bool,
     /// This download's own speed limit in bytes per second; 0 = none.
     pub speed_limit: u64,
+    /// Seconds until Fuselane tries a failed download again by itself.
+    pub retry_in: Option<u64>,
 }
 
 /// One network the app can see.
@@ -507,6 +509,8 @@ pub struct Service {
     updated_from: Option<String>,
     /// Shrinks engine retry waits; only tests set it.
     retry_scale: Option<f64>,
+    /// Failed downloads waiting to be tried again by themselves.
+    retries: Mutex<HashMap<i64, Retry>>,
     /// Opens that arrived before the window subscribed (a double-clicked .torrent
     /// launching the app); sent once it does.
     pending_opens: Mutex<Vec<String>>,
@@ -640,7 +644,18 @@ fn view(job: &Job) -> JobView {
         position: job.position,
         verify: job.expected_sha256.is_some(),
         speed_limit: job.speed_limit,
+        retry_in: None,
     }
+}
+
+/// Waits before each automatic retry of a download that failed for a reason that
+/// may pass (a dropped network, a busy server); a returning network skips the wait.
+pub const RETRY_WAITS: [u64; 6] = [20, 60, 180, 600, 1800, 3600];
+
+#[derive(Debug, Clone, Copy)]
+struct Retry {
+    attempts: usize,
+    at: std::time::Instant,
 }
 
 fn store_error(e: impl std::fmt::Display) -> UiError {
@@ -789,6 +804,7 @@ impl Service {
             default_dir,
             max_running: std::sync::atomic::AtomicUsize::new(max_running),
             retry_scale: None,
+            retries: Mutex::new(HashMap::new()),
             limiter,
             saved_limits: Mutex::new(saved_limits),
             net_prefs: Mutex::new(net_prefs),
@@ -889,13 +905,81 @@ impl Service {
     }
 
     pub fn jobs(&self) -> Result<Vec<JobView>, UiError> {
+        let retries = lock(&self.retries).clone();
+        let now = std::time::Instant::now();
         Ok(self
             .store
             .list()
             .map_err(store_error)?
             .iter()
-            .map(view)
+            .map(|j| {
+                let mut v = view(j);
+                if v.status == "failed" {
+                    v.retry_in = retries
+                        .get(&j.id)
+                        .map(|r| r.at.saturating_duration_since(now).as_secs());
+                }
+                v
+            })
             .collect())
+    }
+
+    fn retry_wait(&self, attempt: usize) -> std::time::Duration {
+        let secs = RETRY_WAITS[attempt.min(RETRY_WAITS.len() - 1)] as f64;
+        std::time::Duration::from_secs_f64(secs * self.retry_scale.unwrap_or(1.0))
+    }
+
+    /// After a run: a failure that may pass is tried again later, up to
+    /// `RETRY_WAITS.len()` times; anything else forgets the count.
+    fn note_outcome(&self, id: i64, retry: bool) {
+        let mut retries = lock(&self.retries);
+        if !retry {
+            retries.remove(&id);
+            return;
+        }
+        let attempts = retries.get(&id).map_or(0, |r| r.attempts);
+        if attempts >= RETRY_WAITS.len() {
+            retries.remove(&id); // gave up: it waits for the person
+            return;
+        }
+        let at = std::time::Instant::now() + self.retry_wait(attempts);
+        retries.insert(
+            id,
+            Retry {
+                attempts: attempts + 1,
+                at,
+            },
+        );
+    }
+
+    /// Called every few seconds: tries again the failed downloads whose wait is over.
+    pub fn tick_retries(self: &Arc<Self>) {
+        let now = std::time::Instant::now();
+        let due: Vec<i64> = lock(&self.retries)
+            .iter()
+            .filter(|(_, r)| r.at <= now)
+            .map(|(id, _)| *id)
+            .collect();
+        if due.is_empty() || !self.schedule_allows() {
+            return;
+        }
+        for id in due {
+            let still_failed = self
+                .store
+                .get(id)
+                .is_ok_and(|j| j.status == Status::Failed { resumable: true });
+            if !still_failed || self.resume(id).is_err() {
+                lock(&self.retries).remove(&id);
+            }
+        }
+    }
+
+    /// A network appeared or came back: waiting retries go now.
+    pub fn retry_now(&self) {
+        let now = std::time::Instant::now();
+        for r in lock(&self.retries).values_mut() {
+            r.at = now;
+        }
     }
 
     /// A plain-text report for bug reports, built to share safely (ADR 0009: no
@@ -1024,6 +1108,9 @@ impl Service {
             names.sort();
             let due = last_check.is_none_or(|t| t.elapsed() >= std::time::Duration::from_secs(60));
             if names != last_names || due {
+                if names.len() > last_names.len() {
+                    self.retry_now();
+                }
                 last_names = names;
                 last_check = Some(std::time::Instant::now());
                 if self.check_reach().await
@@ -2045,6 +2132,15 @@ impl Service {
                 "allowance",
             );
         }
+        let retry = match &outcome {
+            Err(_) => true,
+            Ok(Outcome::Failed {
+                error,
+                resumable: true,
+            }) => runner::action_for(error) == "retry",
+            Ok(_) => false,
+        };
+        self.note_outcome(id, retry);
         let removed = lock(&self.running)
             .remove(&id)
             .is_some_and(|r| r.remove_after);
@@ -2331,6 +2427,56 @@ mod tests {
         for id in r.added {
             assert_eq!(h.job(id).status, "paused");
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_download_that_fails_for_a_passing_reason_tries_again_by_itself() {
+        let content = Content::new(256 * KB, 96);
+        let server = RangeServer::start(content).await.unwrap();
+        // The server is unreachable at first (the network dropped), then fine.
+        server.add_rule(Rule {
+            skip: 0,
+            times: 4,
+            fault: Fault::Reset,
+        });
+        let h = harness(3);
+        let id = h.svc.add(&link(&server), None).unwrap();
+        h.wait("the failure", |h| h.job(id).status == "failed")
+            .await;
+        let job = h.job(id);
+        assert_eq!(job.error_action.as_deref(), Some("retry"));
+        assert!(job.retry_in.is_some(), "a retry is planned");
+        // The app's 5-second tick; tests shrink the waits.
+        let start = Instant::now();
+        while h.job(id).status != "completed" {
+            assert!(start.elapsed() < Duration::from_secs(30), "{:?}", h.job(id));
+            h.svc.tick_retries();
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        assert_eq!(h.job(id).retry_in, None);
+        assert!(lock(&h.svc.retries).is_empty(), "success forgets the count");
+    }
+
+    #[test]
+    fn retries_stop_after_the_last_wait() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = Service::new(
+            Store::open(&dir.path().join("fuselane.db")).unwrap(),
+            dir.path().to_path_buf(),
+        )
+        .unwrap();
+        for n in 1..=RETRY_WAITS.len() {
+            svc.note_outcome(7, true);
+            assert_eq!(lock(&svc.retries)[&7].attempts, n);
+        }
+        svc.note_outcome(7, true);
+        assert!(lock(&svc.retries).is_empty(), "gave up after the last wait");
+        svc.note_outcome(8, true);
+        svc.note_outcome(8, false);
+        assert!(
+            lock(&svc.retries).is_empty(),
+            "any other outcome forgets it"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -3083,6 +3229,7 @@ mod tests {
             position: 0,
             verify: false,
             speed_limit: 0,
+            retry_in: None,
         };
         let net = NetView {
             name: "en0".into(),

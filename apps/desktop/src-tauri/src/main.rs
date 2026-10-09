@@ -913,6 +913,7 @@ fn main() {
             while let Some(svc) = weak.upgrade() {
                 svc.tick_usage(service::local_today());
                 svc.tick_schedule();
+                svc.tick_retries();
                 svc.update_awake();
                 drop(svc);
                 std::thread::sleep(std::time::Duration::from_secs(5));
