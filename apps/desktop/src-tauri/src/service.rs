@@ -2923,12 +2923,13 @@ mod tests {
             .unwrap();
         let id = h.svc.add(&link(&server), None).unwrap();
         h.wait("done", |h| h.job(id).status == "completed").await;
-        assert!(
+        // The store says completed a moment before the countdown is announced.
+        h.wait("the window to be told, so it can offer Cancel", |h| {
             lock(&h.events)
                 .iter()
-                .any(|e| matches!(e, UiEvent::WhenDone { seconds: 1, .. })),
-            "the window is told, so it can offer Cancel"
-        );
+                .any(|e| matches!(e, UiEvent::WhenDone { seconds: 1, .. }))
+        })
+        .await;
         let t = Instant::now();
         while lock(&ran).is_empty() {
             assert!(t.elapsed() < Duration::from_secs(5), "never ran");
