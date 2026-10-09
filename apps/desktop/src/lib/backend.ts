@@ -3,6 +3,7 @@
 // and the UI says so.
 import type {
   HaveView,
+  PageFiles,
   NearbyView,
   FilePriority,
   AddOptions,
@@ -51,6 +52,8 @@ export interface Backend {
     later?: boolean,
     group?: string | null,
   ): Promise<BatchResult>
+  /** Reads a web page and lists the files it links to; nothing is downloaded. */
+  filesOnPage(url: string): Promise<PageFiles>
   renameGroup(id: number, name: string): Promise<void>
   ungroup(id: number): Promise<void>
   pauseGroup(id: number): Promise<void>
@@ -229,6 +232,7 @@ async function tauriBackend(): Promise<Backend> {
     importLinks: () => call('import_links'),
     addBatch: (text, dir, later, group) =>
       call('add_batch', { text, dir, later: later ?? false, group: group ?? null }),
+    filesOnPage: (url) => call('files_on_page', { url }),
     renameGroup: (id, name) => call('rename_group', { id, name }),
     ungroup: (id) => call('ungroup', { id }),
     pauseGroup: (id) => call('pause_group', { id }),

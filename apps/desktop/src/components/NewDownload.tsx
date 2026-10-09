@@ -3,8 +3,9 @@ import { ArrowLeft, FileArrowUp, Magnet, Plus, Warning, X } from '@phosphor-icon
 import { useApp } from '../lib/store'
 import { toUiError } from '../lib/backend'
 import { isSendLink } from '../lib/sendLink'
-import type { HaveView, ListingView, PreviewView, UiError } from '../lib/types'
+import type { HaveView, ListingView, PageFiles, PreviewView, UiError } from '../lib/types'
 import { FilePicker } from './FilePicker'
+import { PagePicker } from './PagePicker'
 import { REVEAL_LABEL } from './TransferDetail'
 import { bytes, clockTime, nextAt, startsAt } from '../lib/format'
 
@@ -71,6 +72,10 @@ export function NewDownload() {
   const select = useApp((s) => s.select)
   const selectTorrent = useApp((s) => s.selectTorrent)
   const [listing, setListing] = useState<ListingView | null>(null)
+  // Find files on a page (B9.3): the page's files, and which are picked.
+  const [page, setPage] = useState<PageFiles | null>(null)
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [pageBusy, setPageBusy] = useState(false)
   const [chosen, setChosen] = useState<Set<number>>(new Set())
   const [finding, setFinding] = useState(false)
   // Bumped on cancel or close, so a late answer for an abandoned lookup is ignored.
@@ -260,6 +265,8 @@ export function NewDownload() {
   }
 
   function reset() {
+    setPage(null)
+    setPicked(new Set())
     setUrl('')
     setDir('')
     setName('')
@@ -364,7 +371,74 @@ export function NewDownload() {
         if (!dialog.current?.open) setAdding(false)
       }}
     >
-      {listing ? (
+      {page ? (
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault()
+            if (!backend || busy || picked.size === 0) return
+            setBusy(true)
+            setError(null)
+            try {
+              const r = await backend.addBatch(
+                [...picked].join('\n'),
+                dir.trim() || null,
+                false,
+                picked.size > 1 ? (page.title ?? '') : null,
+              )
+              reset()
+              setAdding(false)
+              if (r.added[0] !== undefined) select(r.added[0])
+            } catch (err) {
+              setError(toUiError(err))
+            } finally {
+              setBusy(false)
+            }
+          }}
+          noValidate
+        >
+          <header className="dialog-head">
+            <h2 id="nd-title">Files on the page</h2>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Close"
+              onClick={() => setAdding(false)}
+            >
+              <X size={18} aria-hidden />
+            </button>
+          </header>
+          <div className="pick-head">
+            <p className="pick-name" translate="no" title={url}>
+              {page.title ?? url}
+            </p>
+            <p className="field-help page-help">
+              {page.files.length} {page.files.length === 1 ? 'file' : 'files'}. Pick what to
+              download; more than one stay together as a group.
+            </p>
+          </div>
+          <PagePicker page={page} chosen={picked} onChange={setPicked} />
+          {error && (
+            <p className="field-error" role="alert">
+              {error.message} {error.hint}
+            </p>
+          )}
+          <footer className="dialog-foot">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => {
+                setPage(null)
+                setError(null)
+              }}
+            >
+              <ArrowLeft size={16} aria-hidden /> Back
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={busy || picked.size === 0}>
+              {busy ? 'Adding…' : picked.size ? `Download ${picked.size}` : 'Download'}
+            </button>
+          </footer>
+        </form>
+      ) : listing ? (
         <form onSubmit={startTorrent} noValidate>
           <header className="dialog-head">
             <h2 id="nd-title">Choose files</h2>
@@ -534,6 +608,29 @@ export function NewDownload() {
                       ? 'A magnet link. Next you pick which of its files to download.'
                       : 'Fuselane uses every network that can reach the server.')}
               </p>
+            )}
+            {!batch && !isMagnet(url) && /^https?:\/\/\S+$/i.test(url.trim()) && (
+              <button
+                type="button"
+                className="link-btn find-files"
+                disabled={pageBusy}
+                onClick={async () => {
+                  if (!backend) return
+                  setPageBusy(true)
+                  setError(null)
+                  try {
+                    const p = await backend.filesOnPage(url.trim())
+                    setPicked(new Set())
+                    setPage(p)
+                  } catch (err) {
+                    setError(toUiError(err))
+                  } finally {
+                    setPageBusy(false)
+                  }
+                }}
+              >
+                {pageBusy ? 'Reading the page…' : 'Find files on this page'}
+              </button>
             )}
           </div>
           {batch && count > 1 && (

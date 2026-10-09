@@ -7,6 +7,7 @@
 pub mod batch;
 pub mod checksums;
 pub mod clip;
+pub mod grab;
 pub mod job;
 pub mod runner;
 pub mod store;

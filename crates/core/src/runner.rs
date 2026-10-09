@@ -692,6 +692,36 @@ pub async fn find_checksum(link: &str, file: &str) -> Option<(String, String)> {
     None
 }
 
+/// Reads a web page (at most `grab::MAX_PAGE`) to list the files it links to
+/// (B9.3). Returns the page's final address, after redirects, and its text.
+pub async fn fetch_page(link: &str) -> Result<(String, String), String> {
+    let tuning = Tuning {
+        connect_timeout: Duration::from_secs(8),
+        first_byte_timeout: Duration::from_secs(10),
+        ..Tuning::default()
+    };
+    let (place, _) = follow(link, &[], false, Headers::default(), Duration::from_secs(8))
+        .await
+        .map_err(|e| e.to_string())?;
+    let (source, networks, _) = connect_plan(&place, &[], false)
+        .await
+        .map_err(|e| e.to_string())?;
+    let net = networks
+        .first()
+        .ok_or_else(|| "No network can reach that site.".to_string())?;
+    let body = tokio::time::timeout(
+        Duration::from_secs(20),
+        fuselane_engine_http::download::read_small(&source, net, &tuning, crate::grab::MAX_PAGE),
+    )
+    .await
+    .ok()
+    .flatten()
+    .ok_or_else(|| {
+        "Couldn't read that page: it didn't answer, isn't a page, or is over 8 MB.".to_string()
+    })?;
+    Ok((place, String::from_utf8_lossy(&body).into_owned()))
+}
+
 /// Lane ids for mirrors: device id + 100 per mirror (`live` folds them back
 /// onto their device, so a network shows once however many servers it reaches).
 pub const MIRROR_ID_STEP: u32 = 100;

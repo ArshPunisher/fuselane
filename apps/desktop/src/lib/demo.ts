@@ -693,6 +693,34 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       }
       emitJobs()
     },
+    filesOnPage: async (url) => {
+      await new Promise((r) => setTimeout(r, 200))
+      let base: URL
+      try {
+        base = new URL(url.trim())
+      } catch {
+        throw err('bad-link', "That isn't a valid link.", 'Links start with http:// or https://.')
+      }
+      if (base.pathname.includes('nofiles'))
+        throw err(
+          'no-files',
+          "That page doesn't link to any files.",
+          'Paste the link of the file itself, or a page that lists downloads.',
+        )
+      const names = [
+        'ubuntu-26.04-desktop-amd64.iso',
+        'ubuntu-26.04-live-server-amd64.iso',
+        'release-notes.pdf',
+        'wallpapers.zip',
+        'install-guide.pdf',
+        'intro-video.mp4',
+        'source.tar.gz',
+      ]
+      return {
+        title: 'Ubuntu 26.04 downloads',
+        files: names.map((n) => ({ url: new URL(n, base).toString(), name: n })),
+      }
+    },
     renameGroup: async (id, name) => {
       const n = name.trim()
       if (!n) throw err('bad-group-name', 'Give the group a name.', null)

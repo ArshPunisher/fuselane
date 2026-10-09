@@ -241,6 +241,19 @@ async fn set_ready_by(svc: State<'_>, id: i64, at: Option<i64>) -> Result<(), Ui
     svc.set_ready_by(id, at)
 }
 
+/// The files a web page links to, to pick from (B9.3).
+#[tauri::command]
+async fn files_on_page(svc: State<'_>, url: String) -> Result<service::PageFiles, UiError> {
+    if url.len() > 8192 {
+        return Err(UiError::new_public(
+            "bad-link",
+            "That link is too long.",
+            None,
+        ));
+    }
+    svc.files_on_page(&url).await
+}
+
 #[tauri::command]
 fn rename_group(svc: State<'_>, id: i64, name: String) -> Result<(), UiError> {
     svc.rename_group(id, &name)
@@ -1546,6 +1559,7 @@ fn main() {
             already_have,
             set_ready_by,
             rename_group,
+            files_on_page,
             ungroup,
             pause_group,
             resume_group,

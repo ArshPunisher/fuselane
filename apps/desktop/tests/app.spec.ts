@@ -1083,8 +1083,9 @@ test('a download can be given a time to be ready by, and says how it is doing', 
     .first()
     .click()
   const field = page.getByLabel('Ready by')
-  await field.fill('23:59')
   const form = page.locator('.ready-by')
+  await expect(field).not.toHaveValue('') // a time is offered
+  await field.fill('23:59')
   await form.getByRole('button', { name: 'Set' }).click()
   await expect(field).toHaveValue('23:59')
   await expect(form.locator('.field-help')).toContainText(/Ready by .*(On track|At risk)/)
@@ -1092,7 +1093,7 @@ test('a download can be given a time to be ready by, and says how it is doing', 
     page.locator('.row', { hasText: 'dataset-shard-0042' }).locator('.row-ready'),
   ).toContainText('Ready by')
   await form.getByRole('button', { name: 'Clear' }).click()
-  await expect(field).toHaveValue('')
+  await expect(form.getByRole('button', { name: 'Clear' })).toHaveCount(0)
   await expect(
     page.locator('.row', { hasText: 'dataset-shard-0042' }).locator('.row-ready'),
   ).toHaveCount(0)
@@ -1127,6 +1128,30 @@ test('links added together become one group row, paused and resumed as a whole',
   await head.click()
   await expect(head).toHaveAttribute('aria-expanded', 'false')
   await expect(page.getByRole('list', { name: 'Season 1' })).toHaveCount(0)
+})
+
+test('the files a page links to can be picked by type and added as a group', async ({ page }) => {
+  await page.goto('/?empty=1')
+  const dialog = await openDialog(page)
+  await dialog.getByLabel('Link').fill('https://releases.example.org/26.04/')
+  await dialog.getByRole('button', { name: 'Find files on this page' }).click()
+  // The dialog now shows the page's files under its own title.
+  const picker = page.getByRole('dialog', { name: 'Files on the page' })
+  await expect(picker).toBeVisible()
+  const files = picker.getByRole('list', { name: 'Files on the page' })
+  await expect(files.getByRole('listitem')).toHaveCount(7)
+  await expect(picker.getByRole('button', { name: 'Download', exact: true })).toBeDisabled()
+  await picker
+    .getByRole('group', { name: 'Pick by type' })
+    .getByRole('button', { name: /^Disk images/ })
+    .click()
+  await expect(files.getByRole('checkbox', { checked: true })).toHaveCount(2)
+  await files.getByRole('checkbox', { name: /release-notes\.pdf/ }).check()
+  await picker.getByRole('button', { name: 'Download 3' }).click()
+  await expect(picker).toBeHidden()
+  await expect(page.getByRole('button', { name: /Ubuntu 26\.04 downloads/ }).first()).toContainText(
+    '0 of 3 done',
+  )
 })
 
 test('Download later adds it paused, ready to start', async ({ page }) => {

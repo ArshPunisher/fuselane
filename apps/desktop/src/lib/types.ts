@@ -434,3 +434,9 @@ export interface HaveView {
   /** When it finished (unix seconds). */
   finishedAt: number
 }
+
+/** The files a web page links to (B9.3). */
+export interface PageFiles {
+  title: string | null
+  files: { url: string; name: string }[]
+}

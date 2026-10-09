@@ -4242,3 +4242,69 @@ html[data-hidden] .orb b {
 .group-name {
   max-width: 320px;
 }
+
+/* ---------- Find files on a page (B9.3) ---------- */
+
+.find-files {
+  justify-self: start;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.page-picker {
+  display: grid;
+  gap: 10px;
+}
+
+.page-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.page-types .filter[aria-pressed='true'] {
+  border-color: color-mix(in oklch, var(--fuse) 50%, transparent);
+  background: var(--fuse-soft);
+  color: var(--fuse-text);
+}
+
+.page-files {
+  display: grid;
+  gap: 2px;
+  max-height: 300px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+.page-files .check {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px;
+  border-radius: var(--radius-control);
+}
+
+.page-files .check:hover {
+  background: var(--surface-2);
+}
+
+.page-file-name {
+  overflow: hidden;
+  color: var(--ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.page-file-type {
+  font-size: 12px;
+}
+
+.pick-head .page-help {
+  overflow: visible;
+  font-family: inherit;
+  white-space: normal;
+}

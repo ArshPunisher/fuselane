@@ -18,7 +18,10 @@ mod already;
 mod checksum;
 mod deadline;
 mod focus;
+mod grab;
 mod groups;
+
+pub use grab::PageFiles;
 mod power_aware;
 pub mod savings;
 mod worth;
@@ -3535,6 +3538,44 @@ mod tests {
         h.svc.ungroup(g).unwrap();
         assert_eq!(h.job(ia).group_id, None);
         assert!(h.svc.pause_group(g).is_err(), "gone");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_files_a_page_links_to_are_listed() {
+        let server = RangeServer::start(Content::new(64 * KB, 231))
+            .await
+            .unwrap();
+        server.serve_file(
+            "/downloads/",
+            "<title>Builds</title><a href='app-1.2.dmg'>Mac</a> <a href='/files/app-1.2.zip'>Zip</a> <a href='notes.html'>notes</a>",
+        );
+        server.serve_file("/empty", "<p>nothing here</p>");
+        let h = harness(3);
+        let base = format!("http://{}", server.addr());
+        let p = h
+            .svc
+            .files_on_page(&format!("{base}/downloads/"))
+            .await
+            .unwrap();
+        assert_eq!(p.title.as_deref(), Some("Builds"));
+        let urls: Vec<_> = p.files.iter().map(|f| f.url.clone()).collect();
+        assert_eq!(
+            urls,
+            [
+                format!("{base}/downloads/app-1.2.dmg"),
+                format!("{base}/files/app-1.2.zip")
+            ]
+        );
+        let none = h
+            .svc
+            .files_on_page(&format!("{base}/empty"))
+            .await
+            .unwrap_err();
+        assert_eq!(none.code, "no-files");
+        assert_eq!(
+            h.svc.files_on_page("ftp://x").await.unwrap_err().code,
+            "bad-link"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
