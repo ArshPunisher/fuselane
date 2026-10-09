@@ -148,7 +148,7 @@ The owner approved the Figma designs (local file "Fuselane") and asked for all o
 - [x] B8.10 Torrent files: priorities High / Normal / Low / Skip (Low waits until the rest is done) and Play while downloading (the start of the file first)
 - [x] B8.11 Nearby: device discovery on the local network, device keys, the four-word check, trusted devices, "who can see me" (everyone for 10 minutes, then trusted only), send and receive ([NEARBY.md](../03-architecture/NEARBY.md))
 - [x] B8.12 Nearby for phones: a page served by the app over the LAN (QR code) to send and receive in a phone browser; LocalSend v2 interop
-- [ ] B8.13 Screenshots for the owner, then release 0.1.0-beta.8
+- [x] B8.13 Screenshots for the owner, then release 0.1.0-beta.8
 
 ## P5 Torrents (0.2)
 
