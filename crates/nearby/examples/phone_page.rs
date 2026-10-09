@@ -25,16 +25,9 @@ impl PageHost for Print {
 async fn main() {
     let mut args = std::env::args().skip(1);
     let inbox = PathBuf::from(args.next().expect("an inbox folder"));
-    let page = PhonePage::start(
-        Arc::new(Print),
-        inbox,
-        "Fuselane test".into(),
-        ["amber", "river", "candle", "orbit"]
-            .map(String::from)
-            .to_vec(),
-    )
-    .await
-    .unwrap();
+    let page = PhonePage::start(Arc::new(Print), inbox, "Fuselane test".into())
+        .await
+        .unwrap();
     if let Some(f) = args.next() {
         let path = PathBuf::from(f);
         let size = std::fs::metadata(&path).unwrap().len();

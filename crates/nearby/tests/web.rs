@@ -44,12 +44,6 @@ async fn the_page_needs_its_token_and_files_go_both_ways() {
         log.clone(),
         inbox.path().to_path_buf(),
         "Arsh's <MacBook>".into(),
-        vec![
-            "amber".into(),
-            "river".into(),
-            "candle".into(),
-            "orbit".into(),
-        ],
     )
     .await
     .unwrap();
@@ -66,7 +60,6 @@ async fn the_page_needs_its_token_and_files_go_both_ways() {
         html.contains("Arsh&#39;s &lt;MacBook&gt;"),
         "the name is escaped"
     );
-    assert!(html.contains("<li>orbit</li>"));
 
     // An upload lands under a free name.
     std::fs::write(inbox.path().join("photo.jpg"), b"old").unwrap();

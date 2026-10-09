@@ -38,7 +38,6 @@ struct Shared<H> {
     token: String,
     inbox: PathBuf,
     computer: String,
-    words: Mutex<Vec<String>>,
     offers: Mutex<Vec<Offer>>,
     host: Arc<H>,
 }
@@ -48,7 +47,6 @@ pub struct PhonePage {
     pub addr: SocketAddr,
     pub token: String,
     offers: Arc<dyn Fn(Vec<Offer>) + Send + Sync>,
-    words: Arc<dyn Fn(Vec<String>) + Send + Sync>,
     task: tokio::task::JoinHandle<()>,
 }
 
@@ -316,16 +314,6 @@ impl<H: PageHost> Shared<H> {
 
     fn page(&self) -> String {
         PAGE.replace("{{computer}}", &escape(&self.computer))
-            .replace(
-                "{{words}}",
-                &self
-                    .words
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .iter()
-                    .map(|w| format!("<li>{}</li>", escape(w)))
-                    .collect::<String>(),
-            )
             .replace("{{base}}", &format!("/p/{}", self.token))
     }
 }
@@ -365,7 +353,6 @@ impl PhonePage {
         host: Arc<H>,
         inbox: PathBuf,
         computer: String,
-        words: Vec<String>,
     ) -> std::io::Result<PhonePage> {
         let listener = tokio::net::TcpListener::bind(("0.0.0.0", 0)).await?;
         let addr = listener.local_addr()?;
@@ -374,19 +361,9 @@ impl PhonePage {
             token: token.clone(),
             inbox,
             computer,
-            words: Mutex::new(words),
             offers: Mutex::new(Vec::new()),
             host,
         });
-        let word_setter = {
-            let shared = shared.clone();
-            Arc::new(move |w: Vec<String>| {
-                *shared
-                    .words
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner) = w;
-            }) as Arc<dyn Fn(Vec<String>) + Send + Sync>
-        };
         let setter = {
             let shared = shared.clone();
             Arc::new(move |o: Vec<Offer>| {
@@ -414,7 +391,6 @@ impl PhonePage {
             addr,
             token,
             offers: setter,
-            words: word_setter,
             task,
         })
     }
@@ -422,11 +398,6 @@ impl PhonePage {
     /// The link for `ip` (this computer's address on the phone's network).
     pub fn url(&self, ip: std::net::Ipv4Addr) -> String {
         format!("http://{ip}:{}/p/{}", self.addr.port(), self.token)
-    }
-
-    /// The check words the page shows (they depend on its token, known after start).
-    pub fn set_words(&self, words: Vec<String>) {
-        (self.words)(words);
     }
 
     /// Replaces the files offered to the phone.
@@ -450,8 +421,6 @@ const PAGE: &str = r#"<!doctype html>
 main{max-width:520px;margin:0 auto;padding:20px 16px 32px;display:grid;gap:18px}
 h1{margin:0 0 4px;color:var(--ink);font-size:22px;line-height:1.2}p{margin:0}.mute{color:var(--mute);font-size:13px}
 .card{display:grid;gap:12px;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
-.words{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:0;padding:0;list-style:none}
-.words li{padding:8px 0;text-align:center;border:1px solid var(--line);border-radius:8px;font:500 13px ui-monospace,monospace;color:var(--ink)}
 .big{display:flex;align-items:center;justify-content:center;gap:8px;min-height:50px;width:100%;border:0;border-radius:10px;background:var(--fuse);color:var(--fuse-ink);font:600 16px system-ui,sans-serif}
 .item{display:flex;align-items:center;gap:12px;justify-content:space-between}.item+.item{padding-top:12px;border-top:1px solid var(--line)}
 .name{color:var(--ink);overflow-wrap:anywhere}a.save{flex:none;padding:7px 12px;border:1px solid var(--line);border-radius:8px;color:var(--ink);text-decoration:none}
@@ -461,7 +430,6 @@ progress{width:100%;height:6px;accent-color:var(--fuse)}
 <body>
 <main>
 <div><p class="mute">Connected to</p><h1>{{computer}}</h1><p>This page comes straight from the computer over your Wi-Fi. Nothing to install.</p></div>
-<div class="card"><p>The computer shows these words too</p><ol class="words">{{words}}</ol></div>
 <label class="big" for="pick">Send photos or files to the computer</label>
 <input id="pick" type="file" multiple hidden>
 <div id="status" class="card" hidden aria-live="polite"></div>
