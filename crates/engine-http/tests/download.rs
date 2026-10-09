@@ -933,6 +933,12 @@ fn mirror_lane(
 async fn a_mirror_carries_part_of_the_file_and_it_stays_exact() {
     let content = Content::new(2 * 1024 * KB + 5, 31);
     let main = RangeServer::start(content).await.unwrap();
+    // Slow, so the mirror always gets blocks (loopback could finish first otherwise).
+    main.add_rule(Rule {
+        skip: 0,
+        times: u32::MAX,
+        fault: Fault::Throttle(256 * 1024),
+    });
     let mirror = RangeServer::start(content).await.unwrap();
     let t = tuning();
     let mp = fuselane_engine_http::download::probe(&source(&mirror), &[plain(9)], &t)

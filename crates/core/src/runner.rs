@@ -1300,9 +1300,16 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn good_mirrors_help_and_wrong_ones_are_turned_away_with_a_reason() {
-        use fuselane_testkit::{Content, RangeServer};
+        use fuselane_testkit::{Content, Fault, RangeServer, Rule};
         let content = Content::new(3 * 1024 * 1024 + 7, 41);
         let main = RangeServer::start(content).await.unwrap();
+        // A slow main server, so the mirror always has blocks to take (on loopback
+        // the main one could otherwise finish everything first).
+        main.add_rule(Rule {
+            skip: 0,
+            times: u32::MAX,
+            fault: Fault::Throttle(256 * 1024),
+        });
         let good = RangeServer::start(content).await.unwrap();
         let other_size = RangeServer::start(Content::new(3 * 1024 * 1024 + 8, 41))
             .await
