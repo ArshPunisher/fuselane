@@ -6,7 +6,7 @@
 //! be reachable: it listens, asks the router to forward the port (UPnP) and looks
 //! for receivers on the same network.
 
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::{Ipv6Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -155,8 +155,10 @@ impl Sends {
                     download_dir: self.default_dir.clone(),
                     networks,
                     dht: self.reachable,
-                    // Any free port on every address: receivers connect to us.
-                    listen: Some(SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0))),
+                    // Any free port on every address, IPv6 and IPv4: receivers connect
+                    // to us. IPv6 matters most: without NAT, a receiver across the
+                    // internet can reach us whenever the router doesn't block it.
+                    listen: Some(SocketAddr::from((Ipv6Addr::UNSPECIFIED, 0))),
                     state_dir: Some(self.dir.join("dht")),
                     limiter: self.limiter.clone(),
                     upnp: self.reachable,
@@ -710,7 +712,7 @@ fn next_temp() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::IpAddr;
+    use std::net::{IpAddr, Ipv4Addr};
     use std::time::Duration;
 
     use fuselane_netif::Interface;
