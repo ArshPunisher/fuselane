@@ -209,9 +209,14 @@ test('sharing is off by default, and its limits are checked', async ({ page }) =
   await expect(sw).toHaveAttribute('aria-checked', 'true')
   const form = page.getByRole('form', { name: 'Share torrents after downloading' })
   const ratio = form.getByLabel('Stop at ratio')
-  await ratio.fill('0')
-  await form.getByRole('button', { name: 'Save', exact: true }).click()
-  await expect(page.getByText('The sharing ratio must be between 0.1 and 10.')).toBeVisible()
+  // WebKit sometimes drops a fill made right after the form appears: retry it.
+  await expect(async () => {
+    await ratio.fill('0')
+    await form.getByRole('button', { name: 'Save', exact: true }).click()
+    await expect(page.getByText('The sharing ratio must be between 0.1 and 10.')).toBeVisible({
+      timeout: 1000,
+    })
+  }).toPass()
   await expect(ratio).toHaveAttribute('aria-invalid', 'true')
   await ratio.fill('2')
   await form.getByLabel('Stop after (minutes)').fill('45')
