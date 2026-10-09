@@ -233,9 +233,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       const total = j.total ?? 1
       const perTick = total / TICKS
       const share = 1 / Math.max(1, running.length)
-      // A download's own limit scales every lane down to fit it.
-      const full = BASE_RATE.reduce((a, b) => a + b, 0) * share
-      const cap = j.speedLimit > 0 ? Math.min(1, j.speedLimit / full) : 1
+      const cap = capFor(j, share)
       BASE_RATE.forEach((base, lane) => {
         if (!laneUp(lane, clock)) {
           j.inflight[lane] = -1
@@ -267,9 +265,16 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     }
   }
 
+  /** A download's own limit scales every lane down to fit it (wobble included). */
+  function capFor(j: SimJob, share: number): number {
+    const full = BASE_RATE.reduce((a, b) => a + b, 0) * share * 1.25
+    return j.speedLimit > 0 ? Math.min(1, j.speedLimit / full) : 1
+  }
+
   function live(j: SimJob): Live {
     const running = jobs.filter((x) => x.status === 'running').length
     const share = 1 / Math.max(1, running)
+    const cap = capFor(j, share)
     const networks: LiveNet[] = BASE_RATE.map((base, lane) => {
       const n = NETWORKS[lane]!
       const up = laneUp(lane, clock)
@@ -278,7 +283,9 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         label: n.label,
         kind: n.kind,
         bytes: Math.round(j.bytes[lane]!),
-        rate: up ? Math.max(0.2 * MB, base * (1 + 0.22 * wobble(lane + 11, clock))) * share : 0,
+        rate: up
+          ? Math.max(0.2 * MB, base * (1 + 0.22 * wobble(lane + 11, clock))) * share * cap
+          : 0,
         streams: up ? [8, 4, 12][lane]! : 0,
         dead: !up,
       }
