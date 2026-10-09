@@ -602,10 +602,21 @@ fn job_name(job: &Job) -> String {
     }
 }
 
+/// A link as the window may show it: a password in it is masked.
+fn shown_url(url: &str) -> String {
+    match url::Url::parse(url) {
+        Ok(mut u) if u.password().is_some() => {
+            let _ = u.set_password(Some("****"));
+            u.to_string()
+        }
+        _ => url.to_string(),
+    }
+}
+
 fn view(job: &Job) -> JobView {
     JobView {
         id: job.id,
-        url: job.url.clone(),
+        url: shown_url(&job.url),
         name: job_name(job),
         dir: job.dir.to_string_lossy().into_owned(),
         status: job.status.as_str(),
@@ -2249,6 +2260,18 @@ mod tests {
         assert!(svc.watch_clipboard());
         svc.set_watch_clipboard(false).unwrap();
         assert_eq!(svc.clipboard_seen("https://example.com/b.zip"), None);
+    }
+
+    #[test]
+    fn passwords_in_links_are_masked_for_the_window() {
+        assert_eq!(
+            shown_url("https://me:secret@example.com/a.iso"),
+            "https://me:****@example.com/a.iso"
+        );
+        assert_eq!(
+            shown_url("https://example.com/a.iso?x=1"),
+            "https://example.com/a.iso?x=1"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
