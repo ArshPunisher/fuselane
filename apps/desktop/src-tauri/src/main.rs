@@ -491,6 +491,16 @@ async fn set_torrent_seed_settings(
 }
 
 #[tauri::command]
+async fn torrent_peers(tor: Tor<'_>, id: String) -> Result<Vec<torrents::PeerView>, UiError> {
+    tor.peers(&id).await
+}
+
+#[tauri::command]
+async fn torrent_pieces(tor: Tor<'_>, id: String, cells: usize) -> Result<Vec<u8>, UiError> {
+    tor.pieces(&id, cells).await
+}
+
+#[tauri::command]
 async fn torrent_stop_sharing(tor: Tor<'_>, id: String) -> Result<(), UiError> {
     tor.stop_sharing(&id).await
 }
@@ -1132,6 +1142,8 @@ fn main() {
             torrent_seed_settings,
             set_torrent_seed_settings,
             torrent_stop_sharing,
+            torrent_peers,
+            torrent_pieces,
             send_pick,
             send_file,
             sends_state,

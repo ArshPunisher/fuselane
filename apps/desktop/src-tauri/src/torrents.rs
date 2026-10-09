@@ -6,6 +6,7 @@
 //! P5 5.7): chosen files stay, edge-piece bytes in unchosen files are deleted
 //! (L-69), and the row stays as "completed".
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -44,6 +45,25 @@ pub struct TorrentView {
     pub selected_count: usize,
     pub networks: Vec<TorrentNetView>,
     pub added_at: i64,
+}
+
+/// When a torrent's peers were last read, and each one's bytes received and sent.
+type PeerBytes = (Instant, HashMap<String, (u64, u64)>);
+
+/// One connected peer, for the torrent's Peers tab.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PeerView {
+    pub addr: String,
+    pub client: Option<String>,
+    /// Device name of our network it's on; None when it connected to us.
+    pub network: Option<String>,
+    /// Bytes per second from it and to it since the last look.
+    pub down: u64,
+    pub up: u64,
+    pub received: u64,
+    pub sent: u64,
+    pub kind: &'static str,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -168,6 +188,8 @@ pub struct Torrents {
     /// Something is checking or downloading (keeps the computer awake, holds off
     /// "when done" actions). Updated every tick.
     busy: std::sync::atomic::AtomicBool,
+    /// The last peers snapshot per torrent, to turn byte counts into speeds.
+    peer_bytes: Mutex<HashMap<String, PeerBytes>>,
 }
 
 impl std::fmt::Debug for Torrents {
@@ -337,6 +359,7 @@ impl Torrents {
             pending: Mutex::new(Vec::new()),
             emit,
             busy: std::sync::atomic::AtomicBool::new(false),
+            peer_bytes: Mutex::new(HashMap::new()),
         })
     }
 
@@ -586,6 +609,71 @@ impl Torrents {
         })?;
         drop(entries);
         Ok((self.engine().await?, t))
+    }
+
+    /// The peers connected to a torrent now, fastest first, with their speeds
+    /// since the window last asked (it asks about once a second while showing them).
+    pub async fn peers(&self, id: &str) -> Result<Vec<PeerView>, UiError> {
+        let Ok((_, t)) = self.live(id).await else {
+            return Ok(Vec::new());
+        };
+        let now = Instant::now();
+        let peers = t.peers();
+        let mut last = self.peer_bytes.lock().unwrap_or_else(|p| p.into_inner());
+        let prev = last.remove(id);
+        let secs = prev
+            .as_ref()
+            .map_or(0.0, |(at, _)| now.duration_since(*at).as_secs_f64());
+        let rate = |was: Option<u64>, is: u64| -> u64 {
+            match (was, secs > 0.05) {
+                (Some(w), true) => (is.saturating_sub(w) as f64 / secs) as u64,
+                _ => 0,
+            }
+        };
+        let mut views: Vec<PeerView> = peers
+            .iter()
+            .map(|p| {
+                let was = prev.as_ref().and_then(|(_, m)| m.get(&p.addr));
+                PeerView {
+                    addr: p.addr.clone(),
+                    client: p.client.clone(),
+                    network: p.network.clone(),
+                    down: rate(was.map(|w| w.0), p.received),
+                    up: rate(was.map(|w| w.1), p.sent),
+                    received: p.received,
+                    sent: p.sent,
+                    kind: p.kind,
+                }
+            })
+            .collect();
+        views.sort_by(|a, b| {
+            (b.down + b.up)
+                .cmp(&(a.down + a.up))
+                .then(b.received.cmp(&a.received))
+                .then(a.addr.cmp(&b.addr))
+        });
+        last.insert(
+            id.to_string(),
+            (
+                now,
+                peers
+                    .into_iter()
+                    .map(|p| (p.addr, (p.received, p.sent)))
+                    .collect(),
+            ),
+        );
+        Ok(views)
+    }
+
+    /// How complete each slice of the torrent is (0 to 100), for its pieces map.
+    pub async fn pieces(&self, id: &str, cells: usize) -> Result<Vec<u8>, UiError> {
+        let cells = cells.clamp(1, 2048);
+        match self.live(id).await {
+            Ok((engine, t)) => Ok(engine.piece_map(&t, cells)),
+            // A finished torrent has let go of its pieces: all of it is here.
+            Err(e) if e.code == "finished" => Ok(vec![100; cells.min(256)]),
+            Err(e) => Err(e),
+        }
     }
 
     pub async fn pause(&self, id: &str) -> Result<(), UiError> {
@@ -1045,7 +1133,18 @@ pub(crate) mod tests {
             total: 1,
             files: vec![],
         };
+        let peer = PeerView {
+            addr: "1.2.3.4:5".into(),
+            client: None,
+            network: None,
+            down: 0,
+            up: 0,
+            received: 0,
+            sent: 0,
+            kind: "tcp",
+        };
         for (name, got) in [
+            ("PeerView", json_fields(&peer)),
             ("TorrentView", json_fields(&view)),
             ("TorrentNetView", json_fields(&net)),
             ("TorrentFileView", json_fields(&file)),
@@ -1284,6 +1383,43 @@ pub(crate) mod tests {
             .unwrap();
         s.tor.remember(l);
         s.tor.add(&listing.token, files).await.unwrap()
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn peers_and_the_pieces_map_follow_a_download() {
+        logs();
+        let seed = tempfile::tempdir().unwrap();
+        let (_seeder, addr, file) = seeder(seed.path()).await;
+        let s = setup();
+        let id = add(&s, &file, addr, &["a.bin", "b.bin", "c.bin"]).await;
+        // While it runs: the seeder is a peer on the loopback network.
+        let mut seen = None;
+        for _ in 0..200 {
+            if let Some(p) = s.tor.peers(&id).await.unwrap().into_iter().next() {
+                seen = Some(p);
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        if let Some(p) = seen {
+            assert_eq!(p.addr, addr.to_string());
+            assert_eq!(p.network.as_deref(), Some("lo0"));
+        }
+        until(&s.tor, &id, "completed").await;
+        let map = s.tor.pieces(&id, 32).await.unwrap();
+        assert!(!map.is_empty() && map.iter().all(|&c| c == 100), "{map:?}");
+        assert!(
+            s.tor.peers(&id).await.unwrap().is_empty(),
+            "a finished torrent has let go"
+        );
+        assert_eq!(
+            s.tor
+                .pieces("0".repeat(40).as_str(), 8)
+                .await
+                .unwrap_err()
+                .code,
+            "not-found"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
