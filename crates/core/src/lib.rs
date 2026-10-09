@@ -5,6 +5,7 @@
 //! Design: `docs/03-architecture/ARCHITECTURE.md` §4–6. Rules: L-49–L-55, L-85.
 
 pub mod batch;
+pub mod clip;
 pub mod job;
 pub mod runner;
 pub mod store;
