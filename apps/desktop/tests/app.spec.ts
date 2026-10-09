@@ -1115,7 +1115,8 @@ test('links added together become one group row, paused and resumed as a whole',
   await dialog.getByLabel('Group name').fill('Season 1')
   await dialog.getByRole('button', { name: 'Download 3' }).click()
   await expect(dialog).toBeHidden()
-  const head = page.getByRole('button', { name: /Season 1/ }).first()
+  const head = page.locator('.group-row .row-main')
+  await expect(head).toContainText('Season 1')
   await expect(head).toContainText('0 of 3 done')
   // It opens on its first download, which is selected.
   await expect(head).toHaveAttribute('aria-expanded', 'true')
@@ -1124,10 +1125,19 @@ test('links added together become one group row, paused and resumed as a whole',
   await expect(page.getByRole('button', { name: 'Resume all in Season 1' })).toBeVisible()
   await page.getByRole('button', { name: 'Resume all in Season 1' }).click()
   await expect(page.getByRole('button', { name: 'Pause all in Season 1' })).toBeVisible()
-  // Collapsed, the group is a single row.
+  // Renamed, then (below) collapsed to a single row.
+  await page.getByRole('button', { name: 'Rename' }).click()
+  await page.getByRole('textbox', { name: 'Group name' }).fill('Season one')
+  await page.locator('.group-tools').getByRole('button', { name: 'Save' }).click()
+  await expect(head).toContainText('Season one')
   await head.click()
   await expect(head).toHaveAttribute('aria-expanded', 'false')
-  await expect(page.getByRole('list', { name: 'Season 1' })).toHaveCount(0)
+  await expect(page.getByRole('list', { name: 'Season one' })).toHaveCount(0)
+  // Ungrouped, its downloads are single rows again.
+  await head.click()
+  await page.getByRole('button', { name: 'Ungroup' }).click()
+  await expect(head).toHaveCount(0)
+  await expect(page.getByText('ep2.mkv')).toBeVisible()
 })
 
 test('the files a page links to can be picked by type and added as a group', async ({ page }) => {

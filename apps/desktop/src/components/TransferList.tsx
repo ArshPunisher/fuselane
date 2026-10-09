@@ -144,6 +144,58 @@ function torrentMeta(t: TorrentView): string {
   return t.status === 'downloading' ? `${head}, ${rateText(t.rate)}` : head
 }
 
+/** Rename a group, or let its downloads go back to being single ones. */
+function GroupTools({ id, name }: { id: number; name: string }) {
+  const act = useApp((s) => s.act)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(name)
+  if (editing)
+    return (
+      <form
+        className="group-tools"
+        onSubmit={(e) => {
+          e.preventDefault()
+          void act(async (b) => {
+            await b.renameGroup(id, draft)
+            setEditing(false)
+          })
+        }}
+      >
+        <input
+          aria-label="Group name"
+          value={draft}
+          maxLength={80}
+          autoFocus
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => e.key === 'Escape' && setEditing(false)}
+        />
+        <button type="submit" className="btn btn-sm" disabled={!draft.trim()}>
+          Save
+        </button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>
+          Cancel
+        </button>
+      </form>
+    )
+  return (
+    <div className="group-tools">
+      <button
+        type="button"
+        className="link-btn"
+        onClick={() => {
+          setDraft(name)
+          setEditing(true)
+        }}
+      >
+        Rename
+      </button>
+      <button type="button" className="link-btn" onClick={() => void act((b) => b.ungroup(id))}>
+        Ungroup
+      </button>
+    </div>
+  )
+}
+
 /**
  * Links added together (B9.2): one row with one progress, opened to show each
  * download. Pause all / Resume all act on the whole group.
@@ -216,6 +268,7 @@ function GroupRow({ id, name, jobs }: { id: number; name: string; jobs: JobView[
           <span className="row-action-slot" aria-hidden="true" />
         )}
       </div>
+      {open && <GroupTools id={id} name={name} />}
       {open && (
         <ul className="list group-members" id={membersId} aria-label={name}>
           {[...jobs]
