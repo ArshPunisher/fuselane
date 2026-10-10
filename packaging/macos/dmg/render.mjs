@@ -1,7 +1,7 @@
 // Renders background.html to background.png (660x420) and background@2x.png,
 // then joins them into background.tiff so Finder shows it crisp on Retina.
 // Run from the repo root: node packaging/macos/dmg/render.mjs
-import { chromium } from '../../../apps/site/node_modules/@playwright/test/index.mjs'
+import { chromium } from '../../../apps/desktop/node_modules/@playwright/test/index.mjs'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { dirname, resolve } from 'node:path'

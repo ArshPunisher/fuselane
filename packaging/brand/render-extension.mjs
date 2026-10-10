@@ -1,6 +1,6 @@
 // The browser extension's icons (16, 32, 48, 128 px) from the same favicon source.
 // Usage: node packaging/brand/render-extension.mjs
-import { chromium } from '../../apps/site/node_modules/@playwright/test/index.mjs'
+import { chromium } from '../../apps/desktop/node_modules/@playwright/test/index.mjs'
 import { mkdirSync, readFileSync } from 'node:fs'
 const out = new URL('../../apps/extension/public/icon/', import.meta.url)
 mkdirSync(out, { recursive: true })
