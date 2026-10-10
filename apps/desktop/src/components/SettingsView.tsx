@@ -5,6 +5,7 @@ import type { SeedSettings, UiError } from '../lib/types'
 import { LimitField } from './LimitField'
 import { SlowToggle } from './SlowMode'
 import { RemoteSetting } from './RemoteSetting'
+import { WatchSetting } from './WatchSetting'
 import {
   DownloadsAtOnceSetting,
   KeepAwakeSetting,
@@ -628,6 +629,7 @@ export function SettingsView() {
           <AfterDownloadSetting />
           <NameTakenSetting />
           <ChecksumSetting />
+          <WatchSetting />
           <ListSetting />
         </Group>
         <Group title="This computer">

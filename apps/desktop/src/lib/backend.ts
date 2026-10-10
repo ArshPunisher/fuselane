@@ -2,6 +2,7 @@
 // plain browser (pnpm dev, Playwright) it uses the demo engine in ./demo.ts,
 // and the UI says so.
 import type {
+  WatchView,
   FeedView,
   RemoteView,
   UsageHistory,
@@ -124,6 +125,8 @@ export interface Backend {
   diagnostics(): Promise<string>
   /** Bytes per network per day, for the Data used chart. */
   usageHistory(): Promise<UsageHistory>
+  watchState(): Promise<WatchView>
+  watchSet(on: boolean, path: string): Promise<WatchView>
   feedsList(): Promise<FeedView[]>
   feedsAdd(
     url: string,
@@ -326,6 +329,8 @@ async function tauriBackend(): Promise<Backend> {
     unseenCrash: () => call('unseen_crash'),
     netCheckState: () => call('netcheck_state'),
     usageHistory: () => call('usage_history'),
+    watchState: () => call('watch_state'),
+    watchSet: (on, path) => call('watch_set', { on, path }),
     feedsList: () => call('feeds_list'),
     feedsAdd: (url, include, exclude, every, latest) =>
       call('feeds_add', { url, include, exclude, every, latest }),

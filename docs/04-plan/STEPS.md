@@ -177,6 +177,7 @@ The owner asked for more built-in features that cost nothing to run (no paid tie
 - [x] B10.4 Video and audio from pages: hand pages to a yt-dlp the person installs (detected, never bundled), downloads run over every network
 - [x] B10.7 Text on the phone page: a phone without the app sends text or a link to this computer's clipboard, and copies text this computer offers
 - [x] B10.8 Feeds: follow an RSS or Atom feed (podcasts, release files, nightly builds); new files download by themselves, with words to include or skip; torrent items wait to be opened
+- [x] B10.9 Watch folder: .torrent files, Metalinks and .txt lists of links put in a chosen folder start by themselves, then are renamed .added or .failed (works with media tools' "torrent blackhole")
 
 ## P5 Torrents (0.2)
 

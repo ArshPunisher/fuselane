@@ -1921,6 +1921,60 @@ kbd {
   justify-self: start;
 }
 
+/* Watch folder */
+.watch {
+  display: grid;
+  gap: 10px;
+}
+
+.watch-folder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.watch-folder .num {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.watch-recent {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.watch-recent li {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.watch-recent li > .muted {
+  grid-column: 2;
+  font-size: 12px;
+}
+
+.watch-recent li[data-ok='true'] svg {
+  color: var(--success);
+}
+
+.watch-recent li[data-ok='false'] svg {
+  color: var(--danger);
+}
+
+.watch-name {
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Remote control for aria2 apps */
 .remote {
   display: grid;

@@ -10,6 +10,7 @@ import { createDemoTorrents } from './demoTorrents'
 import { createDemoSends } from './demoSends'
 import { createDemoNearby } from './demoNearby'
 import type {
+  WatchView,
   FeedView,
   RemoteView,
   AllowanceView,
@@ -432,6 +433,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
 
   let maxRunning = 3
   let findSums = true
+  let watch: WatchView = { on: false, path: '', problem: null, recent: [] }
   let feeds: FeedView[] = [
     {
       id: 1,
@@ -1082,6 +1084,27 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         }
       })
       return { days, labels: { en0: 'Wi-Fi', en7: 'iPhone USB', en5: 'Ethernet' } }
+    },
+    watchState: async () => structuredClone(watch),
+    watchSet: async (on: boolean, path: string) => {
+      if (on && !path.startsWith('/'))
+        throw err(
+          'watch-folder',
+          'Pick a folder to watch.',
+          'Choose an existing folder, such as one your media tool drops files into.',
+        )
+      watch = { ...watch, on, path: path || watch.path }
+      if (on && !watch.recent.length)
+        watch.recent = [
+          {
+            name: 'debian-13.7.0-amd64-netinst.iso.torrent',
+            ok: true,
+            note: 'Torrent started: debian-13.7.0-amd64-netinst.iso.',
+          },
+          { name: 'links.txt', ok: true, note: '3 downloads added.' },
+          { name: 'old.torrent', ok: false, note: "Not added: That isn't a valid .torrent file." },
+        ]
+      return structuredClone(watch)
     },
     feedsList: async () => structuredClone(feeds),
     feedsAdd: async (

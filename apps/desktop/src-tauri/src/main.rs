@@ -23,6 +23,7 @@ mod stream;
 mod torrents;
 mod unpack;
 mod update;
+mod watch;
 
 use std::sync::Arc;
 
@@ -41,6 +42,7 @@ type Snd<'a> = tauri::State<'a, Arc<sends::Sends>>;
 type Near<'a> = tauri::State<'a, Arc<nearby::Nearby>>;
 type Rem<'a> = tauri::State<'a, Arc<remote::Remote>>;
 type Fds<'a> = tauri::State<'a, Arc<feeds::Feeds>>;
+type Wat<'a> = tauri::State<'a, Arc<watch::Watch>>;
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1207,6 +1209,17 @@ async fn nearby_phone_text(
     near.phone_text(text).await
 }
 
+/// Watch folder (B10.9).
+#[tauri::command]
+fn watch_state(wat: Wat<'_>) -> watch::WatchView {
+    wat.view()
+}
+
+#[tauri::command]
+fn watch_set(wat: Wat<'_>, on: bool, path: String) -> Result<watch::WatchView, UiError> {
+    wat.set(on, &path)
+}
+
 /// Feeds followed (B10.8).
 #[tauri::command]
 fn feeds_list(fds: Fds<'_>) -> Vec<feeds::FeedView> {
@@ -1647,6 +1660,7 @@ fn main() {
     let for_text = near.clone();
     let rem = remote::Remote::new(&svc, Arc::new(nearby::lan_addrs));
     let fds = feeds::Feeds::new(&svc, feeds::real_fetch());
+    let wat = watch::Watch::new(&svc, watch::real_torrents(Arc::downgrade(&tor)));
     {
         // A download handed over from another Fuselane continues here (B9.9).
         let weak = Arc::downgrade(&svc);
@@ -1737,6 +1751,7 @@ fn main() {
         .manage(near.clone())
         .manage(rem.clone())
         .manage(fds.clone())
+        .manage(wat.clone())
         .setup(move |app| {
             {
                 // Text from another computer (B10.2): from a trusted one it goes straight
@@ -1841,6 +1856,14 @@ fn main() {
                     tokio::time::sleep(std::time::Duration::from_secs(60)).await;
                 }
             });
+            // Watch folder (B10.9): a look every 3 seconds.
+            let wat = wat.clone();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    wat.tick().await;
+                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                }
+            });
             // Remote control (ADR 0013), when it was left on.
             let rem = rem.clone();
             tauri::async_runtime::spawn(async move { rem.apply().await });
@@ -1940,6 +1963,8 @@ fn main() {
             nearby_phone_text,
             add_metalink,
             remote_state,
+            watch_state,
+            watch_set,
             feeds_list,
             feeds_add,
             feeds_update,

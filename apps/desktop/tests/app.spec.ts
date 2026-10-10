@@ -797,9 +797,9 @@ test('settings: downloads at once, schedule, when done, keep awake and sorting',
   await expect(schedule).toHaveAttribute('aria-checked', 'false')
   await schedule.click()
   await expect(schedule).toHaveAttribute('aria-checked', 'true')
-  await expect(page.getByLabel('From')).toHaveValue('01:00')
+  await expect(page.getByLabel('From', { exact: true })).toHaveValue('01:00')
   await expect(page.getByText('Runs overnight')).toHaveCount(0)
-  await page.getByLabel('From').fill('23:00')
+  await page.getByLabel('From', { exact: true }).fill('23:00')
   await expect(page.getByText('Runs overnight: from 23:00 until 07:00')).toBeVisible()
   // No days chosen is refused with a reason.
   for (const d of ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
@@ -813,7 +813,7 @@ test('settings: downloads at once, schedule, when done, keep awake and sorting',
   const whenDone = page.getByRole('radiogroup', { name: 'When everything finishes' })
   await whenDone.getByRole('radio', { name: 'Sleep' }).click()
   // Changing another setting keeps the schedule edits that aren't saved yet.
-  await expect(page.getByLabel('From')).toHaveValue('23:00')
+  await expect(page.getByLabel('From', { exact: true })).toHaveValue('23:00')
   await expect(whenDone.getByRole('radio', { name: 'Sleep' })).toHaveAttribute(
     'aria-checked',
     'true',
@@ -1902,4 +1902,19 @@ test('a Metalink link adds the files it lists, as a group', async ({ page }) => 
   await expect(page.getByRole('list', { name: '2 files from mirrors.example' })).toContainText(
     'fedora-43-x86_64.iso',
   )
+})
+
+test('watch folder: pick a folder, see what was taken, turn off', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Settings' }).first().click()
+  const toggle = page.getByRole('switch', { name: 'Add files from a folder' })
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-checked', 'true')
+  await expect(page.locator('.watch-folder')).toContainText('/Users/demo/Movies')
+  const taken = page.getByRole('list', { name: 'Files taken from the folder' })
+  await expect(taken).toContainText('Torrent started')
+  await expect(taken.getByRole('img', { name: 'Not added' })).toHaveCount(1)
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
+  await expect(page.locator('.watch')).toHaveCount(0)
 })

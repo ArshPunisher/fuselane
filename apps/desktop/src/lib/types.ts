@@ -520,6 +520,15 @@ export interface MediaTools {
 }
 
 /** Bytes per network per day (B10.5). */
+/** Watch folder (B10.9). */
+export interface WatchView {
+  on: boolean
+  path: string
+  problem: string | null
+  /** The latest files handled, newest first. */
+  recent: { name: string; ok: boolean; note: string }[]
+}
+
 /** A feed followed (B10.8). */
 export interface FeedView {
   id: number
