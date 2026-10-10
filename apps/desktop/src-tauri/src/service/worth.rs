@@ -173,6 +173,7 @@ pub(super) fn keep(pref: &NetPref) -> bool {
         || pref.lane.is_some()
         || pref.use_for != NetUse::Always
         || pref.hours.is_some()
+        || pref.proxy.is_some()
 }
 
 #[cfg(test)]
@@ -197,6 +198,7 @@ mod tests {
             lane: None,
             use_for,
             hours: None,
+            proxy: None,
         }
     }
 

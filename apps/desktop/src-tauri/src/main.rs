@@ -29,8 +29,8 @@ mod welcome;
 use std::sync::Arc;
 
 use service::{
-    AllowanceRequest, AllowanceView, JobView, LimitsView, NetPref, NetView, PreviewView, Service,
-    UiError, UiEvent,
+    AllowanceRequest, AllowanceView, JobView, LimitsView, NetPref, NetView, PreviewView,
+    ProxyRequest, Service, UiError, UiEvent,
 };
 use tauri::Manager;
 use tauri::ipc::Channel;
@@ -485,6 +485,22 @@ fn network_prefs(svc: State<'_>) -> Vec<NetPref> {
 #[tauri::command]
 fn set_network_pref(svc: State<'_>, pref: NetPref) -> Result<Vec<NetPref>, UiError> {
     svc.set_network_pref(pref)
+}
+
+/// Sets a network's proxy, or removes it when `proxy` is null (STEPS 8.4).
+#[tauri::command]
+fn set_network_proxy(
+    svc: State<'_>,
+    name: String,
+    proxy: Option<ProxyRequest>,
+) -> Result<Vec<NetPref>, UiError> {
+    svc.set_network_proxy(&name, proxy)
+}
+
+/// Checks a network's saved proxy by opening a tunnel through it.
+#[tauri::command]
+async fn check_network_proxy(svc: State<'_>, name: String) -> Result<String, UiError> {
+    svc.check_network_proxy(&name).await
 }
 
 /// Each network's monthly allowance and how much of it is used.
@@ -1965,6 +1981,8 @@ fn main() {
             set_slow,
             network_prefs,
             set_network_pref,
+            set_network_proxy,
+            check_network_proxy,
             diagnostics,
             check_update,
             open_release_notes,

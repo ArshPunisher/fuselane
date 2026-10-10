@@ -26,8 +26,10 @@ pub mod media_jobs;
 mod metalink;
 pub mod netcheck;
 mod notes;
-pub use daily::UsageHistory;
 pub use notes::NetNote;
+mod proxy;
+pub use daily::UsageHistory;
+pub use proxy::{ProxyPref, ProxyRequest};
 
 pub use grab::PageFiles;
 mod power_aware;
@@ -165,6 +167,9 @@ pub struct NetPref {
     /// Only used between these times every day (B10.6), e.g. a night plan.
     #[serde(default)]
     pub hours: Option<NetHours>,
+    /// Its proxy (8.4), set with `set_network_proxy`; renaming keeps it.
+    #[serde(default)]
+    pub proxy: Option<ProxyPref>,
 }
 
 /// A daily window, minutes after midnight; overnight when `start > stop`.
@@ -234,6 +239,8 @@ impl NetPref {
                 None,
             ));
         }
+        // A saved proxy that no longer passes the checks is dropped, not trusted.
+        self.proxy = self.proxy.filter(proxy::saved_ok);
         Ok(self)
     }
 }
@@ -993,7 +1000,7 @@ impl Service {
             limiter.apply(&saved.to_settings());
             saved_limits = saved;
         }
-        Ok(Arc::new(Service {
+        let svc = Arc::new(Service {
             store: Arc::new(store),
             running: Mutex::new(HashMap::new()),
             emit: Mutex::new(Arc::new(|_| {})),
@@ -1042,7 +1049,9 @@ impl Service {
             close_to_tray: std::sync::atomic::AtomicBool::new(close_to_tray),
             watch_clipboard: std::sync::atomic::AtomicBool::new(watch_clipboard),
             last_clip: Mutex::new(None),
-        }))
+        });
+        svc.apply_proxies();
+        Ok(svc)
     }
 
     /// For tests: a different queue size.
@@ -1320,7 +1329,13 @@ impl Service {
     /// leaves none, all of them (the download then says what went wrong).
     pub fn download_networks(&self) -> Result<Vec<fuselane_netif::Interface>, String> {
         let all = pick_networks(&[])?;
-        Ok(without_portals(all, &lock(&self.reach)))
+        // The sign-in check goes direct; a network with a proxy may only get out
+        // through it, so the check says nothing about it.
+        let mut reach = lock(&self.reach).clone();
+        for name in self.proxied() {
+            reach.remove(&name);
+        }
+        Ok(without_portals(all, &reach))
     }
 
     /// Checks every usable network for a sign-in page; true if anything changed.
@@ -1362,6 +1377,9 @@ impl Service {
             if names != last_names || due {
                 if names.len() > last_names.len() {
                     self.retry_now();
+                }
+                if names != last_names {
+                    self.apply_proxies(); // a network's name for messages may have appeared
                 }
                 last_names = names;
                 last_check = Some(std::time::Instant::now());
@@ -2333,13 +2351,25 @@ impl Service {
         self.set_limits(view)
     }
 
+    /// Every network's prefs as the window sees them (no proxy passwords).
     pub fn network_prefs(&self) -> Vec<NetPref> {
-        lock(&self.net_prefs).clone()
+        proxy::masked(lock(&self.net_prefs).clone())
     }
 
     /// Saves a network's name and colour; clearing both forgets the network.
+    /// Its proxy is kept as saved (the window sets it with `set_network_proxy`).
     pub fn set_network_pref(&self, pref: NetPref) -> Result<Vec<NetPref>, UiError> {
-        let pref = pref.validated()?;
+        let mut pref = pref.validated()?;
+        pref.proxy = lock(&self.net_prefs)
+            .iter()
+            .find(|p| p.name == pref.name)
+            .and_then(|p| p.proxy.clone());
+        Ok(proxy::masked(self.save_pref(pref)?))
+    }
+
+    /// Replaces one network's prefs, saves them all and hands the proxies to
+    /// the core. Returns them unmasked.
+    fn save_pref(&self, pref: NetPref) -> Result<Vec<NetPref>, UiError> {
         let mut all = lock(&self.net_prefs).clone();
         all.retain(|p| p.name != pref.name);
         if worth::keep(&pref) {
@@ -2358,6 +2388,8 @@ impl Service {
             .set_setting("network_prefs", &json)
             .map_err(store_error)?;
         *lock(&self.net_prefs) = all.clone();
+        // Names show in proxy messages, and proxies are used from now on.
+        self.apply_proxies();
         Ok(all)
     }
 
@@ -4030,6 +4062,7 @@ mod tests {
                         start: 60,
                         stop: 60
                     }),
+                    proxy: None,
                 })
                 .is_err()
         );
@@ -4043,6 +4076,7 @@ mod tests {
                     start: 23 * 60,
                     stop: 6 * 60,
                 }),
+                proxy: None,
             })
             .unwrap();
         h.svc.set_clock(noon());
@@ -4924,6 +4958,18 @@ mod tests {
                         start: 1380,
                         stop: 360,
                     }),
+                    proxy: None,
+                }),
+            ),
+            (
+                "ProxyPref",
+                json_fields(&ProxyPref {
+                    kind: proxy::ProxyType::Socks5,
+                    host: "proxy.lan".into(),
+                    port: 1080,
+                    username: None,
+                    password: None,
+                    has_password: false,
                 }),
             ),
             (
@@ -5240,6 +5286,7 @@ mod tests {
             lane: lane.map(Into::into),
             use_for: NetUse::Always,
             hours: None,
+            proxy: None,
         };
         let all = svc
             .set_network_pref(pref("en0", Some("  Home Wi-Fi  "), Some("mint")))

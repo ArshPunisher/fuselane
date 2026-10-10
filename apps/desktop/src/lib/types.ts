@@ -366,9 +366,31 @@ export interface NetPref {
   useFor: NetUse
   /** Only used between these times every day (minutes after midnight). */
   hours: { start: number; stop: number } | null
+  /** Its proxy, set with setNetworkProxy; saving a name or colour may leave it out and keeps it. */
+  proxy?: ProxyPref | null
 }
 
 export type NetUse = 'always' | 'long' | 'never'
+
+export type ProxyType = 'http' | 'socks5'
+
+/** A network's proxy as saved. The password never comes back, only hasPassword. */
+export interface ProxyPref {
+  kind: ProxyType
+  host: string
+  port: number
+  username: string | null
+  hasPassword: boolean
+}
+
+/** Sets a network's proxy. Leave out the password to keep the saved one; '' removes it. */
+export interface ProxyRequest {
+  kind: ProxyType
+  host: string
+  port: number
+  username: string | null
+  password?: string
+}
 
 /** A network's monthly data allowance and its usage this period. */
 export interface AllowanceView {
