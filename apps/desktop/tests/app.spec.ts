@@ -2035,8 +2035,8 @@ test('feeds: torrents start by themselves only when the feed allows it', async (
 })
 
 test.describe('Proxy per network', () => {
-  async function openProxy(page: Page, net: string) {
-    await page.goto('/?drop=0')
+  async function openProxy(page: Page, net: string, query = '') {
+    await page.goto(`/?drop=0${query}`)
     await page.getByRole('button', { name: 'Networks' }).first().click()
     await page.getByRole('button', { name: `Set up a proxy for ${net}` }).click()
     return page.getByRole('form', { name: `Proxy for ${net}` })
@@ -2078,7 +2078,9 @@ test.describe('Proxy per network', () => {
     const edit = page.getByRole('form', { name: 'Proxy for Wi-Fi' })
     await expect(edit.getByLabel(/^Password/)).toHaveValue('')
     await expect(edit.getByLabel(/^Password/)).toHaveAttribute('placeholder', 'Saved')
-    await expect(edit.getByText('A password is saved and never shown.')).toBeVisible()
+    await expect(
+      edit.getByText("A password is saved in your system's keychain and never shown."),
+    ).toBeVisible()
     expect(await page.content()).not.toContain('s3cret-pass')
     // Escape cancels and gives the focus back.
     await edit.getByLabel('Port').press('Escape')
@@ -2095,6 +2097,27 @@ test.describe('Proxy per network', () => {
       .getByRole('button', { name: 'Remove proxy' })
       .click()
     await expect(row).toContainText('Direct, no proxy')
+  })
+
+  test("without a system keychain the password is saved in Fuselane's settings, and says so", async ({
+    page,
+  }) => {
+    const form = await openProxy(page, 'Wi-Fi', '&nokeychain=1')
+    await form.getByLabel('Address').fill('proxy.office.lan')
+    await form.getByLabel('Port').fill('3128')
+    await form.getByLabel('Username').fill('ann')
+    await form.getByLabel(/^Password/).fill('s3cret-pass')
+    await form.getByRole('button', { name: 'Save' }).click()
+    const row = page.locator('.proxy-row', { hasText: 'Wi-Fi' })
+    await row.getByRole('button', { name: 'Edit the proxy for Wi-Fi' }).click()
+    const edit = page.getByRole('form', { name: 'Proxy for Wi-Fi' })
+    await expect(edit.getByLabel(/^Password/)).toHaveAttribute('placeholder', 'Saved')
+    await expect(
+      edit.getByText(
+        "A password is saved in Fuselane's settings (no system keychain available) and never shown.",
+      ),
+    ).toBeVisible()
+    expect(await page.content()).not.toContain('s3cret-pass')
   })
 
   test('a proxy that turns down the login says so, with what to do', async ({ page }) => {

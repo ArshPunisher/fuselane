@@ -225,7 +225,15 @@ function ProxyForm({
       {saved?.hasPassword && (
         <div id={`${id}-pass-help`} className="proxy-saved">
           <p className="field-help">
-            {t('A password is saved and never shown. Leave the box empty to keep it.')}
+            {saved.passwordIn === 'keychain'
+              ? t(
+                  "A password is saved in your system's keychain and never shown. Leave the box empty to keep it.",
+                )
+              : saved.passwordIn === 'settings'
+                ? t(
+                    "A password is saved in Fuselane's settings (no system keychain available) and never shown. Leave the box empty to keep it.",
+                  )
+                : t('A password is saved and never shown. Leave the box empty to keep it.')}
           </p>
           <label className="check">
             <input

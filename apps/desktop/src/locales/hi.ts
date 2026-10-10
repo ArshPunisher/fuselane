@@ -1036,6 +1036,10 @@ export const hi: Readonly<Record<string, string>> = {
   '(if it asks)': '(अगर मांगे)',
   'A password is saved and never shown. Leave the box empty to keep it.':
     'पासवर्ड सेव है और कभी दिखाया नहीं जाता। उसे रखने के लिए बॉक्स खाली छोड़ें।',
+  "A password is saved in your system's keychain and never shown. Leave the box empty to keep it.":
+    'पासवर्ड आपके सिस्टम के कीचेन में सेव है और कभी दिखाया नहीं जाता। उसे रखने के लिए बॉक्स खाली छोड़ें।',
+  "A password is saved in Fuselane's settings (no system keychain available) and never shown. Leave the box empty to keep it.":
+    'पासवर्ड Fuselane की सेटिंग्स में सेव है (कोई सिस्टम कीचेन उपलब्ध नहीं) और कभी दिखाया नहीं जाता। उसे रखने के लिए बॉक्स खाली छोड़ें।',
   'Forget the saved password': 'सेव किया पासवर्ड भूल जाएं',
   'Remove proxy': 'प्रॉक्सी हटाएं',
   'Saving…': 'सेव हो रहा है…',

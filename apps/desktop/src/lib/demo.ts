@@ -218,6 +218,8 @@ export function createDemoBackend(params: URLSearchParams): Backend {
   let perNetDns = false
   const throttle = params.get('throttle')
   const proxyTrouble = params.get('proxytrouble') === '1'
+  // Like a Linux machine without a Secret Service: passwords stay in the settings.
+  const noKeychain = params.get('nokeychain') === '1'
   let allowances: AllowanceView[] = NETWORKS.filter((n) => n.usable).map((n) => ({
     name: n.name,
     allowance: n.name === 'en7' && params.get('allowance') === 'reached' ? 5 * 1024 ** 3 : null,
@@ -1200,6 +1202,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       if (req) {
         const checked = checkProxy(req, current?.proxy ?? null, proxyPasswords.get(name) ?? null)
         proxy = checked.pref
+        if (proxy.hasPassword) proxy.passwordIn = noKeychain ? 'settings' : 'keychain'
         if (checked.password) proxyPasswords.set(name, checked.password)
         else proxyPasswords.delete(name)
       } else {
