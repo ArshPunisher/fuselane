@@ -3,6 +3,7 @@ import { useApp } from '../lib/store'
 import { netTitle } from '../lib/lanes'
 import { rateText } from '../lib/format'
 import type { NetNote } from '../lib/types'
+import { t } from '../lib/i18n'
 
 /** What a note says, with the person's name for the network and their speed unit. */
 export function noteText(n: NetNote, title: string): string {
@@ -12,12 +13,20 @@ export function noteText(n: NetNote, title: string): string {
       // "Slowed" only when it was clearly faster before; a network that was never
       // fast is "only managing" its speed.
       const fell = n.best !== null && n.rate !== null && n.best >= 2 * n.rate
-      return `${title} ${fell ? 'slowed to' : 'is only managing'} ${rate} (throttled?), so the other networks carry the rest. Fuselane tries it again every few minutes.`
+      return fell
+        ? t(
+            '{network} slowed to {rate} (throttled?), so the other networks carry the rest. Fuselane tries it again every few minutes.',
+            { network: title, rate },
+          )
+        : t(
+            '{network} is only managing {rate} (throttled?), so the other networks carry the rest. Fuselane tries it again every few minutes.',
+            { network: title, rate },
+          )
     }
     case 'back':
-      return `${title} is fast again (${rate}), so it's helping again.`
+      return t("{network} is fast again ({rate}), so it's helping again.", { network: title, rate })
     case 'trouble':
-      return n.message ?? `${title} can't connect.`
+      return n.message ?? t("{network} can't connect.", { network: title })
   }
 }
 
@@ -36,7 +45,7 @@ export function NetworkNotes({ notes }: { notes: NetNote[] }) {
     return n ? netTitle(n) : name
   }
   return (
-    <ul className="net-notes" aria-label="Network notes">
+    <ul className="net-notes" aria-label={t('Network notes')}>
       {notes.map((n) => {
         const Icon = ICONS[n.kind]
         return (

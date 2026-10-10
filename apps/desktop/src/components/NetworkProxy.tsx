@@ -3,6 +3,7 @@ import { useApp } from '../lib/store'
 import { netTitle, setNetPrefs } from '../lib/lanes'
 import { toUiError } from '../lib/backend'
 import type { NetPref, NetView, ProxyPref, ProxyType, UiError } from '../lib/types'
+import { t } from '../lib/i18n'
 
 const TYPES: { value: ProxyType; label: string; port: string }[] = [
   { value: 'http', label: 'HTTP', port: '8080' },
@@ -13,7 +14,9 @@ const TYPES: { value: ProxyType; label: string; port: string }[] = [
 function summary(p: ProxyPref): string {
   const kind = p.kind === 'http' ? 'HTTP' : 'SOCKS5'
   const at = p.host.includes(':') ? `[${p.host}]:${p.port}` : `${p.host}:${p.port}`
-  return p.username ? `${kind} ${at}, as ${p.username}` : `${kind} ${at}`
+  return p.username
+    ? t('{proxy}, as {user}', { proxy: `${kind} ${at}`, user: p.username })
+    : `${kind} ${at}`
 }
 
 type Check = { state: 'busy' } | { state: 'ok'; text: string } | { state: 'error'; error: UiError }
@@ -51,9 +54,9 @@ function ProxyForm({
 
   const portNum = Number(port)
   const portOk = port !== '' && Number.isInteger(portNum) && portNum >= 1 && portNum <= 65535
-  const hostError = touched && !host.trim() ? "Enter the proxy's name or address." : null
-  const portError = touched && !portOk ? 'Use a port from 1 to 65535, like 8080 or 1080.' : null
-  const portHint = TYPES.find((t) => t.value === kind)!.port
+  const hostError = touched && !host.trim() ? t("Enter the proxy's name or address.") : null
+  const portError = touched && !portOk ? t('Use a port from 1 to 65535, like 8080 or 1080.') : null
+  const portHint = TYPES.find((type) => type.value === kind)!.port
 
   const submit = async () => {
     setTouched(true)
@@ -95,7 +98,7 @@ function ProxyForm({
   return (
     <form
       className="proxy-form"
-      aria-label={`Proxy for ${title}`}
+      aria-label={t('Proxy for {network}', { network: title })}
       noValidate
       onSubmit={(e) => {
         e.preventDefault()
@@ -110,7 +113,7 @@ function ProxyForm({
     >
       <div className="proxy-kind">
         <span id={`${id}-kind`} className="proxy-label">
-          Type
+          {t('Type')}
         </span>
         <div
           className="segmented"
@@ -124,17 +127,17 @@ function ProxyForm({
             e.currentTarget.querySelector<HTMLButtonElement>(`[data-kind="${next}"]`)?.focus()
           }}
         >
-          {TYPES.map((t) => (
+          {TYPES.map((type) => (
             <button
-              key={t.value}
+              key={type.value}
               type="button"
               role="radio"
-              data-kind={t.value}
-              aria-checked={kind === t.value}
-              tabIndex={kind === t.value ? 0 : -1}
-              onClick={() => setKind(t.value)}
+              data-kind={type.value}
+              aria-checked={kind === type.value}
+              tabIndex={kind === type.value ? 0 : -1}
+              onClick={() => setKind(type.value)}
             >
-              {t.label}
+              {type.label}
             </button>
           ))}
         </div>
@@ -143,7 +146,7 @@ function ProxyForm({
         <div className="proxy-where">
           <div className="proxy-field">
             <label htmlFor={`${id}-host`} className="proxy-label">
-              Address
+              {t('Address')}
             </label>
             <input
               ref={hostRef}
@@ -152,6 +155,7 @@ function ProxyForm({
               autoComplete="off"
               autoCapitalize="none"
               spellCheck={false}
+              // i18n-ignore: an example address
               placeholder="proxy.example.com"
               value={host}
               aria-invalid={hostError ? true : undefined}
@@ -166,7 +170,7 @@ function ProxyForm({
           </div>
           <div className="proxy-field proxy-port">
             <label htmlFor={`${id}-port`} className="proxy-label">
-              Port
+              {t('Port')}
             </label>
             <input
               ref={portRef}
@@ -190,7 +194,7 @@ function ProxyForm({
         </div>
         <div className="proxy-field">
           <label htmlFor={`${id}-user`} className="proxy-label">
-            Username <span className="muted">(if it asks)</span>
+            {t('Username')} <span className="muted">{t('(if it asks)')}</span>
           </label>
           <input
             id={`${id}-user`}
@@ -204,14 +208,14 @@ function ProxyForm({
         </div>
         <div className="proxy-field">
           <label htmlFor={`${id}-pass`} className="proxy-label">
-            Password <span className="muted">(if it asks)</span>
+            {t('Password')} <span className="muted">{t('(if it asks)')}</span>
           </label>
           <input
             id={`${id}-pass`}
             name="proxy-password"
             type="password"
             autoComplete="new-password"
-            placeholder={saved?.hasPassword && !forget ? 'Saved' : undefined}
+            placeholder={saved?.hasPassword && !forget ? t('Saved') : undefined}
             value={password}
             aria-describedby={saved?.hasPassword ? `${id}-pass-help` : undefined}
             onChange={(e) => setPassword(e.target.value)}
@@ -221,7 +225,7 @@ function ProxyForm({
       {saved?.hasPassword && (
         <div id={`${id}-pass-help`} className="proxy-saved">
           <p className="field-help">
-            A password is saved and never shown. Leave the box empty to keep it.
+            {t('A password is saved and never shown. Leave the box empty to keep it.')}
           </p>
           <label className="check">
             <input
@@ -230,7 +234,7 @@ function ProxyForm({
               checked={forget}
               onChange={(e) => setForget(e.target.checked)}
             />
-            <span>Forget the saved password</span>
+            <span>{t('Forget the saved password')}</span>
           </label>
         </div>
       )}
@@ -248,14 +252,14 @@ function ProxyForm({
             disabled={busy}
             onClick={() => void remove()}
           >
-            Remove proxy
+            {t('Remove proxy')}
           </button>
         )}
         <button type="button" className="btn btn-ghost" onClick={() => onDone(false)}>
-          Cancel
+          {t('Cancel')}
         </button>
         <button type="submit" className="btn btn-primary" disabled={busy}>
-          {busy ? 'Saving…' : 'Save'}
+          {busy ? t('Saving…') : t('Save')}
         </button>
       </div>
     </form>
@@ -288,7 +292,7 @@ function ProxyRow({ net, pref }: { net: NetView; pref: NetPref | undefined }) {
             {title}
           </span>
           <span className="proxy-summary" translate="no">
-            {proxy ? summary(proxy) : 'Direct, no proxy'}
+            {proxy ? summary(proxy) : t('Direct, no proxy')}
           </span>
         </span>
         {!editing && (
@@ -298,23 +302,27 @@ function ProxyRow({ net, pref }: { net: NetView; pref: NetPref | undefined }) {
                 type="button"
                 className="btn btn-sm"
                 disabled={check?.state === 'busy'}
-                aria-label={`Check the proxy for ${title}`}
+                aria-label={t('Check the proxy for {network}', { network: title })}
                 onClick={() => void runCheck()}
               >
-                Check
+                {t('Check')}
               </button>
             )}
             <button
               ref={editRef}
               type="button"
               className="btn btn-sm"
-              aria-label={proxy ? `Edit the proxy for ${title}` : `Set up a proxy for ${title}`}
+              aria-label={
+                proxy
+                  ? t('Edit the proxy for {network}', { network: title })
+                  : t('Set up a proxy for {network}', { network: title })
+              }
               onClick={() => {
                 setCheck(null)
                 setEditing(true)
               }}
             >
-              {proxy ? 'Edit' : 'Set up'}
+              {proxy ? t('Edit') : t('Set up')}
             </button>
           </span>
         )}
@@ -332,7 +340,7 @@ function ProxyRow({ net, pref }: { net: NetView; pref: NetPref | undefined }) {
         />
       )}
       <div className="proxy-status" aria-live="polite" data-state={check?.state}>
-        {check?.state === 'busy' && <p className="field-help">Checking the proxy…</p>}
+        {check?.state === 'busy' && <p className="field-help">{t('Checking the proxy…')}</p>}
         {check?.state === 'ok' && <p className="field-help proxy-ok">{check.text}</p>}
         {check?.state === 'error' && (
           <p className="field-error">
@@ -356,12 +364,12 @@ export function NetworkProxy() {
   return (
     <section className="net-limits net-proxy" aria-labelledby="proxy-title">
       <h2 id="proxy-title" className="section-title">
-        Proxy per network
+        {t('Proxy per network')}
       </h2>
       <p className="muted">
-        For a network that only reaches the internet through a proxy. Downloads on it go through the
-        proxy, and https stays encrypted end to end: the proxy sees which site, not what you
-        download.
+        {t(
+          'For a network that only reaches the internet through a proxy. Downloads on it go through the proxy, and https stays encrypted end to end: the proxy sees which site, not what you download.',
+        )}
       </p>
       <ul className="proxy-list">
         {networks.map((n) => (
@@ -369,8 +377,9 @@ export function NetworkProxy() {
         ))}
       </ul>
       <p className="field-help">
-        Torrents don&apos;t use these proxies: they connect to peers directly on each network. Proxy
-        settings from your system aren&apos;t used either, only the ones set here.
+        {t(
+          "Torrents don't use these proxies: they connect to peers directly on each network. Proxy settings from your system aren't used either, only the ones set here.",
+        )}
       </p>
     </section>
   )

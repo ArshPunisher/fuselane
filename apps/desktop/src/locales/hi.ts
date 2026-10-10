@@ -1004,4 +1004,41 @@ export const hi: Readonly<Record<string, string>> = {
   Added: 'जोड़ा गया',
   'Not added': 'नहीं जोड़ा गया',
   'Watching. Nothing has been put in it yet.': 'नज़र रखी जा रही है। अभी तक इसमें कुछ नहीं रखा गया।',
+
+  // NetworkProxy: a proxy per network
+  'Proxy per network': 'हर नेटवर्क का प्रॉक्सी',
+  'For a network that only reaches the internet through a proxy. Downloads on it go through the proxy, and https stays encrypted end to end: the proxy sees which site, not what you download.':
+    'उस नेटवर्क के लिए जो सिर्फ़ प्रॉक्सी से इंटरनेट तक पहुंचता है। उस पर डाउनलोड प्रॉक्सी से होकर जाते हैं, और https शुरू से आखिर तक एन्क्रिप्टेड रहता है: प्रॉक्सी को साइट दिखती है, यह नहीं कि आप क्या डाउनलोड कर रहे हैं।',
+  "Torrents don't use these proxies: they connect to peers directly on each network. Proxy settings from your system aren't used either, only the ones set here.":
+    'टोरेंट इन प्रॉक्सी का इस्तेमाल नहीं करते: वे हर नेटवर्क पर सीधे पीयर से जुड़ते हैं। आपके सिस्टम की प्रॉक्सी सेटिंग्स भी इस्तेमाल नहीं होतीं, सिर्फ़ यहां सेट की गई।',
+  'Direct, no proxy': 'सीधे, बिना प्रॉक्सी',
+  '{proxy}, as {user}': '{proxy}, यूज़र {user}',
+  'Check the proxy for {network}': '{network} का प्रॉक्सी जांचें',
+  'Edit the proxy for {network}': '{network} का प्रॉक्सी बदलें',
+  'Set up a proxy for {network}': '{network} के लिए प्रॉक्सी सेट करें',
+  Edit: 'बदलें',
+  'Set up': 'सेट करें',
+  'Checking the proxy…': 'प्रॉक्सी जांच रहे हैं…',
+  'Proxy for {network}': '{network} का प्रॉक्सी',
+  "Enter the proxy's name or address.": 'प्रॉक्सी का नाम या पता लिखें।',
+  'Use a port from 1 to 65535, like 8080 or 1080.':
+    '1 से 65535 तक का पोर्ट लिखें, जैसे 8080 या 1080।',
+  Username: 'यूज़रनेम',
+  Password: 'पासवर्ड',
+  '(if it asks)': '(अगर मांगे)',
+  'A password is saved and never shown. Leave the box empty to keep it.':
+    'पासवर्ड सेव है और कभी दिखाया नहीं जाता। उसे रखने के लिए बॉक्स खाली छोड़ें।',
+  'Forget the saved password': 'सेव किया पासवर्ड भूल जाएं',
+  'Remove proxy': 'प्रॉक्सी हटाएं',
+  'Saving…': 'सेव हो रहा है…',
+
+  // NetworkNotes: what happened to a download's networks
+  'Network notes': 'नेटवर्क की जानकारी',
+  '{network} slowed to {rate} (throttled?), so the other networks carry the rest. Fuselane tries it again every few minutes.':
+    '{network} की स्पीड घटकर {rate} रह गई (शायद धीमी की गई?), इसलिए बाकी काम दूसरे नेटवर्क करेंगे। Fuselane हर कुछ मिनट में इसे फिर आज़माता है।',
+  '{network} is only managing {rate} (throttled?), so the other networks carry the rest. Fuselane tries it again every few minutes.':
+    '{network} सिर्फ़ {rate} दे पा रहा है (शायद धीमा किया गया?), इसलिए बाकी काम दूसरे नेटवर्क करेंगे। Fuselane हर कुछ मिनट में इसे फिर आज़माता है।',
+  "{network} is fast again ({rate}), so it's helping again.":
+    '{network} फिर से तेज़ है ({rate}), इसलिए यह फिर से मदद कर रहा है।',
+  "{network} can't connect.": '{network} कनेक्ट नहीं हो पा रहा।',
 }
