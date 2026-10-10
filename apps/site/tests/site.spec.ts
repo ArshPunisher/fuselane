@@ -142,20 +142,25 @@ test('copy buttons copy the exact command', async ({ page, context, browserName 
   )
 })
 
-test('turning networks on adds their speeds and cuts the wait', async ({ page }) => {
+test('turning a network off in the hero takes its speed away', async ({ page }) => {
   await stub(page)
   await page.goto('/')
   const sw = (name: string) => page.getByRole('switch', { name: new RegExp(name) })
-  await expect(page.locator('#combined')).toHaveText('41.2')
+  await expect(sw('Ethernet')).toHaveAttribute('aria-checked', 'true')
   await sw('Ethernet').click()
-  await sw('iPhone over USB').click()
-  // 41.2 + 33.8 + 12.4 MB/s for 4.7 GB.
-  await expect(page.locator('#combined')).toHaveText('87.4')
-  await expect(page.locator('#time-all')).toHaveText('55 s')
-  await expect(page.locator('#time-one')).toHaveText('1 min 57 s')
-  await expect(page.locator('#combined-caption')).toContainText('3 networks')
-  for (const n of ['Wi-Fi', 'Ethernet', 'iPhone over USB']) await sw(n).click()
-  await expect(page.locator('#time-all')).toHaveText('No network')
+  await sw('iPhone USB').click()
+  await expect(sw('Ethernet')).toHaveAttribute('aria-checked', 'false')
+  await expect(page.locator('#core-live')).toHaveText('Wi-Fi: about 41.2 MB/s together.')
+  // The others slow to a stop; only Wi-Fi's sample speed is left.
+  await expect
+    .poll(async () => Number(await page.locator('#total').textContent()), { timeout: 5000 })
+    .toBeLessThan(48)
+  await expect(page.locator('#gain')).toHaveText('One network')
+  await sw('Wi-Fi').click()
+  await expect(page.locator('#gain')).toHaveText('Turn a network on')
+  await expect(page.locator('#file-left')).toContainText('waiting for a network')
+  await sw('Ethernet').click()
+  await expect(page.locator('#core-live')).toHaveText('Ethernet: about 33.8 MB/s together.')
 })
 
 test('the hero shows live sample speeds that add up', async ({ page }) => {
@@ -220,9 +225,9 @@ test('the combined speed rolls and keeps running, while the exact figure stays r
   page,
 }) => {
   await stub(page)
-  await page.goto('/#how')
-  const odo = page.locator('.odo')
-  await expect(odo.locator('.odo-d')).toHaveCount(3) // 41.2
+  await page.goto('/')
+  const odo = page.locator('.core .odo')
+  await expect(odo.locator('.odo-d')).toHaveCount(3) // 87.4
   const read = () =>
     odo.evaluate((el) =>
       [...el.children]
@@ -235,7 +240,7 @@ test('the combined speed rolls and keeps running, while the exact figure stays r
     )
   const first = await read()
   await expect.poll(read, { timeout: 6000 }).not.toBe(first)
-  await expect(page.locator('#combined')).toHaveText('41.2')
+  await expect(page.locator('#total')).toHaveText(/^\d+\.\d$/)
 })
 
 test('the nav marks the current page and every page links to privacy', async ({ page }) => {

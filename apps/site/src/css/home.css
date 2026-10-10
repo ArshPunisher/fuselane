@@ -1,0 +1,377 @@
+/* Home page. The story runs top to bottom like one download: the live Fuse
+   Core, how a file is split and fused, a race between one network and two,
+   what's built in, sending, the real app, the honest limits, and the footer's
+   ring that ignites when you reach the end. */
+
+/* ---------- Hero ---------- */
+
+.hero {
+  display: grid;
+  gap: 40px;
+  align-items: center;
+  padding-block: clamp(28px, 5vw, 56px) clamp(56px, 6vw, 96px);
+}
+
+.hero-text {
+  display: grid;
+  justify-items: start;
+  gap: 22px;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  color: var(--body);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.eyebrow::before {
+  content: '';
+  width: 14px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--tide), var(--iris), var(--fuse));
+}
+
+.hero h1 {
+  font-size: clamp(2.75rem, 1.5rem + 3.9vw, 4.2rem);
+  line-height: 0.98;
+}
+
+.hero h1 .line {
+  display: block;
+  overflow: clip;
+  /* Room for descenders: "y" and "g" must never be clipped. */
+  padding-bottom: 0.08em;
+  margin-bottom: -0.08em;
+}
+
+.hero h1 .line > span {
+  display: inline-block;
+}
+
+.hero-lead {
+  max-width: 27em;
+}
+
+.hero-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero h1 .line > span {
+    animation: line-up 1s var(--ease-out) both;
+  }
+  .hero h1 .line + .line > span {
+    animation-delay: 0.09s;
+  }
+  .hero .eyebrow,
+  .hero-lead,
+  .hero-cta {
+    animation: rise 0.9s var(--ease-out) both;
+  }
+  .hero .eyebrow {
+    animation-delay: 0s;
+  }
+  .hero-lead {
+    animation-delay: 0.18s;
+  }
+  .hero-cta {
+    animation-delay: 0.26s;
+  }
+  .core {
+    animation: core-in 1.4s var(--ease-out) 0.15s both;
+  }
+}
+
+@keyframes line-up {
+  from {
+    transform: translateY(105%);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+@keyframes core-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+/* The Fuse Core figure. */
+.core {
+  position: relative;
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  min-width: 0;
+}
+
+.core-stage {
+  position: relative;
+  width: 100%;
+  transform: perspective(1400px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.core-canvas {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+}
+
+.core-canvas canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.core-read {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  width: 52%;
+  text-align: center;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.core-total {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--ink);
+  font-size: clamp(2.1rem, 1.2rem + 3.2vw, 3.6rem);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.core-total small {
+  color: var(--mute);
+  font-size: 0.32em;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.core-gain {
+  color: var(--fuse);
+  font-size: clamp(12.5px, 0.7rem + 0.3vw, 14.5px);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.core-done .core-gain {
+  color: var(--ok);
+}
+
+/* Networks: on wide screens each sits by its satellite; on phones, a row below. */
+.core-nets {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.sat {
+  display: inline-flex;
+  white-space: nowrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 13px 0 11px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--canvas) 82%, transparent);
+  color: var(--ink);
+  font: 500 13.5px var(--font-sans);
+  cursor: pointer;
+  touch-action: manipulation;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition:
+    border-color var(--dur-base),
+    color var(--dur-base),
+    opacity var(--dur-base),
+    transform var(--dur-quick) var(--ease-out);
+}
+
+.sat:hover {
+  border-color: color-mix(in oklch, var(--c) 60%, transparent);
+}
+
+.sat:active {
+  transform: scale(0.97);
+}
+
+.sat-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--c);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--c) 22%, transparent);
+  transition:
+    background-color var(--dur-base),
+    box-shadow var(--dur-base);
+}
+
+.sat-rate {
+  color: var(--mute);
+  white-space: nowrap;
+  font-size: 12.5px;
+}
+
+.sat[aria-checked='false'] {
+  color: var(--mute);
+}
+
+.sat[aria-checked='false'] .sat-dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--mute);
+}
+
+.sat[aria-checked='false'] .sat-name {
+  text-decoration: line-through;
+  text-decoration-color: var(--mute);
+}
+
+/* Wide: the networks sit on the orbit (script sets --sx/--sy from the canvas geometry). */
+.core[data-wide] .core-nets {
+  position: absolute;
+  inset: 0;
+  display: block;
+  margin: 0;
+  pointer-events: none;
+}
+
+.core[data-wide] .sat {
+  position: absolute;
+  left: var(--sx, 50%);
+  top: var(--sy, 50%);
+  pointer-events: auto;
+  transform: translate(-50%, calc(-100% - 22px));
+}
+
+.core[data-wide] .sat[data-below] {
+  transform: translate(-50%, 22px);
+}
+
+.core[data-wide] .sat:active {
+  transform: translate(-50%, calc(-100% - 22px)) scale(0.97);
+}
+
+.core[data-wide] .sat[data-below]:active {
+  transform: translate(-50%, 22px) scale(0.97);
+}
+
+.core-file {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 14px;
+  color: var(--body);
+  font-size: 14px;
+}
+
+.core-file-name {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--ink);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.core-file .num {
+  color: var(--mute);
+  font-size: 13px;
+}
+
+.core-note {
+  color: var(--mute);
+  font-size: 13px;
+  text-align: center;
+}
+
+@media (min-width: 1024px) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr);
+    gap: 24px;
+    min-height: min(calc(100dvh - var(--nav-h)), 920px);
+    padding-block: 24px 64px;
+  }
+  .core {
+    margin-right: calc(var(--gutter) * -0.5);
+  }
+  .core-canvas {
+    aspect-ratio: 1.08;
+  }
+}
+
+/* As the hero leaves, the core sinks back a little (browsers with scroll timelines). */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .core-stage {
+      animation: core-out linear both;
+      animation-timeline: view();
+      animation-range: exit 0% exit 100%;
+    }
+  }
+}
+
+@keyframes core-out {
+  to {
+    opacity: 0.35;
+    scale: 0.92;
+    translate: 0 -40px;
+  }
+}
+
+/* ---------- Rolling digits ---------- */
+
+.odo {
+  display: inline-flex;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.odo-d {
+  display: inline-block;
+  height: 1em;
+  overflow: hidden;
+  /* Soft top and bottom edges, so digits roll in and out of view. */
+  mask-image: linear-gradient(transparent, #000 18%, #000 82%, transparent);
+}
+
+.odo-strip {
+  /* "0123456789" one character wide: each digit wraps onto its own 1em line. */
+  display: block;
+  width: 1ch;
+  transform: translateY(calc(var(--n, 0) * -1em));
+  transition: transform 0.9s var(--ease-out);
+  word-break: break-all;
+}
+
+.odo-sep {
+  display: inline-block;
+}
