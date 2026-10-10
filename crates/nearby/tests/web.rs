@@ -186,7 +186,8 @@ async fn text_goes_both_ways_and_stays_small() {
     let (code, why) = http(&page, &post(&format!("{base}/text"), big.len()), &big).await;
     assert_eq!(code, 413);
     assert!(String::from_utf8(why).unwrap().contains("64 KB"));
-    assert_eq!(http(&page, &post("/p/wrong/text", 2), b"hi").await.0, 404);
+    // (No body: one the server never reads can reset the socket before the reply.)
+    assert_eq!(http(&page, &post("/p/wrong/text", 0), b"").await.0, 404);
     assert_eq!(texts.0.lock().unwrap().len(), 1);
 
     // Computer to phone: the number changes with each offer.
