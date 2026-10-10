@@ -1,0 +1,90 @@
+# Flatpak manifest for Fuselane, built from the released .deb packages (the same
+# binaries the Release workflow built, checked and self-tested), not from source.
+# Building, testing, updating and submitting: README.md in this folder.
+#
+# update-manifest.sh <tag> rewrites the two .deb `url`/`sha256` pairs below (from
+# the release's SHA256SUMS) and the releases list in the metainfo. Don't edit
+# those lines by hand.
+
+# Not the Tauri identifier (app.fuselane): Flatpak refuses ids with fewer than
+# three parts ("Names must contain at least 2 periods"), and so does Flathub.
+# Same domain, fuselane.app. README, "Which app id", has the reasoning.
+id: app.fuselane.Fuselane
+# Tauri 2 needs WebKitGTK 4.1 (webkit2gtk-4.1, the GTK 3 API); the GNOME runtime
+# ships it. GNOME 48 reached end of life on 2026-03-24, so this uses 51, the
+# current release. Move up when a new one comes out (every March and September).
+runtime: org.gnome.Platform
+runtime-version: '51'
+sdk: org.gnome.Sdk
+command: fuselane-desktop
+
+finish-args:
+  # Downloads, torrents, Nearby and Fuse Send need the network. This shares the
+  # host's network namespace, so every interface (Wi-Fi, Ethernet, a tethered
+  # phone) is visible and sockets can be pinned to one of them (SO_BINDTODEVICE
+  # needs no privileges on kernel 5.7+). Bonding inside the sandbox is expected
+  # to work but not yet verified (spike S3 in docs/04-plan/ROADMAP.md).
+  - --share=network
+  # X11 shared memory: WebKitGTK is slow or garbled under X11 without it.
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  # GPU rendering for the WebKitGTK webview.
+  - --device=dri
+  # The default save folder. Other folders: the folder picker (a native GTK
+  # chooser, so the file-chooser portal) grants each one, or `flatpak override`.
+  - --filesystem=xdg-download
+  # "Download finished" and "Text from <computer>" notifications.
+  - --talk-name=org.freedesktop.Notifications
+  # The tray icon (keep running after the window closes, start minimised).
+  - --talk-name=org.kde.StatusNotifierWatcher
+  # The tray library writes the icon image to $XDG_RUNTIME_DIR/tray-icon and
+  # hands the tray its path; sharing that one folder lets the host's tray read it.
+  - --filesystem=xdg-run/tray-icon:create
+  # One running copy: a second launch (a magnet link, a .torrent) hands its
+  # arguments to the first over this D-Bus name, which the app derives from the
+  # Tauri identifier, so it isn't under the Flatpak id. Without it every launch
+  # opens another copy. Flathub reviews this line; the app can drop the need by
+  # using its Flatpak id as the single-instance name (README, "Before Flathub").
+  - --own-name=app.fuselane.SingleInstance
+  # Not needed: "Show in folder" falls back to the OpenURI portal when the file
+  # manager's D-Bus name isn't reachable, and "Open" uses that portal too.
+
+modules:
+  # The tray needs libayatana-appindicator, which the GNOME runtime doesn't have
+  # (the .deb gets it from the distro: Depends: libayatana-appindicator3-1), and
+  # without it the app stops at start-up ("Failed to load ayatana-appindicator3").
+  # Flathub's shared recipe builds it: clone https://github.com/flathub/shared-modules
+  # next to this file first (README, "Build and test on Linux").
+  - shared-modules/libayatana-appindicator/libayatana-appindicator-gtk3.json
+
+  - name: fuselane
+    buildsystem: simple
+    sources:
+      # The release's own .deb for each architecture.
+      - type: file
+        only-arches: [x86_64]
+        url: https://github.com/ArshPunisher/fuselane/releases/download/v0.1.0-beta.9/Fuselane_0.1.0-beta.9_linux-x64.deb
+        sha256: 'aa7edec43d8de4f2615c7e0d0e9727792181fcbd963df4a76b9196fb797f0f51'
+        dest-filename: fuselane.deb
+      - type: file
+        only-arches: [aarch64]
+        url: https://github.com/ArshPunisher/fuselane/releases/download/v0.1.0-beta.9/Fuselane_0.1.0-beta.9_linux-arm64.deb
+        sha256: '7a71f3eb7d915ed8ba1c239719509ea0efaf2d1ddc465fe84aed228d8477f6be'
+        dest-filename: fuselane.deb
+      # Desktop entry and metainfo named after the app id, as Flatpak requires.
+      - type: file
+        path: app.fuselane.Fuselane.desktop
+      - type: file
+        path: app.fuselane.Fuselane.metainfo.xml
+    build-commands:
+      # A .deb is an ar archive; its files are in data.tar.* inside it.
+      - ar x fuselane.deb
+      - tar -xf data.tar.*
+      - install -Dm755 -t /app/bin usr/bin/fuselane-desktop
+      - install -Dm644 -t /app/share/applications app.fuselane.Fuselane.desktop
+      - install -Dm644 -t /app/share/metainfo app.fuselane.Fuselane.metainfo.xml
+      # Icons, renamed to the app id. Tauri puts the 256 px icon in "256x256@2".
+      - install -Dm644 usr/share/icons/hicolor/32x32/apps/fuselane-desktop.png /app/share/icons/hicolor/32x32/apps/app.fuselane.Fuselane.png
+      - install -Dm644 usr/share/icons/hicolor/128x128/apps/fuselane-desktop.png /app/share/icons/hicolor/128x128/apps/app.fuselane.Fuselane.png
+      - install -Dm644 usr/share/icons/hicolor/256x256@2/apps/fuselane-desktop.png /app/share/icons/hicolor/256x256/apps/app.fuselane.Fuselane.png

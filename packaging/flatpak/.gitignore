@@ -1,0 +1,7 @@
+# Flathub's shared module recipes, cloned here for local builds (README).
+/shared-modules/
+# flatpak-builder output and caches.
+/build-dir/
+/.flatpak-builder/
+/repo/
+*.flatpak

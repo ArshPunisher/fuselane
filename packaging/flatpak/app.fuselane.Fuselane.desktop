@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Name=Fuselane
+GenericName=Download Manager
+Comment=Download over every network at once
+# %U: .torrent files, magnet links and fuselane:// (Fuse Send) links arrive as
+# arguments; a second launch hands them to the running window.
+Exec=fuselane-desktop %U
+Icon=app.fuselane.Fuselane
+Terminal=false
+StartupNotify=true
+# The X11 window class is the binary's name (same as the .deb's entry).
+StartupWMClass=fuselane-desktop
+Categories=Network;FileTransfer;
+Keywords=download;downloader;download manager;torrent;magnet;bonding;wifi;ethernet;tethering;
+MimeType=application/x-bittorrent;x-scheme-handler/magnet;x-scheme-handler/fuselane;

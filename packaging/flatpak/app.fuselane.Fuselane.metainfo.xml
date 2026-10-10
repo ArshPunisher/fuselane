@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright 2026 The Fuselane Authors -->
+<!-- AppStream metadata for Fuselane (what Flathub and software centres show).
+     update-manifest.sh adds each release to the releases list. -->
+<component type="desktop-application">
+  <id>app.fuselane.Fuselane</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+
+  <name>Fuselane</name>
+  <summary>Download over every network at once</summary>
+  <developer id="app.fuselane">
+    <name>ArshPunisher</name>
+  </developer>
+
+  <description>
+    <p>
+      Fuselane is a download manager that spreads one download across every
+      internet connection the computer has: home Wi-Fi, a phone tethered over
+      USB, Ethernet, a second ISP. You get their combined speed, with no VPN,
+      relay server or admin rights.
+    </p>
+    <ul>
+      <li>HTTP and HTTPS downloads split across every network, with resume and per-network limits</li>
+      <li>Torrents and magnet links over every network</li>
+      <li>Choose which networks a download may use, and keep a phone's data for long downloads only</li>
+      <li>Finished files checked against the SHA-256 a site publishes next to them</li>
+      <li>Send files to other computers on your network</li>
+    </ul>
+    <p>
+      Fuselane collects no user data. This is a beta: please report problems
+      on the issue tracker.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">app.fuselane.Fuselane.desktop</launchable>
+
+  <url type="homepage">https://fuselane.app</url>
+  <url type="bugtracker">https://github.com/ArshPunisher/fuselane/issues</url>
+  <url type="help">https://fuselane.app/faq/</url>
+  <url type="vcs-browser">https://github.com/ArshPunisher/fuselane</url>
+
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/ArshPunisher/fuselane/main/apps/site/public/shots/app.png</image>
+      <caption>One download over Wi-Fi, a tethered phone and Ethernet at once</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/ArshPunisher/fuselane/main/apps/site/public/shots/torrent.png</image>
+      <caption>A torrent, with each network's share of the verified pieces</caption>
+    </screenshot>
+  </screenshots>
+
+  <categories>
+    <category>Network</category>
+    <category>FileTransfer</category>
+  </categories>
+
+  <keywords>
+    <keyword>download manager</keyword>
+    <keyword>downloader</keyword>
+    <keyword>torrent</keyword>
+    <keyword>bonding</keyword>
+    <keyword>tethering</keyword>
+  </keywords>
+
+  <provides>
+    <binary>fuselane-desktop</binary>
+  </provides>
+
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+
+  <branding>
+    <color type="primary" scheme_preference="light">#fd8537</color>
+    <color type="primary" scheme_preference="dark">#c04909</color>
+  </branding>
+
+  <content_rating type="oars-1.1" />
+
+  <releases>
+    <release version="0.1.0-beta.9" date="2026-10-10" type="development">
+      <url type="details">https://github.com/ArshPunisher/fuselane/releases/tag/v0.1.0-beta.9</url>
+    </release>
+  </releases>
+</component>
