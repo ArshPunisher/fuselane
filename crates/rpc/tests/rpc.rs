@@ -61,6 +61,23 @@ impl Host for Fake {
         });
         Ok(id)
     }
+    fn add_metalink(
+        &self,
+        xml: &str,
+        dir: Option<String>,
+        paused: bool,
+    ) -> Result<Vec<i64>, String> {
+        if !xml.contains("<metalink") {
+            return Err("This isn't a Metalink file.".into());
+        }
+        let a = self.add(Add {
+            uris: vec!["https://one.example/a.iso".into()],
+            dir: dir.clone(),
+            out: Some("a.iso".into()),
+            paused,
+        })?;
+        Ok(vec![a])
+    }
     fn pause(&self, id: i64) -> Result<(), String> {
         self.set(id, Status::Paused);
         Ok(())
@@ -200,6 +217,32 @@ fn add_watch_pause_and_remove_like_ariang_does() {
     assert_eq!(code, 400);
     assert!(v["error"]["message"].as_str().unwrap().contains("https://"));
     assert_eq!(call(&rpc, "aria2.addUri", json!([[]])).0, 400);
+}
+
+#[test]
+fn metalinks_come_in_base64() {
+    let host = Arc::new(Fake::default());
+    let rpc = Rpc::new(host.clone(), SECRET.into());
+    // "<metalink/>" in base64.
+    let g = ok(
+        &rpc,
+        "aria2.addMetalink",
+        json!(["PG1ldGFsaW5rLz4=", {"pause": "true"}]),
+    );
+    assert_eq!(g, json!([gid(10)]));
+    assert_eq!(host.job(10).status, Status::Paused);
+    let (code, v) = call(&rpc, "aria2.addMetalink", json!(["not base64!"]));
+    assert_eq!(code, 400);
+    assert!(v["error"]["message"].as_str().unwrap().contains("base64"));
+    // "<rss/>": not a Metalink.
+    let (code, v) = call(&rpc, "aria2.addMetalink", json!(["PHJzcy8+"]));
+    assert_eq!(code, 400);
+    assert!(
+        v["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("isn't a Metalink")
+    );
 }
 
 #[test]

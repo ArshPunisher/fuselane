@@ -81,6 +81,15 @@ pub struct Add {
 pub trait Host: Send + Sync + 'static {
     fn jobs(&self) -> Vec<Job>;
     fn add(&self, add: Add) -> Result<i64, String>;
+    /// The files of a Metalink document (`aria2.addMetalink`).
+    fn add_metalink(
+        &self,
+        _xml: &str,
+        _dir: Option<String>,
+        _paused: bool,
+    ) -> Result<Vec<i64>, String> {
+        Err("Metalinks aren't taken here.".into())
+    }
     fn pause(&self, id: i64) -> Result<(), String>;
     fn resume(&self, id: i64) -> Result<(), String>;
     /// Takes it out of the list (the file stays where it is).
@@ -139,6 +148,7 @@ fn same(a: &str, b: &str) -> bool {
 
 const METHODS: &[&str] = &[
     "aria2.addUri",
+    "aria2.addMetalink",
     "aria2.remove",
     "aria2.forceRemove",
     "aria2.pause",
@@ -282,6 +292,7 @@ impl<H: Host> Rpc<H> {
         let p = |i: usize| params.get(i);
         match method {
             "aria2.addUri" => self.add(&params),
+            "aria2.addMetalink" => self.add_metalink(&params),
             "aria2.remove" | "aria2.forceRemove" => {
                 let id = id_of(p(0))?;
                 self.find(id)?;
@@ -451,6 +462,33 @@ impl<H: Host> Rpc<H> {
         };
         let id = self.host.add(add).map_err(fault)?;
         Ok(json!(gid(id)))
+    }
+
+    fn add_metalink(&self, params: &[Value]) -> Result<Value, Fault> {
+        use base64::Engine as _;
+        let raw = params
+            .first()
+            .and_then(Value::as_str)
+            .ok_or_else(|| fault("addMetalink needs the Metalink, in base64."))?;
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(raw.trim())
+            .map_err(|_| fault("That Metalink isn't valid base64."))?;
+        let xml = String::from_utf8(bytes).map_err(|_| fault("That Metalink isn't text."))?;
+        let opts = params.get(1);
+        let opt = |k: &str| {
+            opts.and_then(|o| o.get(k))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+        };
+        let ids = self
+            .host
+            .add_metalink(&xml, opt("dir"), opt("pause").as_deref() == Some("true"))
+            .map_err(fault)?;
+        Ok(Value::Array(
+            ids.into_iter().map(|id| json!(gid(id))).collect(),
+        ))
     }
 
     fn find(&self, id: i64) -> Result<Job, Fault> {

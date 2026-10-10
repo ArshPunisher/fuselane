@@ -113,6 +113,27 @@ impl fuselane_rpc::Host for Host {
             .map_err(|e| e.message)
     }
 
+    fn add_metalink(
+        &self,
+        xml: &str,
+        dir: Option<String>,
+        paused: bool,
+    ) -> Result<Vec<i64>, String> {
+        let svc = self.svc.upgrade().ok_or_else(gone)?;
+        let r = svc
+            .add_metalink_text(xml, dir.as_deref(), paused)
+            .map_err(|e| e.message)?;
+        if r.added.is_empty() {
+            let why = r
+                .skipped
+                .first()
+                .map(|s| s.reason.clone())
+                .unwrap_or_default();
+            return Err(format!("Nothing was added: {why}"));
+        }
+        Ok(r.added)
+    }
+
     fn pause(&self, id: i64) -> Result<(), String> {
         let svc = self.svc.upgrade().ok_or_else(gone)?;
         svc.pause(id).map_err(|e| e.message)

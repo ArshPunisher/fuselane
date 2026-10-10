@@ -8,7 +8,7 @@ STEPS 8.7 asks for remote control: a way for other programs and other devices to
 
 ## Decision
 
-Add a `fuselane-rpc` crate that speaks the aria2 JSON-RPC methods that make sense for Fuselane (addUri, tellStatus, tellActive/Waiting/Stopped, pause/unpause, remove, getGlobalStat, options for the folder and how many run at once, multicall, getVersion). It is written from aria2's public documentation. Torrent and Metalink uploads are refused for now.
+Add a `fuselane-rpc` crate that speaks the aria2 JSON-RPC methods that make sense for Fuselane (addUri, tellStatus, tellActive/Waiting/Stopped, pause/unpause, remove, getGlobalStat, options for the folder and how many run at once, multicall, getVersion). It is written from aria2's public documentation. Metalinks are taken too (addMetalink); torrent uploads are refused for now.
 
 - **Off by default.** Turned on in Settings, which shows the address and the secret.
 - **A secret is always needed**: a random 128-bit value, sent as `token:<secret>` like aria2's `--rpc-secret`. It is compared in constant time, and a wrong one waits 250 ms before the reply.
