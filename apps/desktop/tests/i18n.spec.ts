@@ -94,6 +94,11 @@ test('?lang=hi shows Downloads in Hindi, with no English left in the nav or butt
   await expect(page.getByText('डेमो डेटा')).toBeVisible()
   expect(await englishLeft(page, 'nav, .sidebar')).toEqual([])
   expect(await englishLeft(page, '.btn, .icon-btn, .chip, .seg, [role="tab"]')).toEqual([])
+  // With the live network table filled in (network names stay as the system names them).
+  await expect(page.getByRole('table', { name: 'इस डाउनलोड के नेटवर्क' })).toContainText(
+    'Ethernet',
+    { timeout: 5000 },
+  )
   expect(await englishLeft(page, 'main')).toEqual([])
 })
 
