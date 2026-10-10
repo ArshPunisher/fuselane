@@ -149,7 +149,7 @@ export const hi: Readonly<Record<string, string>> = {
   "Couldn't build the report. Try again.": 'रिपोर्ट नहीं बन सकी। फिर से कोशिश करें।',
   Diagnostics: 'डायग्नोस्टिक्स',
   'For bug reports. It never includes IP addresses, links or file names, and Fuselane sends nothing by itself. Report a problem opens a GitHub issue with it filled in.':
-    'बग रिपोर्ट के लिए। इसमें IP पते, लिंक या फ़ाइलों के नाम कभी नहीं होते, और Fuselane अपने आप कुछ नहीं भेजता। “समस्या बताएं” इसे भरकर GitHub पर एक issue खोलता है।',
+    'बग रिपोर्ट के लिए। इसमें IP पते, लिंक या फ़ाइलों के नाम कभी नहीं होते, और Fuselane अपने आप कुछ नहीं भेजता। “समस्या बताएं” इसे भरकर GitHub पर एक रिपोर्ट खोलता है।',
   'Collecting…': 'जानकारी जुटा रहे हैं…',
   'Copy diagnostics': 'डायग्नोस्टिक्स कॉपी करें',
   'Opens a bug report on GitHub with the diagnostics filled in; you read it before sending':
