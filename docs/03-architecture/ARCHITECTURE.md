@@ -117,8 +117,11 @@ storage, limits, crypto are leaves used by the engines/core.
 | What | macOS | Windows | Linux |
 |---|---|---|---|
 | App data (DB, logs) | `~/Library/Application Support/app.fuselane` | `%APPDATA%\Fuselane` | `$XDG_DATA_HOME/fuselane` |
+| App data, debug builds | `~/Library/Application Support/app.fuselane.dev` | `%APPDATA%\Fuselane Dev` | `$XDG_DATA_HOME/fuselane-dev` |
 | Default downloads | `~/Downloads` | Known Folder Downloads | XDG download dir |
-| Local API socket | `$TMPDIR/fuselane-<uid>.sock` (0600) | `\\.\pipe\fuselane-<sid>` | `$XDG_RUNTIME_DIR/fuselane.sock` |
+| Local API socket | `api.sock` in the app-data folder (0600) | `\\.\pipe\fuselane-api-<user>` (`fuselane-api-dev-<user>` for debug builds) | `api.sock` in the app-data folder |
+
+`FUSELANE_HOME` overrides the app-data folder in every build. Debug builds (`tauri dev`, `cargo run`, the test binaries) use their own folder (`crates/core/src/home.rs`), so a schema that is still being written can never migrate the list a person's installed Fuselane uses; the local API socket and logs follow the folder. Two things stay shared: the browsers' native-messaging manifests (a debug app that registers itself points the extension at the debug copy until the installed app runs again) and the keychain service `app.fuselane.Fuselane`.
 
 ## 8. Logging and diagnostics
 

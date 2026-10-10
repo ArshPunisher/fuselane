@@ -16,7 +16,10 @@ pub fn endpoint(home: &Path) -> PathBuf {
             .chars()
             .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
             .collect();
-        PathBuf::from(format!(r"\\.\pipe\fuselane-api-{safe}"))
+        // Debug builds have their own data folder (core::home), so their own pipe
+        // too: a dev run never answers the installed app's CLI or extension.
+        let dev = if cfg!(debug_assertions) { "-dev" } else { "" };
+        PathBuf::from(format!(r"\\.\pipe\fuselane-api{dev}-{safe}"))
     }
     #[cfg(not(windows))]
     {

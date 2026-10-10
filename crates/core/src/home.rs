@@ -38,19 +38,33 @@ impl OpenError {
     }
 }
 
-/// `FUSELANE_HOME` if set, else the OS app-data folder.
+/// The app-data folder's name for a build. Debug builds (`tauri dev`, `cargo run`,
+/// test binaries) get their own, so a work-in-progress schema can never migrate
+/// the list a person's installed Fuselane uses.
+fn folder_name(debug: bool) -> &'static str {
+    if cfg!(target_os = "macos") {
+        if debug {
+            "app.fuselane.dev"
+        } else {
+            "app.fuselane"
+        }
+    } else if cfg!(windows) {
+        if debug { "Fuselane Dev" } else { "Fuselane" }
+    } else if debug {
+        "fuselane-dev"
+    } else {
+        "fuselane"
+    }
+}
+
+/// `FUSELANE_HOME` if set, else the OS app-data folder (a separate one for
+/// debug builds, see `folder_name`).
 pub fn home() -> Result<PathBuf, String> {
     if let Some(h) = std::env::var_os("FUSELANE_HOME") {
         return Ok(PathBuf::from(h));
     }
     let base = dirs::data_dir().ok_or("couldn't find the app-data folder")?;
-    Ok(base.join(if cfg!(target_os = "macos") {
-        "app.fuselane"
-    } else if cfg!(windows) {
-        "Fuselane"
-    } else {
-        "fuselane"
-    }))
+    Ok(base.join(folder_name(cfg!(debug_assertions))))
 }
 
 /// Opens the shared list, creating its folder. A damaged list is moved aside and a
@@ -67,6 +81,20 @@ pub fn open_default() -> Result<Store, OpenError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn debug_builds_never_share_the_release_folder() {
+        let release = folder_name(false);
+        let debug = folder_name(true);
+        assert_ne!(release, debug);
+        if cfg!(target_os = "macos") {
+            assert_eq!((release, debug), ("app.fuselane", "app.fuselane.dev"));
+        } else if cfg!(windows) {
+            assert_eq!((release, debug), ("Fuselane", "Fuselane Dev"));
+        } else {
+            assert_eq!((release, debug), ("fuselane", "fuselane-dev"));
+        }
+    }
 
     #[test]
     fn a_newer_list_is_told_apart_from_other_problems() {
