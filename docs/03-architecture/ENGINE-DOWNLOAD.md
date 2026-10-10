@@ -21,6 +21,7 @@ probe → plan → claim staging file → run (scheduler + streams) → verify �
 4. Record the final URL, the version (size, normalized ETag, Last-Modified), Content-Type and the file name (RFC 6266/5987, L-08).
 5. A torrent MIME type or `.torrent` name hands over to the torrent engine.
 6. **Per-network target probe** (NETWORKING.md §6) decides which selected networks may join.
+7. **A dropped probe is asked again.** Busy answers are waited out (L-110). When every network's probe drops (reset, refused, closed or timed out), all networks are tried again: up to 3 more rounds, 500 ms backoff doubling each round, no new round after 30 s. Each round goes through the networks in order, so a dead first network never holds up the others; a network whose connector says retrying can't help is skipped.
 
 ## 3. Plan
 
@@ -83,6 +84,7 @@ Each stream holds one keep-alive connection on its network and loops: pick work 
 | Write error ENOSPC/EDQUOT | **Pause the job immediately** with "Not enough space" (+ over Plexo's 5 strikes) |
 | Write error EIO/EROFS | Pause with a drive message |
 | Sleep/wake, address change | Refresh the affected connections; not a failure |
+| Connector explains (`LaneTrouble`, e.g. a proxy refusing the login) | Shown on the download once per network. Lasting: that network stops for this download. Otherwise retried like a connection error |
 
 ## 8. Storage (`crates/storage`)
 
@@ -125,3 +127,27 @@ Each stream holds one keep-alive connection on its network and loops: pick work 
 
 - Token buckets (1 s capacity, can go into debt) at three levels: global, per network, per job (+). The largest wait wins. Slow mode replaces the global limit.
 - Data usage counted per network per day/week/month, and for downloads and uploads separately. Reaching a limit → network `AtLimit` and its streams retire.
+
+## 13. Throttled networks (STEPS 8.2)
+
+A pure detector (`throttle.rs`, like the scheduler) gets each network's bytes and attempts in flight on every engine tick. It **benches** a network only when all of this held for a whole window:
+
+- it was busy (attempts in flight on ≥ 90% of ticks) and kept delivering (bytes on ≥ 50% of ticks), so idleness, a stall or a burst before a stall don't count;
+- it was slow: under `floor` overall, or under `collapse` × its own best, both overall *and* per stream (fewer streams near the end isn't a collapse);
+- another busy network **to the same server** was at least `ratio` × faster, overall and per stream, and at least `healthy` overall. When every network is slow it's the server; a server that caps each connection shows the same per-stream speed everywhere; a slow mirror isn't the network's fault;
+- the download is at least `min_total`, and no overall or per-download speed limit is in force (a network the person capped is never judged).
+
+| Constant | Start value |
+|---|---|
+| `window_ms` | 15 s |
+| `floor` | 32 KB/s (64 kbps is 8 KB/s; also catches 128 and 256 kbps plans) |
+| `collapse` | 0.1 of its best 5 s |
+| `ratio` / `healthy` | 4× / 128 KB/s |
+| `min_total` | 8 MiB |
+| first check, then doubling to | 60 s, 300 s |
+| check length / gives up without work after | 8 s / 20 s |
+| `recover` | 4× its throttled speed on one stream, and ≥ 2 × `floor` |
+
+A benched network's streams take no work and its in-flight attempts hand their blocks back (bytes already written are kept), so the others carry the rest instead of waiting for end-of-download races. One stream runs each **check**; fast again restores the network, still slow doubles the wait. A benched network still works when no other network can (all dead, out of allowance or without streams), and it doesn't vote on an expired link. The engine tells the app (`LaneEvent::Throttled`, `Restored`), which says it on the download: "iPhone USB slowed to 8 KB/s (throttled?), so the other networks carry the rest."
+
+Tests: unit tests of every rule and a property test (comparable networks are never benched); `tests/throttle.rs` caps one lane of the test server like a phone plan, lifts the cap to see the network come back, and checks that all-slow networks and small downloads are left alone.

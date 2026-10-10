@@ -46,8 +46,22 @@ The pinned `std::net::TcpStream` is converted to tokio and wrapped as a `tower::
 ## 3. One HTTP client per network
 
 - One hyper `Client` per `(network, origin)`, using HTTP/1.1 keep-alive with several connections (segmented downloads), so each stream pays DNS, TCP and TLS once (Plexo 5a2358c).
-- **System proxy settings are ignored** on these clients unless the user configures a proxy per network (L-66).
+- **System proxy settings are ignored** on these clients unless the user configures a proxy per network (L-66). Tested with `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY` set (`crates/core/tests/system_proxy.rs`).
 - A stale pooled socket the server closed gets one immediate retry on a fresh socket.
+
+### 3a. A proxy per network (STEPS 8.4)
+
+A person can give one network an **HTTP proxy** (asked with `CONNECT`) or a **SOCKS5** proxy (RFC 1928, username and password per RFC 1929). Code: `transport::proxy` (handshakes), `core::proxy` (the table and the messages), `service/proxy.rs` (saving and checking).
+
+- **Pinned like everything else.** The connection to the proxy goes through `connect_pinned` on that network, so each network keeps its own proxy. A proxy on this computer (`127.0.0.1`, an SSH tunnel) is reachable but, being loopback, isn't pinned.
+- **A tunnel, never a reader.** The proxy only opens a tunnel to `host:port`; TLS runs end to end through it with the certificate checked against the server's name, so the proxy sees where we connect, never what we ask for. HTTP proxies get `CONNECT` for plain `http://` links too: one code path. Proxies that only allow port 443 refuse those, and the message says so ("many allow only https links").
+- **Names go to the proxy.** The server's name is handed to the proxy to resolve (SOCKS5 address type 3), which may be the only thing that can. When every network of a download has a proxy, nothing is looked up locally; per-network DNS (§4) skips proxied networks.
+- **One table for every request.** Downloads, previews, checksum lookups, page and feed reads and the app's own update all go through `runner::connect_plan`, which reads the table the app sets (`core::proxy::set`) at start and on every change. A server on this computer is always reached directly, as browsers do.
+- **Every failure has words.** The handshake reads the proxy's answer byte by byte up to the blank line (no tunnel byte is eaten) and sends its request in one write (L-123). Failures are typed: name not found, can't connect, login needed, login refused, refused (its rules), can't reach the server, not that kind of proxy, unsupported sign-in method, timed out. The ones retrying can't fix (login needed or refused, refused by its rules, not that kind of proxy, unsupported sign-in) stop that network for the download (`LaneTrouble`, ENGINE-DOWNLOAD.md §7) instead of hammering the proxy; the others are retried. Each shows on the download in plain words with what to do.
+- **Check.** Saving a proxy checks it at once: a tunnel over that network to Fuselane's own site (the host of the sign-in check, §6), port 443. Nothing is fetched.
+- **Credentials.** Saved with the network's other settings on this computer. The password never goes back to the window (only "a password is saved") and never appears in logs or `Debug` output.
+- **The sign-in check goes direct**, so it says nothing about a network with a proxy: such a network is never left out for a sign-in page.
+- **Torrents connect directly.** Peer connections go through the per-network SOCKS5 balancer (ADR 0006), not the person's proxy; the Networks page says so. Proxy per download is left out: a download uses its networks' proxies.
 
 ## 4. DNS per network (L-65)
 
@@ -73,6 +87,7 @@ For each network, take the resolved addresses filtered to families that network 
 | **Latency** | Same | Shown in the network row |
 | **Speed test** | User-triggered, or first-run onboarding | Download (and upload) a test object for N seconds per network, then all together → "you'd get X× with both" |
 | **Target probe** | At job start, per network | Range GET `bytes=0-0` to the actual URL. Drop networks that get 403, a redirect elsewhere, or a different version (IP-locked links, L-20) |
+| **Throttle check** | While a network is benched as throttled | One stream works for a few seconds; fast again lets the network back in (ENGINE-DOWNLOAD.md §13) |
 
 ## 7. Setups bonding can't help, and how we explain them
 
