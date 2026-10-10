@@ -1,7 +1,8 @@
 // Checks the translations (STEPS 8.8), so a new string can't be forgotten silently:
 // - every t() / tn() / tr() / trn() / mark() string has a Hindi entry, with the same {names};
 // - no English text sits in JSX (text, aria-label, title, placeholder, alt) outside t();
-// - no Hindi entry is left over after its English string changed or went away.
+// - no Hindi entry is left over after its English string changed or went away;
+// - no t() runs at module level, where it would keep the language of the first load.
 // Run from apps/desktop: `node scripts/i18n-check.ts` (or with files, to check only those;
 // then left-over entries aren't reported). tests/i18n.spec.ts runs it with the UI tests.
 // `--loose` also lists other strings that look like English sentences (a review aid, not
@@ -315,6 +316,13 @@ function scan(
   const visit = (node: ts.Node) => {
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
       const fn = node.expression.text
+      if (CALLS.has(fn) && fn !== 'mark') {
+        let inside = false
+        for (let p: ts.Node | undefined = node.parent; p && !inside; p = p.parent)
+          inside = ts.isFunctionLike(p)
+        if (!inside)
+          report(node, `${fn}() at module level runs once, before any language change: use mark()`)
+      }
       if (CALLS.has(fn)) {
         const plural = fn === 'tn' || fn === 'trn'
         const forms = plural ? [node.arguments[1], node.arguments[2]] : [node.arguments[0]]

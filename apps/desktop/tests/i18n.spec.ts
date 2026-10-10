@@ -34,7 +34,9 @@ async function englishLeft(page: Page, root: string): Promise<string[]> {
         if (!parent || parent.closest('[translate="no"], code, kbd, .num, [aria-hidden="true"]'))
           continue
         if (!parent.checkVisibility()) continue
-        const text = (n.textContent ?? '').replace(keep, ' ')
+        // File names ("ubuntu-26.04-desktop-amd64.iso") stay as they are, even in a
+        // screen reader's announcement.
+        const text = (n.textContent ?? '').replace(/[\w()-]+(?:\.[\w-]+)+/g, ' ').replace(keep, ' ')
         if (/[A-Za-z]{2,}/.test(text)) out.push((n.textContent ?? '').trim())
       }
     }
