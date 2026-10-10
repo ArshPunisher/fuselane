@@ -37,11 +37,37 @@ pub enum DiskFailure {
     DriveMissing,
 }
 
+/// Why a network can't connect, in plain words, attached by a connector to the
+/// `io::Error` it returns (a proxy turning down the login, STEPS 8.4). The
+/// engine shows it instead of a bare "couldn't connect"; a `lasting` one stops
+/// that network for the download, since retrying can't fix it.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{message}")]
+pub struct LaneTrouble {
+    /// What went wrong and what to do, ready to show.
+    pub message: String,
+    pub lasting: bool,
+}
+
+impl LaneTrouble {
+    /// Wraps it for a connector to return.
+    pub fn into_io(self) -> std::io::Error {
+        std::io::Error::other(self)
+    }
+
+    /// The trouble a connector attached to `e`, if any.
+    pub fn of(e: &std::io::Error) -> Option<&LaneTrouble> {
+        e.get_ref()?.downcast_ref()
+    }
+}
+
 /// How an attempt failed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Failure {
     /// Couldn't connect, reset, timed out, or went silent: the network's fault.
     Connection,
+    /// Couldn't connect, for a reason the connector put in words.
+    Lane(LaneTrouble),
     /// The selected network has no address in the host's IP family.
     NoRoute,
     /// The server answered with a status we can't use.
@@ -127,7 +153,8 @@ impl StreamRetry {
             Failure::VersionChanged {
                 size_changed: false,
             } => (Decision::ConfirmBytes, Signals::default()),
-            Failure::Connection => {
+            Failure::Lane(t) if t.lasting => (Decision::FailNetwork, Signals::default()),
+            Failure::Connection | Failure::Lane(_) => {
                 // Never uses up retries while the network exists (L-16).
                 self.failures += 1;
                 if network_silent {
@@ -428,6 +455,39 @@ mod tests {
             Decision::FailNetwork
         );
         assert_eq!(r.strikes(), 0);
+    }
+
+    #[test]
+    fn trouble_a_connector_explains_stops_the_network_only_when_lasting() {
+        let mut r = StreamRetry::default();
+        let login = Failure::Lane(LaneTrouble {
+            message: "Wi-Fi's proxy turned down the username and password.".into(),
+            lasting: true,
+        });
+        assert_eq!(r.decide(&login, 0, false, 0.5).0, Decision::FailNetwork);
+        // A proxy that's down may come back: retried like any connection error.
+        let down = Failure::Lane(LaneTrouble {
+            message: "Wi-Fi couldn't connect to its proxy.".into(),
+            lasting: false,
+        });
+        assert!(matches!(
+            r.decide(&down, 0, false, 0.5).0,
+            Decision::Retry { .. }
+        ));
+        assert_eq!(
+            r.decide(&down, 0, true, 0.5).0,
+            Decision::Unreachable {
+                retry_ms: UNREACHABLE_RETRY_MS
+            }
+        );
+        // Connectors hand it over inside an io::Error.
+        let e = LaneTrouble {
+            message: "why".into(),
+            lasting: true,
+        }
+        .into_io();
+        assert_eq!(LaneTrouble::of(&e).map(|t| t.message.as_str()), Some("why"));
+        assert!(LaneTrouble::of(&std::io::Error::other("plain")).is_none());
     }
 
     #[test]

@@ -28,6 +28,7 @@ use fuselane_storage::staging::{Staging, StagingError};
 
 use crate::headers::{self, ContentRange, RangeError};
 use crate::plan::Plan;
+pub use crate::retry::LaneTrouble;
 use crate::retry::{Decision, DiskFailure, Failure, StreamRetry};
 use crate::scheduler::{self, Attempt, Block, HedgePolicy, NetId, Requester, StreamId};
 use crate::throttle::{self, ThrottlePolicy};
@@ -152,6 +153,14 @@ pub enum LaneEvent {
     },
     /// A check found it fast again (`rate` bytes per second on one stream).
     Restored { net: NetId, name: String, rate: f64 },
+    /// It can't connect, for a reason its connector put in words (a proxy
+    /// turning down the login). `lasting`: it stopped trying for this download.
+    Trouble {
+        net: NetId,
+        name: String,
+        message: String,
+        lasting: bool,
+    },
 }
 
 /// Receives [`LaneEvent`]s. Called outside the engine's locks; keep it cheap.
@@ -443,6 +452,10 @@ pub enum JobError {
     Paused,
     #[error("this download can't be resumed: {0}")]
     NotResumable(String),
+    /// No network could connect, and a connector said why (a proxy refusing
+    /// the login). Already plain words with what to do.
+    #[error("{0}")]
+    Lane(String),
     #[error(transparent)]
     Staging(#[from] StagingError),
 }
@@ -495,7 +508,9 @@ async fn connect(net: &Network, src: &Source, t: &Tuning) -> Result<Conn, Failur
     let io = tokio::time::timeout(t.connect_timeout, (net.connect)(src.addr))
         .await
         .map_err(|_| Failure::Connection)?
-        .map_err(|_| Failure::Connection)?;
+        .map_err(|e| {
+            LaneTrouble::of(&e).map_or(Failure::Connection, |t| Failure::Lane(t.clone()))
+        })?;
     let (sender, conn) = hyper::client::conn::http1::handshake(TokioIo::new(io))
         .await
         .map_err(|_| Failure::Connection)?;
@@ -619,11 +634,17 @@ const PROBE_RETRY_AFTER_CAP_MS: u64 = 30_000;
 /// Probes with `Range: bytes=0-0` on the first network that answers (L-01, L-04).
 pub async fn probe(src: &Source, networks: &[Network], t: &Tuning) -> Result<Probe, JobError> {
     let mut last = String::from("no networks");
+    // A reason a connector gave (a proxy turning down the login) beats "couldn't connect".
+    let mut trouble: Option<String> = None;
     for net in networks.iter().filter(|n| n.mirror.is_none()) {
         let mut busy = 0;
         let res = loop {
             let mut conn = match connect(net, src, t).await {
                 Ok(c) => c,
+                Err(Failure::Lane(why)) => {
+                    trouble = Some(why.message);
+                    break None;
+                }
                 Err(_) => {
                     last = format!("{} couldn't connect", net.name);
                     break None;
@@ -702,7 +723,7 @@ pub async fn probe(src: &Source, networks: &[Network], t: &Tuning) -> Result<Pro
             content_type,
         });
     }
-    Err(JobError::Unreachable(last))
+    Err(trouble.map_or(JobError::Unreachable(last), JobError::Lane))
 }
 
 // ---------- shared state ----------
@@ -752,6 +773,8 @@ struct Shared {
     probe_open: HashSet<NetId>,
     /// ...and this stream is running it.
     prober: HashMap<NetId, StreamId>,
+    /// Connector reasons already passed on, per network.
+    told: HashSet<(NetId, String)>,
 }
 
 #[derive(Debug, Default)]
@@ -1035,6 +1058,9 @@ async fn run_stream(ctx: Arc<Ctx>, net: Network, stream: StreamId) {
                     silent && ctx.live_networks > 1,
                     jitter,
                 );
+                if let Failure::Lane(t) = &failure {
+                    tell_trouble(&ctx, &net, t);
+                }
                 // A mirror that refuses, or whose file looks different, just stops
                 // helping: its lanes retire and the main server carries on (B8.9).
                 if net.mirror.is_some()
@@ -1057,7 +1083,10 @@ async fn run_stream(ctx: Arc<Ctx>, net: Network, stream: StreamId) {
                 {
                     let mut s = ctx.lock();
                     s.retries += 1;
-                    s.last_error = format!("{}: {failure:?}", net.name);
+                    s.last_error = match &failure {
+                        Failure::Lane(t) => t.message.clone(),
+                        _ => format!("{}: {failure:?}", net.name),
+                    };
                     if signals.refused {
                         s.nets
                             .entry(net.id)
@@ -1129,6 +1158,19 @@ async fn run_stream(ctx: Arc<Ctx>, net: Network, stream: StreamId) {
 
 /// Consecutive refusals on every network before a link counts as expired.
 const LINK_EXPIRED_AFTER: u32 = 4;
+
+/// Passes a connector's reason on to the listener, once per network and reason.
+fn tell_trouble(ctx: &Ctx, net: &Network, t: &LaneTrouble) {
+    let first = ctx.lock().told.insert((net.id, t.message.clone()));
+    if first && let Some(sink) = &ctx.tuning.lane_events {
+        (sink.0)(&LaneEvent::Trouble {
+            net: net.id,
+            name: net.name.clone(),
+            message: t.message.clone(),
+            lasting: t.lasting,
+        });
+    }
+}
 
 /// One tick of throttle detection (8.2): feeds the detector each network's
 /// bytes and attempts, applies what it decides, and tells the listener.
@@ -2024,6 +2066,7 @@ pub async fn download_with(
             benched: HashSet::new(),
             probe_open: HashSet::new(),
             prober: HashMap::new(),
+            told: HashSet::new(),
         }),
         file,
         wake: tokio::sync::Notify::new(),

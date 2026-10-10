@@ -238,6 +238,7 @@ pub fn describe(e: &JobError) -> String {
         JobError::ChecksumMismatch { .. } => "The downloaded file doesn't match the SHA-256 you gave, so it wasn't saved under its name. The partial file is kept for inspection.".into(),
         JobError::Paused => "Paused. Progress is saved.".into(),
         JobError::NotResumable(why) => format!("This download can't be resumed ({why}). Start it again."),
+        JobError::Lane(why) => why.clone(),
         JobError::Staging(e) => format!("Couldn't save the file: {e}"),
     }
 }
@@ -338,6 +339,7 @@ pub fn action_for(e: &JobError) -> &'static str {
         | JobError::ChecksumMismatch { .. } => "start-over",
         JobError::Disk(_) | JobError::Staging(_) | JobError::NoSpace { .. } => "free-space",
         JobError::Unreachable(_)
+        | JobError::Lane(_)
         | JobError::ProbeStatus(_)
         | JobError::Redirect { .. }
         | JobError::AllNetworksFailed(_)
