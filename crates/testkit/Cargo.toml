@@ -17,6 +17,7 @@ bytes = "1"
 sha2 = "0.10"
 futures-core = "0.3"
 futures-util = { version = "0.3", default-features = false }
+base64 = "0.22"
 
 [lints]
 workspace = true

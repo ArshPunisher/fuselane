@@ -5,7 +5,9 @@
 //! Design: `docs/05-quality/TESTING.md` §2.
 
 pub mod content;
+pub mod proxy;
 pub mod server;
 
 pub use content::{Content, sha256_file};
+pub use proxy::{Kind as ProxyKind, TestProxy};
 pub use server::{Fault, RangeServer, RequestLog, Rule};
