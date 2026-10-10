@@ -12,6 +12,7 @@ const SITE = 'https://fuselane.app'
 const LISTED: [path: string, freq: string, priority: string, name: string][] = [
   ['/', 'weekly', '1.0', 'Fuselane'],
   ['/download/', 'weekly', '0.9', 'Download'],
+  ['/guide/', 'monthly', '0.8', 'Guide'],
   ['/faq/', 'monthly', '0.7', 'Questions'],
   ['/support/', 'monthly', '0.5', 'Support'],
 ]
@@ -168,6 +169,7 @@ export default defineConfig({
       input: {
         home: resolve(import.meta.dirname, 'index.html'),
         download: resolve(import.meta.dirname, 'download/index.html'),
+        guide: resolve(import.meta.dirname, 'guide/index.html'),
         faq: resolve(import.meta.dirname, 'faq/index.html'),
         support: resolve(import.meta.dirname, 'support/index.html'),
         send: resolve(import.meta.dirname, 's/index.html'),

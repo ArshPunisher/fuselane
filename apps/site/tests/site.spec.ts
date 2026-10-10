@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 const FEED = { version: '0.1.0-beta.1', notes: '', pub_date: '2026-10-08T00:00:00Z', platforms: {} }
 const REL = 'https://github.com/ArshPunisher/fuselane/releases'
-const PAGES = ['/', '/download/', '/faq/', '/support/']
+const PAGES = ['/', '/download/', '/guide/', '/faq/', '/support/']
 
 async function stub(page: Page, { feed = true, stars = 42 } = {}) {
   await page.route('**/updates/latest.json', (r) =>
@@ -341,6 +341,7 @@ test('the nav marks the current page and every page links to privacy', async ({ 
   await stub(page)
   for (const [path, name] of [
     ['/download/', 'Download'],
+    ['/guide/', 'Guide'],
     ['/faq/', 'FAQ'],
     ['/support/', 'Support'],
   ] as const) {
@@ -381,6 +382,34 @@ test('the FAQ is grouped by topic and the topic list jumps to each', async ({ pa
     'true',
   )
   await expect(page.locator('.qa details')).toHaveCount(17)
+})
+
+test('the guide explains each part and is honest about limits', async ({ page }) => {
+  await stub(page)
+  await page.goto('/guide/')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('The Fuselane guide')
+  const toc = page.getByRole('navigation', { name: 'Guide' })
+  await expect(toc.getByRole('link')).toHaveCount(11)
+  await toc.getByRole('link', { name: 'Limits, honestly' }).click()
+  await expect(page).toHaveURL(/#limits$/)
+  await expect(toc.getByRole('link', { name: 'Limits, honestly' })).toHaveAttribute(
+    'aria-current',
+    'true',
+  )
+  const limits = page.locator('#limits')
+  for (const text of [
+    'the file comes over one network',
+    'DHT and tracker lookups use the default network',
+    'not notarized',
+    'SignPath Foundation',
+  ])
+    await expect(limits).toContainText(text)
+  // The home page's honest notes link here.
+  await page.goto('/')
+  await expect(page.getByRole('link', { name: /All the limits, in the guide/ })).toHaveAttribute(
+    'href',
+    'guide/#limits',
+  )
 })
 
 test('without a known version the download page still reads well', async ({ page }) => {

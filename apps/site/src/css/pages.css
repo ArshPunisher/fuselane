@@ -846,3 +846,156 @@
 .dl-hero {
   padding-bottom: 28px;
 }
+
+/* ---------- The guide ---------- */
+
+.doc {
+  min-width: 0;
+  max-width: 46rem;
+}
+
+.doc-group > p {
+  color: var(--body);
+  font-size: 16.5px;
+}
+
+.doc-group b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.doc-group a {
+  color: var(--ink);
+}
+
+.doc-steps {
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  counter-reset: doc;
+}
+
+.doc-steps li {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  padding: 16px 0 18px 52px;
+  counter-increment: doc;
+}
+
+.doc-steps li + li {
+  border-top: 1px solid var(--hairline);
+}
+
+.doc-steps li::before {
+  content: counter(doc);
+  position: absolute;
+  left: 0;
+  top: 16px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid color-mix(in oklch, var(--fuse) 45%, transparent);
+  border-radius: 999px;
+  color: var(--fuse);
+  font-family: var(--font-mono);
+  font-size: 14px;
+}
+
+.doc-steps h3 {
+  font-size: 17px;
+}
+
+.doc-steps p {
+  color: var(--body);
+}
+
+.doc-terms {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+
+.doc-terms > div {
+  display: grid;
+  gap: 4px;
+  padding: 16px 0;
+}
+
+.doc-terms > div + div {
+  border-top: 1px solid var(--hairline);
+}
+
+.doc-terms dt {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.doc-terms dd {
+  margin: 0;
+  color: var(--body);
+}
+
+@media (min-width: 720px) {
+  .doc-terms > div {
+    grid-template-columns: 13rem minmax(0, 1fr);
+    gap: 24px;
+  }
+}
+
+.doc-note {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--hairline);
+  border-left: 2px solid var(--tide);
+  border-radius: 0 var(--r-control) var(--r-control) 0;
+  background: var(--surface-1);
+  color: var(--body);
+  font-size: 15px;
+}
+
+.doc-note svg {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  fill: var(--tide);
+}
+
+.doc-note.warn {
+  border-left-color: var(--fuse);
+}
+
+.doc-note.warn svg {
+  fill: var(--fuse);
+}
+
+.doc-limits {
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.doc-limits li {
+  padding: 14px 16px 14px 18px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-control);
+  background: var(--surface-1);
+  color: var(--body);
+  font-size: 15.5px;
+}
+
+.doc-limits strong {
+  color: var(--ink);
+}
+
+.doc .cmd {
+  max-width: 30rem;
+}
+
+.doc code {
+  white-space: nowrap;
+}
