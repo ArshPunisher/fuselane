@@ -337,6 +337,35 @@ test('built-in tools: one group at a time, by click or arrow keys', async ({ pag
   await expect(page.locator('#tool-get source')).toHaveAttribute('srcset', /feeds-light\.webp/)
 })
 
+test('one switch pauses every animation, and it is remembered', async ({ page }) => {
+  await stub(page)
+  await page.goto('/')
+  const pause = page.locator('.core-pause')
+  await expect(pause).toHaveAttribute('aria-label', 'Pause animations')
+  await pause.click()
+  await expect(page.locator('html')).toHaveAttribute('data-still', '')
+  await expect(pause).toHaveAttribute('aria-pressed', 'true')
+  // The footer's switch says the same, and the hero's numbers stop.
+  await expect(page.locator('.foot [data-still-toggle]')).toHaveText('Play animations')
+  const before = await page.locator('#total').textContent()
+  await page.waitForTimeout(1200)
+  await expect(page.locator('#total')).toHaveText(before ?? '')
+  await page.goto('/download/')
+  await expect(page.locator('html')).toHaveAttribute('data-still', '')
+  await page.getByRole('button', { name: 'Play animations' }).click()
+  await expect(page.locator('html')).not.toHaveAttribute('data-still', '')
+})
+
+test('a link into the Mac guide opens the Mac panel on any system', async ({ browser }) => {
+  const ctx = await browser.newContext({ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' })
+  const page = await ctx.newPage()
+  await stub(page)
+  await page.goto('/download/#open-anyway')
+  await expect(page.getByRole('tab', { name: /macOS/ })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('#open-anyway')).toBeVisible()
+  await ctx.close()
+})
+
 test('the nav marks the current page and every page links to privacy', async ({ page }) => {
   await stub(page)
   for (const [path, name] of [
@@ -423,7 +452,7 @@ test('without a known version the download page still reads well', async ({ page
 test('FAQ answers open and close', async ({ page }) => {
   await stub(page)
   await page.goto('/faq/')
-  const q = page.getByText("Will it eat my phone's data?")
+  const q = page.getByText(/Will it eat my phone.s data\?/)
   const a = page.getByText(/monthly allowance for each\s+network/)
   await q.click()
   await expect(a).toBeVisible()

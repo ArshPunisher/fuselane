@@ -139,6 +139,17 @@ function seo(): Plugin {
               ],
             }),
           )
+        // The body font starts loading with the page instead of after the stylesheet.
+        if (ctx.bundle && path.endsWith('/')) {
+          const depth = path.split('/').filter(Boolean).length
+          const base = depth ? '../'.repeat(depth) : './'
+          for (const file of Object.keys(ctx.bundle).filter((f) =>
+            /Geist-Variable.*\.woff2$/.test(f),
+          ))
+            extra.push(
+              `<link rel="preload" href="${base}${file}" as="font" type="font/woff2" crossorigin />`,
+            )
+        }
         if (path === '/faq/') {
           // Every <details> on the page is one question and its answer.
           const questions = [

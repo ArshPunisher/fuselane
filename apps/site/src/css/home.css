@@ -1800,3 +1800,44 @@
   height: 17px;
   fill: var(--ok);
 }
+
+/* Pause and play, at the core's corner. */
+.core-pause {
+  position: absolute;
+  right: 0;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--canvas) 80%, transparent);
+  color: var(--body);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    color var(--dur-quick),
+    border-color var(--dur-quick);
+}
+
+.core-pause:hover {
+  color: var(--ink);
+  border-color: var(--hairline-strong);
+}
+
+.core-pause svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.core-pause svg + svg,
+.core-pause[aria-pressed='true'] svg:first-child {
+  display: none;
+}
+
+.core-pause[aria-pressed='true'] svg + svg {
+  display: block;
+}

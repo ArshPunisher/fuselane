@@ -672,6 +672,7 @@ kbd {
 }
 
 .nav-sheet {
+  overscroll-behavior: contain;
   position: fixed;
   inset: var(--nav-h) 0 auto;
   z-index: 39;
@@ -1182,11 +1183,41 @@ kbd {
   }
 }
 
-/* Background tab: CSS animations rest too. */
+/* Background tab, or animations paused by the visitor: CSS animations rest too. */
 html[data-hidden] *,
 html[data-hidden] *::before,
-html[data-hidden] *::after {
+html[data-hidden] *::after,
+html[data-still] *,
+html[data-still] *::before,
+html[data-still] *::after {
   animation-play-state: paused !important;
+}
+
+.foot-end {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+}
+
+.still-toggle {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--body);
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    color var(--dur-quick),
+    border-color var(--dur-quick);
+}
+
+.still-toggle:hover {
+  color: var(--ink);
+  border-color: var(--hairline-strong);
 }
 
 @media (max-width: 639px) {

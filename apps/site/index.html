@@ -144,6 +144,15 @@
           <figcaption class="core-note" id="core-cap">
             Sample speeds, as on a good home line. Turn a network off to see what it adds.
           </figcaption>
+          <button
+            class="core-pause"
+            type="button"
+            data-still-toggle
+            aria-pressed="false"
+            aria-label="Pause animations"
+          >
+            <i data-icon="pause"></i><i data-icon="play"></i>
+          </button>
           <p class="sr-only" aria-live="polite" id="core-live"></p>
         </figure>
       </section>
@@ -153,7 +162,9 @@
         <ul class="proof-list">
           <li class="reveal">
             <span class="proof-num num"><span data-count="18.6">18.6</span> s</span>
-            <span class="proof-text">A 246 MB 1080p video, over Wi-Fi and Ethernet at once.</span>
+            <span class="proof-text"
+              >A 246&nbsp;MB 1080p video, over Wi-Fi and Ethernet at once.</span
+            >
           </li>
           <li class="reveal" style="--i: 1">
             <span class="proof-num num"
@@ -167,7 +178,8 @@
           <li class="reveal" style="--i: 2">
             <span class="proof-num num"><span data-count="50">50</span><small>MB/s</small></span>
             <span class="proof-text"
-              >About that for a 300 MB file over Ethernet and Wi-Fi, byte for byte the same.</span
+              >About that for a 300&nbsp;MB file over Ethernet and Wi-Fi, byte for byte the
+              same.</span
             >
           </li>
         </ul>
@@ -202,7 +214,7 @@
                   one the server sent.
                 </p>
                 <p class="story-note">
-                  A server that doesn't allow parts sends the whole file over one network.
+                  A server that doesn&rsquo;t allow parts sends the whole file over one network.
                 </p>
               </article>
             </div>
@@ -285,21 +297,25 @@
           <div class="section-head reveal">
             <h2 id="race-title">One network, or both at once</h2>
             <p>
-              The speeds come from a real network check on one Mac: Wi-Fi 117 Mbps, Ethernet 113
-              Mbps. Pick a file size and race them.
+              The speeds come from a real network check on one Mac: Wi-Fi 117&nbsp;Mbps, Ethernet
+              113 Mbps. Pick a file size and race them.
             </p>
           </div>
           <div class="race panel reveal">
             <div class="race-top">
               <fieldset class="seg">
                 <legend class="sr-only">File size</legend>
-                <label><input type="radio" name="race-size" value="1" /><span>1 GB</span></label>
+                <label
+                  ><input type="radio" name="race-size" value="1" /><span>1&nbsp;GB</span></label
+                >
                 <label
                   ><input type="radio" name="race-size" value="10" checked /><span
-                    >10 GB</span
+                    >10&nbsp;GB</span
                   ></label
                 >
-                <label><input type="radio" name="race-size" value="50" /><span>50 GB</span></label>
+                <label
+                  ><input type="radio" name="race-size" value="50" /><span>50&nbsp;GB</span></label
+                >
               </fieldset>
               <p class="race-clock">
                 <span class="race-clock-label">Elapsed</span>
@@ -313,7 +329,7 @@
               <li class="lane" data-mbps="117">
                 <div class="lane-head">
                   <span class="lane-name"><span class="lane-key tide"></span>Wi-Fi alone</span>
-                  <span class="lane-speed num">117 Mbps</span>
+                  <span class="lane-speed num">117&nbsp;Mbps</span>
                 </div>
                 <div class="track" style="--p: 1">
                   <span class="fill"></span><span class="head"></span>
@@ -325,7 +341,7 @@
                   <span class="lane-name"
                     ><span class="lane-key both"></span>Wi-Fi and Ethernet, with Fuselane</span
                   >
-                  <span class="lane-speed num">117 + 113 Mbps</span>
+                  <span class="lane-speed num">117 + 113&nbsp;Mbps</span>
                 </div>
                 <div class="track" style="--p: 1">
                   <span class="fill"></span><span class="head"></span>
@@ -339,7 +355,7 @@
           </div>
           <p class="race-note">
             Times are worked out from those speeds. Real results depend on the server and on your
-            lines: two cables to the same router share one line, so they won't add up.
+            lines: two cables to the same router share one line, so they won&rsquo;t add up.
           </p>
         </div>
       </section>
@@ -785,7 +801,9 @@
             </p>
             <ul class="send-points">
               <li><i data-icon="lock"></i>End-to-end encrypted: the key lives only in the link</li>
-              <li><i data-icon="gauge"></i>No size limit: 4 GB or 400 GB, the same link</li>
+              <li>
+                <i data-icon="gauge"></i>No size limit: 4&nbsp;GB or 400&nbsp;GB, the same link
+              </li>
               <li>
                 <i data-icon="plug"></i>Same Wi-Fi: straight away. Across the internet: over IPv6,
                 or when your router has UPnP on

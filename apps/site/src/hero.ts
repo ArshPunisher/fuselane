@@ -4,6 +4,7 @@
 import { createCore, type CoreNet, type CoreFile, type CoreState } from './core'
 import { duration, loop, prefersReduced, approach, watch } from './motion'
 import { odometer } from './odometer'
+import { isStill } from './common'
 
 const NETS: CoreNet[] = [
   { name: 'Wi-Fi', lane: 'tide', base: 41.2 },
@@ -118,6 +119,7 @@ export function startHero() {
   })
 
   place()
+  core.render()
   if (reduced) {
     still()
     return
@@ -145,6 +147,7 @@ export function startHero() {
   let visible = true
   watch(stage, (v) => (visible = v))
   loop(stage, (dt) => {
+    if (isStill()) return
     core.step(dt)
     core.render()
     rx = approach(rx, -ty * 5, 4, dt)

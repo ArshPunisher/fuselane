@@ -58,6 +58,7 @@ import folder from '@phosphor-icons/core/assets/regular/folder-simple.svg?raw'
 import send from '@phosphor-icons/core/assets/regular/paper-plane-tilt.svg?raw'
 import devices from '@phosphor-icons/core/assets/regular/devices.svg?raw'
 import play from '@phosphor-icons/core/assets/regular/play.svg?raw'
+import pause from '@phosphor-icons/core/assets/regular/pause.svg?raw'
 import replay from '@phosphor-icons/core/assets/regular/arrow-counter-clockwise.svg?raw'
 import book from '@phosphor-icons/core/assets/regular/book-open-text.svg?raw'
 import info from '@phosphor-icons/core/assets/regular/info.svg?raw'
@@ -135,6 +136,7 @@ const ICONS: Record<string, string> = {
   send,
   devices,
   play,
+  pause,
   replay,
   book,
   info,
@@ -316,6 +318,50 @@ function spotlight() {
   })
 }
 
+/**
+ * Pause animations (WCAG 2.2.2): one switch, in the footer of every page and on
+ * the hero, stops everything that loops by itself. The choice is remembered on
+ * this device. Under reduced motion nothing loops, so the switch isn't shown.
+ */
+function stillToggle() {
+  const root = document.documentElement
+  const buttons = [...document.querySelectorAll<HTMLButtonElement>('[data-still-toggle]')]
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    buttons.forEach((b) => (b.hidden = true))
+    return
+  }
+  let still = false
+  try {
+    still = localStorage.getItem('fuselane.still') === '1'
+  } catch {
+    /* storage blocked */
+  }
+  const apply = () => {
+    root.toggleAttribute('data-still', still)
+    buttons.forEach((b) => {
+      b.setAttribute('aria-pressed', String(still))
+      const label = still ? 'Play animations' : 'Pause animations'
+      if (b.hasAttribute('aria-label')) b.setAttribute('aria-label', label)
+      else b.textContent = label
+    })
+  }
+  buttons.forEach((b) =>
+    b.addEventListener('click', () => {
+      still = !still
+      try {
+        localStorage.setItem('fuselane.still', still ? '1' : '0')
+      } catch {
+        /* storage blocked: it still works for this visit */
+      }
+      apply()
+    }),
+  )
+  apply()
+}
+
+/** True while the visitor has paused animations. */
+export const isStill = () => document.documentElement.hasAttribute('data-still')
+
 /** Background tab: CSS animations rest too (canvas loops stop by themselves). */
 function restWhenHidden() {
   const set = () => document.documentElement.toggleAttribute('data-hidden', document.hidden)
@@ -337,6 +383,19 @@ export function toast(message: string) {
   }, 2400)
 }
 
+/** Says what just happened to screen readers, without showing anything. */
+export function announce(message: string) {
+  let r = document.querySelector<HTMLElement>('#sr-status')
+  if (!r) {
+    r = document.createElement('p')
+    r.id = 'sr-status'
+    r.className = 'sr-only'
+    r.setAttribute('role', 'status')
+    document.body.append(r)
+  }
+  r.textContent = message
+}
+
 function copyButtons() {
   document.querySelectorAll<HTMLButtonElement>('button[data-copy]').forEach((b) => {
     b.addEventListener('click', async () => {
@@ -344,8 +403,10 @@ function copyButtons() {
       try {
         await navigator.clipboard.writeText(value.replace(/\s+/g, ' '))
         b.textContent = 'Copied'
+        announce('Copied to the clipboard.')
       } catch {
         b.textContent = 'Select and copy'
+        announce('Copying was blocked. Select the text and copy it.')
       }
       window.setTimeout(() => (b.textContent = 'Copy'), 2000)
     })
@@ -385,6 +446,7 @@ navbar()
 reveal()
 spotlight()
 restWhenHidden()
+stillToggle()
 copyButtons()
 void stars()
 topics()

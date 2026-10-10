@@ -1,6 +1,6 @@
 // Download page: the visitor's system picked, links to the exact files of the
 // current version (from the signed update feed), and each file's size.
-import { REPO, detectOs, fileUrl, latestVersion, type Os } from './common'
+import { REPO, detectOs, fileUrl, isStill, latestVersion, type Os } from './common'
 import './css/pages.css'
 import { prefersReduced, watch, whenSeen } from './motion'
 
@@ -37,6 +37,18 @@ function tabs(initial: Os) {
     badge.textContent = 'Yours'
     mine.append(badge)
   }
+  // A link into one system's panel (download/#open-anyway) opens that panel.
+  const follow = () => {
+    const id = decodeURIComponent(location.hash.slice(1))
+    const target = id ? document.getElementById(id) : null
+    const panel = target?.closest<HTMLElement>('[role="tabpanel"]')
+    const tab = panel && list.find((t) => t.getAttribute('aria-controls') === panel.id)
+    if (!target || !tab) return
+    select(tab)
+    target.scrollIntoView()
+  }
+  follow()
+  addEventListener('hashchange', follow)
 }
 
 async function sizes(version: string) {
@@ -98,7 +110,7 @@ function guides() {
       if (v && !steps.some((s) => s.hasAttribute('data-active'))) show(0)
     })
     window.setInterval(() => {
-      if (!visible || document.hidden || Date.now() < holdUntil) return
+      if (!visible || document.hidden || isStill() || Date.now() < holdUntil) return
       show((active + 1) % steps.length)
     }, 3400)
     steps.forEach((s, i) => {
