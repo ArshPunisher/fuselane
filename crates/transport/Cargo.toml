@@ -17,6 +17,7 @@ rustls-platform-verifier = "0.6"
 libc = "0.2"
 thiserror = "2"
 hickory-proto = { version = "0.26", default-features = false, features = ["std"] }
+base64 = "0.22"
 fuselane-netif.workspace = true
 
 [lints]
@@ -27,3 +28,4 @@ windows-sys = { version = "0.61", features = ["Win32_Networking_WinSock"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
+fuselane-testkit.workspace = true

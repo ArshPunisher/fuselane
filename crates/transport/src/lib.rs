@@ -3,10 +3,12 @@
 //! Creates sockets pinned to one network (`SO_BINDTODEVICE`, `IP_BOUND_IF`,
 //! `IP_UNICAST_IF`) and wraps them in TLS with the OS trust store.
 //! Design: `docs/03-architecture/NETWORKING.md` §2–6. Rules: L-09, L-56–L-59.
-//! Per-network DNS and Happy Eyeballs come next (STEPS 2.13, 2.14).
+//! Per-network DNS and Happy Eyeballs come next (STEPS 2.13, 2.14). A proxy set
+//! for a network (HTTP CONNECT or SOCKS5) is reached the same way (`proxy`).
 
 pub mod dns;
 pub mod probe;
+pub mod proxy;
 
 use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, OnceLock};
