@@ -125,6 +125,9 @@ export interface Backend {
   diagnostics(): Promise<string>
   /** Bytes per network per day, for the Data used chart. */
   usageHistory(): Promise<UsageHistory>
+  /** The welcome (guided first run) was seen, or isn't needed. */
+  welcomeSeen(): Promise<boolean>
+  setWelcomeSeen(seen: boolean): Promise<void>
   watchState(): Promise<WatchView>
   watchSet(on: boolean, path: string): Promise<WatchView>
   feedsList(): Promise<FeedView[]>
@@ -329,6 +332,8 @@ async function tauriBackend(): Promise<Backend> {
     unseenCrash: () => call('unseen_crash'),
     netCheckState: () => call('netcheck_state'),
     usageHistory: () => call('usage_history'),
+    welcomeSeen: () => call('welcome_seen'),
+    setWelcomeSeen: (seen) => call('set_welcome_seen', { seen }),
     watchState: () => call('watch_state'),
     watchSet: (on, path) => call('watch_set', { on, path }),
     feedsList: () => call('feeds_list'),

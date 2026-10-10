@@ -15,6 +15,7 @@ import { UpdateBanner, UpdatedBanner } from './components/UpdateBanner'
 import { CrashBanner } from './components/CrashBanner'
 import { WhenDoneBanner } from './components/WhenDoneBanner'
 import { SlowToggle } from './components/SlowMode'
+import { Welcome } from './components/Welcome'
 
 type Layout = 'compact' | 'regular' | 'wide'
 
@@ -332,6 +333,7 @@ export function App() {
       </div>
       <NewDownload />
       <NearbyRequestDialog />
+      {connected && <Welcome />}
       <Toast />
     </div>
   )

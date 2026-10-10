@@ -110,7 +110,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [x] 3.5 Detail screen: hero speed (NumberFlow), ×-faster chip, Fuse Core, Stream graph, network table with streams and orbs
 - [x] 3.6 Complete and error screens with the error catalogue actions; Fix link
 - [ ] 3.7 Selection toolbar with confirmations; Trash; Reveal
-- [ ] 3.8 Networks menu, rename/recolour (done: rename/recolour; to do: health probe, speed test, guided setup), health probe and speed test, guided setup (Windows Wi-Fi policy, Android-on-Mac)
+- [x] 3.8 Networks menu, rename/recolour, health probe and speed test, guided setup (Windows Wi-Fi policy, Android-on-Mac) (rename/recolour; reach checks every minute; network check B10.1; a welcome on the first launch with platform tips)
 - [x] 3.9 Limits dialog (global, per network, slow mode, data allowances)
 - [ ] 3.10 Tray/menu-bar mode, start at login, notifications, dock/taskbar progress, window-state persistence
 - [ ] 3.11 Keyboard shortcuts, drag-drop anywhere, single instance + link hand-over

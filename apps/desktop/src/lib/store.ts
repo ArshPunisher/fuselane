@@ -67,6 +67,8 @@ interface State {
   updateError: UiError | null
   selected: number | null
   view: View
+  /** The welcome (guided first run) is open. */
+  welcomeOpen: boolean
   /** A feed address the extension handed over: Feeds opens with it (B10.8). */
   feedDraft: string | null
   adding: boolean
@@ -161,6 +163,7 @@ export const useApp = create<State>((set, get) => ({
   selected: null,
   view: 'transfers',
   feedDraft: null,
+  welcomeOpen: false,
   adding: false,
   automation: null,
   whenDone: null,

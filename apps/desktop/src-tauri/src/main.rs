@@ -24,6 +24,7 @@ mod torrents;
 mod unpack;
 mod update;
 mod watch;
+mod welcome;
 
 use std::sync::Arc;
 
@@ -1209,6 +1210,17 @@ async fn nearby_phone_text(
     near.phone_text(text).await
 }
 
+/// The welcome (guided first run).
+#[tauri::command]
+fn welcome_seen(svc: State<'_>) -> bool {
+    welcome::seen(&svc)
+}
+
+#[tauri::command]
+fn set_welcome_seen(svc: State<'_>, seen: bool) -> Result<(), UiError> {
+    welcome::set_seen(&svc, seen)
+}
+
 /// Watch folder (B10.9).
 #[tauri::command]
 fn watch_state(wat: Wat<'_>) -> watch::WatchView {
@@ -1963,6 +1975,8 @@ fn main() {
             nearby_phone_text,
             add_metalink,
             remote_state,
+            welcome_seen,
+            set_welcome_seen,
             watch_state,
             watch_set,
             feeds_list,

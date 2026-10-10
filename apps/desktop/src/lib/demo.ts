@@ -1090,6 +1090,9 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       })
       return { days, labels: { en0: 'Wi-Fi', en7: 'iPhone USB', en5: 'Ethernet' } }
     },
+    // The demo shows the welcome only with ?welcome=1.
+    welcomeSeen: async () => params.get('welcome') !== '1',
+    setWelcomeSeen: async () => {},
     watchState: async () => structuredClone(watch),
     watchSet: async (on: boolean, path: string) => {
       if (on && !path.startsWith('/'))

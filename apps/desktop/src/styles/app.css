@@ -5023,3 +5023,201 @@ html[data-hidden] .orb b {
     flex-wrap: nowrap;
   }
 }
+
+/* ---------- Welcome (guided first run) ---------- */
+.dialog.welcome {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.welcome-body {
+  display: grid;
+  gap: 20px;
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  padding: 20px 22px 22px;
+}
+
+.welcome-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.welcome-steps span {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--hairline-strong);
+  transition: background-color var(--dur-base) var(--ease-out);
+}
+
+.welcome-steps span[data-done='true'] {
+  background: var(--fuse);
+}
+
+.welcome-step {
+  display: grid;
+  gap: 14px;
+  min-height: 220px;
+  align-content: start;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .welcome-step {
+    animation: welcome-in var(--dur-base) var(--ease-out);
+  }
+}
+
+@keyframes welcome-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.welcome-step h2 {
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+
+.welcome-lead {
+  max-width: 52ch;
+  color: var(--body);
+}
+
+.welcome-nets,
+.welcome-results,
+.welcome-tips {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.welcome-nets li,
+.welcome-results li {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .welcome-nets li,
+  .welcome-results li {
+    animation: welcome-in var(--dur-base) var(--ease-out) both;
+  }
+}
+
+.welcome-net-ic {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--surface-3);
+  color: var(--fuse);
+}
+
+.welcome-net-name {
+  overflow: hidden;
+  color: var(--ink);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.welcome-results .num {
+  color: var(--ink);
+}
+
+.welcome-hint {
+  padding: 10px 12px;
+  border-left: 2px solid var(--fuse);
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+  background: color-mix(in oklch, var(--fuse) 8%, transparent);
+  color: var(--body);
+  font-size: 13px;
+}
+
+.welcome-verdict {
+  min-height: 1.5em;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.welcome-verdict:empty {
+  display: none;
+}
+
+.welcome-step > .btn {
+  justify-self: start;
+}
+
+.welcome-tips li {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  color: var(--body);
+}
+
+.welcome-tips svg {
+  margin-top: 2px;
+  color: var(--fuse);
+}
+
+.welcome-tips b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.welcome-tips .num {
+  overflow-wrap: anywhere;
+}
+
+/* Two short buttons fit side by side even on a phone. */
+.welcome .dialog-foot {
+  flex-wrap: nowrap;
+}
+
+.welcome .dialog-foot .foot-start {
+  flex-basis: auto;
+}
+
+.welcome-more {
+  font-size: 13px;
+}
+
+.welcome-more summary {
+  width: fit-content;
+  color: var(--ink);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.welcome-more ul {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--body);
+}
+
+.welcome-more b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.welcome-more code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}

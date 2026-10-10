@@ -647,6 +647,21 @@ export function SettingsView() {
         </Group>
         <Group title="About">
           <UpdateSetting />
+          <div className="setting">
+            <div>
+              <p className="setting-name">Welcome</p>
+              <p className="muted">
+                The short tour from the first launch: networks, a check, tips.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => useApp.setState({ welcomeOpen: true })}
+            >
+              Show it again
+            </button>
+          </div>
           <ShortcutsSetting />
           <DiagnosticsSetting />
           <div className="setting">
