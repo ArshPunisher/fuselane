@@ -17,6 +17,7 @@ import {
 } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { bytes } from '../lib/format'
+import { intlLocale, mark, t, tn, tr } from '../lib/i18n'
 import type {
   DeviceView,
   NearbyRequest,
@@ -35,8 +36,8 @@ function deviceSub(d: Pick<DeviceView, 'model' | 'fuselane' | 'kind'>): string {
     if (/linux/i.test(m)) return 'Linux'
     return 'Fuselane'
   }
-  const what = m || (d.kind === 'mobile' ? 'Phone' : 'Computer')
-  return `${what}, via LocalSend`
+  const what = m || (d.kind === 'mobile' ? t('Phone') : t('Computer'))
+  return t('{what}, via LocalSend', { what })
 }
 
 function DeviceIcon({
@@ -58,7 +59,7 @@ function shortDate(iso: string): string {
   const d = new Date(`${iso}T12:00:00`)
   return Number.isNaN(d.getTime())
     ? iso
-    : d.toLocaleDateString([], { day: 'numeric', month: 'short' })
+    : d.toLocaleDateString(intlLocale(), { day: 'numeric', month: 'short' })
 }
 
 /** Seconds left, counting down every second from the backend's last value. */
@@ -70,15 +71,15 @@ function useSecondsLeft(seconds: number | null): number | null {
   }, [seconds])
   useEffect(() => {
     if (seconds === null) return
-    const t = setInterval(() => tick((n) => n + 1), 1000)
-    return () => clearInterval(t)
+    const timer = setInterval(() => tick((n) => n + 1), 1000)
+    return () => clearInterval(timer)
   }, [seconds])
   if (seconds === null) return null
   return Math.max(0, Math.round((until.current - Date.now()) / 1000))
 }
 
-const live = (t: NearbyTransfer) =>
-  t.state === 'asking' || t.state === 'sending' || t.state === 'receiving'
+const live = (x: NearbyTransfer) =>
+  x.state === 'asking' || x.state === 'sending' || x.state === 'receiving'
 
 /** A ring that fills with progress (0..1); just the track when unknown. */
 function Ring({
@@ -144,7 +145,7 @@ function Radar({
   over: string | null
 }) {
   const sendTo = useSendTo()
-  const active = (d: DeviceView) => transfers.find((t) => t.device === d.alias && live(t))
+  const active = (d: DeviceView) => transfers.find((x) => x.device === d.alias && live(x))
   return (
     <div className="radar" data-searching={devices.length === 0 || undefined}>
       <div className="radar-rings" aria-hidden>
@@ -155,15 +156,15 @@ function Radar({
       </div>
       <svg className="radar-beams" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
         {devices.map((d, i) => {
-          const t = active(d)
-          if (!t) return null
+          const x = active(d)
+          if (!x) return null
           const p = orbit(devices.length, i)
-          const inward = t.direction === 'in'
+          const inward = x.direction === 'in'
           return (
             <line
               key={d.fingerprint}
               className="beam"
-              data-wait={t.state === 'asking' || undefined}
+              data-wait={x.state === 'asking' || undefined}
               x1={inward ? p.x : 50}
               y1={inward ? p.y : 50}
               x2={inward ? 50 : p.x}
@@ -180,17 +181,17 @@ function Radar({
         <span className="radar-me-name" translate="no">
           {me}
         </span>
-        <span className="radar-me-sub">This computer</span>
+        <span className="radar-me-sub">{t('This computer')}</span>
       </div>
       {devices.length === 0 && (
         <p className="radar-empty">
-          No one here yet. Open Fuselane or LocalSend on the other device, on this Wi-Fi.
+          {t('No one here yet. Open Fuselane or LocalSend on the other device, on this Wi-Fi.')}
         </p>
       )}
       {devices.map((d, i) => {
         const p = orbit(devices.length, i)
-        const t = active(d)
-        const progress = t && t.state !== 'asking' && t.size ? t.done / t.size : null
+        const x = active(d)
+        const progress = x && x.state !== 'asking' && x.size ? x.done / x.size : null
         return (
           <button
             key={d.fingerprint}
@@ -198,17 +199,17 @@ function Radar({
             className="radar-node"
             data-device={d.fingerprint}
             data-over={over === d.fingerprint || undefined}
-            data-busy={t ? t.state : undefined}
+            data-busy={x ? x.state : undefined}
             style={{ '--x': `${p.x}%`, '--y': `${p.y}%`, '--i': i } as CSSProperties}
             onClick={() => void sendTo(d.fingerprint)}
-            aria-label={`Send files to ${d.alias}`}
-            title="Click to choose files, or drop files here"
+            aria-label={t('Send files to {name}', { name: d.alias })}
+            title={t('Click to choose files, or drop files here')}
           >
             <span className="radar-node-tile">
-              <Ring value={t ? progress : null} size={64} />
+              <Ring value={x ? progress : null} size={64} />
               <DeviceIcon kind={d.kind} model={d.model} />
               {d.trusted && (
-                <span className="radar-trust" title="Trusted">
+                <span className="radar-trust" title={t('Trusted')}>
                   <ShieldCheck size={12} weight="fill" aria-hidden />
                 </span>
               )}
@@ -217,9 +218,9 @@ function Radar({
               {d.alias}
             </span>
             <span className="radar-node-sub">
-              {t
-                ? t.state === 'asking'
-                  ? 'Waiting for them…'
+              {x
+                ? x.state === 'asking'
+                  ? t('Waiting for them…')
                   : `${Math.floor((progress ?? 0) * 100)}%`
                 : deviceSub(d)}
             </span>
@@ -243,20 +244,18 @@ function Visibility({ seconds }: { seconds: number | null }) {
       </span>
       <div>
         <p className="setting-name" id="vis-label">
-          Who can see this computer
+          {t('Who can see this computer')}
         </p>
         <p className="muted">
-          {everyone && left !== null ? (
-            <>
-              Everyone here, for{' '}
-              <span className="num">
-                {Math.floor(left / 60)}:{String(left % 60).padStart(2, '0')}
-              </span>{' '}
-              more.
-            </>
-          ) : (
-            'Only devices you trust.'
-          )}
+          {everyone && left !== null
+            ? tr('Everyone here, for {time} more.', {
+                time: (
+                  <span className="num">
+                    {Math.floor(left / 60)}:{String(left % 60).padStart(2, '0')}
+                  </span>
+                ),
+              })
+            : t('Only devices you trust.')}
         </p>
       </div>
       <div className="segmented" role="radiogroup" aria-labelledby="vis-label">
@@ -266,7 +265,7 @@ function Visibility({ seconds }: { seconds: number | null }) {
           aria-checked={!everyone}
           onClick={() => act((b) => b.nearbySetEveryone(false))}
         >
-          Trusted only
+          {t('Trusted only')}
         </button>
         <button
           type="button"
@@ -274,7 +273,7 @@ function Visibility({ seconds }: { seconds: number | null }) {
           aria-checked={everyone}
           onClick={() => act((b) => b.nearbySetEveryone(true))}
         >
-          Everyone, 10 min
+          {t('Everyone, 10 min')}
         </button>
       </div>
     </section>
@@ -282,52 +281,57 @@ function Visibility({ seconds }: { seconds: number | null }) {
 }
 
 const STATE_WORD: Record<NearbyTransfer['state'], string> = {
-  asking: 'Waiting for them to accept',
-  sending: 'Sending',
-  receiving: 'Receiving',
-  done: 'Done',
-  declined: 'They declined',
-  failed: "Didn't arrive",
-  cancelled: 'Cancelled',
+  asking: mark('Waiting for them to accept'),
+  sending: mark('Sending'),
+  receiving: mark('Receiving'),
+  done: mark('Done'),
+  declined: mark('They declined'),
+  failed: mark("Didn't arrive"),
+  cancelled: mark('Cancelled'),
 }
 
 /** One transfer: slides in, fills its ring, turns into a check when done (motion 5). */
-function Transfer({ t }: { t: NearbyTransfer }) {
+function Transfer({ x }: { x: NearbyTransfer }) {
   const act = useApp((s) => s.act)
-  const running = live(t)
-  const pct = t.size ? Math.min(1, t.done / t.size) : 0
+  const running = live(x)
+  const pct = x.size ? Math.min(1, x.done / x.size) : 0
   return (
-    <li className="activity" data-state={t.state} data-dir={t.direction}>
+    <li className="activity" data-state={x.state} data-dir={x.direction}>
       <span className="activity-ic" aria-hidden>
         <Ring
-          value={t.state === 'done' ? 1 : running && t.state !== 'asking' ? pct : null}
+          value={x.state === 'done' ? 1 : running && x.state !== 'asking' ? pct : null}
           size={38}
         />
-        {t.text !== null && t.state === 'done' ? (
+        {x.text !== null && x.state === 'done' ? (
           <TextT size={16} weight="bold" className="done-check" />
-        ) : t.state === 'done' ? (
+        ) : x.state === 'done' ? (
           <Check size={16} weight="bold" className="done-check" />
-        ) : t.direction === 'out' ? (
+        ) : x.direction === 'out' ? (
           <PaperPlaneTilt size={16} />
         ) : (
           <DownloadSimple size={16} />
         )}
       </span>
       <span className="activity-text">
-        <span className="activity-name" translate="no" title={t.text ?? t.name}>
-          {t.text !== null ? `“${t.name}”` : t.name}
+        <span className="activity-name" translate="no" title={x.text ?? x.name}>
+          {x.text !== null ? `“${x.name}”` : x.name}
         </span>
         <span className="activity-meta">
-          {t.direction === 'out' ? 'To' : 'From'} <span translate="no">{t.device}</span>.{' '}
-          {t.error ?? STATE_WORD[t.state]}
-          {running && t.size > 0 && t.state !== 'asking' && (
-            <span className="num">
+          {tr(x.direction === 'out' ? 'To {device}.' : 'From {device}.', {
+            device: <span translate="no">{x.device}</span>,
+          })}{' '}
+          {x.error ?? t(STATE_WORD[x.state])}
+          {running && x.size > 0 && x.state !== 'asking' && (
+            <span>
               {' '}
-              {bytes(t.done)} of {bytes(t.size)}
+              {tr('{done} of {total}', {
+                done: <span className="num">{bytes(x.done)}</span>,
+                total: <span className="num">{bytes(x.size)}</span>,
+              })}
             </span>
           )}
         </span>
-        {running && t.state !== 'asking' && (
+        {running && x.state !== 'asking' && (
           <span className="activity-bar" aria-hidden>
             <span style={{ width: `${pct * 100}%` }} />
           </span>
@@ -337,31 +341,31 @@ function Transfer({ t }: { t: NearbyTransfer }) {
         {running ? (
           <button
             className="btn btn-ghost btn-sm"
-            aria-label={`Cancel ${t.name}`}
-            onClick={() => act((b) => b.nearbyCancel(t.id))}
+            aria-label={t('Cancel {name}', { name: x.name })}
+            onClick={() => act((b) => b.nearbyCancel(x.id))}
           >
-            Cancel
+            {t('Cancel')}
           </button>
         ) : (
           <>
-            {t.text !== null && t.state === 'done' && (
+            {x.text !== null && x.state === 'done' && (
               <button
                 className="btn btn-sm"
-                aria-label={`Copy text from ${t.device}`}
-                onClick={() => void navigator.clipboard?.writeText(t.text ?? '')}
+                aria-label={t('Copy text from {name}', { name: x.device })}
+                onClick={() => void navigator.clipboard?.writeText(x.text ?? '')}
               >
-                <Copy size={16} aria-hidden /> Copy
+                <Copy size={16} aria-hidden /> {t('Copy')}
               </button>
             )}
-            {t.direction === 'in' && t.state === 'done' && t.path && (
-              <button className="btn btn-sm" onClick={() => act((b) => b.nearbyReveal(t.id))}>
-                <FolderOpen size={16} aria-hidden /> Show
+            {x.direction === 'in' && x.state === 'done' && x.path && (
+              <button className="btn btn-sm" onClick={() => act((b) => b.nearbyReveal(x.id))}>
+                <FolderOpen size={16} aria-hidden /> {t('Show')}
               </button>
             )}
             <button
               className="icon-btn"
-              aria-label={`Clear ${t.name}`}
-              onClick={() => act((b) => b.nearbyClear(t.id))}
+              aria-label={t('Clear {name}', { name: x.name })}
+              onClick={() => act((b) => b.nearbyClear(x.id))}
             >
               <X size={16} aria-hidden />
             </button>
@@ -385,24 +389,24 @@ function TextCard({ devices }: { devices: DeviceView[] }) {
   return (
     <section className="text-card" aria-labelledby="text-title">
       <h2 className="group" id="text-title">
-        Send text
+        {t('Send text')}
       </h2>
       <textarea
-        aria-label="Text to send"
+        aria-label={t('Text to send')}
         rows={2}
         maxLength={65536}
-        placeholder="Type or paste, or leave empty to send what you copied"
+        placeholder={t('Type or paste, or leave empty to send what you copied')}
         value={text}
         onChange={(e) => setText(e.target.value)}
       />
       <div className="text-card-row">
         <select
-          aria-label="Send to"
+          aria-label={t('Send to')}
           value={target?.fingerprint ?? ''}
           onChange={(e) => setTo(e.target.value)}
         >
           {devices.map((d) => (
-            <option key={d.fingerprint} value={d.fingerprint}>
+            <option key={d.fingerprint} value={d.fingerprint} translate="no">
               {d.alias}
             </option>
           ))}
@@ -418,7 +422,8 @@ function TextCard({ devices }: { devices: DeviceView[] }) {
             })
           }
         >
-          <PaperPlaneTilt size={16} aria-hidden /> {text.trim() ? 'Send' : 'Send what I copied'}
+          <PaperPlaneTilt size={16} aria-hidden />{' '}
+          {text.trim() ? t('Send') : t('Send what I copied')}
         </button>
       </div>
     </section>
@@ -426,11 +431,18 @@ function TextCard({ devices }: { devices: DeviceView[] }) {
 }
 
 const SYNC_WORD = {
-  'up-to-date': 'Up to date',
-  sending: 'Sending changes',
-  waiting: 'Waiting',
-  problem: 'Problem',
+  'up-to-date': mark('Up to date'),
+  sending: mark('Sending changes'),
+  waiting: mark('Waiting'),
+  problem: mark('Problem'),
 } as const
+
+/** "Up to date, 128 files", "Sending changes, 3 to go", "Waiting". */
+function syncWord(s: SyncView): string {
+  if (s.state === 'sending' && s.pending) return t('Sending changes, {n} to go', { n: s.pending })
+  if (s.state === 'up-to-date') return tn(s.files, 'Up to date, {n} file', 'Up to date, {n} files')
+  return t(SYNC_WORD[s.state])
+}
 
 /**
  * Folders kept in sync with your own trusted computers (B10.3): new and
@@ -442,11 +454,11 @@ function SyncCard({ syncs, trusted }: { syncs: SyncView[]; trusted: TrustedDevic
   const backend = useApp((s) => s.backend)
   const [to, setTo] = useState('')
   if (!trusted.length && !syncs.length) return null
-  const target = trusted.find((t) => t.fingerprint === to) ?? trusted[0]
+  const target = trusted.find((d) => d.fingerprint === to) ?? trusted[0]
   return (
     <section className="sync-card" aria-labelledby="sync-title">
       <h2 className="group" id="sync-title">
-        Folders kept in sync
+        {t('Folders kept in sync')}
       </h2>
       {syncs.length > 0 && (
         <ul className="sync-list">
@@ -457,15 +469,13 @@ function SyncCard({ syncs, trusted }: { syncs: SyncView[]; trusted: TrustedDevic
                   {s.name} → {s.device}
                 </span>
                 <span className="muted">
-                  {SYNC_WORD[s.state]}
-                  {s.state === 'sending' && s.pending ? `, ${s.pending} to go` : ''}
-                  {s.state === 'up-to-date' ? `, ${s.files} files` : ''}
+                  {syncWord(s)}
                   {s.note ? `. ${s.note}` : ''}
                 </span>
               </span>
               <button
                 className="icon-btn"
-                aria-label={`Stop syncing ${s.name}`}
+                aria-label={t('Stop syncing {name}', { name: s.name })}
                 onClick={() => void act((b) => b.nearbySyncRemove(s.id))}
               >
                 <X size={16} aria-hidden />
@@ -477,13 +487,13 @@ function SyncCard({ syncs, trusted }: { syncs: SyncView[]; trusted: TrustedDevic
       {trusted.length > 0 && (
         <div className="text-card-row">
           <select
-            aria-label="Keep in sync with"
+            aria-label={t('Keep in sync with')}
             value={target?.fingerprint ?? ''}
             onChange={(e) => setTo(e.target.value)}
           >
-            {trusted.map((t) => (
-              <option key={t.fingerprint} value={t.fingerprint}>
-                {t.alias}
+            {trusted.map((d) => (
+              <option key={d.fingerprint} value={d.fingerprint} translate="no">
+                {d.alias}
               </option>
             ))}
           </select>
@@ -495,13 +505,14 @@ function SyncCard({ syncs, trusted }: { syncs: SyncView[]; trusted: TrustedDevic
               if (folder) void act((b) => b.nearbySyncAdd(folder, target.fingerprint))
             }}
           >
-            <FolderOpen size={16} aria-hidden /> Add a folder
+            <FolderOpen size={16} aria-hidden /> {t('Add a folder')}
           </button>
         </div>
       )}
       <p className="muted sync-help">
-        New and changed files go to that computer&apos;s downloads folder whenever both are on this
-        network. Nothing is deleted there.
+        {t(
+          "New and changed files go to that computer's downloads folder whenever both are on this network. Nothing is deleted there.",
+        )}
       </p>
     </section>
   )
@@ -518,11 +529,11 @@ function PhoneCard({ phone }: { phone: PhoneView | null }) {
           <QrCode size={20} />
         </span>
         <div>
-          <p className="setting-name">A phone without Fuselane?</p>
-          <p className="muted">It can send and receive in its browser, on this Wi-Fi.</p>
+          <p className="setting-name">{t('A phone without Fuselane?')}</p>
+          <p className="muted">{t('It can send and receive in its browser, on this Wi-Fi.')}</p>
         </div>
         <button className="btn btn-sm" onClick={() => act((b) => b.nearbyPhone(true))}>
-          <QrCode size={16} aria-hidden /> Show a code to scan
+          <QrCode size={16} aria-hidden /> {t('Show a code to scan')}
         </button>
       </section>
     )
@@ -533,28 +544,31 @@ function PhoneCard({ phone }: { phone: PhoneView | null }) {
         <span
           className="qr"
           role="img"
-          aria-label="Code to scan with the phone's camera"
+          aria-label={t("Code to scan with the phone's camera")}
           dangerouslySetInnerHTML={{ __html: phone.qr }}
         />
         <div className="phone-text">
-          <p className="setting-name">Scan with the phone&apos;s camera</p>
+          <p className="setting-name">{t("Scan with the phone's camera")}</p>
           <p className="muted">
-            Or type{' '}
-            <span className="num" translate="no">
-              {phone.url}
-            </span>
+            {tr('Or type {url}', {
+              url: (
+                <span className="num" translate="no">
+                  {phone.url}
+                </span>
+              ),
+            })}
           </p>
         </div>
       </div>
       {phone.offers.length > 0 && (
-        <ul className="offers" aria-label="Offered to the phone">
+        <ul className="offers" aria-label={t('Offered to the phone')}>
           {phone.offers.map((o) => (
             <li key={o.id}>
               <span translate="no">{o.name}</span>
               <span className="num muted">{bytes(o.size)}</span>
               <button
                 className="icon-btn"
-                aria-label={`Stop offering ${o.name}`}
+                aria-label={t('Stop offering {name}', { name: o.name })}
                 onClick={() => act((b) => b.nearbyPhoneOffer([], o.id))}
               >
                 <X size={14} aria-hidden />
@@ -566,11 +580,11 @@ function PhoneCard({ phone }: { phone: PhoneView | null }) {
       {phone.text !== null ? (
         <div className="phone-note">
           <p className="muted">
-            On the phone&apos;s page: <q translate="no">{phone.text}</q>
+            {tr("On the phone's page: {text}", { text: <q translate="no">{phone.text}</q> })}
           </p>
           <button
             className="icon-btn"
-            aria-label="Take the text away from the phone's page"
+            aria-label={t("Take the text away from the phone's page")}
             onClick={() => act((b) => b.nearbyPhoneText(null, true))}
           >
             <X size={14} aria-hidden />
@@ -582,9 +596,9 @@ function PhoneCard({ phone }: { phone: PhoneView | null }) {
             type="text"
             name="phone-text"
             autoComplete="off"
-            aria-label="Text for the phone"
+            aria-label={t('Text for the phone')}
             maxLength={65536}
-            placeholder="Text or a link for the phone, or leave empty for what you copied"
+            placeholder={t('Text or a link for the phone, or leave empty for what you copied')}
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
@@ -597,12 +611,12 @@ function PhoneCard({ phone }: { phone: PhoneView | null }) {
               })
             }
           >
-            {text.trim() ? 'Offer text' : 'Offer what I copied'}
+            {text.trim() ? t('Offer text') : t('Offer what I copied')}
           </button>
         </div>
       )}
       <p className="muted phone-hint">
-        Text typed on the phone lands on this computer&apos;s clipboard.
+        {t("Text typed on the phone lands on this computer's clipboard.")}
       </p>
       <div className="phone-actions">
         <button
@@ -614,10 +628,10 @@ function PhoneCard({ phone }: { phone: PhoneView | null }) {
             })
           }
         >
-          <PaperPlaneTilt size={16} aria-hidden /> Offer files to the phone
+          <PaperPlaneTilt size={16} aria-hidden /> {t('Offer files to the phone')}
         </button>
         <button className="btn btn-ghost btn-sm" onClick={() => act((b) => b.nearbyPhone(false))}>
-          Stop
+          {t('Stop')}
         </button>
       </div>
     </section>
@@ -667,7 +681,7 @@ export function NearbyPanel() {
   const over = useDropOnDevice()
   const transfers = useMemo(() => nearby?.transfers ?? [], [nearby?.transfers])
   if (!nearby)
-    return <div className="sk sk-line" aria-busy="true" aria-label="Looking for devices" />
+    return <div className="sk sk-line" aria-busy="true" aria-label={t('Looking for devices')} />
   return (
     <div className="nearby">
       <div className="nearby-stage">
@@ -679,26 +693,28 @@ export function NearbyPanel() {
         )}
         <section aria-labelledby="near-devices" className="nearby-devices">
           <h2 className="group" id="near-devices">
-            On this network <span className="num">{nearby.devices.length}</span>
+            {tr('On this network {n}', {
+              n: <span className="num">{nearby.devices.length}</span>,
+            })}
           </h2>
           <Radar me={nearby.me} devices={nearby.devices} transfers={transfers} over={over} />
           <p className="send-note muted">
-            <LockKey size={14} aria-hidden /> Click a device or drop files on it. Files go straight
-            there, encrypted.
+            <LockKey size={14} aria-hidden />{' '}
+            {t('Click a device or drop files on it. Files go straight there, encrypted.')}
           </p>
         </section>
       </div>
-      <aside className="nearby-side" aria-label="Activity">
+      <aside className="nearby-side" aria-label={t('Activity')}>
         <section aria-labelledby="near-recent">
           <h2 className="group" id="near-recent">
-            Activity
+            {t('Activity')}
           </h2>
           {transfers.length === 0 ? (
-            <p className="muted activity-empty">Nothing sent or received yet.</p>
+            <p className="muted activity-empty">{t('Nothing sent or received yet.')}</p>
           ) : (
             <ul className="activity-list">
-              {transfers.map((t) => (
-                <Transfer key={t.id} t={t} />
+              {transfers.map((x) => (
+                <Transfer key={x.id} x={x} />
               ))}
             </ul>
           )}
@@ -709,25 +725,29 @@ export function NearbyPanel() {
         {nearby.trusted.length > 0 && (
           <section aria-labelledby="near-trusted">
             <h2 className="group" id="near-trusted">
-              Trusted devices <span className="num">{nearby.trusted.length}</span>
+              {tr('Trusted devices {n}', {
+                n: <span className="num">{nearby.trusted.length}</span>,
+              })}
             </h2>
             <ul className="trusted">
-              {nearby.trusted.map((t) => (
-                <li key={t.fingerprint}>
+              {nearby.trusted.map((d) => (
+                <li key={d.fingerprint}>
                   <ShieldCheck size={18} aria-hidden />
                   <span>
                     <span className="device-name" translate="no">
-                      {t.alias}
+                      {d.alias}
                     </span>
                     <br />
-                    <span className="muted">Since {shortDate(t.since)}. Sends without asking.</span>
+                    <span className="muted">
+                      {t('Since {date}. Sends without asking.', { date: shortDate(d.since) })}
+                    </span>
                   </span>
                   <button
                     className="btn btn-ghost btn-sm"
-                    aria-label={`Forget ${t.alias}`}
-                    onClick={() => act((b) => b.nearbyForget(t.fingerprint))}
+                    aria-label={t('Forget {name}', { name: d.alias })}
+                    onClick={() => act((b) => b.nearbyForget(d.fingerprint))}
                   >
-                    Forget
+                    {t('Forget')}
                   </button>
                 </li>
               ))}
@@ -781,12 +801,18 @@ export function NearbyRequestDialog() {
               </span>
               <div>
                 <h2 id="nr-title">
-                  <span translate="no">{r.alias}</span> wants to send you{' '}
                   {r.text !== null
-                    ? 'text'
+                    ? tr('{name} wants to send you text', {
+                        name: <span translate="no">{r.alias}</span>,
+                      })
                     : r.files.length === 1
-                      ? 'a file'
-                      : `${r.files.length} files`}
+                      ? tr('{name} wants to send you a file', {
+                          name: <span translate="no">{r.alias}</span>,
+                        })
+                      : tr('{name} wants to send you {n} files', {
+                          name: <span translate="no">{r.alias}</span>,
+                          n: r.files.length,
+                        })}
                 </h2>
                 <p className="muted">
                   {deviceSub({
@@ -808,18 +834,26 @@ export function NearbyRequestDialog() {
                 <FolderOpen size={18} />
               </span>
               <span>
-                <b translate="no">
-                  {r.files.length === 1 ? r.files[0] : `${r.files.length} files`}
-                </b>
-                <span className="muted num">{bytes(r.total)}, saves to your downloads folder</span>
+                {r.files.length === 1 ? (
+                  <b translate="no">{r.files[0]}</b>
+                ) : (
+                  <b>{tn(r.files.length, '{n} file', '{n} files')}</b>
+                )}
+                <span className="muted">
+                  {tr('{size}, saves to your downloads folder', {
+                    size: <span className="num">{bytes(r.total)}</span>,
+                  })}
+                </span>
               </span>
             </div>
           )}
           <label className="check">
             <input type="checkbox" checked={trust} onChange={(e) => setTrust(e.target.checked)} />
             <span>
-              Trust <span translate="no">{r.alias}</span>. Its files arrive without asking next
-              time, and its text goes straight to your clipboard.
+              {tr(
+                'Trust {name}. Its files arrive without asking next time, and its text goes straight to your clipboard.',
+                { name: <span translate="no">{r.alias}</span> },
+              )}
             </span>
           </label>
           <footer className="dialog-foot">
@@ -829,10 +863,10 @@ export function NearbyRequestDialog() {
               data-decline
               onClick={() => answer(false)}
             >
-              Decline
+              {t('Decline')}
             </button>
             <button type="button" className="btn btn-primary" onClick={() => answer(true)}>
-              Accept
+              {t('Accept')}
             </button>
           </footer>
         </form>

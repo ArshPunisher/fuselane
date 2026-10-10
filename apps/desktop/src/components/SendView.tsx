@@ -15,26 +15,25 @@ import { bytes } from '../lib/format'
 import type { ReceiveView, ShareView, UiError } from '../lib/types'
 import { SEND_PAGE } from '../lib/sendLink'
 import { NearbyPanel } from './NearbyPanel'
+import { mark, t, tn } from '../lib/i18n'
 
 function shareStatus(s: ShareView): string {
   switch (s.state) {
     case 'preparing':
-      return `Preparing… ${Math.floor(s.prepared * 100)}%`
+      return t('Preparing… {pct}%', { pct: Math.floor(s.prepared * 100) })
     case 'sharing': {
       const who =
         s.peers === 0
-          ? 'Waiting for the receiver'
-          : s.peers === 1
-            ? '1 receiver connected'
-            : `${s.peers} receivers connected`
-      return s.sent > 0 ? `${who} · ${bytes(s.sent)} sent` : who
+          ? t('Waiting for the receiver')
+          : tn(s.peers, '1 receiver connected', '{n} receivers connected')
+      return s.sent > 0 ? t('{who} · {size} sent', { who, size: bytes(s.sent) }) : who
     }
     case 'sent':
-      return 'Sent in full. Sharing stopped'
+      return t('Sent in full. Sharing stopped')
     case 'changed':
-      return 'File changed'
+      return t('File changed')
     case 'failed':
-      return "Couldn't share"
+      return t("Couldn't share")
   }
 }
 
@@ -43,8 +42,8 @@ function CopyLink({ link, name }: { link: string; name: string }) {
   const field = useRef<HTMLInputElement>(null)
   useEffect(() => {
     if (!copied) return
-    const t = setTimeout(() => setCopied(false), 1800)
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => setCopied(false), 1800)
+    return () => clearTimeout(timer)
   }, [copied])
   async function copy() {
     try {
@@ -61,7 +60,7 @@ function CopyLink({ link, name }: { link: string; name: string }) {
         ref={field}
         readOnly
         value={link}
-        aria-label={`Link for ${name}`}
+        aria-label={t('Link for {name}', { name })}
         onFocus={(e) => e.currentTarget.select()}
         spellCheck={false}
       />
@@ -71,7 +70,7 @@ function CopyLink({ link, name }: { link: string; name: string }) {
         ) : (
           <Copy size={16} aria-hidden />
         )}
-        {copied ? 'Copied' : 'Copy link'}
+        {copied ? t('Copied') : t('Copy link')}
       </button>
     </div>
   )
@@ -84,7 +83,7 @@ function ShareRow({ s }: { s: ShareView }) {
       <div className="send-item-head">
         <PaperPlaneTilt size={18} aria-hidden className="send-ic" />
         <div className="send-item-text">
-          <p className="send-name" title={s.name}>
+          <p className="send-name" title={s.name} translate="no">
             {s.name}
           </p>
           <p className="send-meta">
@@ -100,9 +99,9 @@ function ShareRow({ s }: { s: ShareView }) {
           className="btn btn-ghost"
           onClick={() => void act((b) => b.stopSend(s.id))}
           disabled={s.state === 'preparing'}
-          aria-label={`Stop sending ${s.name}`}
+          aria-label={t('Stop sending {name}', { name: s.name })}
         >
-          {s.state === 'sharing' ? 'Stop' : 'Remove'}
+          {s.state === 'sharing' ? t('Stop') : t('Remove')}
         </button>
       </div>
       {s.state === 'preparing' && (
@@ -110,7 +109,7 @@ function ShareRow({ s }: { s: ShareView }) {
           className="bar"
           data-status="running"
           role="progressbar"
-          aria-label={`Preparing ${s.name}`}
+          aria-label={t('Preparing {name}', { name: s.name })}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={Math.floor(s.prepared * 100)}
@@ -126,7 +125,7 @@ function ShareRow({ s }: { s: ShareView }) {
             checked={s.once}
             onChange={(e) => void act((b) => b.sendOnce(s.id, e.target.checked))}
           />
-          Stop sharing after one full copy is sent
+          {t('Stop sharing after one full copy is sent')}
         </label>
       )}
       {s.error && (
@@ -141,15 +140,17 @@ function ShareRow({ s }: { s: ShareView }) {
 function receiveStatus(r: ReceiveView): string {
   switch (r.state) {
     case 'finding':
-      return 'Looking for the sender…'
+      return t('Looking for the sender…')
     case 'receiving':
-      return r.size ? `${bytes(r.done)} of ${bytes(r.size)}` : 'Receiving…'
+      return r.size
+        ? t('{done} of {total}', { done: bytes(r.done), total: bytes(r.size) })
+        : t('Receiving…')
     case 'checking':
-      return 'Checking it arrived whole…'
+      return t('Checking it arrived whole…')
     case 'done':
-      return 'Arrived and checked'
+      return t('Arrived and checked')
     case 'failed':
-      return "Didn't arrive"
+      return t("Didn't arrive")
   }
 }
 
@@ -168,7 +169,7 @@ function ReceiveRow({ r }: { r: ReceiveView }) {
           <ArrowDown size={18} aria-hidden className="send-ic" />
         )}
         <div className="send-item-text">
-          <p className="send-name" title={r.name}>
+          <p className="send-name" title={r.name} translate="no">
             {r.name}
           </p>
           <p className="send-meta">
@@ -184,14 +185,14 @@ function ReceiveRow({ r }: { r: ReceiveView }) {
             onClick={() => void act((b) => b.revealReceived(r.id))}
           >
             <FolderOpen size={16} aria-hidden />
-            Show
+            {t('Show')}
           </button>
         )}
         {ended && (
           <button
             type="button"
             className="icon-btn"
-            aria-label={`Remove ${r.name} from the list`}
+            aria-label={t('Remove {name} from the list', { name: r.name })}
             onClick={() => void act((b) => b.dismissReceive(r.id))}
           >
             <X size={16} aria-hidden />
@@ -204,7 +205,7 @@ function ReceiveRow({ r }: { r: ReceiveView }) {
           data-status="running"
           data-indeterminate={r.state === 'finding' ? '' : undefined}
           role="progressbar"
-          aria-label={`Receiving ${r.name}`}
+          aria-label={t('Receiving {name}', { name: r.name })}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={r.state === 'finding' ? undefined : Math.floor(pct)}
@@ -244,7 +245,7 @@ function ReceiveForm() {
     if (!backend) return
     const text = link.trim()
     if (!text) {
-      setError({ code: 'empty', message: 'Paste the link someone sent you.', hint: null })
+      setError({ code: 'empty', message: t('Paste the link someone sent you.'), hint: null })
       input.current?.focus()
       return
     }
@@ -263,7 +264,7 @@ function ReceiveForm() {
 
   return (
     <form className="field send-receive" onSubmit={submit} noValidate>
-      <label htmlFor={id}>Link someone sent you</label>
+      <label htmlFor={id}>{t('Link someone sent you')}</label>
       <div className="field-row">
         <input
           ref={input}
@@ -282,7 +283,7 @@ function ReceiveForm() {
         />
         <button type="submit" className="btn btn-primary" disabled={busy}>
           <ArrowDown size={16} aria-hidden weight="bold" />
-          {busy ? 'Opening…' : 'Receive'}
+          {busy ? t('Opening…') : t('Receive')}
         </button>
       </div>
       {error ? (
@@ -292,7 +293,7 @@ function ReceiveForm() {
         </p>
       ) : (
         <p className="field-help" id={`${id}-help`}>
-          Saved to your download folder and checked against what the sender shared.
+          {t('Saved to your download folder and checked against what the sender shared.')}
         </p>
       )}
     </form>
@@ -316,17 +317,17 @@ export function SendView() {
   const tab = useApp((s) => s.sendTab)
   const setTab = useApp((s) => s.setSendTab)
   const tabs: ['nearby' | 'link', string][] = [
-    ['nearby', 'Nearby'],
-    ['link', 'Link'],
+    ['nearby', mark('Nearby')],
+    ['link', mark('Link')],
   ]
   return (
     <div className="page send-page">
       <div className="page-head with-tabs">
-        <h1>Send</h1>
+        <h1>{t('Send')}</h1>
         <div
           className="segmented"
           role="radiogroup"
-          aria-label="How to send"
+          aria-label={t('How to send')}
           onKeyDown={(e) => {
             if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
               e.preventDefault()
@@ -346,7 +347,7 @@ export function SendView() {
               tabIndex={tab === id ? 0 : -1}
               onClick={() => setTab(id)}
             >
-              {label}
+              {t(label)}
             </button>
           ))}
         </div>
@@ -354,37 +355,41 @@ export function SendView() {
       {tab === 'nearby' ? (
         <>
           <p className="page-lead muted">
-            Send to computers and phones on this network. Nothing goes through the internet.
+            {t('Send to computers and phones on this network. Nothing goes through the internet.')}
           </p>
           <NearbyPanel />
         </>
       ) : (
         <>
           <p className="page-lead muted">
-            Send a file of any size straight from this computer. No upload, no account, no size
-            limit: the receiver gets it directly from you, encrypted, and only the link can open it.
+            {t(
+              'Send a file of any size straight from this computer. No upload, no account, no size limit: the receiver gets it directly from you, encrypted, and only the link can open it.',
+            )}
           </p>
 
           <section className="send-section" aria-labelledby="send-out">
             <h2 className="group" id="send-out">
-              Send a file
+              {t('Send a file')}
             </h2>
             <button type="button" className="send-drop" onClick={() => void choose()}>
               <span className="send-drop-orb" aria-hidden>
                 <PaperPlaneTilt size={26} weight="duotone" />
               </span>
               <span className="send-drop-text">
-                <span className="send-drop-title">Choose a file to send</span>
-                <span className="muted">You get a link to give to the person receiving it.</span>
+                <span className="send-drop-title">{t('Choose a file to send')}</span>
+                <span className="muted">
+                  {t('You get a link to give to the person receiving it.')}
+                </span>
               </span>
             </button>
             <p className="send-note muted">
-              <LockKey size={14} aria-hidden /> Keep Fuselane open until it arrives. On the same
-              network it connects straight away; across the internet your router needs UPnP on. The
-              key is only in the link, so share it the way you'd share a password.
+              <LockKey size={14} aria-hidden />{' '}
+              {t(
+                "Keep Fuselane open until it arrives. On the same network it connects straight away; across the internet your router needs UPnP on. The key is only in the link, so share it the way you'd share a password.",
+              )}
             </p>
             {shares.length > 0 && (
-              <ul className="send-list" aria-label="Files you're sending">
+              <ul className="send-list" aria-label={t("Files you're sending")}>
                 {shares.map((s) => (
                   <ShareRow key={s.id} s={s} />
                 ))}
@@ -394,11 +399,11 @@ export function SendView() {
 
           <section className="send-section" aria-labelledby="send-in">
             <h2 className="group" id="send-in">
-              Receive
+              {t('Receive')}
             </h2>
             <ReceiveForm />
             {receives.length > 0 && (
-              <ul className="send-list" aria-label="Files you're receiving">
+              <ul className="send-list" aria-label={t("Files you're receiving")}>
                 {receives.map((r) => (
                   <ReceiveRow key={r.id} r={r} />
                 ))}
