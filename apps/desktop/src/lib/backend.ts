@@ -3,6 +3,8 @@
 // and the UI says so.
 import type {
   HaveView,
+  MediaInfo,
+  MediaTools,
   NetCheckView,
   PageFiles,
   NearbyView,
@@ -53,6 +55,10 @@ export interface Backend {
     later?: boolean,
     group?: string | null,
   ): Promise<BatchResult>
+  /** Video pages (B10.4): helpers found, a page's qualities, and adding one. */
+  mediaTools(): Promise<MediaTools>
+  mediaInfo(url: string): Promise<MediaInfo>
+  mediaAdd(url: string, option: string, dir: string | null): Promise<number[]>
   /** Reads a web page and lists the files it links to; nothing is downloaded. */
   filesOnPage(url: string): Promise<PageFiles>
   renameGroup(id: number, name: string): Promise<void>
@@ -248,6 +254,9 @@ async function tauriBackend(): Promise<Backend> {
     addBatch: (text, dir, later, group) =>
       call('add_batch', { text, dir, later: later ?? false, group: group ?? null }),
     filesOnPage: (url) => call('files_on_page', { url }),
+    mediaTools: () => call('media_tools'),
+    mediaInfo: (url) => call('media_info', { url }),
+    mediaAdd: (url, option, dir) => call('media_add', { url, option, dir }),
     renameGroup: (id, name) => call('rename_group', { id, name }),
     ungroup: (id) => call('ungroup', { id }),
     pauseGroup: (id) => call('pause_group', { id }),

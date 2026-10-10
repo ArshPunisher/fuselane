@@ -716,6 +716,42 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       }
       emitJobs()
     },
+    mediaTools: async () => ({
+      ytDlp: params.get('ytdlp') === '0' ? null : '/opt/homebrew/bin/yt-dlp',
+      ffmpeg: '/opt/homebrew/bin/ffmpeg',
+    }),
+    mediaInfo: async (url) => {
+      await new Promise((r) => setTimeout(r, 300))
+      if (params.get('ytdlp') === '0')
+        throw err(
+          'needs-yt-dlp',
+          "Videos from pages need the free yt-dlp tool, which isn't installed.",
+          'Install it with Homebrew (brew install yt-dlp), then try again.',
+        )
+      if (url.includes('nomedia'))
+        throw err('no-media', 'No video found there: unsupported URL.', null)
+      return {
+        title: 'Big Buck Bunny 60fps 4K - Official Blender Foundation Short Film',
+        site: 'Youtube',
+        duration: 635,
+        hdNeedsFfmpeg: false,
+        options: [
+          { id: 'v2160', label: '2160p', detail: 'MP4, about 690 MB', size: 723 * MB },
+          { id: 'v1080', label: '1080p', detail: 'MP4, about 256 MB', size: 268 * MB },
+          { id: 'v720', label: '720p', detail: 'MP4, about 81 MB', size: 85 * MB },
+          { id: 'v360', label: '360p', detail: 'MP4, about 29 MB', size: 30 * MB },
+          { id: 'a', label: 'Audio only', detail: 'M4A, about 10 MB', size: 10 * MB },
+        ],
+      }
+    },
+    mediaAdd: async (url, option, dir) => {
+      const label = option === 'a' ? 'audio' : option.slice(1) + 'p'
+      const id = await backend.add(url, dir, {
+        name: `Big Buck Bunny (${label}).${option === 'a' ? 'm4a' : 'mp4'}`,
+        allowDuplicate: true,
+      })
+      return [id]
+    },
     filesOnPage: async (url) => {
       await new Promise((r) => setTimeout(r, 200))
       let base: URL

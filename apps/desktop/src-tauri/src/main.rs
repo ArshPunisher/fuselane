@@ -8,6 +8,7 @@
 mod api_bridge;
 mod automation;
 mod battery;
+mod media;
 mod native;
 mod nearby;
 mod opens;
@@ -53,6 +54,36 @@ fn app_info(svc: State<'_>) -> AppInfo {
         default_dir: svc.default_dir().to_string_lossy().into_owned(),
         updated_from: svc.updated_from().map(str::to_string),
     }
+}
+
+/// Which helpers for video pages are installed (yt-dlp, ffmpeg).
+#[tauri::command]
+fn media_tools(svc: State<'_>) -> service::media_jobs::MediaTools {
+    svc.media_tools()
+}
+
+/// What a video page offers; nothing is downloaded (B10.4).
+#[tauri::command]
+async fn media_info(svc: State<'_>, url: String) -> Result<media::MediaInfo, UiError> {
+    if url.len() > 8192 {
+        return Err(UiError::new_public(
+            "bad-link",
+            "That link is too long.",
+            None,
+        ));
+    }
+    svc.media_info(&url).await
+}
+
+/// Downloads the chosen quality over every network.
+#[tauri::command]
+async fn media_add(
+    svc: State<'_>,
+    url: String,
+    option: String,
+    dir: Option<String>,
+) -> Result<Vec<i64>, UiError> {
+    svc.media_add(&url, &option, dir.as_deref())
 }
 
 #[tauri::command]
@@ -1723,6 +1754,9 @@ fn main() {
             already_have,
             unseen_crash,
             netcheck_state,
+            media_tools,
+            media_info,
+            media_add,
             netcheck_start,
             netcheck_cancel,
             netcheck_report,

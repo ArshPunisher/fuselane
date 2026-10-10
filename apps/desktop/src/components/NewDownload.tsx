@@ -3,7 +3,14 @@ import { ArrowLeft, FileArrowUp, Magnet, Plus, Warning, X } from '@phosphor-icon
 import { useApp } from '../lib/store'
 import { toUiError } from '../lib/backend'
 import { isSendLink } from '../lib/sendLink'
-import type { HaveView, ListingView, PageFiles, PreviewView, UiError } from '../lib/types'
+import type {
+  HaveView,
+  ListingView,
+  MediaInfo,
+  PageFiles,
+  PreviewView,
+  UiError,
+} from '../lib/types'
 import { FilePicker } from './FilePicker'
 import { PagePicker } from './PagePicker'
 import { REVEAL_LABEL } from './TransferDetail'
@@ -76,6 +83,10 @@ export function NewDownload() {
   const [page, setPage] = useState<PageFiles | null>(null)
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [pageBusy, setPageBusy] = useState(false)
+  // Video pages (B10.4): the qualities yt-dlp found, and the one picked.
+  const [media, setMedia] = useState<MediaInfo | null>(null)
+  const [quality, setQuality] = useState('')
+  const [mediaBusy, setMediaBusy] = useState(false)
   const [chosen, setChosen] = useState<Set<number>>(new Set())
   const [finding, setFinding] = useState(false)
   // Bumped on cancel or close, so a late answer for an abandoned lookup is ignored.
@@ -265,6 +276,7 @@ export function NewDownload() {
   }
 
   function reset() {
+    setMedia(null)
     setPage(null)
     setPicked(new Set())
     setUrl('')
@@ -371,7 +383,93 @@ export function NewDownload() {
         if (!dialog.current?.open) setAdding(false)
       }}
     >
-      {page ? (
+      {media ? (
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault()
+            if (!backend || busy || !quality) return
+            setBusy(true)
+            setError(null)
+            try {
+              const ids = await backend.mediaAdd(url.trim(), quality, dir.trim() || null)
+              reset()
+              setAdding(false)
+              if (ids[0] !== undefined) select(ids[0])
+            } catch (err) {
+              setError(toUiError(err))
+            } finally {
+              setBusy(false)
+            }
+          }}
+          noValidate
+        >
+          <header className="dialog-head">
+            <h2 id="nd-title">Get the video</h2>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Close"
+              onClick={() => setAdding(false)}
+            >
+              <X size={18} aria-hidden />
+            </button>
+          </header>
+          <div className="pick-head">
+            <p className="pick-name" translate="no" title={media.title}>
+              {media.title}
+            </p>
+            <p className="field-help page-help">
+              {media.site}
+              {media.duration
+                ? `, ${Math.floor(media.duration / 60)}:${String(Math.round(media.duration % 60)).padStart(2, '0')}`
+                : ''}
+              . Downloads over every network at once.
+            </p>
+          </div>
+          <fieldset className="quality-list">
+            <legend className="sr-only">Quality</legend>
+            {media.options.map((o) => (
+              <label key={o.id} className="quality">
+                <input
+                  type="radio"
+                  name="quality"
+                  value={o.id}
+                  checked={quality === o.id}
+                  onChange={() => setQuality(o.id)}
+                />
+                <span className="quality-label">{o.label}</span>
+                <span className="muted num">{o.detail}</span>
+              </label>
+            ))}
+          </fieldset>
+          {media.hdNeedsFfmpeg && (
+            <p className="field-help">
+              Higher qualities need the free ffmpeg tool to join video and sound. Install it and
+              look the page up again.
+            </p>
+          )}
+          {error && (
+            <p className="field-error" role="alert">
+              {error.message} {error.hint}
+            </p>
+          )}
+          <footer className="dialog-foot">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => {
+                setMedia(null)
+                setError(null)
+              }}
+            >
+              <ArrowLeft size={16} aria-hidden /> Back
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={busy || !quality}>
+              {busy ? 'Adding…' : 'Download'}
+            </button>
+          </footer>
+        </form>
+      ) : page ? (
         <form
           onSubmit={async (e) => {
             e.preventDefault()
@@ -630,6 +728,29 @@ export function NewDownload() {
                 }}
               >
                 {pageBusy ? 'Reading the page…' : 'Find files on this page'}
+              </button>
+            )}
+            {!batch && !isMagnet(url) && /^https?:\/\/\S+$/i.test(url.trim()) && (
+              <button
+                type="button"
+                className="link-btn find-files"
+                disabled={mediaBusy}
+                onClick={async () => {
+                  if (!backend) return
+                  setMediaBusy(true)
+                  setError(null)
+                  try {
+                    const m = await backend.mediaInfo(url.trim())
+                    setQuality(m.options[0]?.id ?? '')
+                    setMedia(m)
+                  } catch (err) {
+                    setError(toUiError(err))
+                  } finally {
+                    setMediaBusy(false)
+                  }
+                }}
+              >
+                {mediaBusy ? 'Looking for the video…' : 'Get the video from this page'}
               </button>
             )}
           </div>

@@ -4496,3 +4496,38 @@ html[data-hidden] .orb b {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* ---------- Video pages (B10.4) ---------- */
+
+.quality-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.quality {
+  display: grid;
+  grid-template-columns: auto 80px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+.quality:has(input:checked) {
+  border-color: color-mix(in oklch, var(--fuse) 55%, transparent);
+  background: var(--fuse-soft);
+}
+
+.quality input {
+  accent-color: var(--fuse);
+}
+
+.quality-label {
+  color: var(--ink);
+  font-weight: 600;
+}

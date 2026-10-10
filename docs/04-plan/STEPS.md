@@ -172,7 +172,7 @@ The owner asked for more built-in features that cost nothing to run (no paid tie
 - [x] B10.1 Network check: per-network speed, latency, jitter, bufferbloat grade and DNS time, every network together, an outage log from the minute-by-minute reach checks, and a dated report for the internet provider
 - [x] B10.2 Clipboard between your computers: copy on one Fuselane computer, paste on another (Nearby, LAN only, encrypted)
 - [ ] B10.3 Shared folders between your own computers over Nearby (no cloud)
-- [ ] B10.4 Video and audio from pages: hand pages to a yt-dlp the person installs (detected, never bundled), downloads run over every network
+- [x] B10.4 Video and audio from pages: hand pages to a yt-dlp the person installs (detected, never bundled), downloads run over every network
 
 ## P5 Torrents (0.2)
 

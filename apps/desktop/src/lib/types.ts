@@ -486,3 +486,18 @@ export interface NetCheckView {
   history: CheckRun[]
   outages: Outage[]
 }
+
+/** A video page's choices, from yt-dlp (B10.4). */
+export interface MediaInfo {
+  title: string
+  site: string
+  duration: number | null
+  options: { id: string; label: string; detail: string; size: number | null }[]
+  /** HD needs ffmpeg to join video and audio. */
+  hdNeedsFfmpeg: boolean
+}
+
+export interface MediaTools {
+  ytDlp: string | null
+  ffmpeg: string | null
+}

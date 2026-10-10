@@ -21,6 +21,7 @@ mod focus;
 mod grab;
 mod groups;
 pub mod handoff;
+pub mod media_jobs;
 pub mod netcheck;
 
 pub use grab::PageFiles;
@@ -627,6 +628,8 @@ pub struct Service {
     /// Network check (B10.1): the running check, and outages seen by the reach checks.
     netcheck: Mutex<netcheck::NetCheckState>,
     outages: Mutex<Vec<netcheck::Outage>>,
+    /// Pages looked up with yt-dlp, and their choices, for a few minutes (B10.4).
+    media_probes: Mutex<media_jobs::Probes>,
 }
 
 /// Opens a file with the system's default app.
@@ -962,6 +965,7 @@ impl Service {
             battery: Mutex::new(None),
             battery_paused: Mutex::default(),
             netcheck: Mutex::default(),
+            media_probes: Mutex::default(),
             outages: Mutex::new(saved_outages),
             retries: Mutex::new(HashMap::new()),
             limiter,
@@ -2542,6 +2546,7 @@ impl Service {
             let path = self.replace_if_asked(id, &report.path, report.total);
             self.sort_finished(id, &job.dir, &path, report.total);
             self.after_download(id);
+            self.join_finished();
         }
         if lock(&self.schedule_paused).contains(&id) {
             let next = self.automation_view().next.unwrap_or_default();
@@ -3695,6 +3700,121 @@ mod tests {
                 .unwrap()
                 .contains("en9")
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_video_and_its_audio_download_together_and_are_joined() {
+        let (Some(ffmpeg), Some(ffprobe)) =
+            (crate::media::find("ffmpeg"), crate::media::find("ffprobe"))
+        else {
+            eprintln!("skipped: ffmpeg isn't installed");
+            return;
+        };
+        let work = tempfile::tempdir().unwrap();
+        let make = |args: &[&str], out: &str| {
+            let ok = std::process::Command::new(&ffmpeg)
+                .args(["-hide_banner", "-loglevel", "error", "-y"])
+                .args(args)
+                .arg(work.path().join(out))
+                .status()
+                .unwrap()
+                .success();
+            assert!(ok, "ffmpeg made {out}");
+            std::fs::read(work.path().join(out)).unwrap()
+        };
+        let video = make(
+            &[
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc=size=160x90:rate=10",
+                "-t",
+                "1",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+            ],
+            "v.mp4",
+        );
+        let audio = make(
+            &[
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=440",
+                "-t",
+                "1",
+                "-c:a",
+                "aac",
+            ],
+            "a.m4a",
+        );
+        let server = RangeServer::start(Content::new(1024, 1)).await.unwrap();
+        server.serve_file("/v.mp4", video);
+        server.serve_file("/a.m4a", audio);
+        let base = format!("http://{}", server.addr());
+        let stream = |path: &str, ext: &str| crate::media::Stream {
+            url: format!("{base}{path}"),
+            ext: ext.into(),
+            headers: vec![("User-Agent".into(), "Test".into())],
+            size: None,
+        };
+        let h = harness(3);
+        lock(&h.svc.media_probes).insert(
+            "https://video.example/watch".into(),
+            (
+                Instant::now(),
+                "Bunny: the movie".into(),
+                HashMap::from([(
+                    "v90".to_string(),
+                    crate::media::Plan {
+                        video: stream("/v.mp4", "mp4"),
+                        audio: Some(stream("/a.m4a", "m4a")),
+                        out_ext: "mp4".into(),
+                        label: "90p".into(),
+                    },
+                )]),
+            ),
+        );
+        let ids = h
+            .svc
+            .media_add("https://video.example/watch", "v90", None)
+            .unwrap();
+        assert_eq!(ids.len(), 2);
+        assert!(
+            h.svc
+                .media_add("https://video.example/watch", "v1080", None)
+                .is_err()
+        );
+        h.wait("joined", |h| {
+            h.svc.jobs().unwrap().len() == 1
+                && h.job(ids[0]).final_path.as_deref().is_some_and(|p| {
+                    p.ends_with("Bunny the movie (90p).mp4")
+                        || p.ends_with("Bunny_ the movie (90p).mp4")
+                        || p.contains("(90p).mp4")
+                })
+        })
+        .await;
+        let joined = PathBuf::from(h.job(ids[0]).final_path.unwrap());
+        let streams = std::process::Command::new(&ffprobe)
+            .args([
+                "-v",
+                "error",
+                "-show_entries",
+                "stream=codec_type",
+                "-of",
+                "csv=p=0",
+            ])
+            .arg(&joined)
+            .output()
+            .unwrap();
+        let kinds = String::from_utf8_lossy(&streams.stdout);
+        assert!(
+            kinds.contains("video") && kinds.contains("audio"),
+            "{kinds}"
+        );
+        assert_eq!(h.job(ids[0]).group_id, None, "a single file now");
     }
 
     #[tokio::test(flavor = "multi_thread")]

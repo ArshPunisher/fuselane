@@ -1225,6 +1225,30 @@ test('a network check measures each network, shows outages and makes a report', 
   await expect(check.getByRole('button', { name: 'Check again' })).toBeVisible()
 })
 
+test('a video page offers its qualities and downloads the chosen one', async ({ page }) => {
+  await page.goto('/?empty=1')
+  const dialog = await openDialog(page)
+  await dialog.getByLabel('Link').fill('https://www.youtube.com/watch?v=aqz-KE-bpKQ')
+  await dialog.getByRole('button', { name: 'Get the video from this page' }).click()
+  const pick = page.getByRole('dialog', { name: 'Get the video' })
+  await expect(pick).toContainText('Big Buck Bunny')
+  await expect(pick.getByRole('radio', { name: /2160p/ })).toBeChecked()
+  await pick.getByRole('radio', { name: /1080p/ }).check()
+  await pick.getByRole('button', { name: 'Download', exact: true }).click()
+  await expect(pick).toBeHidden()
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Big Buck Bunny (1080p).mp4' }),
+  ).toBeVisible()
+})
+
+test('without yt-dlp a video page says what to install', async ({ page }) => {
+  await page.goto('/?empty=1&ytdlp=0')
+  const dialog = await openDialog(page)
+  await dialog.getByLabel('Link').fill('https://www.youtube.com/watch?v=aqz-KE-bpKQ')
+  await dialog.getByRole('button', { name: 'Get the video from this page' }).click()
+  await expect(dialog.getByRole('alert')).toContainText('brew install yt-dlp')
+})
+
 test('Download later adds it paused, ready to start', async ({ page }) => {
   await page.goto('/?empty=1')
   const dialog = await openDialog(page)
