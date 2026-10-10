@@ -324,3 +324,75 @@ async fn a_text_message_arrives_without_a_file() {
             .is_err()
     );
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_folder_arrives_as_a_folder_and_a_newer_copy_replaces_the_old() {
+    let inbox = tempfile::tempdir().unwrap();
+    let outbox = tempfile::tempdir().unwrap();
+    let a = device("Receiver", inbox.path()).await;
+    let b = device("Sender", tempfile::tempdir().unwrap().path()).await;
+    let me = info("Sender", &b.id, b.server.addr.port());
+    let t = target(&a, Some(&a.id.fingerprint));
+    let mut f1 = outgoing(outbox.path(), "a.txt", b"first");
+    f1.name = "Notes/2026/a.txt".into();
+    let mut f2 = outgoing(outbox.path(), "b.txt", b"loose");
+    f2.name = "../escape/b.txt".into();
+    client::send(
+        &me,
+        &t,
+        &[f1, f2],
+        Arc::default(),
+        Arc::new(AtomicBool::new(false)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        std::fs::read(inbox.path().join("Notes/2026/a.txt")).unwrap(),
+        b"first"
+    );
+    assert_eq!(
+        std::fs::read(inbox.path().join("b.txt")).unwrap(),
+        b"loose",
+        "odd paths land loose"
+    );
+    // Sent again: the copy in the folder is replaced, not numbered.
+    let mut again = outgoing(outbox.path(), "a2.txt", b"second");
+    again.name = "Notes/2026/a.txt".into();
+    client::send(
+        &me,
+        &t,
+        &[again],
+        Arc::default(),
+        Arc::new(AtomicBool::new(false)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        std::fs::read(inbox.path().join("Notes/2026/a.txt")).unwrap(),
+        b"second"
+    );
+    assert_eq!(
+        std::fs::read_dir(inbox.path().join("Notes/2026"))
+            .unwrap()
+            .count(),
+        1
+    );
+    #[cfg(unix)]
+    {
+        // A link planted inside the save folder can't lead files out of it.
+        let outside = tempfile::tempdir().unwrap();
+        std::os::unix::fs::symlink(outside.path(), inbox.path().join("Trap")).unwrap();
+        let mut f = outgoing(outbox.path(), "c.txt", b"x");
+        f.name = "Trap/c.txt".into();
+        let r = client::send(
+            &me,
+            &t,
+            &[f],
+            Arc::default(),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await;
+        assert!(r.is_err());
+        assert_eq!(std::fs::read_dir(outside.path()).unwrap().count(), 0);
+    }
+}

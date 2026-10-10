@@ -208,6 +208,7 @@ pub async fn send(
                 file_type: f.mime.clone(),
                 sha256: None,
                 preview: None,
+                folder: None,
             },
         );
     }
@@ -293,6 +294,7 @@ pub async fn send_text(me: &DeviceInfo, t: &Target, text: &str) -> Result<(), Se
             file_type: "text/plain".into(),
             sha256: None,
             preview: Some(text.to_string()),
+            folder: None,
         },
     );
     let body = serde_json::to_vec(&offer).map_err(|e| SendError::Failed(e.to_string()))?;

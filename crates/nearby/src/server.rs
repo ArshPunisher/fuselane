@@ -156,6 +156,25 @@ pub async fn fingerprint_of_peer(ip: std::net::IpAddr, port: u16) -> Option<Stri
 }
 
 /// A free name in `dir` (never overwriting): "a.jpg", "a (2).jpg", ...
+/// Where a file goes: `dir`, or `dir/<folder>` made on the way, and whether an
+/// older copy there is replaced. A folder that resolves outside `dir` (a link
+/// planted earlier) is refused.
+fn place(dir: &Path, folder: Option<&str>) -> Result<(PathBuf, bool), String> {
+    let Some(folder) = folder else {
+        return Ok((dir.to_path_buf(), false));
+    };
+    let target = dir.join(folder);
+    std::fs::create_dir_all(&target).map_err(|e| format!("couldn't make the folder ({e})"))?;
+    let (root, inside) = (
+        dir.canonicalize().map_err(|e| e.to_string())?,
+        target.canonicalize().map_err(|e| e.to_string())?,
+    );
+    if !inside.starts_with(&root) {
+        return Err("that folder leads outside the save folder".into());
+    }
+    Ok((inside, true))
+}
+
 fn free_name(dir: &Path, name: &str) -> PathBuf {
     let first = dir.join(name);
     if first.symlink_metadata().is_err() {
@@ -323,6 +342,12 @@ impl<H: Host> State<H> {
             }
             (f.meta.clone(), s.dir.clone())
         };
+        // A file sent in a folder goes into that folder (made here, and never
+        // reaching outside the save folder through a link).
+        let (dir, replace) = match place(&dir, meta.folder.as_deref()) {
+            Ok(p) => p,
+            Err(why) => return text(StatusCode::BAD_REQUEST, &why),
+        };
         let part = dir.join(format!(".{}.{}.fuselane-part", meta.file_name, &token[..8]));
         let result = self.receive(req, &part, &meta, sid, fid).await;
         let failed = |why: String| {
@@ -331,7 +356,17 @@ impl<H: Host> State<H> {
         };
         let outcome = match result {
             Ok(()) => {
-                let target = free_name(&dir, &meta.file_name);
+                // In a folder the newest copy wins (a folder kept in sync); loose
+                // files keep both.
+                let target = if replace {
+                    let t = dir.join(&meta.file_name);
+                    if t.is_file() && cfg!(windows) {
+                        let _ = std::fs::remove_file(&t);
+                    }
+                    t
+                } else {
+                    free_name(&dir, &meta.file_name)
+                };
                 match std::fs::rename(&part, &target) {
                     Ok(()) => Ok(target),
                     Err(e) => Err(failed(format!("couldn't save it ({e})"))),

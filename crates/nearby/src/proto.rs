@@ -69,7 +69,14 @@ pub struct FileMeta {
     /// here instead of uploading a file. Thumbnails of other files are ignored.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preview: Option<String>,
+    /// The folders it goes in, when it was sent as part of a folder ("Photos/2026").
+    /// Set only by `parse_prepare`, from a clean relative path; never sent.
+    #[serde(skip)]
+    pub folder: Option<String>,
 }
+
+/// Deepest folder kept from a sent path.
+pub const MAX_DEPTH: usize = 16;
 
 /// Longest text message taken (a clipboard's worth; anything longer is a file).
 pub const MAX_TEXT: usize = 64 * 1024;
@@ -143,7 +150,9 @@ pub fn parse_prepare(body: &[u8]) -> Result<PrepareUpload, Invalid> {
         if *key != f.id || key.is_empty() || key.len() > 128 {
             return Err(Invalid::FileId);
         }
-        // Only the last part of a path counts; the engine's cleaning does the rest.
+        // A clean relative path ("Photos/2026/a.jpg") keeps its folders; anything
+        // odd (.., hidden, absolute, a drive) keeps only the last part.
+        f.folder = folder_of(&f.file_name);
         let last = f.file_name.rsplit(['/', '\\']).next().unwrap_or("").trim();
         if last.is_empty() || last.starts_with('.') {
             return Err(Invalid::FileName);
@@ -155,6 +164,29 @@ pub fn parse_prepare(body: &[u8]) -> Result<PrepareUpload, Invalid> {
         f.file_name = clean;
     }
     Ok(p)
+}
+
+/// The folder part of a sent path, cleaned, or None when there isn't one or any
+/// part of it looks unsafe (then the file lands loose, by its name alone).
+pub fn folder_of(path: &str) -> Option<String> {
+    let parts: Vec<&str> = path.split(['/', '\\']).collect();
+    let (dirs, _) = parts.split_at(parts.len().saturating_sub(1));
+    if dirs.is_empty() || dirs.len() > MAX_DEPTH || path.starts_with(['/', '\\']) {
+        return None;
+    }
+    let mut clean = vec![];
+    for d in dirs {
+        let d = d.trim();
+        if d.is_empty() || d.starts_with('.') || d.contains(':') {
+            return None;
+        }
+        let c = fuselane_storage::names::sanitize(d);
+        if c.is_empty() || c.starts_with('.') {
+            return None;
+        }
+        clean.push(c);
+    }
+    Some(clean.join("/"))
 }
 
 /// Reads an announcement or register body.
@@ -198,6 +230,36 @@ mod tests {
         assert_eq!(p.info.device_type.as_deref(), Some("mobile"));
         assert_eq!(p.files["f1"].size, 324_242);
         assert_eq!(p.files["f2"].file_name, "evil.sh", "path parts are dropped");
+        assert_eq!(p.files["f2"].folder, None);
+    }
+
+    #[test]
+    fn clean_folders_are_kept_and_anything_odd_is_not() {
+        assert_eq!(
+            folder_of("Photos/2026/a.jpg").as_deref(),
+            Some("Photos/2026")
+        );
+        assert_eq!(
+            folder_of("Photos\\Trip\\b.jpg").as_deref(),
+            Some("Photos/Trip")
+        );
+        assert_eq!(folder_of("a.jpg"), None);
+        for bad in [
+            "../x/a.jpg",
+            "/etc/a",
+            "Photos/../../a",
+            ".ssh/key",
+            "C:/x/a",
+            "a//b",
+            "x/./a",
+        ] {
+            assert_eq!(folder_of(bad), None, "{bad}");
+        }
+        assert_eq!(
+            folder_of(&format!("{}a", "d/".repeat(17))),
+            None,
+            "too deep"
+        );
     }
 
     #[test]
