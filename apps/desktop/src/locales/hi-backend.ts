@@ -596,7 +596,6 @@ export const hiBackend: Readonly<Record<string, string>> = {
   "Couldn't open the browser: {e}": 'ब्राउज़र नहीं खुल सका: {e}',
   "Couldn't open the release notes: {e}": 'रिलीज़ नोट्स नहीं खुल सके: {e}',
   "Couldn't build the report: {e}": 'रिपोर्ट नहीं बन सकी: {e}',
-  "Your system didn't accept the change ({e}).": 'आपके सिस्टम ने यह बदलाव नहीं माना ({e})।',
   'Try again, or add Fuselane to your login items yourself.':
     'फिर से कोशिश करें, या Fuselane को खुद अपने लॉगिन आइटम में जोड़ें।',
   "Fuselane couldn't save that: {e}": 'Fuselane इसे सेव नहीं कर सका: {e}',
@@ -610,4 +609,18 @@ export const hiBackend: Readonly<Record<string, string>> = {
     'Fuselane पता नहीं लगा सका कि वह कहां इंस्टॉल है, इसलिए ब्राउज़र उसे नहीं ढूंढ सकते।',
   'Fuselane is running from the disk image or a temporary copy. Drag it into Applications and open it from there so browsers can find it.':
     'Fuselane डिस्क इमेज या किसी अस्थायी कॉपी से चल रहा है। इसे Applications में खींचें और वहीं से खोलें, ताकि ब्राउज़र इसे ढूंढ सकें।',
+  // ==== Flatpak ====
+  'Updates come through your software centre (Flatpak).':
+    'अपडेट आपके सॉफ़्टवेयर सेंटर (Flatpak) से आते हैं।',
+  'Update Fuselane there, or run flatpak update.':
+    'Fuselane को वहीं अपडेट करें, या flatpak update चलाएं।',
+  "The Flatpak version can't put the computer to sleep or shut it down.":
+    'Flatpak वर्ज़न कंप्यूटर को स्लीप या बंद नहीं कर सकता।',
+  'Pick Quit or Nothing, or use the .deb or AppImage for this.':
+    'बंद करें या कुछ नहीं चुनें, या इसके लिए .deb या AppImage इस्तेमाल करें।',
+  "Your system didn't accept the change ({e}).": 'आपके सिस्टम ने यह बदलाव नहीं माना ({e})।',
+  'Allow Fuselane to run in the background in your system settings, then try again.':
+    'सिस्टम सेटिंग्स में Fuselane को बैकग्राउंड में चलने दें, फिर से कोशिश करें।',
+  'Start Fuselane when you sign in, so scheduled downloads run.':
+    'साइन इन करने पर Fuselane शुरू करें, ताकि तय किए गए डाउनलोड चल सकें।',
 }

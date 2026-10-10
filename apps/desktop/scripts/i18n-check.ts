@@ -407,7 +407,17 @@ function backendTable(
 }
 
 /** Words the demo's messages keep in English: names, standards and quoted HTTP. */
-const BACKEND_KEEP = [...KEEP, 'Too Many Requests', 'Homebrew', 'winget', 'brew install', 'zip']
+const BACKEND_KEEP = [
+  ...KEEP,
+  'Too Many Requests',
+  'Homebrew',
+  'winget',
+  'brew install',
+  'zip',
+  'flatpak update',
+  'Flatpak',
+  'AppImage',
+]
 
 /** Messages in the demo backend: err()/bad() arguments, and error/note/problem texts. */
 function demoMessages(): { file: string; line: number; text: string }[] {
