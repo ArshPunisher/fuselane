@@ -198,13 +198,14 @@ function Hours({
         value={hhmm(hours?.stop ?? 6 * 60)}
         onChange={(e) => hours && onChange({ ...hours, stop: minutes(e.target.value) })}
       />
-      {/* Daily data packs expire at midnight (8.1): with a daily allowance, this
-          spends what's left of today's data in the last two hours. */}
+      {/* Daily data packs expire at midnight (8.1): the phone helps in the last two
+          hours with what's left of today's data; if the pack runs out, the carrier's
+          slowdown is caught by throttle detection (8.2). */}
       <button
         type="button"
         className="link-btn"
         aria-label={`${name}: only before midnight, 22:00 to 00:00`}
-        title="22:00 to midnight. With a daily allowance, downloads use what's left of today's data before it runs out."
+        title="22:00 to midnight. Daily data packs expire at midnight, so the phone helps with what's left of today's data. If it runs out, Fuselane notices the slowdown and stops using it."
         onClick={() => onChange({ start: 22 * 60, stop: 0 })}
       >
         Before midnight
