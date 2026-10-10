@@ -7,9 +7,12 @@
 // then left-over entries aren't reported). tests/i18n.spec.ts runs it with the UI tests.
 // `--loose` also lists other strings that look like English sentences (a review aid, not
 // a gate: some are fine, like log text or values compared in code).
+// Text from the core (src/locales/hi-backend.ts) is checked too: every entry has Hindi
+// with the same {names}, each template matches its own sentence (not a wider one), and
+// every message the demo backend sends comes out in Hindi.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import ts from 'typescript'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -371,7 +374,124 @@ function scan(
   if (looseToo) loose(sf, report)
 }
 
-function main() {
+/** The backend table, read as source so a key written twice is caught. */
+function backendTable(
+  file: string,
+  problems: Problem[],
+): Map<string, { value: string; line: number }> {
+  const sf = parse(file)
+  const map = new Map<string, { value: string; line: number }>()
+  const visit = (n: ts.Node) => {
+    if (ts.isPropertyAssignment(n) && (isText(n.name) || ts.isIdentifier(n.name))) {
+      const key = n.name.text
+      const line = lineOf(sf, n)
+      const report = (text: string) => problems.push({ file, line, text })
+      if (!isText(n.initializer)) report(`"${key}": the Hindi must be a plain string`)
+      else {
+        const value = n.initializer.text
+        if (map.has(key)) report(`"${key}" is in the table twice`)
+        if (!value.trim()) report(`empty Hindi for "${key}"`)
+        else if (value === key) report(`"${key}": the Hindi is the English`)
+        else if (names(value).join() !== names(key).join())
+          report(`"${key}": the Hindi has {${names(value)}}, the English {${names(key)}}`)
+        else if (/[—–]/.test(value)) report(`"${key}": no dashes in the Hindi (use , or :)`)
+        else if (/[A-Za-z]{2,}/.test(key) && !/[\u0900-\u097F]/.test(value))
+          report(`"${key}": the Hindi has no Devanagari`)
+        map.set(key, { value, line })
+      }
+    }
+    ts.forEachChild(n, visit)
+  }
+  visit(sf)
+  return map
+}
+
+/** Words the demo's messages keep in English: names, standards and quoted HTTP. */
+const BACKEND_KEEP = [...KEEP, 'Too Many Requests', 'Homebrew', 'winget', 'brew install', 'zip']
+
+/** Messages in the demo backend: err()/bad() arguments, and error/note/problem texts. */
+function demoMessages(): { file: string; line: number; text: string }[] {
+  const out: { file: string; line: number; text: string }[] = []
+  const files = walk(join(src, 'lib')).filter((f) => /[/\\]demo\w*\.ts$/.test(f))
+  for (const file of files) {
+    const sf = parse(file)
+    const add = (n: ts.Node) => {
+      let text: string | null = null
+      if (isText(n)) text = n.text
+      // `There's no download ${id}.`: a sample value stands in for each part.
+      else if (ts.isTemplateExpression(n))
+        text = n.head.text + n.templateSpans.map((s) => `7${s.literal.text}`).join('')
+      if (text && /\s/.test(text) && looksEnglish(text))
+        out.push({ file, line: lineOf(sf, n), text })
+    }
+    const visit = (n: ts.Node) => {
+      if (ts.isCallExpression(n) && ts.isIdentifier(n.expression)) {
+        const fn = n.expression.text
+        if (fn === 'err') n.arguments.slice(1).forEach(add)
+        else if (fn === 'bad') n.arguments.forEach(add)
+        else if (fn === 'make') n.arguments.slice(4, 5).forEach(add)
+      }
+      if (
+        ts.isPropertyAssignment(n) &&
+        /^(error|note|problem|message|reason)$/.test(n.name.getText())
+      )
+        add(n.initializer)
+      ts.forEachChild(n, visit)
+    }
+    visit(sf)
+  }
+  return out
+}
+
+/** English words left in a translation, outside names, links, files and numbers. */
+function englishIn(hindi: string): boolean {
+  let rest = hindi.replace(/\S*:\/\/\S*|"[^"]*"|\S*[./]\w+|[\w-]+:/g, ' ')
+  for (const k of BACKEND_KEEP) rest = rest.split(k).join(' ')
+  return /[A-Za-z]{2,}/.test(rest)
+}
+
+async function checkBackend(problems: Problem[]) {
+  const file = join(locales, 'hi-backend.ts')
+  const table = backendTable(file, problems)
+  const match = (await import(pathToFileURL(join(src, 'lib', 'backendMatch.ts')).href)) as {
+    compileBackend: (t: Readonly<Record<string, string>>) => unknown
+    translateBackend: (s: string, c: unknown) => string
+    matchedTemplate: (s: string, c: unknown) => string | null
+  }
+  const compiled = match.compileBackend(
+    Object.fromEntries([...table].map(([en, e]) => [en, e.value])),
+  )
+  // Each template, filled with sample parts, must come out as its own Hindi: a wider
+  // template listed with more text would otherwise take it over.
+  for (const [en, { value: hi, line }] of table) {
+    let i = 0
+    const samples = new Map<string, string>()
+    const sample = en.replace(/\{(\w+)\}/g, (_, name: string) => {
+      if (!samples.has(name)) samples.set(name, `Q${i++}q`)
+      return samples.get(name) ?? ''
+    })
+    const want = hi.replace(/\{(\w+)\}/g, (_, name: string) => samples.get(name) ?? '')
+    const got = match.translateBackend(sample, compiled)
+    if (got !== want)
+      problems.push({
+        file,
+        line,
+        text: `"${en}" comes out as "${got}" (taken by "${match.matchedTemplate(sample, compiled)}"?)`,
+      })
+  }
+  for (const m of demoMessages()) {
+    const got = match.translateBackend(m.text, compiled)
+    if (englishIn(got))
+      problems.push({
+        file: m.file,
+        line: m.line,
+        text: `no Hindi for the core's "${m.text}" (add it to locales/hi-backend.ts)`,
+      })
+  }
+  return table.size
+}
+
+async function main() {
   const looseToo = process.argv.includes('--loose')
   const args = process.argv.slice(2).filter((a) => a !== '--loose')
   const problems: Problem[] = []
@@ -383,13 +503,14 @@ function main() {
     for (const [key, e] of cat)
       if (!used.has(key))
         problems.push({ file: e.file, line: e.line, text: `left over (not in the code): "${key}"` })
+  const backend = args.length ? 0 : await checkBackend(problems)
   for (const p of problems) console.log(`${relative(root, p.file)}:${p.line}: ${p.text}`)
   console.log(
     problems.length
       ? `\n${problems.length} translation problem(s). See docs/07-design/I18N.md.`
-      : `Translations OK: ${used.size} strings, all in Hindi.`,
+      : `Translations OK: ${used.size} strings and ${backend} from the core, all in Hindi.`,
   )
   process.exitCode = problems.length ? 1 : 0
 }
 
-main()
+await main()
