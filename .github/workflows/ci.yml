@@ -59,6 +59,8 @@ jobs:
           pnpm --filter @fuselane/extension test
           pnpm --filter @fuselane/extension build
           pnpm --filter @fuselane/extension build:firefox
+      - name: Firefox add-on lint (web-ext, as addons.mozilla.org checks it)
+        run: pnpm dlx web-ext@8.10.0 lint --source-dir apps/extension/.output/firefox-mv3 --output text
       - name: UI tests (WebKit and Chromium, demo backend)
         run: |
           pnpm --filter @fuselane/desktop exec playwright install --with-deps webkit chromium
