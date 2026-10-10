@@ -317,6 +317,16 @@ async fn http(addr: std::net::SocketAddr, raw: String) -> (u16, String) {
     (code, body)
 }
 
+/// The remote page's whole reply (headers too), lowercased.
+async fn page_raw(addr: std::net::SocketAddr, host: &str) -> String {
+    let mut s = tokio::net::TcpStream::connect(addr).await.unwrap();
+    let req = format!("GET / HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n");
+    s.write_all(req.as_bytes()).await.unwrap();
+    let mut out = String::new();
+    s.read_to_string(&mut out).await.unwrap();
+    out.to_ascii_lowercase()
+}
+
 fn post(host: &str, body: &str) -> String {
     format!(
         "POST /jsonrpc HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -361,6 +371,16 @@ async fn over_http_with_rebinding_and_size_guards() {
         !html.contains("https://cdn"),
         "nothing loaded from elsewhere"
     );
+    // Its policy allows its own WebSocket by name, and nothing a Host header
+    // could smuggle in.
+    let out = page_raw(addr, "192.168.1.24:6800").await;
+    assert!(
+        out.contains("connect-src 'self' ws://192.168.1.24:6800;"),
+        "{out}"
+    );
+    let out = page_raw(addr, "127.0.0.1:80;script-src_*").await;
+    assert!(out.contains("connect-src 'self';"), "{out}");
+    assert!(!out.contains("script-src_*"), "{out}");
     let get = "GET /jsonrpc HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n".to_string();
     assert_eq!(http(addr, get).await.0, 405);
     let big = format!(

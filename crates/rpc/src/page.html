@@ -366,6 +366,61 @@
             ? sessionStorage.setItem('fuselane-secret', secret)
             : sessionStorage.removeItem('fuselane-secret')
         } catch {}
+        on ? connectSocket() : closeSocket()
+      }
+      // A WebSocket tells the page the moment a download starts, pauses or
+      // finishes. The 2-second polling below keeps working without it.
+      let sock = null,
+        sockTimer = 0,
+        soon = 0
+      function connectSocket() {
+        if (sock || !secret || typeof WebSocket === 'undefined') return
+        let ws
+        try {
+          ws = new WebSocket('ws://' + location.host + '/jsonrpc')
+        } catch {
+          return retrySocket()
+        }
+        sock = ws
+        ws.onopen = () =>
+          ws.send(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              id: 'hello',
+              method: 'aria2.getVersion',
+              params: ['token:' + secret],
+            }),
+          )
+        ws.onmessage = (e) => {
+          let j
+          try {
+            j = JSON.parse(e.data)
+          } catch {
+            return
+          }
+          if (j && typeof j.method === 'string' && j.method.startsWith('aria2.onDownload')) {
+            // Several changes at once make one refresh.
+            clearTimeout(soon)
+            soon = setTimeout(refresh, 100)
+          }
+        }
+        ws.onerror = () => ws.close()
+        ws.onclose = () => {
+          if (sock === ws) {
+            sock = null
+            retrySocket()
+          }
+        }
+      }
+      function retrySocket() {
+        clearTimeout(sockTimer)
+        if (secret) sockTimer = setTimeout(connectSocket, 5000)
+      }
+      function closeSocket() {
+        clearTimeout(sockTimer)
+        const ws = sock
+        sock = null
+        if (ws) ws.close()
       }
       document.getElementById('login').addEventListener('submit', (e) => {
         e.preventDefault()

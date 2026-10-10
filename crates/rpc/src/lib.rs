@@ -802,6 +802,23 @@ async fn serve<H: Host>(rpc: Arc<Rpc<H>>, req: Request<Incoming>) -> Response<Bo
     if req.uri().path() == "/" && req.method() == hyper::Method::GET {
         // The remote page for phones: it asks for the secret, or reads it from
         // the link's #fragment (never sent to the server), and calls /jsonrpc.
+        // Its WebSocket (for notifications) is named exactly: not every
+        // browser counts ws:// as 'self'. Only the characters of an address
+        // and port go into the header.
+        let ws = req
+            .headers()
+            .get(hyper::header::HOST)
+            .and_then(|v| v.to_str().ok())
+            .filter(|h| {
+                h.bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b':' | b'[' | b']'))
+            })
+            .map(|h| format!(" ws://{h}"))
+            .unwrap_or_default();
+        let csp = format!(
+            "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; \
+             connect-src 'self'{ws}; form-action 'none'; frame-ancestors 'none'; base-uri 'none'"
+        );
         let mut r = reply(
             StatusCode::OK,
             PAGE.as_bytes().to_vec(),
@@ -810,10 +827,12 @@ async fn serve<H: Host>(rpc: Arc<Rpc<H>>, req: Request<Incoming>) -> Response<Bo
         let h = r.headers_mut();
         h.insert(
             hyper::header::CONTENT_SECURITY_POLICY,
-            hyper::header::HeaderValue::from_static(
-                "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; \
-                 connect-src 'self'; form-action 'none'; frame-ancestors 'none'; base-uri 'none'",
-            ),
+            hyper::header::HeaderValue::from_str(&csp).unwrap_or_else(|_| {
+                hyper::header::HeaderValue::from_static(
+                    "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; \
+                     connect-src 'self'; form-action 'none'; frame-ancestors 'none'; base-uri 'none'",
+                )
+            }),
         );
         h.insert(
             hyper::header::HeaderName::from_static("referrer-policy"),
