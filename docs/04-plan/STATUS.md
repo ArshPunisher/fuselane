@@ -27,6 +27,19 @@
 
 ## Log
 
+### 2026-10-10, night (owner away; more zero-cost features for beta.10, not released)
+
+- **Built (tested, committed, pushed):**
+  - Networks page in three tabs: Setup, Check, Usage.
+  - B10.7 Phone page text both ways: a phone without the app sends text to the clipboard and copies text offered to it.
+  - 8.7 Remote control for aria2 apps (ADR 0013, `fuselane-rpc` crate, Settings → Other apps, off by default): aria2 JSON-RPC over HTTP and WebSocket with a secret, Host check against DNS rebinding, open sessions closed on a new secret. Checked with the real AriaNg 1.3.15 (HTTP and its default WebSocket): it connects, lists, shows speed and adds links.
+  - B10.8 Feeds (Downloads → Feeds): RSS and Atom, words to include or skip, every 15 min to daily, names from titles (podcast hosts call every episode default.mp3), torrent items wait for Open. Checked on real feeds: a 20 MB podcast feed in 10 s, SourceForge file feeds, GitHub's release feed (no files, correctly).
+  - 8.3 Metalink: `.meta4`/`.metalink` links add their files with mirrors and SHA-256, as a group; `aria2.addMetalink` too. Checked on a live openSUSE Metalink.
+  - Fixed: Settings scrolled sideways at 375 px (the Diagnostics buttons couldn't wrap). Flaky phone-page test fixed.
+  - Site source lists the new built-ins (not deployed: goes live with beta.10).
+- **Housekeeping:** `target/debug` had grown to 30 GB and filled the disk mid-build; removed (it's rebuildable).
+- **Next:** owner reviews beta.10 (demo at localhost:5191) and says release; then publish beta.10, deploy the site, upload extension 0.2.0. Owner: Google Search Console Domain property for fuselane.app.
+
 ### 2026-10-10, later (beta.9 published; beta.10 round built, not released)
 
 - **Published:** `v0.1.0-beta.9` (verified: checksums, universal binary, self-test incl. Nearby, feed for 4 platforms, probe unchanged; Homebrew cask, homepage fuselane.app). fuselane.app live; IndexNow accepted. Chrome Web Store listing live (0.1.0); new images, captions and 0.2.0 zip ready in `apps/extension`.
