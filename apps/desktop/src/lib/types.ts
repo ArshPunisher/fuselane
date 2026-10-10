@@ -42,6 +42,8 @@ export interface JobView {
   /** Hosts of its mirrors, and why any of them wasn't used. */
   mirrors: string[]
   mirrorNotes: string[]
+  /** What its networks went through in the latest run (throttled, back, proxy trouble). */
+  networkNotes: NetNote[]
   /** It has every network to itself ("Do this one now"). */
   focused: boolean
   /** Where its checksum was found by itself ("SHA256SUMS"), if it was. */
@@ -56,6 +58,20 @@ export interface JobView {
   /** The group it was added in, and its name. */
   groupId: number | null
   groupName: string | null
+}
+
+/** One network's latest news in a download. */
+export interface NetNote {
+  /** Device name; show the person's name for it. */
+  name: string
+  /** slow: throttled, the others carry the rest; back: fast again; trouble: can't connect. */
+  kind: 'slow' | 'back' | 'trouble'
+  /** Bytes per second: its throttled speed (slow) or what the check measured (back). */
+  rate: number | null
+  /** Its best speed before it slowed down, when it had one. */
+  best: number | null
+  /** Why it can't connect and what to do, in plain words (trouble). */
+  message: string | null
 }
 
 export interface ReportView {

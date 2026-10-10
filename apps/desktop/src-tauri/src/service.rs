@@ -25,7 +25,9 @@ pub mod handoff;
 pub mod media_jobs;
 mod metalink;
 pub mod netcheck;
+mod notes;
 pub use daily::UsageHistory;
+pub use notes::NetNote;
 
 pub use grab::PageFiles;
 mod power_aware;
@@ -71,6 +73,9 @@ pub struct JobView {
     /// Hosts of its mirrors (B8.9), and why any of them wasn't used.
     pub mirrors: Vec<String>,
     pub mirror_notes: Vec<String>,
+    /// What its networks went through in the latest run: throttled and back,
+    /// or a proxy that wouldn't let them connect (8.2, 8.4).
+    pub network_notes: Vec<NetNote>,
     /// It has every network to itself ("Do this one now").
     pub focused: bool,
     /// Where its checksum was found by itself ("SHA256SUMS"), if it was (B9.7).
@@ -645,6 +650,8 @@ pub struct Service {
     opener: Mutex<OpenFn>,
     /// Why mirrors weren't used, per download, from its latest run.
     mirror_notes: Mutex<HashMap<i64, Arc<Mutex<Vec<String>>>>>,
+    /// What each download's networks went through in its latest run (8.2, 8.4).
+    net_notes: Mutex<HashMap<i64, Arc<Mutex<notes::Notes>>>>,
     /// "Do this one now" (B9.1): the download with every network to itself, and
     /// the ones it paused, which carry on after it.
     focus: Mutex<Option<i64>>,
@@ -789,6 +796,7 @@ fn view(job: &Job) -> JobView {
             })
             .collect(),
         mirror_notes: vec![],
+        network_notes: vec![],
         focused: false,
         checksum_from: job.sha256_from.clone().filter(|f| !f.is_empty()),
         verified: job.status == Status::Completed && job.expected_sha256.is_some(),
@@ -995,6 +1003,7 @@ impl Service {
             retry_scale: None,
             opener: Mutex::new(Arc::new(|_| {})),
             mirror_notes: Mutex::new(HashMap::new()),
+            net_notes: Mutex::new(HashMap::new()),
             focus: Mutex::new(None),
             focus_held: Mutex::new(std::collections::HashSet::new()),
             find_checksums: std::sync::atomic::AtomicBool::new(find_checksums),
@@ -1111,6 +1120,7 @@ impl Service {
     pub fn jobs(&self) -> Result<Vec<JobView>, UiError> {
         let retries = lock(&self.retries).clone();
         let notes = lock(&self.mirror_notes).clone();
+        let net_notes = lock(&self.net_notes).clone();
         let focus = self.focused();
         let group_names: HashMap<i64, String> = self
             .store
@@ -1134,6 +1144,9 @@ impl Service {
                 v.ready_state = self.ready_state(j).map(deadline::ReadyState::word);
                 if let Some(n) = notes.get(&j.id) {
                     v.mirror_notes = lock(n).clone();
+                }
+                if let Some(n) = net_notes.get(&j.id) {
+                    v.network_notes = lock(n).list();
                 }
                 if v.status == "failed" {
                     v.retry_in = retries
@@ -2567,6 +2580,21 @@ impl Service {
         if !held_back.is_empty() {
             self.watch_if_long(id, last.clone());
         }
+        // A fresh run starts with no news about its networks.
+        let net_notes: Arc<Mutex<notes::Notes>> = Arc::default();
+        lock(&self.net_notes).insert(id, net_notes.clone());
+        let opts = RunOptions {
+            lane_events: Some(fuselane_engine_http::download::LaneEventFn(Arc::new({
+                let me = self.clone();
+                move |e| {
+                    let changed = lock(&net_notes).hear(e);
+                    if changed {
+                        me.publish_jobs();
+                    }
+                }
+            }))),
+            ..opts
+        };
         let resume = job.resume();
         let outcome = runner::run(
             self.store.clone(),
@@ -4896,6 +4924,16 @@ mod tests {
                         start: 1380,
                         stop: 360,
                     }),
+                }),
+            ),
+            (
+                "NetNote",
+                json_fields(&NetNote {
+                    name: "en5".into(),
+                    kind: "slow",
+                    rate: Some(8192.0),
+                    best: None,
+                    message: None,
                 }),
             ),
         ] {

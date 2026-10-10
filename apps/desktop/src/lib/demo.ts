@@ -181,6 +181,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       startAt: null,
       mirrors: [],
       mirrorNotes: [],
+      networkNotes: [],
       focused: false,
       checksumFrom: null,
       verified: false,
