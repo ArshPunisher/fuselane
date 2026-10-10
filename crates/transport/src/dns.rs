@@ -25,6 +25,9 @@ pub const PUBLIC_RESOLVERS: [SocketAddr; 4] = [
     ),
 ];
 
+/// How long the second answer (A or AAAA) gets once the first has arrived.
+const SECOND_ANSWER_WAIT: Duration = Duration::from_millis(500);
+
 /// Most addresses kept from one answer (a hostile reply can't balloon memory).
 const MAX_ADDRS: usize = 32;
 
@@ -109,8 +112,22 @@ async fn ask(
     let mut answered = [false, false];
     let mut nxdomain = false;
     let mut buf = [0u8; 4096];
-    let deadline = tokio::time::Instant::now() + timeout;
+    let mut deadline = tokio::time::Instant::now() + timeout;
+    // Some networks drop the second of two queries sent back to back. Once one
+    // answer is in, the other is asked for again once and given a short wait,
+    // instead of the whole timeout.
+    let mut resent = false;
     while !(answered[0] && answered[1]) {
+        if !resent && (answered[0] || answered[1]) {
+            resent = true;
+            let (id, kind) = if answered[0] {
+                (id_aaaa, RecordType::AAAA)
+            } else {
+                (id_a, RecordType::A)
+            };
+            udp.send(&query(id, name, kind)?).await?;
+            deadline = deadline.min(tokio::time::Instant::now() + SECOND_ANSWER_WAIT);
+        }
         let n = match tokio::time::timeout_at(deadline, udp.recv(&mut buf)).await {
             Ok(Ok(n)) => n,
             Ok(Err(e)) => return Err(e),
@@ -202,6 +219,8 @@ mod tests {
         WrongId,
         Garbage,
         NxDomain,
+        /// Drops the second query it ever gets (some networks do).
+        DropSecond,
     }
 
     /// A fake DNS server on loopback that answers each query according to `mode`.
@@ -210,7 +229,12 @@ mod tests {
         let addr = sock.local_addr().unwrap();
         tokio::spawn(async move {
             let mut buf = [0u8; 1500];
+            let mut seen = 0;
             while let Ok((n, from)) = sock.recv_from(&mut buf).await {
+                seen += 1;
+                if matches!(mode, Mode::DropSecond) && seen == 2 {
+                    continue;
+                }
                 let Ok(q) = Message::from_vec(&buf[..n]) else {
                     continue;
                 };
@@ -255,6 +279,21 @@ mod tests {
             .unwrap();
         assert!(addrs.contains(&"203.0.113.7".parse().unwrap()));
         assert!(addrs.contains(&"2001:db8::7".parse().unwrap()));
+    }
+
+    #[tokio::test]
+    async fn a_dropped_second_query_is_asked_again_instead_of_waiting_it_out() {
+        let s = fake(Mode::DropSecond).await;
+        let start = std::time::Instant::now();
+        let addrs = resolve_on(&lo(), "cdn.example.org", &[s], Duration::from_secs(5))
+            .await
+            .unwrap();
+        assert_eq!(addrs.len(), 2, "both families, thanks to the second ask");
+        assert!(
+            start.elapsed() < Duration::from_secs(2),
+            "{:?}",
+            start.elapsed()
+        );
     }
 
     #[tokio::test]
