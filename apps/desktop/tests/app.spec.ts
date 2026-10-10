@@ -1241,6 +1241,21 @@ test('a video page offers its qualities and downloads the chosen one', async ({ 
   ).toBeVisible()
 })
 
+test('the extension hands a video page over and the qualities open by themselves', async ({
+  page,
+}) => {
+  await page.goto('/?empty=1')
+  await expect(page.getByText('Nothing downloading yet')).toBeVisible()
+  await page.evaluate(() =>
+    (window as unknown as { __demoOpen: (t: string) => void }).__demoOpen(
+      'fuselane-video:https://www.youtube.com/watch?v=aqz-KE-bpKQ',
+    ),
+  )
+  const pick = page.getByRole('dialog', { name: 'Get the video' })
+  await expect(pick).toContainText('Big Buck Bunny')
+  await expect(pick.getByRole('radio', { name: /1080p/ })).toBeVisible()
+})
+
 test('without yt-dlp a video page says what to install', async ({ page }) => {
   await page.goto('/?empty=1&ytdlp=0')
   const dialog = await openDialog(page)

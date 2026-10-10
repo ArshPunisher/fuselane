@@ -73,6 +73,10 @@ async fn handle(endpoint: &Path, msg: &[u8]) -> Value {
                 Err(_) => decline("unsupported"),
             }
         }
+        Some("page.video") => match crate::client::request(endpoint, "page.video", v, wait).await {
+            Ok(reply) => reply,
+            Err(_) => decline("unsupported"),
+        },
         Some("ping") => match crate::client::request(endpoint, "ping", Value::Null, wait).await {
             Ok(r) => json!({"v": 1, "type": "pong", "app": r}),
             Err(e) => json!({"v": 1, "type": "pong", "error": e}),

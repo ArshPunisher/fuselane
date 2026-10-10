@@ -65,6 +65,9 @@ function isTorrentPath(s: string): boolean {
   return /\.torrent$/i.test(s.trim()) && !looksLikeLink(s) && !isMagnet(s)
 }
 
+/** A draft from the extension asking for a page's video (api_bridge.rs). */
+const VIDEO_DRAFT = 'fuselane-video:'
+
 /** The folder part of a path, for "It's still in ~/Downloads". */
 function folderOf(path: string): string {
   const i = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
@@ -222,6 +225,12 @@ export function NewDownload() {
     if (draftTorrent) {
       setListing(null)
       void inspect((b) => b.inspectTorrentBytes(draftTorrent, dir.trim() || null))
+    } else if (draft.startsWith(VIDEO_DRAFT)) {
+      // The extension's "Get the video": straight to the qualities.
+      const link = draft.slice(VIDEO_DRAFT.length)
+      setListing(null)
+      setUrl(link)
+      void getVideo(link)
     } else if (draft && isTorrentPath(draft)) {
       setListing(null)
       void inspect((b) => b.inspectTorrentFile(draft, dir.trim() || null))
@@ -272,6 +281,22 @@ export function NewDownload() {
       setError(toUiError(err))
     } finally {
       setBusy(false)
+    }
+  }
+
+  /** Looks a video page up and shows its qualities (B10.4). */
+  async function getVideo(link: string) {
+    if (!backend) return
+    setMediaBusy(true)
+    setError(null)
+    try {
+      const m = await backend.mediaInfo(link)
+      setQuality(m.options[0]?.id ?? '')
+      setMedia(m)
+    } catch (err) {
+      setError(toUiError(err))
+    } finally {
+      setMediaBusy(false)
     }
   }
 
@@ -735,20 +760,7 @@ export function NewDownload() {
                 type="button"
                 className="link-btn find-files"
                 disabled={mediaBusy}
-                onClick={async () => {
-                  if (!backend) return
-                  setMediaBusy(true)
-                  setError(null)
-                  try {
-                    const m = await backend.mediaInfo(url.trim())
-                    setQuality(m.options[0]?.id ?? '')
-                    setMedia(m)
-                  } catch (err) {
-                    setError(toUiError(err))
-                  } finally {
-                    setMediaBusy(false)
-                  }
-                }}
+                onClick={() => void getVideo(url.trim())}
               >
                 {mediaBusy ? 'Looking for the video…' : 'Get the video from this page'}
               </button>

@@ -45,6 +45,19 @@ pub trait Handler: Send + Sync + 'static {
     fn offer(&self, offer: Offer) -> BoxFuture<'_, Result<String, Decline>>;
     /// The app's version, for `ping`.
     fn version(&self) -> String;
+    /// A page whose video the person wants (the extension's "Get the video"):
+    /// the app opens its video picker with it. False when it can't.
+    fn page_video(&self, _url: String) -> bool {
+        false
+    }
+}
+
+/// A page link from the extension: http(s) only, and not absurdly long.
+fn page_url(params: &Value) -> Option<String> {
+    let url = params.get("url")?.as_str()?.trim();
+    let lower = url.get(..8).unwrap_or("").to_ascii_lowercase();
+    (url.len() <= 8192 && (lower.starts_with("https://") || lower.starts_with("http://")))
+        .then(|| url.to_string())
 }
 
 fn accepted(job_id: &str) -> Value {
@@ -85,6 +98,20 @@ pub async fn answer(handler: &dyn Handler, line: &str) -> Value {
                 },
                 // Refused before reaching the app; the browser keeps the download.
                 Err(_) => declined(Decline::Invalid),
+            };
+            json!({"id": id, "result": result})
+        }
+        Some("page.video") => {
+            let params = req.get("params").cloned().unwrap_or(Value::Null);
+            let result = match page_url(&params) {
+                Some(url) => {
+                    if handler.page_video(url) {
+                        json!({"v": 1, "type": "page.video.opened"})
+                    } else {
+                        declined(Decline::Unsupported)
+                    }
+                }
+                None => declined(Decline::Invalid),
             };
             json!({"id": id, "result": result})
         }
@@ -261,6 +288,29 @@ mod tests {
         fn version(&self) -> String {
             "9.9.9".into()
         }
+        fn page_video(&self, url: String) -> bool {
+            url.contains("youtube")
+        }
+    }
+
+    #[tokio::test]
+    async fn a_video_page_opens_the_picker_and_bad_links_are_refused() {
+        let ok = answer(&Fake, r#"{"id":1,"method":"page.video","params":{"url":"https://www.youtube.com/watch?v=x"}}"#).await;
+        assert_eq!(ok["result"]["type"], "page.video.opened");
+        let no = answer(
+            &Fake,
+            r#"{"id":2,"method":"page.video","params":{"url":"https://example.org/"}}"#,
+        )
+        .await;
+        assert_eq!(no["result"]["reason"], "unsupported");
+        let bad = answer(
+            &Fake,
+            r#"{"id":3,"method":"page.video","params":{"url":"javascript:alert(1)"}}"#,
+        )
+        .await;
+        assert_eq!(bad["result"]["reason"], "invalid");
+        let missing = answer(&Fake, r#"{"id":4,"method":"page.video"}"#).await;
+        assert_eq!(missing["result"]["reason"], "invalid");
     }
 
     const OFFER: &str = r#"{"v":1,"type":"download.offer","url":"https://example.org/big.iso"}"#;

@@ -12,7 +12,15 @@ pub struct ApiBridge {
     pub svc: Arc<Service>,
 }
 
+/// Drafts starting with this open New download on its video picker (B10.4).
+pub const VIDEO_DRAFT: &str = "fuselane-video:";
+
 impl Handler for ApiBridge {
+    fn page_video(&self, url: String) -> bool {
+        self.svc.open_request(format!("{VIDEO_DRAFT}{url}"));
+        true
+    }
+
     fn offer(&self, offer: Offer) -> BoxFuture<'_, Result<String, Decline>> {
         Box::pin(async move {
             if offer
