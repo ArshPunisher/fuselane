@@ -487,7 +487,10 @@ test('Copy diagnostics shows exactly what is copied, with nothing personal', asy
     await context.grantPermissions(['clipboard-read', 'clipboard-write'])
   await page.goto('/')
   await page.getByRole('button', { name: 'Settings' }).click()
-  await page.getByRole('button', { name: 'Copy diagnostics' }).click()
+  // From the keyboard: WebKit can move the long Settings page's scroll between a pointer
+  // click being aimed and landing, so the click sometimes missed the button.
+  await page.getByRole('button', { name: 'Copy diagnostics' }).focus()
+  await page.keyboard.press('Enter')
   const report = page.getByLabel('Diagnostics report')
   await expect(report).toContainText('Recent downloads')
   await expect(page.getByRole('status').filter({ hasText: /Copied|Select the text/ })).toBeVisible()
