@@ -3,7 +3,7 @@ import { useApp, type Theme } from '../lib/store'
 import { mark, setLangPref, t, tn, useLang, type LangPref } from '../lib/i18n'
 import { toUiError } from '../lib/backend'
 import type { SeedSettings, UiError } from '../lib/types'
-import { LimitField } from './LimitField'
+import { AutoLimit } from './AutoSave'
 import { SlowToggle } from './SlowMode'
 import { RemoteSetting } from './RemoteSetting'
 import { WatchSetting } from './WatchSetting'
@@ -164,81 +164,51 @@ function SpeedUnitSetting() {
 function SpeedLimitSetting() {
   const limits = useApp((s) => s.limits)
   const save = useApp((s) => s.saveLimits)
-  const [draft, setDraft] = useState<number | null>(limits.global)
-  const [status, setStatus] = useState('')
-  const changed = draft !== null && draft !== limits.global
   return (
-    <form
-      className="setting"
-      aria-label={t('Speed limit')}
-      onSubmit={async (e) => {
-        e.preventDefault()
-        if (draft === null) return
-        setStatus('')
-        if (await save({ ...limits, global: draft }))
-          setStatus(draft ? t('Saved. Running downloads follow it now.') : t('Limit removed.'))
-      }}
-    >
+    <div className="setting">
       <div>
         <p className="setting-name">{t('Speed limit')}</p>
         <p className="muted">{t('For all downloads and networks together.')}</p>
-        <p className="muted" role="status">
-          {status}
-        </p>
       </div>
       <div className="setting-control">
-        <LimitField
+        <AutoLimit
           label={t('Speed limit for all networks')}
           hideLabel
           rate={limits.global}
-          onChange={setDraft}
+          save={(global) => save({ ...limits, global })}
+          savedText={(r) =>
+            r ? t('Saved. Running downloads follow it now.') : t('Limit removed.')
+          }
         />
-        <button type="submit" className="btn" disabled={!changed}>
-          {t('Save')}
-        </button>
       </div>
-    </form>
+    </div>
   )
 }
 
 function SlowModeSetting() {
   const limits = useApp((s) => s.limits)
   const save = useApp((s) => s.saveLimits)
-  const [draft, setDraft] = useState<number | null>(limits.slowRate)
-  const [status, setStatus] = useState('')
-  const changed = draft !== null && draft > 0 && draft !== limits.slowRate
   return (
-    <form
-      className="setting setting-stack"
-      aria-label={t('Slow mode')}
-      onSubmit={async (e) => {
-        e.preventDefault()
-        if (draft === null || draft <= 0) return
-        setStatus('')
-        if (await save({ ...limits, slowRate: draft })) setStatus(t('Saved.'))
-      }}
-    >
-      <div className="setting-row">
-        <div>
-          <p className="setting-name">{t('Slow mode')}</p>
-          <p className="muted">
-            {t(
-              'One switch for calls and streaming: caps all downloads, then puts your normal limits back.',
-            )}
-          </p>
-          <p className="muted" role="status">
-            {status}
-          </p>
-        </div>
+    <div className="setting" aria-label={t('Slow mode')} role="group">
+      <div>
+        <p className="setting-name">{t('Slow mode')}</p>
+        <p className="muted">
+          {t(
+            'One switch for calls and streaming: caps all downloads, then puts your normal limits back.',
+          )}
+        </p>
+      </div>
+      <div className="setting-control slow-control">
+        <AutoLimit
+          label={t('Slow mode speed')}
+          hideLabel
+          rate={limits.slowRate}
+          allowZero={false}
+          save={(slowRate) => save({ ...limits, slowRate })}
+        />
         <SlowToggle labelled={false} />
       </div>
-      <div className="setting-control">
-        <LimitField label={t('Slow mode speed')} rate={limits.slowRate} onChange={setDraft} />
-        <button type="submit" className="btn" disabled={!changed}>
-          {t('Save')}
-        </button>
-      </div>
-    </form>
+    </div>
   )
 }
 
@@ -248,6 +218,8 @@ const SHORTCUTS: [string[], string][] = [
   [[MOD, '1'], mark('Downloads')],
   [[MOD, '2'], mark('Networks')],
   [[MOD, '3'], mark('Settings')],
+  [[MOD, '4'], mark('Send')],
+  [[MOD, '5'], mark('Speedtest')],
   [['↑', '↓'], mark('Move through downloads')],
   [['Space'], mark('Pause or resume the selected download')],
   [['Esc'], mark('Back to the list, or close a dialog')],

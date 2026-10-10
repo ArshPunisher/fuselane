@@ -438,32 +438,31 @@ test('a file that changed on the server can be started over', async ({ page }) =
   await expect(page.locator('.row-name', { hasText: 'mirror-snapshot' })).toHaveCount(1)
 })
 
-test('an overall speed limit is validated, saved and can be removed', async ({ page }) => {
+test('an overall speed limit is validated, saves itself and can be removed', async ({ page }) => {
   await page.goto('/?empty=1')
   await page.getByRole('button', { name: 'Settings' }).click()
   const field = page.getByLabel('Speed limit for all networks', { exact: true })
-  const save = page.getByRole('form', { name: 'Speed limit' }).getByRole('button', { name: 'Save' })
-  await expect(save).toBeDisabled() // nothing changed yet
   for (const bad of ['abc', '-5', '1e9', '5 MB']) {
     await field.fill(bad)
+    await field.press('Enter')
     await expect(page.getByText('Enter a number, like 5 or 2.5.')).toBeVisible()
-    await expect(save).toBeDisabled()
+    // Nothing invalid is saved.
+    await expect(page.getByRole('status').filter({ hasText: 'Saved' })).toHaveCount(0)
   }
   // A number too big to be a speed is refused by the backend with a clear reason.
   await field.fill('999999999')
-  await save.click()
+  await field.press('Enter')
   await expect(
     page.getByRole('alert').filter({ hasText: 'too high to be a real speed' }),
   ).toBeVisible()
   await field.fill('2.5')
   await page.getByLabel('Speed limit for all networks unit').selectOption('MB')
-  await save.click()
+  // It saves by itself once typing stops.
   await expect(
     page.getByRole('status').filter({ hasText: 'Running downloads follow it now' }),
   ).toBeVisible()
-  await expect(save).toBeDisabled()
   await field.fill('')
-  await save.click()
+  await field.press('Enter')
   await expect(page.getByRole('status').filter({ hasText: 'Limit removed' })).toBeVisible()
 })
 
@@ -473,7 +472,7 @@ test("a network's limit saves on its own and survives moving between pages", asy
   const phone = page.getByLabel('iPhone USB speed limit', { exact: true })
   await phone.fill('512')
   await page.getByLabel('iPhone USB speed limit unit').selectOption('KB')
-  await page.getByRole('button', { name: 'Save the speed limit for iPhone USB' }).click()
+  await page.getByLabel('iPhone USB speed limit unit').press('Enter')
   await expect(page.getByRole('status').filter({ hasText: 'follow it now' })).toBeVisible()
   await page.getByRole('button', { name: 'Downloads' }).click()
   await page.getByRole('button', { name: 'Networks' }).click()
@@ -603,7 +602,7 @@ test('slow mode switches on and off and its speed can be changed', async ({ page
   )
   await page.getByLabel('Slow mode speed', { exact: true }).fill('300')
   await page.getByLabel('Slow mode speed unit').selectOption('KB')
-  await page.getByRole('form', { name: 'Slow mode' }).getByRole('button', { name: 'Save' }).click()
+  await page.getByLabel('Slow mode speed unit').press('Enter')
   await expect(page.locator('.sidebar .slow-toggle')).toContainText('300 KB/s max')
   await toggle.click()
   await expect(toggle).toHaveAttribute('aria-checked', 'false')
@@ -666,12 +665,13 @@ test('a monthly allowance can be set, is validated, and shows its usage', async 
   const amount = page.getByLabel('iPhone USB monthly allowance')
   const row = page.locator('.allowance', { has: amount })
   await amount.fill('lots')
+  await amount.press('Enter')
   await expect(row.getByText('Enter a number, like 5 or 2.5.')).toBeVisible()
-  await expect(row.getByRole('button', { name: 'Save' })).toBeDisabled()
+  await expect(row.getByText('Saved')).toHaveCount(0)
   await amount.fill('8')
   await page.getByLabel('iPhone USB allowance unit').selectOption('GB')
   await page.getByLabel('iPhone USB reset day').selectOption('15')
-  await row.getByRole('button', { name: 'Save' }).click()
+  await page.getByLabel('iPhone USB reset day').press('Enter')
   const saved = page.locator('.allowance', { has: page.getByLabel('iPhone USB monthly allowance') })
   await expect(saved).toContainText('of 8.0 GB')
   await expect(page.getByLabel('iPhone USB reset day')).toHaveValue('15')

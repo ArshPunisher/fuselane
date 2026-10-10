@@ -6966,3 +6966,167 @@ html[data-hidden] .orb b {
     stroke-dashoffset: -200;
   }
 }
+
+/* ---------- Fields that save themselves; joined number + unit ---------- */
+
+/* A number and its unit read as one control. */
+.limit-inputs {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0;
+  width: max-content;
+  max-width: 100%;
+}
+
+.limit-inputs input {
+  width: 112px;
+  min-width: 0;
+  border-right: 0;
+  border-radius: var(--radius-control) 0 0 var(--radius-control);
+}
+
+.limit-inputs select {
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+  background: var(--surface-3);
+  cursor: pointer;
+}
+
+.limit-inputs input:focus-visible,
+.limit-inputs select:focus-visible {
+  position: relative;
+  z-index: 1;
+}
+
+.auto-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.auto-field .limit-field {
+  gap: 4px;
+}
+
+.saved-tick {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  color: var(--success);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.saved-tick[data-state='saving'] {
+  color: var(--mute);
+}
+
+.saved-tick:empty {
+  display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .saved-tick[data-state='saved'] {
+    animation: tick-in var(--dur-base) var(--ease-out);
+  }
+}
+
+@keyframes tick-in {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+}
+
+/* Hours: one tidy row of the same height. */
+.net-hours {
+  gap: 8px;
+}
+
+.net-hours .check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+}
+
+.net-hours input[type='time'] {
+  width: 118px;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.net-hours input[type='time']:disabled {
+  border-style: dashed;
+  background: transparent;
+  opacity: 0.55;
+}
+
+/* "Before midnight" as a small chip, not a stray link. */
+.net-hours .link-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in oklch, var(--fuse) 35%, var(--hairline));
+  border-radius: var(--radius-pill);
+  background: var(--fuse-soft);
+  color: var(--fuse-text);
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.net-hours .link-btn:hover {
+  background: color-mix(in oklch, var(--fuse) 18%, transparent);
+}
+
+/* Cards: the allowance ring replaces the bar; usage is a caption. */
+.net-card .allowance-bar {
+  display: none;
+}
+
+.net-card .allowance {
+  display: grid;
+  gap: 8px;
+}
+
+.net-card .allowance-head {
+  font-size: 12px;
+}
+
+.net-card-row {
+  grid-template-columns: 120px minmax(0, 1fr);
+  align-items: center;
+}
+
+.net-card-row:has(.net-hours) {
+  align-items: start;
+}
+
+.net-card-row:has(.net-hours) .net-card-label,
+.net-card-row:has(.allowance) .net-card-label {
+  padding-top: 6px;
+}
+
+.net-card-label {
+  padding-top: 0;
+}
+
+.net-card-allow {
+  align-items: center;
+}
+
+/* Settings: the slow-mode speed and its switch side by side. */
+.setting-control.slow-control {
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 14px;
+}

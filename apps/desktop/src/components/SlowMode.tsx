@@ -8,18 +8,25 @@ export function SlowToggle({ labelled = true }: { labelled?: boolean }) {
   const setSlow = useApp((s) => s.setSlow)
   // Clicking before the backend is connected would silently do nothing.
   const ready = useApp((s) => s.backend !== null)
+  // In Settings the row already names it: just the switch.
+  if (!labelled)
+    return (
+      <button
+        type="button"
+        role="switch"
+        className="switch"
+        aria-checked={limits.slow}
+        aria-label={t('Slow mode')}
+        disabled={!ready}
+        onClick={() => void setSlow(!limits.slow)}
+      />
+    )
   return (
     <div className="slow-toggle">
       <p>
         <span className="net-name">{t('Slow mode')}</span>
-        {labelled && (
-          <>
-            <br />
-            <span className="muted num">
-              {t('{rate} max', { rate: rateText(limits.slowRate) })}
-            </span>
-          </>
-        )}
+        <br />
+        <span className="muted num">{t('{rate} max', { rate: rateText(limits.slowRate) })}</span>
       </p>
       <button
         type="button"

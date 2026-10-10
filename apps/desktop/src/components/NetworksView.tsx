@@ -13,7 +13,7 @@ import type { AllowanceView, NetUse, NetView } from '../lib/types'
 import { bytes as bytesText, rateText } from '../lib/format'
 import { NetIcon } from './NetIcon'
 import { Orb } from './Orb'
-import { LimitField } from './LimitField'
+import { AutoLimit, SavedTick, useAutoSave } from './AutoSave'
 import { DataUsed } from './DataUsed'
 import { ProxyRow } from './NetworkProxy'
 import { intlLocale, mark, t, tr } from '../lib/i18n'
@@ -331,7 +331,7 @@ function shortDate(iso: string): string {
   )
 }
 
-/** One network's monthly allowance: amount, reset day, and how much is used. */
+/** One network's monthly allowance: amount and reset day (saved by themselves), and how much is used. */
 function AllowanceRow({
   view,
   onSaved,
@@ -352,10 +352,23 @@ function AllowanceRow({
   const trimmed = text.trim().replace(',', '.')
   const valid = trimmed === '' || /^\d+(\.\d+)?$/.test(trimmed)
   const bytes = trimmed === '' ? 0 : Math.round(Number(trimmed) * (unit === 'GB' ? GB : MB))
-  const changed = valid && (bytes !== (view.allowance ?? 0) || day !== view.resetDay)
   const title = net ? netTitle(net) : view.name
   const pct = view.allowance ? Math.min(100, (view.used / view.allowance) * 100) : 0
   const id = `allow-${view.name}`
+  const { state, flush } = useAutoSave(
+    valid ? `${bytes}:${day}` : null,
+    `${view.allowance ?? 0}:${view.resetDay}`,
+    async (key) => {
+      if (!backend) return false
+      const [b, d] = key.split(':').map(Number)
+      let done = false
+      await act(async (api) => {
+        onSaved(await api.setAllowance({ name: view.name, bytes: b ?? 0, resetDay: d ?? 1 }))
+        done = true
+      })
+      return done
+    },
+  )
   return (
     <li className="allowance" data-reached={view.reached || undefined}>
       <div className="allowance-head">
@@ -387,14 +400,16 @@ function AllowanceRow({
           })}
         </p>
       )}
-      <form
-        className="allowance-form"
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (!valid || !backend) return
-          void act(async (b) =>
-            onSaved(await b.setAllowance({ name: view.name, bytes, resetDay: day })),
-          )
+      <div
+        className="allowance-form auto-field"
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) flush()
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            flush()
+          }
         }}
       >
         <label htmlFor={id} className="sr-only">
@@ -433,10 +448,8 @@ function AllowanceRow({
             ))}
           </select>
         </label>
-        <button type="submit" className="btn" disabled={!changed}>
-          {t('Save')}
-        </button>
-      </form>
+        <SavedTick state={state} />
+      </div>
       {!valid && <p className="field-error">{t('Enter a number, like 5 or 2.5.')}</p>}
     </li>
   )
@@ -526,43 +539,20 @@ function NetLimit({ net }: { net: NetView }) {
   const limits = useApp((s) => s.limits)
   const save = useApp((s) => s.saveLimits)
   const current = limits.networks.find((l) => l.name === net.name)?.rate ?? 0
-  const [draft, setDraft] = useState<number | null | undefined>(undefined)
-  const [status, setStatus] = useState('')
-  const value = draft === undefined ? current : draft
-  const title = netTitle(net)
   return (
-    <form
-      className="net-limit"
-      onSubmit={async (e) => {
-        e.preventDefault()
-        if (value === null) return
-        setStatus('')
+    <AutoLimit
+      label={t('{name} speed limit', { name: netTitle(net) })}
+      hideLabel
+      rate={current}
+      save={(rate) => {
         const others = limits.networks.filter((l) => l.name !== net.name)
-        const next = value > 0 ? [...others, { name: net.name, rate: value }] : others
-        if (await save({ ...limits, networks: next })) {
-          setDraft(undefined)
-          setStatus(value > 0 ? t('Saved. Running downloads follow it now.') : t('Limit removed.'))
-        }
+        return save({
+          ...limits,
+          networks: rate > 0 ? [...others, { name: net.name, rate }] : others,
+        })
       }}
-    >
-      <LimitField
-        label={t('{name} speed limit', { name: title })}
-        hideLabel
-        rate={current}
-        onChange={(r) => setDraft(r)}
-      />
-      <button
-        type="submit"
-        className="btn btn-sm"
-        disabled={value === null || value === current}
-        aria-label={t('Save the speed limit for {name}', { name: title })}
-      >
-        {t('Save')}
-      </button>
-      <p className="field-help net-limit-status" role="status">
-        {status}
-      </p>
-    </form>
+      savedText={(r) => (r ? t('Saved. Running downloads follow it now.') : t('Limit removed.'))}
+    />
   )
 }
 

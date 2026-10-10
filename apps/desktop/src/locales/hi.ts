@@ -871,7 +871,6 @@ export const hi: Readonly<Record<string, string>> = {
   '{name}: no internet {n} times this week, {m} min in total.':
     '{name}: इस हफ़्ते {n} बार इंटरनेट गया, कुल {m} मिनट।',
   Speedtest: 'स्पीडटेस्ट',
-  'Save the speed limit for {name}': '{name} की स्पीड सीमा सेव करें',
   'Your networks, joined': 'आपके नेटवर्क, एक साथ',
   Together: 'एक साथ',
   '1 network': '1 नेटवर्क',
