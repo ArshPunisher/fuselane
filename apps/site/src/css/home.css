@@ -464,7 +464,7 @@
   display: grid;
   align-content: center;
   gap: 12px;
-  min-height: 46vh;
+  min-height: 40vh;
   padding: 24px 0 24px 22px;
   border-left: 2px solid var(--hairline);
   transition: border-color var(--dur-slow);
@@ -1301,14 +1301,19 @@
   fill: var(--fuse);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .marquee[data-play] .marquee-track {
-    animation: marquee 48s linear infinite;
-  }
-  .marquee:hover .marquee-track,
-  .marquee:focus-within .marquee-track {
-    animation-play-state: paused;
-  }
+/* Script sets data-anim once (never under reduced motion); data-play only while on screen. */
+.marquee[data-anim] .marquee-track {
+  animation: marquee 48s linear infinite;
+  animation-play-state: paused;
+}
+
+.marquee[data-anim][data-play] .marquee-track {
+  animation-play-state: running;
+}
+
+.marquee[data-anim]:hover .marquee-track,
+.marquee[data-anim]:focus-within .marquee-track {
+  animation-play-state: paused;
 }
 
 @keyframes marquee {
@@ -1318,15 +1323,480 @@
 }
 
 /* Under reduced motion (or without script) the chips simply wrap. */
-.marquee:not([data-play]) {
+.marquee:not([data-anim]) {
   mask-image: none;
 }
 
-.marquee:not([data-play]) .marquee-track {
+.marquee:not([data-anim]) .marquee-track {
   width: min(var(--max), 100% - var(--gutter) * 2);
   margin-inline: auto;
 }
 
-.marquee:not([data-play]) .marquee-list {
+.marquee:not([data-anim]) .marquee-list {
   flex-wrap: wrap;
+}
+
+/* ---------- Fuse Send: what a link is made of ---------- */
+
+.send-grid {
+  display: grid;
+  gap: 48px;
+  align-items: center;
+}
+
+.send-copy {
+  display: grid;
+  gap: 20px;
+}
+
+.send-kicker {
+  color: var(--fuse);
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.send-lead {
+  max-width: 32em;
+  font-size: 17.5px;
+}
+
+.send-points {
+  list-style: none;
+  display: grid;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.send-points li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 12px;
+  color: var(--body);
+}
+
+.send-points svg {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  fill: var(--fuse);
+}
+
+.anatomy {
+  display: grid;
+  gap: 18px;
+  margin: 0;
+  padding: clamp(18px, 3vw, 32px);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-panel);
+  background:
+    radial-gradient(120% 80% at 100% 0%, var(--fuse-soft), transparent 60%), var(--surface-1);
+}
+
+.link-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 18px 10px 12px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 22px;
+  background: var(--canvas);
+  box-shadow: var(--shadow-soft);
+}
+
+.link-lock {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--fuse-soft);
+  color: var(--fuse);
+}
+
+.link-lock svg {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+}
+
+.link-text {
+  min-width: 0;
+  font-size: clamp(12.5px, 0.7rem + 0.45vw, 15px);
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 1100px) {
+  .link-text {
+    white-space: nowrap;
+  }
+}
+
+.link-host {
+  color: var(--body);
+  text-decoration: underline;
+  text-decoration-color: var(--tide);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 6px;
+}
+
+.link-key {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--fuse);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 6px;
+}
+
+.link-parts {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.part {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 12px 14px;
+  border-left: 2px solid var(--tide);
+  background: var(--surface-2);
+  border-radius: 0 var(--r-control) var(--r-control) 0;
+}
+
+.part-key {
+  border-left-color: var(--fuse);
+}
+
+.part dt {
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 14.5px;
+}
+
+.part dd {
+  margin: 0;
+  color: var(--body);
+  font-size: 14.5px;
+}
+
+@media (min-width: 640px) {
+  .link-parts {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* The trip: parts travel locked from your computer to theirs, and fill it. */
+.wire {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+  color: var(--mute);
+  font-size: 13px;
+}
+
+.wire-end {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  overflow: hidden;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-control);
+  background: var(--canvas);
+}
+
+.wire-end svg {
+  width: 26px;
+  height: 26px;
+  fill: var(--ink);
+}
+
+.wire-them {
+  border-color: color-mix(in oklch, var(--fuse) 40%, transparent);
+}
+
+.wire-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--fuse);
+  transform: scaleX(0.7);
+  transform-origin: left;
+}
+
+.wire-line {
+  position: relative;
+  height: 14px;
+  container-type: inline-size;
+  background: linear-gradient(90deg, var(--hairline-strong) 50%, transparent 0) center / 8px 1px
+    repeat-x;
+}
+
+.wire-line b {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 3px;
+  background: var(--fuse);
+  opacity: 0;
+}
+
+.wire-line b:nth-child(2n) {
+  background: var(--tide);
+}
+
+.wire-line b:nth-child(3n) {
+  background: var(--iris);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .anatomy[data-play] .wire-line b {
+    animation: wire 2.6s var(--ease-in-out) infinite;
+  }
+  .anatomy[data-play] .wire-line b:nth-child(2) {
+    animation-delay: 0.45s;
+  }
+  .anatomy[data-play] .wire-line b:nth-child(3) {
+    animation-delay: 0.9s;
+  }
+  .anatomy[data-play] .wire-line b:nth-child(4) {
+    animation-delay: 1.35s;
+  }
+  .anatomy[data-play] .wire-line b:nth-child(5) {
+    animation-delay: 1.8s;
+  }
+  .anatomy[data-play] .wire-fill {
+    animation: wire-fill 7.8s var(--ease-in-out) infinite;
+  }
+}
+
+@keyframes wire {
+  0% {
+    opacity: 0;
+    transform: translateX(0) rotate(0);
+  }
+  12%,
+  88% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(100cqw) rotate(90deg);
+  }
+}
+
+@keyframes wire-fill {
+  from {
+    transform: scaleX(0.05);
+  }
+  80%,
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.anatomy-cap {
+  color: var(--mute);
+  font-size: 13px;
+}
+
+@media (min-width: 960px) {
+  .send-grid {
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+    gap: clamp(48px, 6vw, 96px);
+  }
+}
+
+/* ---------- The real app ---------- */
+
+.showcase-stage {
+  perspective: 1800px;
+}
+
+.frame {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-panel);
+  background: var(--surface-1);
+  box-shadow:
+    0 40px 120px -40px var(--fuse-glow),
+    var(--shadow-float);
+}
+
+.frame img {
+  width: 100%;
+}
+
+/* It tips up into place as it scrolls in (browsers with view timelines). */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .frame {
+      animation: frame-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 45%;
+      transform-origin: 50% 100%;
+    }
+  }
+}
+
+@keyframes frame-in {
+  from {
+    opacity: 0.3;
+    transform: rotateX(18deg) scale(0.9) translateY(40px);
+  }
+}
+
+/* ---------- Good to know ---------- */
+
+.notes-grid {
+  display: grid;
+  gap: 32px;
+}
+
+.notes-head {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 16px;
+}
+
+.notes-head p {
+  max-width: 24em;
+  font-size: 17.5px;
+}
+
+.notes-more {
+  margin-left: -12px;
+}
+
+.notes-list {
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+
+.notes-list li {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 20px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-panel);
+  background: var(--surface-1);
+}
+
+.notes-list h3 {
+  font-size: 16.5px;
+}
+
+.notes-list p {
+  color: var(--body);
+  font-size: 15px;
+}
+
+.note-ic {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-bottom: 4px;
+  border-radius: var(--r-control);
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.note-ic svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+@media (min-width: 720px) {
+  .notes-list {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (min-width: 1024px) {
+  .notes-grid {
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.6fr);
+    gap: 64px;
+  }
+  .notes-head {
+    position: sticky;
+    top: calc(var(--nav-h) + 40px);
+  }
+}
+
+/* ---------- Free, and built in the open ---------- */
+
+.cta-final {
+  padding-bottom: clamp(32px, 4vw, 56px);
+}
+
+.cta-inner {
+  display: grid;
+  justify-items: center;
+  gap: 22px;
+  text-align: center;
+}
+
+.cta-inner h2 {
+  font-size: clamp(2.3rem, 1.4rem + 3.4vw, 4rem);
+}
+
+.cta-inner > p {
+  max-width: 34em;
+  font-size: 17.5px;
+}
+
+.cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.star-n:not(:empty) {
+  margin-left: 2px;
+  padding-left: 10px;
+  border-left: 1px solid var(--hairline-strong);
+  color: var(--mute);
+}
+
+.assurances {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 20px;
+  margin-top: 8px;
+  color: var(--body);
+  font-size: 14.5px;
+}
+
+.assurances li {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.assurances svg {
+  width: 17px;
+  height: 17px;
+  fill: var(--ok);
 }

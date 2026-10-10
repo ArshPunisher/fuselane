@@ -46,5 +46,6 @@ export function startTools() {
   const copy = items.cloneNode(true) as HTMLElement
   copy.setAttribute('aria-hidden', 'true')
   track.append(copy)
+  marquee.setAttribute('data-anim', '')
   watch(marquee, (v) => marquee.toggleAttribute('data-play', v))
 }

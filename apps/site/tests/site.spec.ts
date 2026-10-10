@@ -448,18 +448,47 @@ test('the logo draws itself in and ends fully drawn', async ({ page }) => {
   expect(offsets.every((o) => o === '0' || o === '0px')).toBe(true)
 })
 
-test('with reduced motion, nothing waits to appear', async ({ browser }) => {
+test('with reduced motion, nothing waits to appear and nothing loops', async ({ browser }) => {
   const ctx = await browser.newContext({ reducedMotion: 'reduce' })
   const page = await ctx.newPage()
   await stub(page)
   await page.goto('/')
   // Sections that would fade in on scroll are visible straight away.
-  const opacity = await page
-    .locator('#features .reveal')
-    .first()
-    .evaluate((e) => getComputedStyle(e).opacity)
-  expect(opacity).toBe('1')
+  for (const sel of ['#features .reveal', '.notes-list li', '.foot'])
+    expect(
+      await page
+        .locator(sel)
+        .first()
+        .evaluate((e) => getComputedStyle(e).opacity),
+    ).toBe('1')
   await expect(page.locator('#total')).not.toHaveText('')
+  // The race is shown finished, the marquee doesn't move, the key doesn't scramble.
+  await expect(page.locator('#race-clock')).toHaveText('11:24')
+  await expect(page.locator('.race')).not.toHaveAttribute('data-running', '')
+  await expect(page.locator('.marquee')).not.toHaveAttribute('data-anim', '')
+  await expect(page.locator('.marquee-list')).toHaveCount(1)
+  await expect(page.locator('.anatomy')).not.toHaveAttribute('data-play', '')
+  // The hero still answers its switches, without moving.
+  await page.getByRole('switch', { name: /Ethernet/ }).click()
+  await expect(page.locator('#total')).toHaveText('53.6')
+  await ctx.close()
+})
+
+test('the home page reads well without JavaScript', async ({ browser }) => {
+  const ctx = await browser.newContext({ javaScriptEnabled: false })
+  const page = await ctx.newPage()
+  await page.goto('/')
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Every network.')
+  // Every tool group shows, with its own heading.
+  for (const name of [
+    'Get any file',
+    'Between your devices',
+    'Know your networks',
+    'Stay in control',
+  ])
+    await expect(page.getByRole('heading', { level: 3, name })).toBeVisible()
+  await expect(page.locator('#race-one')).toHaveText('11 min 24 s')
+  await expect(page.getByText('Measured on real machines')).toBeVisible()
   await ctx.close()
 })
 

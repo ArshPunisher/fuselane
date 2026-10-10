@@ -72,6 +72,8 @@ import prohibit from '@phosphor-icons/core/assets/regular/prohibit.svg?raw'
 import eyeSlash from '@phosphor-icons/core/assets/regular/eye-slash.svg?raw'
 import cursor from '@phosphor-icons/core/assets/regular/cursor-click.svg?raw'
 import sliders from '@phosphor-icons/core/assets/regular/sliders-horizontal.svg?raw'
+import desktop from '@phosphor-icons/core/assets/regular/desktop.svg?raw'
+import laptop from '@phosphor-icons/core/assets/regular/laptop.svg?raw'
 
 export const REPO = 'https://github.com/ArshPunisher/fuselane'
 
@@ -147,6 +149,8 @@ const ICONS: Record<string, string> = {
   'eye-slash': eyeSlash,
   cursor,
   sliders,
+  desktop,
+  laptop,
 }
 
 const svgOf = (name: string) =>
