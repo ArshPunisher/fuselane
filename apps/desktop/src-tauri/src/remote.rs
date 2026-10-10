@@ -1,6 +1,7 @@
 //! Remote control (8.7, ADR 0013): aria2 tools add and watch downloads through
 //! `fuselane-rpc`. This side keeps the setting, starts and stops the endpoint,
-//! and answers for the download list.
+//! answers for the download list, and turns status changes into aria2's
+//! WebSocket notifications.
 
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -9,7 +10,7 @@ use std::sync::{Arc, Mutex, Weak};
 use serde::{Deserialize, Serialize};
 
 use crate::service::{AddRequest, Service, UiError, UiEvent};
-use fuselane_rpc::{Add, Job, Status};
+use fuselane_rpc::{Add, Event, Job, Notifier, Status};
 
 const SETTING: &str = "remote_control";
 
@@ -54,6 +55,61 @@ pub struct RemoteView {
     pub phone_qr: Option<String>,
 }
 
+/// A download's state in aria2's words; `None` for a cancelled one, which
+/// aria2 tools don't list.
+fn aria2_status(status: &str) -> Option<Status> {
+    match status {
+        "queued" => Some(Status::Waiting),
+        "running" => Some(Status::Active),
+        "paused" => Some(Status::Paused),
+        "completed" => Some(Status::Complete),
+        "failed" | "failed-final" => Some(Status::Error),
+        _ => None,
+    }
+}
+
+/// The notification for a download going from `was` to `now` (`None`: not in
+/// the list). aria2 says nothing about waiting, about a download added
+/// paused, or about clearing a finished one from the list.
+fn event_for(was: Option<Status>, now: Option<Status>) -> Option<Event> {
+    if was == now {
+        return None;
+    }
+    match now {
+        Some(Status::Active) => Some(Event::Start),
+        Some(Status::Paused) if was.is_some() => Some(Event::Pause),
+        Some(Status::Complete) => Some(Event::Complete),
+        Some(Status::Error) => Some(Event::Error),
+        None if matches!(was, Some(Status::Active | Status::Waiting | Status::Paused)) => {
+            Some(Event::Stop)
+        }
+        _ => None,
+    }
+}
+
+/// What changed since the last list, as notifications; `seen` becomes the new list.
+fn changes<'a>(
+    seen: &mut HashMap<i64, Status>,
+    jobs: impl IntoIterator<Item = (i64, &'a str)>,
+) -> Vec<(i64, Event)> {
+    let now: HashMap<i64, Status> = jobs
+        .into_iter()
+        .filter_map(|(id, s)| aria2_status(s).map(|s| (id, s)))
+        .collect();
+    let mut out: Vec<(i64, Event)> = now
+        .iter()
+        .filter_map(|(&id, &s)| event_for(seen.get(&id).copied(), Some(s)).map(|e| (id, e)))
+        .chain(
+            seen.iter()
+                .filter(|(id, _)| !now.contains_key(id))
+                .filter_map(|(&id, &s)| event_for(Some(s), None).map(|e| (id, e))),
+        )
+        .collect();
+    out.sort_unstable_by_key(|&(id, _)| id);
+    *seen = now;
+    out
+}
+
 /// The download list, as aria2 tools see it.
 struct Host {
     svc: Weak<Service>,
@@ -75,14 +131,7 @@ impl fuselane_rpc::Host for Host {
             .unwrap_or_default()
             .into_iter()
             .filter_map(|j| {
-                let status = match j.status {
-                    "queued" => Status::Waiting,
-                    "running" => Status::Active,
-                    "paused" => Status::Paused,
-                    "completed" => Status::Complete,
-                    "failed" | "failed-final" => Status::Error,
-                    _ => return None, // cancelled: not in the list
-                };
+                let status = aria2_status(j.status)?;
                 Some(Job {
                     id: j.id,
                     url: j.url,
@@ -176,6 +225,8 @@ pub struct Remote {
     server: tokio::sync::Mutex<Option<fuselane_rpc::Server>>,
     problem: Mutex<Option<String>>,
     rates: Arc<Mutex<HashMap<i64, u64>>>,
+    /// Reaches the running endpoint's WebSockets; `None` while it's off.
+    notifier: Arc<Mutex<Option<Notifier>>>,
     addrs: Arc<dyn Fn() -> Vec<Ipv4Addr> + Send + Sync>,
 }
 
@@ -198,8 +249,16 @@ impl Remote {
             .and_then(|s| serde_json::from_str::<Saved>(&s).ok())
             .unwrap_or_default();
         let rates: Arc<Mutex<HashMap<i64, u64>>> = Arc::default();
+        let notifier: Arc<Mutex<Option<Notifier>>> = Arc::default();
         {
             let rates = rates.clone();
+            let notifier = notifier.clone();
+            // The list as last seen, so only changes are announced (not
+            // everything already there at startup).
+            let mut first = HashMap::new();
+            let jobs = svc.jobs().unwrap_or_default();
+            changes(&mut first, jobs.iter().map(|j| (j.id, j.status)));
+            let seen = Mutex::new(first);
             svc.listen(Arc::new(move |e| match e {
                 UiEvent::Live(l) => {
                     lock(&rates).insert(l.id, l.rate.max(0.0) as u64);
@@ -208,6 +267,12 @@ impl Remote {
                     // Only running downloads have a speed.
                     lock(&rates)
                         .retain(|id, _| jobs.iter().any(|j| j.id == *id && j.status == "running"));
+                    let events = changes(&mut lock(&seen), jobs.iter().map(|j| (j.id, j.status)));
+                    if let Some(n) = lock(&notifier).as_ref() {
+                        for (id, event) in events {
+                            n.notify(id, event);
+                        }
+                    }
                 }
                 _ => {}
             }));
@@ -218,6 +283,7 @@ impl Remote {
             server: tokio::sync::Mutex::new(None),
             problem: Mutex::new(None),
             rates,
+            notifier,
             addrs,
         })
     }
@@ -277,6 +343,7 @@ impl Remote {
     pub async fn apply(&self) {
         let s = lock(&self.saved).clone();
         let mut server = self.server.lock().await;
+        *lock(&self.notifier) = None;
         if let Some(old) = server.take() {
             old.stop().await; // the port is free before binding it again
         }
@@ -294,7 +361,10 @@ impl Remote {
             rates: self.rates.clone(),
         });
         match fuselane_rpc::Server::start(host, SocketAddr::new(ip, s.port), s.secret).await {
-            Ok(started) => *server = Some(started),
+            Ok(started) => {
+                *lock(&self.notifier) = Some(started.notifier());
+                *server = Some(started);
+            }
             Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
                 *lock(&self.problem) = Some(format!(
                     "Port {} is in use by another program (aria2 itself, perhaps). Pick another port.",
@@ -429,6 +499,129 @@ mod tests {
                 .problem
                 .is_none()
         );
+    }
+
+    #[test]
+    fn status_changes_become_aria2_notifications() {
+        let mut seen = HashMap::new();
+        // Waiting, or added paused: aria2 says nothing.
+        assert_eq!(changes(&mut seen, [(1, "queued"), (2, "paused")]), []);
+        assert_eq!(
+            changes(&mut seen, [(1, "running"), (2, "paused")]),
+            [(1, Event::Start)]
+        );
+        assert_eq!(
+            changes(&mut seen, [(1, "paused"), (2, "queued")]),
+            [(1, Event::Pause)]
+        );
+        assert_eq!(
+            changes(&mut seen, [(1, "paused"), (2, "running")]),
+            [(2, Event::Start)]
+        );
+        // The same list again (a speed changed, say): nothing.
+        assert_eq!(changes(&mut seen, [(1, "paused"), (2, "running")]), []);
+        assert_eq!(
+            changes(&mut seen, [(1, "failed"), (2, "completed")]),
+            [(1, Event::Error), (2, Event::Complete)]
+        );
+        // Giving up for good is still the same error; clearing a finished one
+        // from the list says nothing.
+        assert_eq!(changes(&mut seen, [(1, "failed-final")]), []);
+        // Tried again, then started; then one removed and one cancelled.
+        assert_eq!(
+            changes(&mut seen, [(1, "queued"), (3, "running")]),
+            [(3, Event::Start)]
+        );
+        assert_eq!(
+            changes(&mut seen, [(3, "cancelled")]),
+            [(1, Event::Stop), (3, Event::Stop)]
+        );
+        assert!(seen.is_empty(), "cancelled ones aren't listed");
+    }
+
+    /// Opens a WebSocket to the endpoint and shows the secret on it.
+    async fn ws_signed_in(port: u16, secret: &str) -> tokio::net::TcpStream {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let mut s = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .unwrap();
+        s.write_all(
+            b"GET /jsonrpc HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n",
+        )
+        .await
+        .unwrap();
+        let mut head = Vec::new();
+        while !head.ends_with(b"\r\n\r\n") {
+            head.push(s.read_u8().await.unwrap());
+        }
+        assert!(head.starts_with(b"HTTP/1.1 101"));
+        let call = format!(
+            r#"{{"jsonrpc":"2.0","id":"hi","method":"aria2.getVersion","params":["token:{secret}"]}}"#
+        );
+        // A client frame: masked, short.
+        let mask = [1u8, 2, 3, 4];
+        let mut f = vec![0x81, 0x80 | u8::try_from(call.len()).unwrap()];
+        f.extend_from_slice(&mask);
+        f.extend(call.bytes().enumerate().map(|(i, b)| b ^ mask[i % 4]));
+        s.write_all(&f).await.unwrap();
+        assert!(ws_text(&mut s).await.contains(r#""id":"hi""#));
+        s
+    }
+
+    /// The next text message from the server, within five seconds.
+    async fn ws_text(s: &mut tokio::net::TcpStream) -> String {
+        use tokio::io::AsyncReadExt;
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            let op = s.read_u8().await.unwrap() & 0x0f;
+            let len = match s.read_u8().await.unwrap() & 0x7f {
+                126 => usize::from(s.read_u16().await.unwrap()),
+                n => usize::from(n),
+            };
+            let mut data = vec![0u8; len];
+            s.read_exact(&mut data).await.unwrap();
+            assert_eq!(op, 0x1);
+            String::from_utf8(data).unwrap()
+        })
+        .await
+        .expect("a message within 5 s")
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn aria2_tools_hear_about_changes_on_their_websocket() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = fuselane_core::Store::open(&dir.path().join("db")).unwrap();
+        let svc = Service::new(store, dir.path().to_path_buf()).unwrap();
+        let remote = Remote::new(&svc, Arc::new(Vec::new));
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let secret = remote.set(true, false, port).await.unwrap().secret;
+        let req = AddRequest {
+            later: true,
+            ..AddRequest::default()
+        };
+        let id = svc
+            .add_with("https://example.com/big.iso", None, &req)
+            .unwrap();
+        let mut ws = ws_signed_in(port, &secret).await;
+
+        // Removing it from Fuselane's own list: aria2 tools hear "stopped".
+        svc.remove(id).unwrap();
+        let note: serde_json::Value = serde_json::from_str(&ws_text(&mut ws).await).unwrap();
+        assert_eq!(
+            note,
+            serde_json::json!({"jsonrpc": "2.0", "method": "aria2.onDownloadStop",
+                               "params": [{"gid": fuselane_rpc::gid(id)}]})
+        );
+
+        // Turned off: nothing is sent, and nothing fails.
+        remote.set(false, false, port).await.unwrap();
+        let again = svc
+            .add_with("https://example.com/other.iso", None, &req)
+            .unwrap();
+        svc.remove(again).unwrap();
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
