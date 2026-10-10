@@ -83,7 +83,7 @@ Rendered from the real UI by `node apps/extension/store/render.mjs` into `store/
 | File | Size | Caption |
 | --- | --- | --- |
 | `screenshot-1-every-network.jpg` | 1280×800 | One download, every network: Wi-Fi, Ethernet and your phone fused into one fast, verified file. |
-| `screenshot-2-from-the-browser.jpg` | 1280×800 | The toolbar button lists the videos and files on the page; big downloads go to Fuselane by themselves. |
+| `screenshot-2-from-the-browser.jpg` | 1280×800 | One click gets the page's video, or any file on it; big downloads go to Fuselane by themselves. |
 | `screenshot-3-right-click.jpg` | 1280×800 | Right-click any link and choose "Download with Fuselane". |
 | `screenshot-4-verified.jpg` | 1280×800 | Every file is checked against its published checksum, and you see how much time each network saved. |
 | `screenshot-5-whole-page.jpg` | 1280×800 | Grab every file on a downloads page, picked by type, as one group. |

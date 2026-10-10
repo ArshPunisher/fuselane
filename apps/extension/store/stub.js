@@ -16,7 +16,6 @@ globalThis.chrome = globalThis.browser = {
           { url: 'ubuntu-26.04-desktop-amd64.iso', kind: 'link', label: 'Desktop image' },
           { url: 'ubuntu-26.04-live-server-amd64.iso', kind: 'link', label: 'Server image' },
           { url: 'intro-video.mp4', kind: 'video', label: 'Tour' },
-          { url: 'release-notes.pdf', kind: 'link', label: '' },
         ],
       },
     ],

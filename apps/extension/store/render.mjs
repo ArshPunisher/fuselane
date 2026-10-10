@@ -122,7 +122,7 @@ await frame(
 await frame(
   'screenshot-2-from-the-browser',
   'Big downloads go <em>straight to Fuselane</em>',
-  "The toolbar button lists the videos and files on the page. Anything the app can't take stays in the browser, so nothing is lost.",
+  "One click gets the page's video, or any file on it. Anything the app can't take stays in the browser, so nothing is lost.",
   await popupShot(),
   { width: 360, center: true },
 )
