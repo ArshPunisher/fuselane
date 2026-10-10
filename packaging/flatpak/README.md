@@ -61,7 +61,7 @@ flatpak run app.fuselane.Fuselane --self-test                       # the releas
 flatpak run app.fuselane.Fuselane
 ```
 
-The manifest lint reports `finish-args-own-name-app.fuselane.SingleInstance` until the app change in "Before Flathub" is made. To lint the built repository too, add `--repo=repo` to the build and run `flatpak run --command=flatpak-builder-lint org.flatpak.Builder repo repo`.
+The manifest lint reports `finish-args-own-name-app.fuselane.SingleInstance` until the manifest moves to beta.11 or later ("Before Flathub", item 1). To lint the built repository too, add `--repo=repo` to the build and run `flatpak run --command=flatpak-builder-lint org.flatpak.Builder repo repo`.
 
 By hand: the window opens on Wayland and on X11 (`flatpak run --nosocket=wayland app.fuselane.Fuselane`); the tray shows Fuselane's icon; a download into `~/Downloads` finishes with a notification; Networks lists every interface and a download uses more than one (this is spike S3: bonding inside the sandbox); a `.torrent` double-clicked and a magnet link clicked in a browser open in the window that is already running; Show in folder opens the folder.
 
@@ -74,28 +74,36 @@ git diff packaging/flatpak
 
 It reads the release's `SHA256SUMS` (public, no token), rewrites both `.deb` URLs and SHA-256s, and adds the release to the metainfo's `<releases>` with its publish date (from GitHub's API; set `RELEASE_DATE=YYYY-MM-DD` if the API's hourly limit is used up). Running it twice changes nothing. Then build again to check. On Flathub the same change goes as a pull request to the app's own repository there.
 
-## What doesn't work in the sandbox yet
+## How the app behaves in the sandbox
 
-Plainly, for the Flatpak build of 0.1.0-beta.9. None of these is changed by the manifest; each needs an app change, listed in the next section.
+From 0.1.0-beta.11 the app knows when it runs as a Flatpak (`FLATPAK_ID`, or `/.flatpak-info`; `apps/desktop/src-tauri/src/flatpak.rs`) and changes only these things there. Outside a Flatpak, and always on macOS and Windows, nothing changes.
 
-- **The in-app updater.** It should be off in a Flatpak, because Flathub updates the app. Today the app doesn't know it's in a Flatpak: it offers updates from Fuselane's own feed, and installing one fails (the app's files are read-only, and the feed offers the AppImage).
-- **Start at login.** The autostart entry is written inside the sandbox, where the desktop never sees it.
-- **Keep the computer awake, and sleep or shut down when done.** These run `systemd-inhibit` and `systemctl`, which aren't in the sandbox. Keeping awake is skipped quietly; sleep and shut down fail.
-- **The browser extension.** The app registers its native-messaging helper in each browser's folders, which the sandbox can't reach, so the extension can't find a Flatpak Fuselane.
+| What | In the Flatpak |
+|---|---|
+| **Updates** | Never checked, downloaded or installed in the app: Flathub (or whichever remote it came from) updates it. Settings → Updates says "Updates come through your software centre (Flatpak).", the update banner never appears, and the update commands answer `update-flatpak` with that message instead of trying. |
+| **One running copy** | The single-instance D-Bus name is `app.fuselane.Fuselane.SingleInstance` (the plugin's `dbus_id`, set to the Flatpak id). An app may own names under its own id, so no `--own-name` is needed. |
+| **Start at login** | Through the Background portal (`org.freedesktop.portal.Background.RequestBackground`, `autostart` on or off, command line `fuselane-desktop --minimized`). The portal writes the autostart entry on the host, where the desktop reads it; the app can't see that entry, so it remembers what the portal last granted. If the user or the desktop refuses, Settings says so. |
+| **Keep the computer awake** | Through the Inhibit portal (`org.freedesktop.portal.Inhibit`, flag 4: suspend), held while something downloads and closed when nothing does; the portal also lifts it if the app dies. |
+| **Sleep or Shut down when done** | Not offered (Settings shows only Nothing and Quit, with a one-line note), and refused by the backend: they need `systemctl`, which the sandbox lacks, and no portal does this. |
+| **Browser extension** | The app doesn't write native-messaging manifests (the browsers' folders are on the host, out of reach, and a browser couldn't start the sandboxed helper anyway). Settings → Other apps and the welcome tour say: "The browser extension can't talk to the Flatpak version yet; use the .deb or AppImage for it." |
+
+All of this is done with zbus calls (zbus is already in the build for the single-instance plugin), so no crates were added.
+
+## Still limited in the sandbox
+
+- **The browser extension**, as above. It needs a host-side helper that talks to the sandbox (a later step).
 - **The CLI.** The Flatpak keeps its own download list in `~/.var/app/app.fuselane.Fuselane/data/fuselane`, separate from a `.deb` or AppImage install, and its local API lives in the sandbox, so the host's `fuselane` command doesn't see it.
+- **Sleep or Shut down when done**, as above.
 - **Video and audio from pages.** This uses `yt-dlp` and `ffmpeg` installed on the computer, which the sandbox can't see.
 - **Folders outside Downloads.** Only `~/Downloads` is open to the app. A folder picked in Fuselane is granted through the file-chooser portal and shows up as `/run/user/<uid>/doc/...`. To use a folder's real path, grant it: `flatpak override --user --filesystem=~/Videos app.fuselane.Fuselane` (or use Flatseal).
 - **Bonding** should work (with `--share=network` the app sees every interface, and `SO_BINDTODEVICE` needs no privileges on kernel 5.7+) but is not verified yet (spike S3).
+- **Not yet run in a real Flatpak.** The changes above have unit tests (the detection, the gating, the portal request paths and answers) and UI tests (the demo backend's `?flatpak=1`), and the Linux-only code was compiled on macOS, but the portals and the single-instance name have not been exercised on Linux yet. Check them in the first build from beta.11: toggle Start at login (then look for `~/.config/autostart/app.fuselane.Fuselane.desktop` on the host), start a download with Keep awake on (`gnome-session-inhibit --list` or `systemd-inhibit --list` shows it), and open a magnet link while the app runs (it goes to the running window).
 
 ## Before Flathub
 
-App changes that make the Flatpak a first-class build (none made here):
-
-1. When `FLATPAK_ID` is set, hide the update check and the update banner.
-2. Use the Flatpak id as the single-instance D-Bus name (`tauri_plugin_single_instance::Builder::new().dbus_id(...)` when `FLATPAK_ID` is set), then drop `--own-name=app.fuselane.SingleInstance` from the manifest.
-3. Start at login through the Background portal, and keep awake through the Inhibit portal.
-4. Screenshots of the app on Linux, at URLs pinned to a release tag rather than `main` (the current two are from macOS: "Show in Finder").
-5. Keep the desktop entries in step: this one and the `.deb`'s own (from `tauri.linux.conf.json`) both offer `.torrent` files, magnet links and `fuselane://`.
+1. **The manifest still pins the beta.9 `.deb`**, which predates these app changes, so it keeps `--own-name=app.fuselane.SingleInstance`. When `update-manifest.sh` moves it to beta.11 or later, delete that line (and its comment); `flatpak-builder-lint` then stops reporting `finish-args-own-name-app.fuselane.SingleInstance`.
+2. Screenshots of the app on Linux, at URLs pinned to a release tag rather than `main` (the current two are from macOS: "Show in Finder").
+3. Keep the desktop entries in step: this one and the `.deb`'s own (from `tauri.linux.conf.json`) both offer `.torrent` files, magnet links and `fuselane://`.
 
 ## Submit to Flathub (after 1.0)
 

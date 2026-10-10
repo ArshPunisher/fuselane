@@ -41,14 +41,17 @@ finish-args:
   # The tray library writes the icon image to $XDG_RUNTIME_DIR/tray-icon and
   # hands the tray its path; sharing that one folder lets the host's tray read it.
   - --filesystem=xdg-run/tray-icon:create
-  # One running copy: a second launch (a magnet link, a .torrent) hands its
-  # arguments to the first over this D-Bus name, which the app derives from the
-  # Tauri identifier, so it isn't under the Flatpak id. Without it every launch
-  # opens another copy. Flathub reviews this line; the app can drop the need by
-  # using its Flatpak id as the single-instance name (README, "Before Flathub").
+  # Only for the .deb pinned below (beta.9), which takes its single-instance name
+  # from the Tauri identifier. From beta.11 the app uses its Flatpak id
+  # (app.fuselane.Fuselane.SingleInstance, which needs no permission), so delete
+  # this line when update-manifest.sh moves the manifest to beta.11 or later.
+  # Until then, without it every launch (a magnet link, a .torrent) opens another copy.
   - --own-name=app.fuselane.SingleInstance
-  # Not needed: "Show in folder" falls back to the OpenURI portal when the file
-  # manager's D-Bus name isn't reachable, and "Open" uses that portal too.
+  # Not needed:
+  # - "Show in folder" falls back to the OpenURI portal when the file manager's
+  #   D-Bus name isn't reachable, and "Open" uses that portal too.
+  # - Start at login and keep awake: the Background and Inhibit portals, which
+  #   every app may call (org.freedesktop.portal.*).
 
 modules:
   # The tray needs libayatana-appindicator, which the GNOME runtime doesn't have
