@@ -407,7 +407,7 @@ impl Sends {
             err(
                 "bad-send-link",
                 e.to_string(),
-                Some("Fuse Send links start with https://arshpunisher.github.io/fuselane/s#."),
+                Some("Fuse Send links start with https://fuselane.app/s#."),
             )
         })?;
         let dir = match dir.map(str::trim).filter(|d| !d.is_empty()) {
@@ -830,7 +830,7 @@ mod tests {
         // Stop once a full copy is out (kept across restarts).
         a.sends.set_once(&share.id, true).await.unwrap();
         let link = share.link.clone().unwrap();
-        assert!(link.starts_with("https://arshpunisher.github.io/fuselane/s#"));
+        assert!(link.starts_with("https://fuselane.app/s#"));
 
         let port = a.sends.engine.get().unwrap().listen_addr().unwrap().port();
         let peer = SocketAddr::from((Ipv4Addr::LOCALHOST, port));

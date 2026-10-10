@@ -6,7 +6,7 @@ import type { ReceiveView, ShareView, UiError, UiEvent } from './types'
 import { isSendLink } from './sendLink'
 
 const MB = 1024 * 1024
-const PAGE = 'https://arshpunisher.github.io/fuselane/s#'
+const PAGE = 'https://fuselane.app/s#'
 
 function err(code: string, message: string, hint: string | null): UiError {
   return { code, message, hint }

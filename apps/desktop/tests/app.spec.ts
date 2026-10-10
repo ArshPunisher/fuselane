@@ -1349,7 +1349,7 @@ test.describe('Fuse Send', () => {
     const list = page.getByRole('list', { name: "Files you're sending" })
     await expect(list).toContainText('Holiday video.mov')
     const link = list.getByLabel('Link for Holiday video.mov')
-    await expect(link).toHaveValue(/^https:\/\/arshpunisher\.github\.io\/fuselane\/s#v1\./)
+    await expect(link).toHaveValue(/^https:\/\/fuselane\.app\/s#v1\./)
     await expect(list).toContainText('Waiting for the receiver')
     if (browserName === 'chromium') {
       await context.grantPermissions(['clipboard-read', 'clipboard-write'])

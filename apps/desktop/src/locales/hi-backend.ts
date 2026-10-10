@@ -490,8 +490,8 @@ export const hiBackend: Readonly<Record<string, string>> = {
   'Zip the folder and send the zip.': 'फ़ोल्डर को zip करके zip भेजें।',
   'Preparing stopped unexpectedly. Try again.': 'तैयारी अचानक रुक गई। फिर से कोशिश करें।',
   'That share is no longer in the list.': 'यह शेयर अब सूची में नहीं है।',
-  'Fuse Send links start with https://arshpunisher.github.io/fuselane/s#.':
-    'Fuse Send लिंक https://arshpunisher.github.io/fuselane/s# से शुरू होते हैं।',
+  'Fuse Send links start with https://fuselane.app/s#.':
+    'Fuse Send लिंक https://fuselane.app/s# से शुरू होते हैं।',
   'Fuse Send links start with {page}.': 'Fuse Send लिंक {page} से शुरू होते हैं।',
   "That isn't a whole Fuse Send link. Copy all of it and paste it again.":
     'यह पूरा Fuse Send लिंक नहीं है। पूरा लिंक कॉपी करके फिर से पेस्ट करें।',

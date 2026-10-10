@@ -16,11 +16,14 @@ Decision: [ADR 0011](../adr/0011-fuse-send-p2p.md). This replaces the cloud desi
 ## 2. The link
 
 ```
-https://arshpunisher.github.io/fuselane/s#v1.<base64url(info-hash ‖ key ‖ flags)>
+https://fuselane.app/s#v1.<base64url(info-hash ‖ key ‖ flags)>
 ```
 
-- The page is a static file on GitHub Pages (free). Everything after `#` stays in the
-  browser and is never sent to GitHub or anyone else.
+- The page is a static file on fuselane.app (Cloudflare Pages, free). Everything after `#`
+  stays in the browser and is never sent to the server or anyone else.
+- Links made before beta.11 used `https://arshpunisher.github.io/fuselane/s#…`; that page
+  still works and the app still opens those links. Copies before beta.11 don't recognise
+  the new address when pasted, though the page still opens them through `fuselane://`.
 - The page hands the link to the app (`fuselane://send/…`); if the app isn't installed it
   explains how to install it. It never asks for or stores anything.
 - `fuselane://send/v1.…` also works directly (pasted into the app).

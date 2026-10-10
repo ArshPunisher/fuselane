@@ -1,7 +1,7 @@
 //! The share link (FUSE-SEND.md §2):
 //!
 //! ```text
-//! https://arshpunisher.github.io/fuselane/s#v1.<base64url(info-hash ‖ key ‖ flags)>
+//! https://fuselane.app/s#v1.<base64url(info-hash ‖ key ‖ flags)>
 //! ```
 //!
 //! Everything after `#` stays in the browser, so the key never reaches a server.
@@ -13,7 +13,9 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
 /// The static page that hands links to the app.
-pub const PAGE: &str = "https://arshpunisher.github.io/fuselane/s";
+pub const PAGE: &str = "https://fuselane.app/s";
+/// Where the page used to be: links made by older versions still open.
+pub const OLD_PAGES: &[&str] = &["https://arshpunisher.github.io/fuselane/s"];
 pub const SCHEME: &str = "fuselane://send/";
 /// The newest link version this build understands.
 pub const VERSION: u32 = 1;
@@ -112,7 +114,10 @@ impl Link {
             rest
         } else if let Some((page, fragment)) = text.split_once('#') {
             let page = page.trim_end_matches('/');
-            if page != PAGE && page != PAGE.replacen("https://", "http://", 1) {
+            let page = page
+                .strip_prefix("http://")
+                .map_or(page.to_string(), |p| format!("https://{p}"));
+            if page != PAGE && !OLD_PAGES.contains(&page.as_str()) {
                 return Err(LinkError::NotALink);
             }
             fragment
@@ -196,6 +201,9 @@ mod tests {
             format!("  {}\n", l.url()),
             format!("{PAGE}/#{}", l.token()),
             format!("http://arshpunisher.github.io/fuselane/s#{}", l.token()),
+            // Links made before the page moved to fuselane.app still open.
+            format!("https://arshpunisher.github.io/fuselane/s#{}", l.token()),
+            format!("http://fuselane.app/s/#{}", l.token()),
         ] {
             assert_eq!(Link::parse(&text), Ok(l.clone()), "{text}");
         }
