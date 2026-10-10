@@ -207,6 +207,7 @@ pub async fn send(
                 size: f.size,
                 file_type: f.mime.clone(),
                 sha256: None,
+                preview: None,
             },
         );
     }
@@ -270,6 +271,63 @@ pub async fn send(
         count += 1;
     }
     Ok(count)
+}
+
+/// Sends a text message (LocalSend-style: the text rides in the offer and the
+/// receiver shows or copies it). A receiver that asks for it as a file gets it
+/// uploaded as `message.txt`.
+pub async fn send_text(me: &DeviceInfo, t: &Target, text: &str) -> Result<(), SendError> {
+    if text.is_empty() || text.len() > crate::proto::MAX_TEXT {
+        return Err(SendError::Failed("text must be 1 byte to 64 KB".into()));
+    }
+    let mut offer = PrepareUpload {
+        info: me.clone(),
+        files: Default::default(),
+    };
+    offer.files.insert(
+        "t0".into(),
+        FileMeta {
+            id: "t0".into(),
+            file_name: "message.txt".into(),
+            size: text.len() as u64,
+            file_type: "text/plain".into(),
+            sha256: None,
+            preview: Some(text.to_string()),
+        },
+    );
+    let body = serde_json::to_vec(&offer).map_err(|e| SendError::Failed(e.to_string()))?;
+    let (status, reply) = call(t, "/api/localsend/v2/prepare-upload", full(body), None).await?;
+    match status.as_u16() {
+        204 => return Ok(()),
+        200 => {}
+        403 => return Err(SendError::Declined),
+        409 => return Err(SendError::Busy),
+        c => return Err(SendError::Refused(c)),
+    }
+    let accepted: PrepareUploadReply = serde_json::from_slice(&reply)
+        .map_err(|_| SendError::Failed("the device's answer couldn't be read".into()))?;
+    let Some(token) = accepted.files.get("t0") else {
+        return Ok(());
+    };
+    let q: String = url::form_urlencoded::Serializer::new(String::new())
+        .append_pair("sessionId", &accepted.session_id)
+        .append_pair("fileId", "t0")
+        .append_pair("token", token)
+        .finish();
+    let bytes = text.as_bytes().to_vec();
+    let len = bytes.len() as u64;
+    let (status, _) = call(
+        t,
+        &format!("/api/localsend/v2/upload?{q}"),
+        full(bytes),
+        Some(len),
+    )
+    .await?;
+    if status.is_success() {
+        Ok(())
+    } else {
+        Err(SendError::Refused(status.as_u16()))
+    }
 }
 
 async fn cancel_session(t: &Target, session: &str) -> Result<(), SendError> {

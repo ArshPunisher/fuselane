@@ -22,6 +22,7 @@ struct Box1 {
     written: AtomicU64,
     /// Receives slowly, so a cancel always lands mid-file even on a busy machine.
     slow: AtomicBool,
+    messages: Mutex<Vec<(String, String)>>,
 }
 
 impl Host for Box1 {
@@ -54,6 +55,12 @@ impl Host for Box1 {
     }
     fn ended(&self, _: &str, how: Ended) {
         self.ends.lock().unwrap().push(how);
+    }
+    fn message(&self, from: &DeviceInfo, text: &str) {
+        self.messages
+            .lock()
+            .unwrap()
+            .push((from.alias.clone(), text.to_string()));
     }
 }
 
@@ -92,6 +99,7 @@ async fn device(alias: &str, inbox: &Path) -> Device {
         sessions: Mutex::default(),
         written: AtomicU64::new(0),
         slow: AtomicBool::new(false),
+        messages: Mutex::default(),
     });
     let server = Server::start(&id, host.clone(), 0).await.unwrap();
     Device {
@@ -279,5 +287,40 @@ async fn the_receiver_can_cancel_and_the_sender_is_told() {
         std::fs::read_dir(inbox.path()).unwrap().count(),
         0,
         "no partial file"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_text_message_arrives_without_a_file() {
+    let inbox = tempfile::tempdir().unwrap();
+    let a = device("Receiver", inbox.path()).await;
+    let b = device("Sender", tempfile::tempdir().unwrap().path()).await;
+    let me = info("Sender", &b.id, b.server.addr.port());
+    let t = target(&a, Some(&a.id.fingerprint));
+    client::send_text(&me, &t, "https://example.org/a-link copied on the laptop")
+        .await
+        .unwrap();
+    assert_eq!(
+        a.host.messages.lock().unwrap().as_slice(),
+        &[(
+            "Sender".to_string(),
+            "https://example.org/a-link copied on the laptop".to_string()
+        )]
+    );
+    assert_eq!(
+        std::fs::read_dir(inbox.path()).unwrap().count(),
+        0,
+        "no file saved"
+    );
+    // Declined like files are, and too long is refused before sending.
+    *a.host.answer.lock().unwrap() = Decision::Decline;
+    assert_eq!(
+        client::send_text(&me, &t, "hi").await,
+        Err(client::SendError::Declined)
+    );
+    assert!(
+        client::send_text(&me, &t, &"x".repeat(70_000))
+            .await
+            .is_err()
     );
 }

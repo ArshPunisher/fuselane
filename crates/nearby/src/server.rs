@@ -65,6 +65,8 @@ pub trait Host: Send + Sync + 'static {
     fn progress(&self, session: &str, file: &str, written: u64);
     fn file_done(&self, session: &str, file: &str, path: &Path);
     fn ended(&self, session: &str, how: Ended);
+    /// An accepted text message (no file is uploaded for it).
+    fn message(&self, _from: &DeviceInfo, _text: &str) {}
 }
 
 struct Incoming1 {
@@ -245,6 +247,14 @@ impl<H: Host> State<H> {
             return text(StatusCode::CONFLICT, "Blocked by another session");
         }
         let sender = p.info.clone();
+        // A lone text message is delivered here and needs no upload (LocalSend).
+        if p.files.len() == 1
+            && let Some(msg) = p.files.values().next().and_then(FileMeta::message)
+        {
+            drop(s);
+            self.host.message(&sender, msg);
+            return text(StatusCode::NO_CONTENT, "");
+        }
         let mut files = HashMap::new();
         let mut reply = PrepareUploadReply {
             session_id: random_id(),

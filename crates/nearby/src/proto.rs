@@ -65,7 +65,22 @@ pub struct FileMeta {
     pub file_type: String,
     #[serde(default)]
     pub sha256: Option<String>,
-    // `preview` (a thumbnail) is ignored: it can be large and isn't shown.
+    /// For a text message (`text/plain`), the text itself; LocalSend sends it
+    /// here instead of uploading a file. Thumbnails of other files are ignored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview: Option<String>,
+}
+
+/// Longest text message taken (a clipboard's worth; anything longer is a file).
+pub const MAX_TEXT: usize = 64 * 1024;
+
+impl FileMeta {
+    /// The text, when this "file" is a text message LocalSend-style.
+    pub fn message(&self) -> Option<&str> {
+        self.preview
+            .as_deref()
+            .filter(|t| self.file_type.starts_with("text/") && t.len() <= MAX_TEXT)
+    }
 }
 
 /// `POST /api/localsend/v2/prepare-upload`
