@@ -544,6 +544,9 @@ export const hi: Readonly<Record<string, string>> = {
   'No file in it': 'इसमें कोई फ़ाइल नहीं',
   Torrent: 'टोरेंट',
   "Couldn't add": 'नहीं जुड़ सका',
+  'Torrent started': 'टोरेंट शुरू हुआ',
+  'Torrents start by themselves.': 'टोरेंट अपने आप शुरू होते हैं।',
+  'Start torrents by themselves': 'टोरेंट अपने आप शुरू करें',
   'Not checked yet': 'अभी तक नहीं जांचा',
   'Checked just now': 'अभी-अभी जांचा',
   'Checked {n} min ago': '{n} मिनट पहले जांचा',
@@ -567,8 +570,8 @@ export const hi: Readonly<Record<string, string>> = {
     'फ़ॉलो कर रहे हैं। सबसे नई फ़ाइल डाउनलोड हो रही है; नई फ़ाइलें अपने आप आएंगी।',
   'Following. New files download by themselves.':
     'फ़ॉलो कर रहे हैं। नई फ़ाइलें अपने आप डाउनलोड होंगी।',
-  "Follow a podcast, a project's releases or any RSS or Atom feed. New files in it download by themselves, over every network. Torrents wait for you to open them.":
-    'कोई पॉडकास्ट, किसी प्रोजेक्ट की रिलीज़ या कोई भी RSS या Atom फ़ीड फ़ॉलो करें। इसमें आने वाली नई फ़ाइलें हर नेटवर्क से अपने आप डाउनलोड होंगी। टोरेंट तब तक रुके रहेंगे जब तक आप उन्हें न खोलें।',
+  "Follow a podcast, a project's releases or any RSS or Atom feed. New files in it download by themselves, over every network. Torrents wait for you to open them, unless you let them start by themselves.":
+    'कोई पॉडकास्ट, किसी प्रोजेक्ट की रिलीज़ या कोई भी RSS या Atom फ़ीड फ़ॉलो करें। इसमें आने वाली नई फ़ाइलें हर नेटवर्क से अपने आप डाउनलोड होंगी। टोरेंट तब तक रुके रहेंगे जब तक आप उन्हें न खोलें, या उन्हें अपने आप शुरू होने न दें।',
   'Feed address': 'फ़ीड का पता',
   'Download the latest one now': 'सबसे नई फ़ाइल अभी डाउनलोड करें',
   'Reading the feed…': 'फ़ीड पढ़ रहे हैं…',
