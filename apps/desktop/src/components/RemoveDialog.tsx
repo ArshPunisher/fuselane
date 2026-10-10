@@ -1,8 +1,9 @@
 import { FolderOpen, Trash, X } from '@phosphor-icons/react'
 import { useEffect, useRef, useState } from 'react'
+import { mark, t } from '../lib/i18n'
 
-/** The platform's name for where deleted files go. */
-export const BIN = /Win/i.test(navigator.platform) ? 'Recycle Bin' : 'Trash'
+/** The platform's name for where deleted files go (marked: t(BIN) where it's shown). */
+export const BIN = /Win/i.test(navigator.platform) ? mark('Recycle Bin') : mark('Trash')
 
 export interface RemoveChoice {
   label: string
@@ -77,7 +78,7 @@ export function RemoveDialog({
         <form method="dialog" onSubmit={(e) => e.preventDefault()}>
           <header className="dialog-head">
             <h2 id="rm-title">{title}</h2>
-            <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}>
+            <button type="button" className="icon-btn" aria-label={t('Close')} onClick={onClose}>
               <X size={16} aria-hidden />
             </button>
           </header>
@@ -97,7 +98,7 @@ export function RemoveDialog({
           </div>
           <footer className="dialog-foot">
             <button type="button" className="btn btn-ghost" data-cancel onClick={onClose}>
-              Cancel
+              {t('Cancel')}
             </button>
             {choices.map((c) => (
               <button

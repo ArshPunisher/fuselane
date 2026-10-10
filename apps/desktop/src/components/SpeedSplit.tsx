@@ -1,5 +1,6 @@
 import { rate } from '../lib/format'
 import type { Lane } from '../lib/lanes'
+import { t } from '../lib/i18n'
 
 /**
  * The networks that make up the big speed, with their own speeds. The big number
@@ -9,7 +10,7 @@ export function SpeedSplit({ parts }: { parts: { name: string; lane: Lane; rate:
   const moving = parts.filter((p) => p.rate > 0)
   if (moving.length < 2) return null
   return (
-    <ul className="speed-split" aria-label="Speed by network">
+    <ul className="speed-split" aria-label={t('Speed by network')}>
       {moving.map((p) => {
         const r = rate(p.rate)
         return (
@@ -23,7 +24,7 @@ export function SpeedSplit({ parts }: { parts: { name: string; lane: Lane; rate:
           </li>
         )
       })}
-      <li className="eq">adds up to the speed above</li>
+      <li className="eq">{t('adds up to the speed above')}</li>
     </ul>
   )
 }

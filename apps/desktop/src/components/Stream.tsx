@@ -4,6 +4,7 @@ import { resolveVar, type RGB } from '../lib/color'
 import { useEffect, useRef } from 'react'
 import type { History } from '../lib/store'
 import type { Lane } from '../lib/lanes'
+import { t } from '../lib/i18n'
 
 const RATE = 5
 
@@ -112,8 +113,8 @@ export function Stream({ history, lanes }: { history: History | undefined; lanes
     <div className="stream">
       <canvas ref={ref} aria-hidden="true" />
       <div className="stream-axis">
-        <span>{seconds} s ago</span>
-        <span>now</span>
+        <span>{t('{n} s ago', { n: seconds })}</span>
+        <span>{t('now')}</span>
       </div>
     </div>
   )

@@ -3,6 +3,7 @@ import { Desktop, X } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { toUiError } from '../lib/backend'
 import type { JobView } from '../lib/types'
+import { t, tr } from '../lib/i18n'
 
 /**
  * Hand a paused download to another Fuselane on this network (B9.9): its
@@ -70,21 +71,24 @@ export function HandoffDialog({
       {open && (
         <form className="handoff" method="dialog" onSubmit={(e) => e.preventDefault()}>
           <header className="dialog-head">
-            <h2 id="ho-title">Continue on another computer</h2>
-            <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}>
+            <h2 id="ho-title">{t('Continue on another computer')}</h2>
+            <button type="button" className="icon-btn" aria-label={t('Close')} onClick={onClose}>
               <X size={16} aria-hidden />
             </button>
           </header>
           {sent ? (
             <p className="dialog-text" role="status">
-              Sent to <b translate="no">{sent}</b>. It appears there paused; press Resume on that
-              computer to carry on. You can remove it here.
+              {tr(
+                'Sent to {device}. It appears there paused; press Resume on that computer to carry on. You can remove it here.',
+                { device: <b translate="no">{sent}</b> },
+              )}
             </p>
           ) : (
             <>
               <p className="dialog-text">
-                What&apos;s downloaded so far goes along, so the other computer carries on where
-                this one stopped. Both need Fuselane, on the same network.
+                {t(
+                  "What's downloaded so far goes along, so the other computer carries on where this one stopped. Both need Fuselane, on the same network.",
+                )}
               </p>
               {devices.length ? (
                 <ul className="handoff-devices">
@@ -98,14 +102,18 @@ export function HandoffDialog({
                       >
                         <Desktop size={16} aria-hidden />
                         <span translate="no">{d.alias}</span>
-                        {sending === d.fingerprint && <span className="muted">Sending…</span>}
+                        {sending === d.fingerprint && (
+                          <span className="muted">{t('Sending…')}</span>
+                        )}
                       </button>
                     </li>
                   ))}
                 </ul>
               ) : (
                 <p className="muted" role="status">
-                  Looking for other computers with Fuselane… Open Fuselane on the other computer.
+                  {t(
+                    'Looking for other computers with Fuselane… Open Fuselane on the other computer.',
+                  )}
                 </p>
               )}
             </>
@@ -117,7 +125,7 @@ export function HandoffDialog({
           )}
           <footer className="dialog-foot">
             <button type="button" className="btn btn-ghost" onClick={onClose}>
-              {sent ? 'Done' : 'Cancel'}
+              {sent ? t('Done') : t('Cancel')}
             </button>
           </footer>
         </form>

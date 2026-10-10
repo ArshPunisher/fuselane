@@ -21,20 +21,21 @@ import { assignLanes, kindLabel, netTitle } from '../lib/lanes'
 import { FuseCore } from './FuseCore'
 import { Stream } from './Stream'
 import { Orb } from './Orb'
-import { STATUS_WORD } from './status'
+import { statusWord } from './status'
 import { LimitField } from './LimitField'
 import { LiveRate } from './LiveRate'
 import { BIN, RemoveDialog } from './RemoveDialog'
 import { HandoffDialog } from './HandoffDialog'
 import { NetworkNotes } from './NetworkNotes'
 import type { JobView, Live, ReportView } from '../lib/types'
+import { mark, t, tn, tr } from '../lib/i18n'
 
-/** The platform's own words for showing a file in its folder. */
+/** The platform's own words for showing a file in its folder (marked: show it with t()). */
 export const REVEAL_LABEL = /Mac/i.test(navigator.platform)
-  ? 'Show in Finder'
+  ? mark('Show in Finder')
   : /Win/i.test(navigator.platform)
-    ? 'Show in Explorer'
-    : 'Show in folder'
+    ? mark('Show in Explorer')
+    : mark('Show in folder')
 
 function Center({ job, live }: { job: JobView; live: Live | undefined }) {
   if (job.status === 'running' && live) {
@@ -51,8 +52,11 @@ function Center({ job, live }: { job: JobView; live: Live | undefined }) {
         <LiveRate value={total} />
         <p className="speed-sub">
           {faster >= 1.1 && best
-            ? `${faster.toFixed(1)}x faster than ${netTitle(best)}`
-            : `${live1.length} network${live1.length === 1 ? '' : 's'}`}
+            ? t('{times}x faster than {network}', {
+                times: faster.toFixed(1),
+                network: netTitle(best),
+              })
+            : tn(live1.length, '{n} network', '{n} networks')}
         </p>
       </>
     )
@@ -65,7 +69,7 @@ function Center({ job, live }: { job: JobView; live: Live | undefined }) {
         <span className="unit">%</span>
       </p>
       <p className="speed-sub" data-status={job.status}>
-        {job.startAt ? startsAt(job.startAt) : STATUS_WORD[job.status]}
+        {job.startAt ? startsAt(job.startAt) : statusWord(job.status)}
       </p>
     </>
   )
@@ -75,18 +79,22 @@ function Center({ job, live }: { job: JobView; live: Live | undefined }) {
 function useAnnounce(job: JobView, live: Live | undefined) {
   const [text, setText] = useState('')
   useEffect(() => {
-    const t = setInterval(() => {
+    const timer = setInterval(() => {
       const s = useApp.getState()
       const l = s.live[job.id]
       if (job.status === 'running' && l) {
         const p = percent(l.written, l.total)
-        setText(`${p === null ? '' : `${Math.floor(p)} percent, `}${rateText(l.rate)}`)
+        setText(
+          p === null
+            ? rateText(l.rate)
+            : t('{p} percent, {rate}', { p: Math.floor(p), rate: rateText(l.rate) }),
+        )
       }
     }, 5000)
-    return () => clearInterval(t)
+    return () => clearInterval(timer)
   }, [job.id, job.status])
   useEffect(() => {
-    setText(`${job.name}: ${STATUS_WORD[job.status]}`)
+    setText(`${job.name}: ${statusWord(job.status)}`)
   }, [job.name, job.status])
   void live
   return text
@@ -125,16 +133,19 @@ function ErrorPanel({ job }: { job: JobView }) {
         <p>{job.error}</p>
         {job.retryIn !== null && (
           <p className="field-help">
-            Fuselane tries again by itself{' '}
             {job.retryIn < 60
-              ? 'in under a minute'
-              : `in about ${Math.round(job.retryIn / 60)} min`}
-            , or as soon as a network comes back.
+              ? t(
+                  'Fuselane tries again by itself in under a minute, or as soon as a network comes back.',
+                )
+              : t(
+                  'Fuselane tries again by itself in about {n} min, or as soon as a network comes back.',
+                  { n: Math.round(job.retryIn / 60) },
+                )}
           </p>
         )}
         {action === 'fix-link' && job.resumable && (
           <form className="fix-link" onSubmit={fix} noValidate>
-            <label htmlFor={`fix-${job.id}`}>New link to the same file</label>
+            <label htmlFor={`fix-${job.id}`}>{t('New link to the same file')}</label>
             <div className="field-row">
               <input
                 id={`fix-${job.id}`}
@@ -143,6 +154,7 @@ function ErrorPanel({ job }: { job: JobView }) {
                 autoComplete="off"
                 spellCheck={false}
                 value={link}
+                // i18n-ignore: a link
                 placeholder="https://…"
                 aria-invalid={problem ? true : undefined}
                 aria-describedby={problem ? `fix-${job.id}-err` : `fix-${job.id}-help`}
@@ -152,7 +164,7 @@ function ErrorPanel({ job }: { job: JobView }) {
                 }}
               />
               <button type="submit" className="btn btn-primary" disabled={busy}>
-                {busy ? 'Checking…' : 'Continue'}
+                {busy ? t('Checking…') : t('Continue')}
               </button>
             </div>
             {problem ? (
@@ -161,7 +173,9 @@ function ErrorPanel({ job }: { job: JobView }) {
               </p>
             ) : (
               <p id={`fix-${job.id}-help`} className="field-help">
-                Saved progress is kept if it's the same file. A different file is never mixed in.
+                {t(
+                  "Saved progress is kept if it's the same file. A different file is never mixed in.",
+                )}
               </p>
             )}
           </form>
@@ -175,17 +189,17 @@ function ErrorPanel({ job }: { job: JobView }) {
               })
             }
           >
-            <ArrowClockwise size={16} aria-hidden /> Start over
+            <ArrowClockwise size={16} aria-hidden /> {t('Start over')}
           </button>
         )}
         {action === 'allowance' && (
           <button className="btn" onClick={() => useApp.getState().setView('networks')}>
-            Open Networks
+            {t('Open Networks')}
           </button>
         )}
         {action === 'free-space' && (
           <p className="field-help">
-            Free up space on that disk, or choose another folder, then try again.
+            {t('Free up space on that disk, or choose another folder, then try again.')}
           </p>
         )}
       </div>
@@ -207,19 +221,25 @@ function JobLimit({ job }: { job: JobView }) {
         if (changed) void act((b) => b.setJobLimit(job.id, draft))
       }}
     >
-      <LimitField label="Speed limit for this download" rate={job.speedLimit} onChange={setDraft} />
+      <LimitField
+        label={t('Speed limit for this download')}
+        rate={job.speedLimit}
+        onChange={setDraft}
+      />
       <button type="submit" className="btn" disabled={!changed}>
-        {draft === 0 && job.speedLimit > 0 ? 'Remove limit' : 'Set limit'}
+        {draft === 0 && job.speedLimit > 0 ? t('Remove limit') : t('Set limit')}
       </button>
-      <p className="field-help">Empty for no limit. The overall and network limits still apply.</p>
+      <p className="field-help">
+        {t('Empty for no limit. The overall and network limits still apply.')}
+      </p>
     </form>
   )
 }
 
 const READY_WORD = {
-  'on-track': 'On track',
-  'at-risk': 'At risk: it goes first, and runs outside the schedule if it has to',
-  missed: 'The time has passed; it carries on',
+  'on-track': mark('On track'),
+  'at-risk': mark('At risk: it goes first, and runs outside the schedule if it has to'),
+  missed: mark('The time has passed; it carries on'),
 } as const
 
 /** Ready by (B9.4): a time this download should be finished. */
@@ -244,7 +264,7 @@ function ReadyBy({ job }: { job: JobView }) {
       }}
     >
       <div className="ready-field">
-        <label htmlFor={id}>Ready by</label>
+        <label htmlFor={id}>{t('Ready by')}</label>
         <input
           id={id}
           type="time"
@@ -259,7 +279,7 @@ function ReadyBy({ job }: { job: JobView }) {
           className="btn"
           disabled={at === null || (job.readyBy !== null && at === job.readyBy)}
         >
-          Set
+          {t('Set')}
         </button>
         {job.readyBy !== null && (
           <button
@@ -267,14 +287,17 @@ function ReadyBy({ job }: { job: JobView }) {
             className="btn btn-ghost"
             onClick={() => void act((b) => b.setReadyBy(job.id, null))}
           >
-            Clear
+            {t('Clear')}
           </button>
         )}
       </div>
       <p id={`${id}-state`} className="field-help" data-state={job.readyState ?? undefined}>
         {job.readyBy && job.readyState
-          ? `${readyBy(job.readyBy)}. ${READY_WORD[job.readyState]}.`
-          : 'Downloads with a time go first, earliest first.'}
+          ? t('{ready}. {state}.', {
+              ready: readyBy(job.readyBy),
+              state: t(READY_WORD[job.readyState]),
+            })
+          : t('Downloads with a time go first, earliest first.')}
       </p>
     </form>
   )
@@ -287,10 +310,10 @@ function HandoffButton({ job }: { job: JobView }) {
     <>
       <button
         className="btn btn-ghost"
-        title="Send it, with what's downloaded so far, to another computer with Fuselane"
+        title={t("Send it, with what's downloaded so far, to another computer with Fuselane")}
         onClick={() => setOpen(true)}
       >
-        <ShareFat size={16} aria-hidden /> Continue elsewhere
+        <ShareFat size={16} aria-hidden /> {t('Continue elsewhere')}
       </button>
       <HandoffDialog job={job} open={open} onClose={() => setOpen(false)} />
     </>
@@ -306,36 +329,47 @@ function RemoveButton({ job }: { job: JobView }) {
     <>
       <button className="btn btn-ghost" onClick={() => setOpen(true)}>
         <Trash size={16} aria-hidden />
-        Remove
+        {t('Remove')}
       </button>
       <RemoveDialog
         open={open}
         onClose={() => setOpen(false)}
-        title={done ? 'Remove this download?' : 'Stop and remove this download?'}
+        title={done ? t('Remove this download?') : t('Stop and remove this download?')}
         text={
           done
-            ? `${job.name} leaves your list. Keep the file, or move it to the ${BIN}?`
-            : `${job.name} stops and leaves your list. The unfinished file can't be used, so it's deleted.`
+            ? t('{name} leaves your list. Keep the file, or move it to the {bin}?', {
+                name: job.name,
+                bin: t(BIN),
+              })
+            : t(
+                "{name} stops and leaves your list. The unfinished file can't be used, so it's deleted.",
+                { name: job.name },
+              )
         }
         where={where}
         facts={
           done
             ? bytes(job.total ?? job.written)
-            : `${bytes(job.written)}${job.total ? ` of ${bytes(job.total)}` : ''} downloaded`
+            : job.total
+              ? t('{done} of {total} downloaded', {
+                  done: bytes(job.written),
+                  total: bytes(job.total),
+                })
+              : t('{done} downloaded', { done: bytes(job.written) })
         }
         choices={
           done
             ? [
-                { label: 'Keep file', run: () => act((b) => b.remove(job.id)) },
+                { label: t('Keep file'), run: () => act((b) => b.remove(job.id)) },
                 {
-                  label: `Move file to ${BIN}`,
+                  label: t('Move file to {bin}', { bin: t(BIN) }),
                   danger: true,
                   run: () => act((b) => b.trashFile(job.id)),
                 },
               ]
             : [
                 {
-                  label: 'Delete unfinished file',
+                  label: t('Delete unfinished file'),
                   danger: true,
                   run: () => act((b) => b.remove(job.id)),
                 },
@@ -349,10 +383,12 @@ function RemoveButton({ job }: { job: JobView }) {
 /** "45 s", "4 min", "1 h 5 min": the same words as the notification. */
 function took(secs: number): string {
   const s = Math.max(0, Math.round(secs))
-  if (s < 60) return `${s} s`
+  if (s < 60) return t('{n} s', { n: s })
   const m = Math.round(s / 60)
-  if (m < 60) return `${m} min`
-  return m % 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m / 60} h`
+  if (m < 60) return t('{n} min', { n: m })
+  return m % 60
+    ? tn(Math.floor(m / 60), '1 h {m} min', '{n} h {m} min', { m: m % 60 })
+    : tn(m / 60, '1 h', '{n} h')
 }
 
 /** After a download: what each network carried, and how long it would have taken without it. */
@@ -365,18 +401,18 @@ function Savings({ report }: { report: ReportView }) {
   return (
     <section className="savings" aria-labelledby="savings-title">
       <h2 className="group" id="savings-title">
-        What each network saved
+        {t('What each network saved')}
       </h2>
       <p className="savings-lead">
-        Finished in <strong className="num">{took(report.secs)}</strong>
-        {best?.savedSecs && best.savedSecs >= 30 ? (
-          <>
-            . Without <span translate="no">{best.label}</span> it would have taken about{' '}
-            <strong className="num">{took(report.secs + best.savedSecs)}</strong>.
-          </>
-        ) : (
-          '.'
-        )}
+        {best?.savedSecs && best.savedSecs >= 30
+          ? tr('Finished in {time}. Without {network} it would have taken about {longer}.', {
+              time: <strong className="num">{took(report.secs)}</strong>,
+              network: <span translate="no">{best.label}</span>,
+              longer: <strong className="num">{took(report.secs + best.savedSecs)}</strong>,
+            })
+          : tr('Finished in {time}.', {
+              time: <strong className="num">{took(report.secs)}</strong>,
+            })}
       </p>
       <ul className="savings-list">
         {report.nets.map((n) => (
@@ -389,7 +425,7 @@ function Savings({ report }: { report: ReportView }) {
             </span>
             <span className="num">{bytes(n.bytes)}</span>
             <span className="num savings-saved">
-              {n.savedSecs === null ? '' : `${took(n.savedSecs)} saved`}
+              {n.savedSecs === null ? '' : t('{time} saved', { time: took(n.savedSecs) })}
             </span>
           </li>
         ))}
@@ -400,19 +436,37 @@ function Savings({ report }: { report: ReportView }) {
 
 /** Whether the file is (or will be) checked against a SHA-256, and from where. */
 function ChecksumBadge({ job }: { job: JobView }) {
-  const from = job.checksumFrom ? `the SHA-256 from ${job.checksumFrom}` : 'the SHA-256 you gave'
+  const source = job.checksumFrom
+  const against = t('against {source}', { source: source ?? t('your SHA-256') })
   if (job.verified)
     return (
-      <p className="checksum-badge" data-verified title={`The finished file matches ${from}.`}>
-        <ShieldCheck size={14} weight="fill" aria-hidden /> Verified
-        <span className="muted">against {job.checksumFrom ?? 'your SHA-256'}</span>
+      <p
+        className="checksum-badge"
+        data-verified
+        title={
+          source
+            ? t('The finished file matches the SHA-256 from {source}.', { source })
+            : t('The finished file matches the SHA-256 you gave.')
+        }
+      >
+        <ShieldCheck size={14} weight="fill" aria-hidden /> {t('Verified')}
+        <span className="muted">{against}</span>
       </p>
     )
   if (job.status === 'completed') return null
   return (
-    <p className="checksum-badge" title={`When it finishes, the file is checked against ${from}.`}>
-      <ShieldCheck size={14} aria-hidden /> Checked when done
-      <span className="muted">against {job.checksumFrom ?? 'your SHA-256'}</span>
+    <p
+      className="checksum-badge"
+      title={
+        source
+          ? t('When it finishes, the file is checked against the SHA-256 from {source}.', {
+              source,
+            })
+          : t('When it finishes, the file is checked against the SHA-256 you gave.')
+      }
+    >
+      <ShieldCheck size={14} aria-hidden /> {t('Checked when done')}
+      <span className="muted">{against}</span>
     </p>
   )
 }
@@ -448,7 +502,7 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
     <article className="detail" aria-labelledby="detail-title">
       <header className="detail-head">
         {onBack && (
-          <button className="icon-btn" onClick={onBack} aria-label="Back to downloads">
+          <button className="icon-btn" onClick={onBack} aria-label={t('Back to downloads')}>
             <ArrowLeft size={18} aria-hidden />
           </button>
         )}
@@ -465,34 +519,36 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
           {job.status === 'queued' && (
             <button
               className="btn"
-              title="Starts as soon as a download finishes"
+              title={t('Starts as soon as a download finishes')}
               onClick={() => act((b) => b.reorder([job.id]))}
             >
-              <ArrowLineUp size={16} aria-hidden /> Start next
+              <ArrowLineUp size={16} aria-hidden /> {t('Start next')}
             </button>
           )}
           {canFocus && (
             <button
               className="btn"
-              title="Every network goes to this download; the others wait and carry on after it"
+              title={t(
+                'Every network goes to this download; the others wait and carry on after it',
+              )}
               onClick={() => act((b) => b.focus(job.id))}
             >
-              <Lightning size={16} aria-hidden /> Do this now
+              <Lightning size={16} aria-hidden /> {t('Do this now')}
             </button>
           )}
           {job.focused && (
             <button
               className="btn btn-focus"
               aria-pressed="true"
-              title="Let the other downloads run again"
+              title={t('Let the other downloads run again')}
               onClick={() => act((b) => b.unfocus())}
             >
-              <Lightning size={16} weight="fill" aria-hidden /> Every network
+              <Lightning size={16} weight="fill" aria-hidden /> {t('Every network')}
             </button>
           )}
           {canPause && (
             <button className="btn" onClick={() => act((b) => b.pause(job.id))}>
-              <Pause size={16} aria-hidden /> Pause
+              <Pause size={16} aria-hidden /> {t('Pause')}
             </button>
           )}
           {job.resumable && (
@@ -506,16 +562,20 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
               ) : (
                 <Play size={16} aria-hidden />
               )}
-              {job.status === 'failed' ? 'Try again' : job.startAt ? 'Start now' : 'Resume'}
+              {job.status === 'failed'
+                ? t('Try again')
+                : job.startAt
+                  ? t('Start now')
+                  : t('Resume')}
             </button>
           )}
           {job.status === 'completed' && (
             <>
               <button className="btn btn-primary" onClick={() => act((b) => b.openFile(job.id))}>
-                <ArrowSquareOut size={16} aria-hidden /> Open
+                <ArrowSquareOut size={16} aria-hidden /> {t('Open')}
               </button>
               <button className="btn" onClick={() => act((b) => b.reveal(job.id))}>
-                <FolderOpen size={16} aria-hidden /> {REVEAL_LABEL}
+                <FolderOpen size={16} aria-hidden /> {t(REVEAL_LABEL)}
               </button>
             </>
           )}
@@ -552,32 +612,32 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
         <div className="detail-side">
           <dl className="facts">
             <div>
-              <dt>Saved</dt>
+              <dt>{t('Saved')}</dt>
               <dd className="num">
                 {bytes(job.status === 'completed' ? (total ?? written) : written)}
                 {total && job.status !== 'completed' ? (
-                  <span className="of"> of {bytes(total)}</span>
+                  <span className="of"> {t('of {total}', { total: bytes(total) })}</span>
                 ) : null}
               </dd>
             </div>
             <div>
-              <dt>{job.status === 'running' ? 'Time left' : 'Status'}</dt>
+              <dt>{job.status === 'running' ? t('Time left') : t('Status')}</dt>
               <dd className="num">
-                {job.status === 'running' ? left || 'Working it out' : STATUS_WORD[job.status]}
+                {job.status === 'running' ? left || t('Working it out') : statusWord(job.status)}
               </dd>
             </div>
             {live && (
               <div>
-                <dt>Streams</dt>
+                <dt>{t('Streams')}</dt>
                 <dd className="num">{nets.reduce((a, n) => a + n.streams, 0)}</dd>
               </div>
             )}
             {live && (live.retries > 0 || live.hedges > 0) && (
               <div>
-                <dt>Recovered</dt>
+                <dt>{t('Recovered')}</dt>
                 <dd className="num">
-                  {live.retries} {live.retries === 1 ? 'retry' : 'retries'}, {live.hedges}{' '}
-                  {live.hedges === 1 ? 'race' : 'races'}
+                  {tn(live.retries, '{n} retry', '{n} retries')},{' '}
+                  {tn(live.hedges, '{n} race', '{n} races')}
                 </dd>
               </div>
             )}
@@ -586,9 +646,18 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
           {job.mirrors.length > 0 && (
             <div className="mirror-note">
               <p className="field-help">
-                Also from {job.mirrors.length === 1 ? 'a mirror' : `${job.mirrors.length} mirrors`}:{' '}
-                <span translate="no">{job.mirrors.join(', ')}</span>. Each was checked for the same
-                file before helping.
+                {job.mirrors.length === 1
+                  ? tr(
+                      'Also from a mirror: {mirrors}. Each was checked for the same file before helping.',
+                      { mirrors: <span translate="no">{job.mirrors.join(', ')}</span> },
+                    )
+                  : tr(
+                      'Also from {n} mirrors: {mirrors}. Each was checked for the same file before helping.',
+                      {
+                        n: job.mirrors.length,
+                        mirrors: <span translate="no">{job.mirrors.join(', ')}</span>,
+                      },
+                    )}
               </p>
               {job.mirrorNotes.map((n) => (
                 <p key={n} className="field-help warn">
@@ -604,15 +673,15 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
 
           {nets.length > 0 && (
             <table className="nets">
-              <caption className="sr-only">Networks in this download</caption>
+              <caption className="sr-only">{t('Networks in this download')}</caption>
               <thead>
                 <tr>
-                  <th scope="col">Network</th>
+                  <th scope="col">{t('Network')}</th>
                   <th scope="col" className="r">
-                    Share
+                    {t('Share')}
                   </th>
                   <th scope="col" className="r">
-                    {finished ? 'Carried' : 'Speed'}
+                    {finished ? t('Carried') : t('Speed')}
                   </th>
                 </tr>
               </thead>
@@ -638,7 +707,7 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
                       {sum > 0 ? `${Math.round((n.bytes / sum) * 100)}%` : ''}
                     </td>
                     <td className="r num">
-                      {finished ? bytes(n.bytes) : n.dead ? 'Offline' : rateText(n.rate)}
+                      {finished ? bytes(n.bytes) : n.dead ? t('Offline') : rateText(n.rate)}
                     </td>
                   </tr>
                 ))}

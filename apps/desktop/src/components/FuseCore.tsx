@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createFuseCore, geometry, type CoreData } from './coreRenderer'
 import { assignLanes, netTitle } from '../lib/lanes'
 import { rateText } from '../lib/format'
+import { t } from '../lib/i18n'
 import type { JobView, Live } from '../lib/types'
 
 const TICKS = 180
@@ -157,7 +158,7 @@ export function FuseCore({
                 style={{ left: x, top: y, transform: `translate(${tx}, ${ty})`, textAlign: align }}
               >
                 <span className="name">{netTitle(n)}</span>
-                <span className="num">{n.dead ? 'Offline' : rateText(n.rate)}</span>
+                <span className="num">{n.dead ? t('Offline') : rateText(n.rate)}</span>
               </li>
             )
           })}
