@@ -248,6 +248,12 @@ export function FeedsDialog({ open, onClose }: { open: boolean; onClose: () => v
     if (open && !d.open) {
       setError(null)
       setStatus('')
+      // A feed handed over by the extension: ready to follow with one click.
+      const draft = useApp.getState().feedDraft
+      if (draft) {
+        setUrl(draft)
+        useApp.setState({ feedDraft: null })
+      }
       d.showModal()
       void backend?.feedsList().then(setFeeds)
     }

@@ -384,6 +384,10 @@ export function TransferList() {
   const ready = useApp((s) => s.ready)
   const setAdding = useApp((s) => s.setAdding)
   const [feedsOpen, setFeedsOpen] = useState(false)
+  const feedDraft = useApp((s) => s.feedDraft)
+  useEffect(() => {
+    if (feedDraft) setFeedsOpen(true)
+  }, [feedDraft])
   const feedsDialog = <FeedsDialog open={feedsOpen} onClose={() => setFeedsOpen(false)} />
   if (!ready) {
     return (

@@ -14,8 +14,15 @@ pub struct ApiBridge {
 
 /// Drafts starting with this open New download on its video picker (B10.4).
 pub const VIDEO_DRAFT: &str = "fuselane-video:";
+/// Drafts starting with this open Feeds with the feed's address (B10.8).
+pub const FEED_DRAFT: &str = "fuselane-feed:";
 
 impl Handler for ApiBridge {
+    fn page_feed(&self, url: String) -> bool {
+        self.svc.open_request(format!("{FEED_DRAFT}{url}"));
+        true
+    }
+
     fn page_video(&self, url: String) -> bool {
         self.svc.open_request(format!("{VIDEO_DRAFT}{url}"));
         true

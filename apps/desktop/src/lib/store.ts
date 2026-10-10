@@ -67,6 +67,8 @@ interface State {
   updateError: UiError | null
   selected: number | null
   view: View
+  /** A feed address the extension handed over: Feeds opens with it (B10.8). */
+  feedDraft: string | null
   adding: boolean
   /** A link handed to the dialog by paste or drop. */
   draft: string
@@ -158,6 +160,7 @@ export const useApp = create<State>((set, get) => ({
   updateError: null,
   selected: null,
   view: 'transfers',
+  feedDraft: null,
   adding: false,
   automation: null,
   whenDone: null,
@@ -383,6 +386,15 @@ async function startOnce(): Promise<void> {
       if (e.type === 'open' && isSendLink(e.target)) {
         // The share page's "Open in Fuselane": receive it on the Send page.
         get().openReceive(e.target)
+        return
+      }
+      if (e.type === 'open' && e.target.startsWith('fuselane-feed:')) {
+        // The extension's "Follow this site's feed": Feeds opens with the address.
+        set({
+          view: 'transfers',
+          adding: false,
+          feedDraft: e.target.slice('fuselane-feed:'.length),
+        })
         return
       }
       if (e.type === 'open') {

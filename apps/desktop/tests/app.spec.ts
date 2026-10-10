@@ -1923,3 +1923,16 @@ test('watch folder: pick a folder, see what was taken, turn off', async ({ page 
   await expect(toggle).toHaveAttribute('aria-checked', 'false')
   await expect(page.locator('.watch')).toHaveCount(0)
 })
+
+test("the extension's feed button opens Feeds with the address ready", async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByRole('button', { name: 'Feeds', exact: true })).toBeVisible()
+  await page.evaluate(() =>
+    (window as unknown as { __demoOpen: (t: string) => void }).__demoOpen(
+      'fuselane-feed:https://blog.example/feed.xml',
+    ),
+  )
+  const dialog = page.getByRole('dialog', { name: 'Feeds' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByLabel('Feed address')).toHaveValue('https://blog.example/feed.xml')
+})
