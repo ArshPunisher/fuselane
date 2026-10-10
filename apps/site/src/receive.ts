@@ -2,6 +2,7 @@
 // says what to do without it. The token stays in this tab: it's never fetched,
 // logged or sent anywhere (the referrer policy keeps the address to itself too).
 import { toast } from './common'
+import './css/receive.css'
 
 /** v1 token: "v1." + base64url(20-byte info-hash, 32-byte key, 1 flag byte). */
 const BODY_CHARS = Math.ceil((53 * 4) / 3)

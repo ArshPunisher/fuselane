@@ -3,8 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#0b0d12" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#0a0c11" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f9fafc" media="(prefers-color-scheme: light)" />
     <title>Fuselane questions, answered</title>
     <meta
       name="description"
@@ -50,11 +51,11 @@
           <a href="https://github.com/ArshPunisher/fuselane/issues">Ask on GitHub</a>.
         </p>
       </section>
-      <div class="faq-layout">
-        <nav class="faq-index" aria-label="Topics">
+      <div class="doc-layout">
+        <nav class="toc" aria-label="Topics" data-toc>
           <ul>
             <li>
-              <a href="#basics">How it works<span class="num">6</span></a>
+              <a href="#basics">How it works<span class="num">8</span></a>
             </li>
             <li>
               <a href="#send">Fuse Send<span class="num">4</span></a>
@@ -64,8 +65,8 @@
             </li>
           </ul>
         </nav>
-        <div class="faq-groups reveal">
-          <section class="faq-group" id="basics" aria-labelledby="basics-title">
+        <div class="doc-groups">
+          <section class="doc-group" id="basics" aria-labelledby="basics-title">
             <h2 id="basics-title">How it works</h2>
             <div class="qa">
               <details open>
@@ -154,7 +155,7 @@
               </details>
             </div>
           </section>
-          <section class="faq-group" id="send" aria-labelledby="send-title">
+          <section class="doc-group" id="send" aria-labelledby="send-title">
             <h2 id="send-title">Fuse Send</h2>
             <div class="qa">
               <details>
@@ -206,7 +207,7 @@
               </details>
             </div>
           </section>
-          <section class="faq-group" id="trust" aria-labelledby="trust-title">
+          <section class="doc-group" id="trust" aria-labelledby="trust-title">
             <h2 id="trust-title">Installing and trust</h2>
             <div class="qa">
               <details>
@@ -273,6 +274,6 @@
     </main>
 
     <!-- @footer -->
-    <script type="module" src="/src/common.ts"></script>
+    <script type="module" src="/src/faq.ts"></script>
   </body>
 </html>

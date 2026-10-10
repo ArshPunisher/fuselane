@@ -3,8 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#0b0d12" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#0a0c11" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f9fafc" media="(prefers-color-scheme: light)" />
     <title>Someone sent you a file with Fuselane</title>
     <meta
       name="description"
@@ -47,21 +48,24 @@
     <main id="main" class="wrap">
       <section class="receive" aria-labelledby="receive-title">
         <div class="receive-art" aria-hidden="true">
-          <svg viewBox="0 40 320 110" class="beam">
-            <defs>
-              <linearGradient id="beam-fill" x1="0" x2="1">
-                <stop offset="0" stop-color="var(--tide)" stop-opacity="0" />
-                <stop offset="0.6" stop-color="var(--fuse-hot)" />
-                <stop offset="1" stop-color="var(--fuse)" />
-              </linearGradient>
-            </defs>
-            <rect class="dev dev-a" x="14" y="62" width="88" height="64" rx="10" />
-            <rect class="dev dev-b" x="218" y="62" width="88" height="64" rx="10" />
-            <path class="beam-path" d="M102 94 C 150 40, 170 148, 218 94" pathLength="1" />
-            <circle class="packet p1" r="5" />
-            <circle class="packet p2" r="4" />
-            <circle class="packet p3" r="3" />
+          <svg viewBox="0 0 360 140" class="beam">
+            <g class="dev-a">
+              <rect class="dev" x="14" y="40" width="104" height="64" rx="9" />
+              <rect class="screen" x="24" y="50" width="84" height="44" rx="4" />
+              <rect class="base" x="44" y="110" width="44" height="4" rx="2" />
+            </g>
+            <g class="dev-b">
+              <rect class="dev" x="242" y="40" width="104" height="64" rx="9" />
+              <rect class="screen" x="252" y="50" width="84" height="44" rx="4" />
+              <rect class="bar" x="262" y="78" width="64" height="6" rx="3" />
+              <rect class="base" x="272" y="110" width="44" height="4" rx="2" />
+            </g>
+            <path class="beam-path" d="M118 70 C 160 30, 200 110, 242 70" />
+            <rect class="packet p1" x="-5" y="-5" width="10" height="10" rx="2.5" />
+            <rect class="packet p2" x="-4" y="-4" width="8" height="8" rx="2" />
+            <rect class="packet p3" x="-3" y="-3" width="6" height="6" rx="1.5" />
           </svg>
+          <span class="receive-lock"><i data-icon="lock"></i></span>
         </div>
         <p class="label receive-kicker">Fuse Send</p>
         <h1 id="receive-title" data-state-title>Someone sent you a file</h1>

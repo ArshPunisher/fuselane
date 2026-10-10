@@ -1,5 +1,6 @@
 // Support page: Share uses the system's share sheet, or copies the link.
 import { toast } from './common'
+import './css/pages.css'
 
 const url = 'https://fuselane.app/'
 

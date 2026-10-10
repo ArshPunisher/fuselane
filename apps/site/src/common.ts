@@ -1,6 +1,6 @@
 // Shared by every page: icons (Phosphor's own SVGs), the live star count, the
-// current page in the nav, reveal-on-scroll, the pointer spotlight, copy buttons.
-import './site.css'
+// navbar, reveal-on-scroll, the pointer light on panels, copy buttons.
+import './css/base.css'
 import star from '@phosphor-icons/core/assets/regular/star.svg?raw'
 import lightning from '@phosphor-icons/core/assets/regular/lightning.svg?raw'
 import film from '@phosphor-icons/core/assets/regular/film-strip.svg?raw'
@@ -10,6 +10,7 @@ import github from '@phosphor-icons/core/assets/regular/github-logo.svg?raw'
 import download from '@phosphor-icons/core/assets/regular/download-simple.svg?raw'
 import arrowUpRight from '@phosphor-icons/core/assets/regular/arrow-up-right.svg?raw'
 import arrowRight from '@phosphor-icons/core/assets/regular/arrow-right.svg?raw'
+import arrowDown from '@phosphor-icons/core/assets/regular/arrow-down.svg?raw'
 import apple from '@phosphor-icons/core/assets/regular/apple-logo.svg?raw'
 import windows from '@phosphor-icons/core/assets/regular/windows-logo.svg?raw'
 import linux from '@phosphor-icons/core/assets/regular/linux-logo.svg?raw'
@@ -45,6 +46,32 @@ import gear from '@phosphor-icons/core/assets/regular/gear-six.svg?raw'
 import check from '@phosphor-icons/core/assets/regular/check-circle.svg?raw'
 import menu from '@phosphor-icons/core/assets/regular/list.svg?raw'
 import close from '@phosphor-icons/core/assets/regular/x.svg?raw'
+import wifi from '@phosphor-icons/core/assets/regular/wifi-high.svg?raw'
+import ethernet from '@phosphor-icons/core/assets/regular/plugs.svg?raw'
+import phone from '@phosphor-icons/core/assets/regular/device-mobile.svg?raw'
+import lock from '@phosphor-icons/core/assets/regular/lock-key.svg?raw'
+import key from '@phosphor-icons/core/assets/regular/key.svg?raw'
+import link from '@phosphor-icons/core/assets/regular/link-simple.svg?raw'
+import seal from '@phosphor-icons/core/assets/regular/seal-check.svg?raw'
+import clock from '@phosphor-icons/core/assets/regular/clock.svg?raw'
+import folder from '@phosphor-icons/core/assets/regular/folder-simple.svg?raw'
+import send from '@phosphor-icons/core/assets/regular/paper-plane-tilt.svg?raw'
+import devices from '@phosphor-icons/core/assets/regular/devices.svg?raw'
+import play from '@phosphor-icons/core/assets/regular/play.svg?raw'
+import replay from '@phosphor-icons/core/assets/regular/arrow-counter-clockwise.svg?raw'
+import book from '@phosphor-icons/core/assets/regular/book-open-text.svg?raw'
+import info from '@phosphor-icons/core/assets/regular/info.svg?raw'
+import globe from '@phosphor-icons/core/assets/regular/globe-simple.svg?raw'
+import qr from '@phosphor-icons/core/assets/regular/qr-code.svg?raw'
+import text from '@phosphor-icons/core/assets/regular/textbox.svg?raw'
+import queue from '@phosphor-icons/core/assets/regular/queue.svg?raw'
+import timer from '@phosphor-icons/core/assets/regular/timer.svg?raw'
+import split from '@phosphor-icons/core/assets/regular/arrows-split.svg?raw'
+import tray from '@phosphor-icons/core/assets/regular/tray-arrow-down.svg?raw'
+import prohibit from '@phosphor-icons/core/assets/regular/prohibit.svg?raw'
+import eyeSlash from '@phosphor-icons/core/assets/regular/eye-slash.svg?raw'
+import cursor from '@phosphor-icons/core/assets/regular/cursor-click.svg?raw'
+import sliders from '@phosphor-icons/core/assets/regular/sliders-horizontal.svg?raw'
 
 export const REPO = 'https://github.com/ArshPunisher/fuselane'
 
@@ -58,6 +85,7 @@ const ICONS: Record<string, string> = {
   download,
   'arrow-up-right': arrowUpRight,
   'arrow-right': arrowRight,
+  'arrow-down': arrowDown,
   apple,
   windows,
   linux,
@@ -93,14 +121,42 @@ const ICONS: Record<string, string> = {
   walk,
   pie,
   keys,
+  wifi,
+  ethernet,
+  phone,
+  lock,
+  key,
+  link,
+  seal,
+  clock,
+  folder,
+  send,
+  devices,
+  play,
+  replay,
+  book,
+  info,
+  globe,
+  qr,
+  text,
+  queue,
+  timer,
+  split,
+  tray,
+  prohibit,
+  'eye-slash': eyeSlash,
+  cursor,
+  sliders,
 }
+
+const svgOf = (name: string) =>
+  ICONS[name]?.replace('<svg ', '<svg aria-hidden="true" focusable="false" ') ?? ''
 
 /** `<i data-icon="star"></i>` becomes the icon, hidden from screen readers. */
 function icons() {
-  document.querySelectorAll<HTMLElement>('[data-icon]').forEach((el) => {
-    const svg = ICONS[el.dataset.icon ?? '']
-    if (!svg) return
-    el.outerHTML = svg.replace('<svg ', '<svg aria-hidden="true" focusable="false" ')
+  document.querySelectorAll<HTMLElement>('i[data-icon]').forEach((el) => {
+    const svg = svgOf(el.dataset.icon ?? '')
+    if (svg) el.outerHTML = svg
   })
 }
 
@@ -128,24 +184,14 @@ async function stars() {
   }
   // "0" next to Star reads worse than no number at all.
   if (n === null || n < 1) return
-  const text = new Intl.NumberFormat(undefined, { notation: 'compact' }).format(n)
-  slots.forEach((s) => (s.textContent = text))
-}
-
-function currentPage() {
-  const here = location.pathname.replace(/index\.html$/, '').replace(/\/$/, '')
-  document
-    .querySelectorAll<HTMLAnchorElement>('.nav-links a, .nav-cta, .nav-sheet a')
-    .forEach((a) => {
-      const to = new URL(a.href).pathname.replace(/index\.html$/, '').replace(/\/$/, '')
-      if (to === here && !a.hash) a.setAttribute('aria-current', 'page')
-    })
+  const label = new Intl.NumberFormat(undefined, { notation: 'compact' }).format(n)
+  slots.forEach((s) => (s.textContent = label))
 }
 
 /**
- * The navbar: a highlight glides to whichever link the pointer or focus is on
- * (and rests on the current page), the bar tightens once the page scrolls, and
- * on phones a menu button opens the page list.
+ * The navbar: a Fuse underline glides to whichever link the pointer or focus is
+ * on (and rests on the current page), the bar turns to glass once the page
+ * scrolls, and on phones a menu button opens the page list.
  */
 function navbar() {
   const nav = document.querySelector<HTMLElement>('[data-nav]')
@@ -160,6 +206,7 @@ function navbar() {
     }
     track.style.setProperty('--glide-x', `${a.offsetLeft}px`)
     track.style.setProperty('--glide-w', `${a.offsetWidth}px`)
+    track.style.setProperty('--glide-s', String(Math.max(0, a.offsetWidth - 26)))
     track.style.setProperty('--glide-o', '1')
   }
   const rest = () => glideTo(links.find((a) => a.getAttribute('aria-current') === 'page'))
@@ -172,6 +219,8 @@ function navbar() {
     if (!track.contains(e.relatedTarget as Node)) rest()
   })
   rest()
+  // The web font changes link widths once it arrives.
+  void document.fonts?.ready.then(rest)
   // Scrolled: a sentinel at the top of the page leaves view (no scroll listener).
   const sentinel = document.querySelector('.nav-sentinel')
   if (sentinel && 'IntersectionObserver' in window) {
@@ -188,11 +237,7 @@ function navbar() {
     sheet.hidden = !open
     nav.toggleAttribute('data-open', open)
     const icon = button.querySelector('svg')
-    if (icon)
-      icon.outerHTML = (open ? close : menu).replace(
-        '<svg ',
-        '<svg aria-hidden="true" focusable="false" ',
-      )
+    if (icon) icon.outerHTML = svgOf(open ? 'close' : 'menu')
   }
   button.addEventListener('click', () => set(sheet.hidden))
   sheet.addEventListener('click', (e) => {
@@ -204,15 +249,18 @@ function navbar() {
       button.focus()
     }
   })
-  matchMedia('(min-width: 721px)').addEventListener('change', (m) => m.matches && set(false))
+  matchMedia('(min-width: 960px)').addEventListener('change', (m) => m.matches && set(false))
 }
 
+/**
+ * Reveal on scroll. Only what starts below the fold is held back, so the first
+ * screen never flashes, nothing is hidden without JavaScript, and nothing waits
+ * under reduced motion.
+ */
 function reveal() {
-  const els = document.querySelectorAll<HTMLElement>('.reveal, .frame, .smalls')
-  if (!('IntersectionObserver' in window)) {
-    els.forEach((e) => e.classList.add('seen'))
+  const els = [...document.querySelectorAll<HTMLElement>('.reveal, .foot')]
+  if (!('IntersectionObserver' in window) || matchMedia('(prefers-reduced-motion: reduce)').matches)
     return
-  }
   const io = new IntersectionObserver(
     (entries) => {
       for (const e of entries) {
@@ -222,31 +270,34 @@ function reveal() {
         }
       }
     },
-    { rootMargin: '0px 0px -8% 0px', threshold: 0.12 },
+    { rootMargin: '0px 0px -6% 0px', threshold: 0.08 },
   )
-  els.forEach((e) => io.observe(e))
+  for (const el of els) {
+    if (el.getBoundingClientRect().top > innerHeight) {
+      el.classList.add('pending')
+      io.observe(el)
+    }
+  }
 }
 
-/** FAQ: the topic list marks the topic being read. */
-function faqTopics() {
-  const links = [...document.querySelectorAll<HTMLAnchorElement>('.faq-index a')]
+/** FAQ and guide: the topic list marks the topic being read. */
+function topics() {
+  const links = [...document.querySelectorAll<HTMLAnchorElement>('[data-toc] a')]
   if (!links.length || !('IntersectionObserver' in window)) return
+  const targets = links
+    .map((a) => document.getElementById(decodeURIComponent(a.hash.slice(1))))
+    .filter((t): t is HTMLElement => Boolean(t))
+  const mark = (id: string) =>
+    links.forEach((a) => a.setAttribute('aria-current', String(a.hash === `#${id}`)))
   const io = new IntersectionObserver(
     (entries) => {
-      for (const e of entries) {
-        if (!e.isIntersecting) continue
-        links.forEach((a) => a.setAttribute('aria-current', String(a.hash === `#${e.target.id}`)))
-      }
+      for (const e of entries) if (e.isIntersecting) mark(e.target.id)
     },
     { rootMargin: '-30% 0px -60% 0px' },
   )
-  document.querySelectorAll('.faq-group').forEach((g) => io.observe(g))
+  targets.forEach((t) => io.observe(t))
   // A pick is marked at once: the last topic may never reach the middle band.
-  links.forEach((l) =>
-    l.addEventListener('click', () =>
-      links.forEach((a) => a.setAttribute('aria-current', String(a === l))),
-    ),
-  )
+  links.forEach((l) => l.addEventListener('click', () => mark(l.hash.slice(1))))
 }
 
 /** Panels with .spot light up where the pointer is (CSS reads --mx/--my). */
@@ -261,7 +312,14 @@ function spotlight() {
   })
 }
 
-export function toast(text: string) {
+/** Background tab: CSS animations rest too (canvas loops stop by themselves). */
+function restWhenHidden() {
+  const set = () => document.documentElement.toggleAttribute('data-hidden', document.hidden)
+  document.addEventListener('visibilitychange', set)
+  set()
+}
+
+export function toast(message: string) {
   let t = document.querySelector<HTMLElement>('.toast')
   if (!t) {
     t = document.createElement('p')
@@ -269,7 +327,7 @@ export function toast(text: string) {
     t.setAttribute('role', 'status')
     document.body.append(t)
   }
-  t.textContent = text
+  t.textContent = message
   window.setTimeout(() => {
     if (t) t.textContent = ''
   }, 2400)
@@ -278,9 +336,9 @@ export function toast(text: string) {
 function copyButtons() {
   document.querySelectorAll<HTMLButtonElement>('button[data-copy]').forEach((b) => {
     b.addEventListener('click', async () => {
-      const text = document.getElementById(b.dataset.copy ?? '')?.textContent?.trim() ?? ''
+      const value = document.getElementById(b.dataset.copy ?? '')?.textContent?.trim() ?? ''
       try {
-        await navigator.clipboard.writeText(text)
+        await navigator.clipboard.writeText(value.replace(/\s+/g, ' '))
         b.textContent = 'Copied'
       } catch {
         b.textContent = 'Select and copy'
@@ -318,10 +376,10 @@ export function fileUrl(version: string, suffix: string, cli = false) {
 }
 
 icons()
-currentPage()
 navbar()
 reveal()
 spotlight()
+restWhenHidden()
 copyButtons()
 void stars()
-faqTopics()
+topics()

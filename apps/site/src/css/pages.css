@@ -1,0 +1,463 @@
+/* Inner pages: download, guide, questions, support. */
+
+/* ---------- Download ---------- */
+
+.dl-head {
+  display: grid;
+  gap: 28px;
+  padding-bottom: 8px;
+}
+
+.os-tabs {
+  display: inline-flex;
+  gap: 4px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 4px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--surface-1);
+}
+
+.os-tabs [role='tab'] {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--body);
+  font: 500 15px var(--font-sans);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background-color var(--dur-base),
+    color var(--dur-base);
+}
+
+.os-tabs [role='tab'] svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.os-tabs [role='tab']:hover {
+  color: var(--ink);
+}
+
+.os-tabs [role='tab'][aria-selected='true'] {
+  background: var(--surface-3);
+  color: var(--ink);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.06);
+}
+
+.detected {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--fuse-soft);
+  color: var(--fuse);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+@media (max-width: 479px) {
+  .os-tabs {
+    width: 100%;
+  }
+  .os-tabs [role='tab'] {
+    flex: 1;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 8px;
+    font-size: 14px;
+  }
+  .detected {
+    display: none;
+  }
+}
+
+.tab-panel {
+  display: grid;
+  gap: 16px;
+  padding-top: 28px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tab-panel:not([hidden]) {
+    animation: panel-in var(--dur-slow) var(--ease-out) both;
+  }
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.file-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: center;
+  gap: 14px 24px;
+  padding: 20px;
+}
+
+.file-row h3 {
+  font-size: 18px;
+}
+
+.file-row .sub {
+  margin-top: 2px;
+  color: var(--mute);
+  font-size: 14.5px;
+}
+
+.file-row .fname {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--mute);
+  font-size: 13px;
+}
+
+.file-row .cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (min-width: 720px) {
+  .file-row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    padding: 22px 24px;
+  }
+}
+
+.label-row {
+  margin-top: 18px;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.more {
+  display: grid;
+  gap: 16px;
+}
+
+.more-grid {
+  display: grid;
+  gap: 16px;
+}
+
+@media (min-width: 860px) {
+  .more-grid {
+    grid-template-columns: 1.15fr 1fr;
+  }
+}
+
+.more-card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 24px;
+}
+
+.more-card .icon-tile {
+  margin-bottom: 4px;
+}
+
+.more-card p {
+  color: var(--body);
+}
+
+.more-card .row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.icon-tile {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-control);
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.icon-tile svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+/* The Windows question, inside its panel. */
+.tab-panel .qa {
+  margin-top: 6px;
+}
+
+/* ---------- Questions (FAQ) and the guide: a topic list beside the text ---------- */
+
+.doc-layout {
+  display: grid;
+  gap: 32px;
+  padding-bottom: clamp(48px, 6vw, 96px);
+}
+
+.toc {
+  position: relative;
+  min-width: 0;
+}
+
+.toc ul {
+  list-style: none;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scrollbar-width: none;
+}
+
+.toc ul::-webkit-scrollbar {
+  display: none;
+}
+
+.toc a {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  color: var(--body);
+  font-size: 14.5px;
+  white-space: nowrap;
+  text-decoration: none;
+  transition:
+    color var(--dur-quick),
+    border-color var(--dur-quick),
+    background-color var(--dur-quick);
+}
+
+.toc a .num {
+  color: var(--mute);
+  font-size: 12.5px;
+}
+
+.toc a:hover {
+  color: var(--ink);
+}
+
+.toc a[aria-current='true'] {
+  border-color: color-mix(in oklch, var(--fuse) 45%, transparent);
+  background: var(--fuse-soft);
+  color: var(--ink);
+}
+
+.doc-group {
+  display: grid;
+  gap: 14px;
+  padding-top: 8px;
+  scroll-margin-top: calc(var(--nav-h) + 24px);
+}
+
+.doc-group + .doc-group {
+  margin-top: clamp(40px, 5vw, 64px);
+}
+
+.doc-group > h2 {
+  font-size: clamp(1.6rem, 1.2rem + 1.2vw, 2.1rem);
+  letter-spacing: -0.03em;
+}
+
+@media (min-width: 960px) {
+  .doc-layout {
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 64px;
+  }
+  .toc ul {
+    position: sticky;
+    top: calc(var(--nav-h) + 32px);
+    flex-direction: column;
+    gap: 2px;
+    overflow: visible;
+    padding: 0;
+  }
+  .toc a {
+    justify-content: space-between;
+    width: 100%;
+    border-color: transparent;
+    border-radius: var(--r-control);
+  }
+  .toc a[aria-current='true'] {
+    border-color: transparent;
+  }
+}
+
+/* ---------- Support ---------- */
+
+.support-grid {
+  display: grid;
+  gap: 16px;
+  padding-bottom: clamp(48px, 6vw, 96px);
+}
+
+@media (min-width: 900px) {
+  .support-grid {
+    grid-template-columns: 1fr 1.1fr;
+    align-items: start;
+  }
+}
+
+.support-lead {
+  display: grid;
+  gap: 24px;
+  padding: clamp(24px, 3vw, 36px);
+}
+
+.support-lead > p {
+  color: var(--body);
+  font-size: 17.5px;
+  line-height: 1.6;
+}
+
+.support-lead strong {
+  color: var(--ink);
+}
+
+.lead-facts {
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+
+.lead-facts li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lead-facts svg {
+  width: 20px;
+  height: 20px;
+  fill: var(--fuse);
+}
+
+.support-lead .btn .num:not(:empty) {
+  padding-left: 10px;
+  border-left: 1px solid oklch(0 0 0 / 0.18);
+}
+
+.ways {
+  display: grid;
+  padding: 6px;
+}
+
+.way {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  min-height: 72px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: calc(var(--r-panel) - 4px);
+  background: transparent;
+  color: var(--body);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--dur-quick);
+}
+
+.way + .way {
+  box-shadow: 0 -1px 0 var(--hairline);
+}
+
+.way:hover {
+  background: var(--surface-2);
+  box-shadow: none;
+}
+
+.way:hover + .way {
+  box-shadow: none;
+}
+
+.way strong {
+  display: block;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.way small {
+  display: block;
+  color: var(--mute);
+  font-size: 14px;
+}
+
+.way > svg {
+  width: 18px;
+  height: 18px;
+  fill: var(--mute);
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    fill var(--dur-quick);
+}
+
+.way:hover > svg {
+  fill: var(--fuse);
+  transform: translate(2px, -2px);
+}
+
+/* First open on a Mac: three steps. */
+.first-open {
+  display: grid;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.first-open .sub {
+  max-width: 44em;
+  color: var(--body);
+}
+
+.open-steps {
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+
+.open-steps li {
+  display: grid;
+  gap: 6px;
+  padding: 18px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-panel);
+  background: var(--surface-1);
+}
+
+.open-steps strong {
+  color: var(--ink);
+}
+
+.step-ic svg {
+  width: 22px;
+  height: 22px;
+  fill: var(--fuse);
+}
+
+@media (min-width: 860px) {
+  .open-steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

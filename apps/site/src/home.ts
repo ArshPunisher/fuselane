@@ -1,6 +1,7 @@
 // Home: the fusion hero, the "combine your networks" toy, and the download button
 // for the visitor's system.
 import { detectOs, fileUrl, latestVersion } from './common'
+import './site.css'
 import { startFusion } from './fusion'
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)

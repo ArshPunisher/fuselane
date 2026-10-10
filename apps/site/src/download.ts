@@ -1,6 +1,7 @@
 // Download page: the visitor's system picked, links to the exact files of the
 // current version (from the signed update feed), and each file's size.
 import { REPO, detectOs, fileUrl, latestVersion, type Os } from './common'
+import './css/pages.css'
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)
 

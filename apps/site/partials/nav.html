@@ -1,66 +1,73 @@
 <a class="skip" href="#main">Skip to content</a>
 <div class="nav-sentinel" aria-hidden="true"></div>
 <header class="nav" data-nav>
-  <a class="wordmark" href="{{base}}" translate="no" aria-label="Fuselane home">
-    <svg class="mark" viewBox="0 0 512 512" aria-hidden="true">
-      <g fill="none" stroke-linecap="round" stroke-width="34">
-        <path
-          class="lane l1"
-          pathLength="1"
-          d="M70 150 C 180 150, 220 256, 300 256"
-          stroke="var(--lane-tide)"
-        />
-        <path class="lane l2" pathLength="1" d="M70 256 L 300 256" stroke="var(--lane-volt)" />
-        <path
-          class="lane l3"
-          pathLength="1"
-          d="M70 362 C 180 362, 220 256, 300 256"
-          stroke="var(--lane-iris)"
-        />
-        <path
-          class="fuse"
-          pathLength="1"
-          d="M300 256 L 442 256"
-          stroke="var(--fuse)"
-          stroke-width="46"
-        />
-      </g>
-    </svg>
-    <span>Fuselane</span>
-  </a>
-  <nav class="nav-main" aria-label="Main">
-    <div class="nav-track">
-      <span class="nav-glide" aria-hidden="true"></span>
-      <ul class="nav-links">
-        <li><a href="{{base}}#features">Features</a></li>
-        <li><a href="{{base}}#send">Send</a></li>
-        <li><a href="{{base}}faq/" data-page="/faq/">FAQ</a></li>
-        <li><a href="{{base}}support/" data-page="/support/">Support</a></li>
-      </ul>
-    </div>
-    <a
-      class="star"
-      href="https://github.com/ArshPunisher/fuselane"
-      aria-label="Fuselane on GitHub (star it)"
-    >
-      <i data-icon="github"></i>
-      <span class="count num" data-stars></span>
+  <div class="nav-inner wrap">
+    <a class="wordmark" href="{{base}}" translate="no" aria-label="Fuselane home">
+      <svg class="mark" viewBox="0 0 512 512" aria-hidden="true">
+        <g fill="none" stroke-linecap="round" stroke-width="34">
+          <path
+            class="lane l1"
+            pathLength="1"
+            d="M70 150 C 180 150, 220 256, 300 256"
+            stroke="var(--lane-tide)"
+          />
+          <path class="lane l2" pathLength="1" d="M70 256 L 300 256" stroke="var(--lane-volt)" />
+          <path
+            class="lane l3"
+            pathLength="1"
+            d="M70 362 C 180 362, 220 256, 300 256"
+            stroke="var(--lane-iris)"
+          />
+          <path
+            class="fuse"
+            pathLength="1"
+            d="M300 256 L 442 256"
+            stroke="var(--fuse)"
+            stroke-width="46"
+          />
+        </g>
+      </svg>
+      <span>Fuselane</span>
     </a>
-    <a class="nav-cta" href="{{base}}download/" data-page="/download/"
-      ><i data-icon="download"></i>Download</a
-    >
-  </nav>
-  <button class="nav-menu" type="button" aria-expanded="false" aria-controls="nav-sheet">
-    <i data-icon="menu"></i>
-    <span class="sr-only">Menu</span>
-  </button>
+    <nav class="nav-main" aria-label="Main">
+      <div class="nav-track">
+        <span class="nav-glide" aria-hidden="true"></span>
+        <ul class="nav-links">
+          <li><a href="{{base}}#features">Features</a></li>
+          <li><a href="{{base}}#send">Send</a></li>
+          <li><a href="{{base}}faq/" data-page="/faq/">FAQ</a></li>
+          <li><a href="{{base}}support/" data-page="/support/">Support</a></li>
+        </ul>
+      </div>
+      <a
+        class="star"
+        href="https://github.com/ArshPunisher/fuselane"
+        aria-label="Fuselane on GitHub (star it)"
+      >
+        <i data-icon="github"></i>
+        <span class="count num" data-stars></span>
+      </a>
+      <a class="btn btn-primary nav-cta" href="{{base}}download/" data-page="/download/"
+        ><i data-icon="download"></i>Download</a
+      >
+    </nav>
+    <button class="nav-menu" type="button" aria-expanded="false" aria-controls="nav-sheet">
+      <i data-icon="menu"></i>
+      <span class="sr-only">Menu</span>
+    </button>
+  </div>
+  <span class="nav-progress" aria-hidden="true"></span>
 </header>
 <nav class="nav-sheet" id="nav-sheet" aria-label="Pages" hidden>
   <ul>
-    <li><a href="{{base}}#features">Features</a></li>
-    <li><a href="{{base}}#send">Send</a></li>
-    <li><a href="{{base}}download/" data-page="/download/">Download</a></li>
-    <li><a href="{{base}}faq/" data-page="/faq/">FAQ</a></li>
-    <li><a href="{{base}}support/" data-page="/support/">Support</a></li>
+    <li style="--i: 0"><a href="{{base}}#features">Features</a></li>
+    <li style="--i: 1"><a href="{{base}}#send">Send</a></li>
+    <li style="--i: 2"><a href="{{base}}faq/" data-page="/faq/">FAQ</a></li>
+    <li style="--i: 3"><a href="{{base}}support/" data-page="/support/">Support</a></li>
+    <li style="--i: 4">
+      <a class="btn btn-primary" href="{{base}}download/" data-page="/download/"
+        ><i data-icon="download"></i>Download</a
+      >
+    </li>
   </ul>
 </nav>

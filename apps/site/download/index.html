@@ -3,8 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#0b0d12" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#0a0c11" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f9fafc" media="(prefers-color-scheme: light)" />
     <title>Download Fuselane for macOS, Windows and Linux</title>
     <meta
       name="description"
@@ -227,35 +228,25 @@
         </div>
       </section>
 
-      <section class="section" aria-labelledby="more-title" style="padding-top: 64px">
-        <h2
-          id="more-title"
-          class="reveal"
-          style="font-size: clamp(28px, 4vw, 40px); margin-bottom: 20px"
-        >
-          More ways to use it
-        </h2>
-        <div class="bento" style="grid-auto-rows: auto">
-          <article class="panel cell cell-b spot reveal">
-            <div class="icon-row">
-              <span class="icon-tile"><i data-icon="terminal"></i></span>
-            </div>
+      <section class="more section" aria-labelledby="more-title">
+        <h2 id="more-title" class="reveal">More ways to use it</h2>
+        <div class="more-grid">
+          <article class="panel more-card spot reveal">
+            <span class="icon-tile"><i data-icon="terminal"></i></span>
             <h3>Command line</h3>
             <p>
               The same engine for scripts and servers:
               <code class="num">fuselane get &lt;link&gt;</code>.
             </p>
-            <p class="art cta">
+            <p class="row">
               <a class="btn btn-small" data-cli="macos-universal.tar.gz">macOS</a>
               <a class="btn btn-small" data-cli="windows-x64.exe">Windows</a>
               <a class="btn btn-small" data-cli="linux-x64.tar.gz">Linux x64</a>
               <a class="btn btn-small" data-cli="linux-arm64.tar.gz">Linux arm64</a>
             </p>
           </article>
-          <article class="panel cell cell-e spot reveal" style="--i: 1">
-            <div class="icon-row">
-              <span class="icon-tile"><i data-icon="puzzle"></i></span>
-            </div>
+          <article class="panel more-card spot reveal" style="--i: 1">
+            <span class="icon-tile"><i data-icon="puzzle"></i></span>
             <h3>Browser extension</h3>
             <p>
               Sends big downloads from Chrome, Edge and Brave to the app. It is in review on the
