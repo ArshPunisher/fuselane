@@ -9,6 +9,7 @@ mod api_bridge;
 mod automation;
 mod battery;
 mod feeds;
+mod flatpak;
 mod media;
 mod native;
 mod nearby;
@@ -52,6 +53,8 @@ struct AppInfo {
     default_dir: String,
     /// Set on the first launch after an update, for a one-time "Updated" message.
     updated_from: Option<String>,
+    /// Running as a Flatpak: no in-app updates, no browser extension (flatpak.rs).
+    flatpak: bool,
 }
 
 #[tauri::command]
@@ -60,6 +63,7 @@ fn app_info(svc: State<'_>) -> AppInfo {
         version: env!("CARGO_PKG_VERSION"),
         default_dir: svc.default_dir().to_string_lossy().into_owned(),
         updated_from: svc.updated_from().map(str::to_string),
+        flatpak: flatpak::active(),
     }
 }
 
@@ -238,6 +242,9 @@ async fn set_automation(
     svc: State<'_>,
     settings: automation::Automation,
 ) -> Result<service::AutomationView, UiError> {
+    if let Some(e) = flatpak::when_done_error(flatpak::id(), settings.when_done) {
+        return Err(e);
+    }
     svc.set_automation(settings)
 }
 
@@ -571,6 +578,10 @@ struct UpdateInfo {
 #[tauri::command]
 async fn check_update(app: tauri::AppHandle) -> Result<Option<UpdateInfo>, UiError> {
     use tauri_plugin_updater::UpdaterExt;
+    // Flathub updates a Flatpak; the window doesn't ask, and this says why if it does.
+    if let Some(e) = flatpak::updates_error(flatpak::id()) {
+        return Err(e);
+    }
     let updater = app
         .updater()
         .map_err(|e| ui_error("update-check", format!("Couldn't check for updates: {e}")))?;
@@ -604,6 +615,10 @@ async fn check_update(app: tauri::AppHandle) -> Result<Option<UpdateInfo>, UiErr
 #[tauri::command]
 async fn install_update(app: tauri::AppHandle, svc: State<'_>) -> Result<(), UiError> {
     use tauri_plugin_updater::UpdaterExt;
+    // The app's files are read-only in a Flatpak, and the feed offers the AppImage.
+    if let Some(e) = flatpak::updates_error(flatpak::id()) {
+        return Err(e);
+    }
     let fail = |e: &dyn std::fmt::Display| {
         ui_error(
             "update-failed",
@@ -1593,6 +1608,10 @@ fn open_torrents(svc: &Arc<Service>) -> Arc<torrents::Torrents> {
 /// updated app fixes its own manifests.
 fn register_browser_host() {
     use fuselane_api::hosts;
+    // The browsers' folders are on the host, out of the sandbox's reach.
+    if !flatpak::registers_browsers(flatpak::id()) {
+        return;
+    }
     let (Ok(current), Ok(home)) = (std::env::current_exe(), fuselane_core::home::home()) else {
         return;
     };
@@ -1747,9 +1766,8 @@ fn main() {
             }
         });
     }
-    let result = tauri::Builder::default()
-        // Must be registered first: a second launch focuses the existing window.
-        .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+    let mut single_instance =
+        tauri_plugin_single_instance::Builder::new().callback(|app, argv, cwd| {
             show_main(app);
             // A second launch (double-clicked .torrent, a browser's magnet link on
             // Windows or Linux) hands its arguments to this instance.
@@ -1757,7 +1775,16 @@ fn main() {
             for t in opens::from_args_in(argv, Some(std::path::Path::new(&cwd))) {
                 svc.open_request(t.as_draft());
             }
-        }))
+        });
+    // Its D-Bus name (Linux) is "<id>.SingleInstance". In a Flatpak the id is the
+    // Flatpak's: the sandbox lets an app own names under its own id without an
+    // extra --own-name. Elsewhere it stays the Tauri identifier, as before.
+    if let Some(id) = flatpak::id() {
+        single_instance = single_instance.dbus_id(id);
+    }
+    let result = tauri::Builder::default()
+        // Must be registered first: a second launch focuses the existing window.
+        .plugin(single_instance.build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
