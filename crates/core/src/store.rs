@@ -282,13 +282,9 @@ impl Store {
         // Set before anything else touches the file, so every statement here
         // (including the WAL switch) waits for another process instead of failing.
         conn.busy_timeout(std::time::Duration::from_secs(5))?;
-        conn.pragma_update(None, "journal_mode", "WAL")?;
-        conn.pragma_update(None, "synchronous", "NORMAL")?;
-        // Integrity first: a garbage file must fail here, not later.
-        let ok: String = conn.query_row("PRAGMA quick_check", [], |r| r.get(0))?;
-        if ok != "ok" {
-            return Err(StoreError::Sql(rusqlite::Error::InvalidQuery));
-        }
+        // A list from a newer Fuselane is refused before anything writes to it
+        // (the WAL switch rewrites the header), so the newer copy finds it as it
+        // left it. It is never moved aside as damaged either.
         let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
         let known = MIGRATIONS.len() as i64;
         if version > known {
@@ -296,6 +292,13 @@ impl Store {
                 found: version,
                 known,
             });
+        }
+        conn.pragma_update(None, "journal_mode", "WAL")?;
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
+        // Integrity first: a garbage file must fail here, not later.
+        let ok: String = conn.query_row("PRAGMA quick_check", [], |r| r.get(0))?;
+        if ok != "ok" {
+            return Err(StoreError::Sql(rusqlite::Error::InvalidQuery));
         }
         let tx = conn.transaction()?;
         for (i, sql) in MIGRATIONS.iter().enumerate().skip(version as usize) {
@@ -1001,11 +1004,12 @@ mod tests {
             let c = Connection::open(&p).unwrap();
             c.pragma_update(None, "user_version", 99).unwrap();
         }
+        let before = std::fs::read(&p).unwrap();
         assert!(matches!(
             Store::open(&p),
             Err(StoreError::TooNew { found: 99, .. })
         ));
-        assert!(p.exists(), "never touched");
+        assert_eq!(std::fs::read(&p).unwrap(), before, "never touched");
     }
 
     #[test]
