@@ -2,8 +2,9 @@
 //! checked on request, and handed to the core, whose connection planner every
 //! download, preview and page read goes through.
 //!
-//! The password is stored with the other network settings on this computer and
-//! never goes back to the window: the window learns only that one is saved.
+//! The password goes to the system's keychain where there is one (`secrets`,
+//! SECURITY.md T16), else into the network settings on this computer. It never
+//! goes back to the window: the window learns only that one is saved, and where.
 //! Torrents don't use these proxies; they connect to peers directly (ADR 0006).
 
 use std::collections::HashMap;
@@ -13,6 +14,7 @@ use std::time::Duration;
 use fuselane_core::proxy::{Login, NetProxy, Proxy, ProxyError, ProxyKind};
 use serde::{Deserialize, Serialize};
 
+use super::secrets::{self, PasswordHome};
 use super::{NetPref, Service, UiError, lock, valid_device};
 
 /// Which protocol the proxy speaks.
@@ -34,12 +36,16 @@ pub struct ProxyPref {
     pub port: u16,
     #[serde(default)]
     pub username: Option<String>,
-    /// Stored only; never sent to the window.
+    /// Held in memory; on disk only while there's no keychain. Never sent
+    /// to the window.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub password: Option<String>,
     /// A password is saved (for the window, which never sees it).
     #[serde(default)]
     pub has_password: bool,
+    /// Where the password is kept, so the window and diagnostics can say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub password_in: Option<PasswordHome>,
 }
 
 impl std::fmt::Debug for ProxyPref {
@@ -167,13 +173,14 @@ pub(super) fn validated(
             ));
         }
     }
-    let password = match req.password {
-        // Nothing typed: keep the saved password, while there's a login for it.
+    let (password, password_in) = match req.password {
+        // Nothing typed: keep the saved password, while there's a login for it
+        // (also one in a keychain that couldn't be read yet).
         None => saved
-            .and_then(|s| s.password.clone())
-            .filter(|_| username.is_some()),
-        Some(p) if p.is_empty() => None,
-        Some(p) => Some(p),
+            .filter(|_| username.is_some())
+            .map_or((None, None), |s| (s.password.clone(), s.password_in)),
+        Some(p) if p.is_empty() => (None, None),
+        Some(p) => (Some(p), None),
     };
     if let Some(p) = &password {
         if username.is_none() {
@@ -193,13 +200,15 @@ pub(super) fn validated(
         kind: req.kind,
         host,
         port,
-        has_password: password.is_some(),
+        has_password: password.is_some() || password_in == Some(PasswordHome::Keychain),
         password,
+        password_in,
         username,
     })
 }
 
 /// Whether a proxy read back from disk is still one the window could have set.
+/// (Its password may be in the keychain, which needs a username too.)
 pub(super) fn saved_ok(p: &ProxyPref) -> bool {
     validated(
         ProxyRequest {
@@ -211,15 +220,22 @@ pub(super) fn saved_ok(p: &ProxyPref) -> bool {
         },
         None,
     )
-    .is_ok_and(|v| v == *p)
+    .is_ok_and(|v| {
+        (&v.kind, &v.host, v.port, &v.username, &v.password)
+            == (&p.kind, &p.host, p.port, &p.username, &p.password)
+    }) && (p.password_in != Some(PasswordHome::Keychain) || p.username.is_some())
 }
 
-/// The prefs as the window sees them: passwords replaced by `has_password`.
+/// The prefs as the window sees them: passwords replaced by `has_password`
+/// (and where it's kept).
 pub(super) fn masked(mut prefs: Vec<NetPref>) -> Vec<NetPref> {
     for p in &mut prefs {
         if let Some(x) = &mut p.proxy {
-            x.has_password = x.password.is_some();
+            x.has_password = x.password.is_some() || x.password_in == Some(PasswordHome::Keychain);
             x.password = None;
+            if !x.has_password {
+                x.password_in = None;
+            }
         }
     }
     prefs
@@ -277,7 +293,32 @@ impl Service {
     }
 
     /// Hands the saved proxies to the core, so every connection uses them.
+    /// A password the keychain couldn't give before (locked) is asked for again.
     pub(super) fn apply_proxies(&self) {
+        let unread = |p: &NetPref| {
+            p.proxy.as_ref().is_some_and(|x| {
+                x.password.is_none() && x.password_in == Some(PasswordHome::Keychain)
+            })
+        };
+        // Read outside the lock: a keychain can stop to ask the user.
+        let mut waiting: Vec<NetPref> = lock(&self.net_prefs)
+            .iter()
+            .filter(|p| unread(p))
+            .cloned()
+            .collect();
+        if !waiting.is_empty() {
+            secrets::fill(&*self.secrets, &mut waiting);
+            for pref in lock(&self.net_prefs).iter_mut() {
+                if let Some(read) = waiting.iter().find(|w| w.name == pref.name)
+                    && unread(pref)
+                    && let (Some(now), Some(got)) = (pref.proxy.as_mut(), read.proxy.as_ref())
+                {
+                    now.password.clone_from(&got.password);
+                    now.password_in = got.password_in;
+                    now.has_password = got.has_password;
+                }
+            }
+        }
         let ifaces = fuselane_netif::list().unwrap_or_default();
         let saved: Vec<(String, ProxyPref)> = lock(&self.net_prefs)
             .iter()
@@ -394,6 +435,7 @@ impl Service {
 
 #[cfg(test)]
 mod tests {
+    use super::super::secrets;
     use super::*;
 
     fn req(kind: ProxyType, host: &str, port: u32) -> ProxyRequest {
@@ -501,9 +543,6 @@ mod tests {
         let shown = serde_json::to_string(&masked(vec![pref.clone()])).unwrap();
         assert!(!shown.contains("hunter2"), "{shown}");
         assert!(shown.contains("\"hasPassword\":true"), "{shown}");
-        // Stored as saved, so it survives a restart.
-        let stored = serde_json::to_string(&pref).unwrap();
-        assert!(stored.contains("hunter2"));
         for debug in [format!("{p:?}"), format!("{r:?}"), format!("{pref:?}")] {
             assert!(
                 !debug.contains("hunter2") && !debug.contains("ann"),
@@ -532,6 +571,15 @@ mod tests {
         Service::new(store, dir.to_path_buf()).unwrap()
     }
 
+    /// A service whose keychain outlives it, like the real one across restarts.
+    fn service_with(
+        dir: &std::path::Path,
+        keys: &std::sync::Arc<secrets::Memory>,
+    ) -> std::sync::Arc<Service> {
+        let store = fuselane_core::Store::open(&dir.join("fuselane.db")).unwrap();
+        Service::with_secrets(store, dir.to_path_buf(), keys.clone()).unwrap()
+    }
+
     fn login(kind: ProxyType, host: &str, port: u32, pass: Option<&str>) -> ProxyRequest {
         ProxyRequest {
             kind,
@@ -545,7 +593,8 @@ mod tests {
     #[test]
     fn a_proxy_is_saved_masked_survives_a_restart_and_a_rename() {
         let dir = tempfile::tempdir().unwrap();
-        let svc = service(dir.path());
+        let keys = std::sync::Arc::new(secrets::Memory::default());
+        let svc = service_with(dir.path(), &keys);
         let shown = svc
             .set_network_proxy(
                 "en9",
@@ -555,13 +604,19 @@ mod tests {
         let p = shown[0].proxy.clone().unwrap();
         assert_eq!((p.host.as_str(), p.port), ("proxy.lan", 1080));
         assert_eq!((p.password, p.has_password), (None, true), "masked");
+        assert_eq!(p.password_in, Some(PasswordHome::Keychain), "says where");
         assert_eq!(svc.network_prefs(), shown);
         assert!(svc.proxied().contains(&"en9".to_string()));
-        // On disk with its password, so a restart keeps it working.
+        // In the keychain, not in the settings; a restart reads it back.
         let raw = svc.store.setting("network_prefs").unwrap().unwrap();
-        assert!(raw.contains("hunter2"));
+        assert!(!raw.contains("hunter2"), "{raw}");
+        assert_eq!(keys.entry("proxy:en9").as_deref(), Some("hunter2"));
+        assert!(
+            svc.diagnostics(&[])
+                .contains("passwords: 1 in the system keychain")
+        );
         drop(svc);
-        let svc = service(dir.path());
+        let svc = service_with(dir.path(), &keys);
         let saved = lock(&svc.net_prefs)[0].proxy.clone().unwrap();
         assert_eq!(saved.password.as_deref(), Some("hunter2"));
         // Renaming the network keeps its proxy, whatever the window sends.
@@ -583,11 +638,109 @@ mod tests {
         .unwrap();
         let p = lock(&svc.net_prefs)[0].proxy.clone().unwrap();
         assert_eq!((p.port, p.password.as_deref()), (1081, Some("hunter2")));
-        // Removing it leaves the rest of the network's settings.
+        assert_eq!(keys.entry("proxy:en9").as_deref(), Some("hunter2"));
+        // Removing it leaves the rest of the network's settings, and the
+        // keychain entry goes with it.
         let after = svc.set_network_proxy("en9", None).unwrap();
         assert_eq!(after.len(), 1);
         assert_eq!(after[0].proxy, None);
         assert!(svc.proxied().is_empty());
+        assert_eq!(keys.entry("proxy:en9"), None);
+    }
+
+    #[test]
+    fn without_a_keychain_the_password_is_kept_in_the_settings_and_moves_later() {
+        let dir = tempfile::tempdir().unwrap();
+        let keys = std::sync::Arc::new(secrets::Memory::default());
+        keys.break_it(true);
+        let svc = service_with(dir.path(), &keys);
+        let shown = svc
+            .set_network_proxy(
+                "en9",
+                Some(login(ProxyType::Http, "proxy.lan", 3128, Some("hunter2"))),
+            )
+            .unwrap();
+        let p = shown[0].proxy.clone().unwrap();
+        assert_eq!(
+            (p.password, p.has_password, p.password_in),
+            (None, true, Some(PasswordHome::Settings)),
+            "saved, masked, and the window can say where"
+        );
+        let raw = svc.store.setting("network_prefs").unwrap().unwrap();
+        assert!(raw.contains("hunter2"), "never lost");
+        assert!(
+            svc.diagnostics(&[])
+                .contains("1 in Fuselane's settings (no system keychain available)")
+        );
+        drop(svc);
+        // Next launch, with a keychain: it moves there and leaves the settings.
+        keys.break_it(false);
+        let svc = service_with(dir.path(), &keys);
+        assert_eq!(keys.entry("proxy:en9").as_deref(), Some("hunter2"));
+        let raw = svc.store.setting("network_prefs").unwrap().unwrap();
+        assert!(!raw.contains("hunter2"), "{raw}");
+        let p = lock(&svc.net_prefs)[0].proxy.clone().unwrap();
+        assert_eq!(p.password.as_deref(), Some("hunter2"), "still used");
+    }
+
+    #[test]
+    fn a_locked_keychain_at_launch_loses_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let keys = std::sync::Arc::new(secrets::Memory::default());
+        let svc = service_with(dir.path(), &keys);
+        svc.set_network_proxy(
+            "en9",
+            Some(login(ProxyType::Socks5, "proxy.lan", 1080, Some("hunter2"))),
+        )
+        .unwrap();
+        drop(svc);
+        keys.break_it(true);
+        let svc = service_with(dir.path(), &keys);
+        let p = svc.network_prefs()[0].proxy.clone().unwrap();
+        assert!(p.has_password, "still shown as saved");
+        // Renaming and changing the port meanwhile keep the keychain entry.
+        let mut renamed = svc.network_prefs()[0].clone();
+        renamed.label = Some("Office".into());
+        svc.set_network_pref(renamed).unwrap();
+        svc.set_network_proxy(
+            "en9",
+            Some(login(ProxyType::Socks5, "proxy.lan", 1081, None)),
+        )
+        .unwrap();
+        assert_eq!(keys.entry("proxy:en9").as_deref(), Some("hunter2"));
+        // Once it opens, the next save reads the password.
+        keys.break_it(false);
+        svc.apply_proxies();
+        let p = lock(&svc.net_prefs)[0].proxy.clone().unwrap();
+        assert_eq!((p.port, p.password.as_deref()), (1081, Some("hunter2")));
+    }
+
+    #[test]
+    fn a_password_saved_by_an_older_version_moves_to_the_keychain() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = fuselane_core::Store::open(&dir.path().join("fuselane.db")).unwrap();
+        store
+            .set_setting(
+                "network_prefs",
+                r#"[{"name":"en9","label":"Office","lane":null,"useFor":"always","hours":null,
+                "proxy":{"kind":"socks5","host":"proxy.lan","port":1080,"username":"ann",
+                "password":"hunter2","hasPassword":true}}]"#,
+            )
+            .unwrap();
+        drop(store);
+        let keys = std::sync::Arc::new(secrets::Memory::default());
+        let svc = service_with(dir.path(), &keys);
+        assert_eq!(keys.entry("proxy:en9").as_deref(), Some("hunter2"));
+        let raw = svc.store.setting("network_prefs").unwrap().unwrap();
+        assert!(!raw.contains("hunter2"), "{raw}");
+        assert!(raw.contains("Office"), "the rest kept");
+        // Forgetting the network removes the entry too.
+        let mut plain = svc.network_prefs()[0].clone();
+        plain.label = None;
+        svc.set_network_pref(plain).unwrap();
+        svc.set_network_proxy("en9", None).unwrap();
+        assert!(svc.network_prefs().is_empty());
+        assert_eq!(keys.entry("proxy:en9"), None);
     }
 
     #[test]

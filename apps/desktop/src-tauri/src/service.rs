@@ -28,6 +28,7 @@ pub mod netcheck;
 mod notes;
 pub use notes::NetNote;
 mod proxy;
+mod secrets;
 pub use daily::UsageHistory;
 pub use proxy::{ProxyPref, ProxyRequest};
 
@@ -613,6 +614,8 @@ pub struct Service {
     /// Limits as saved (the limiter holds the effective ones, after slow mode).
     saved_limits: Mutex<LimitsView>,
     net_prefs: Mutex<Vec<NetPref>>,
+    /// Where proxy passwords go: the system keychain (an in-memory one in tests).
+    secrets: Arc<dyn secrets::Secrets>,
     allowances: Mutex<Vec<Allowance>>,
     usage: Mutex<HashMap<String, Usage>>,
     /// Running jobs paused because every network reached its allowance.
@@ -907,6 +910,20 @@ fn live(id: i64, s: &Snapshot, nets: &[(String, String, String)]) -> Live {
 impl Service {
     /// Opens the service. Jobs a crash left running come back paused (L-53).
     pub fn new(store: Store, default_dir: PathBuf) -> Result<Arc<Service>, UiError> {
+        // Tests never touch the real keychain (CI machines have none).
+        #[cfg(not(test))]
+        let secrets: Arc<dyn secrets::Secrets> = Arc::new(secrets::OsKeychain);
+        #[cfg(test)]
+        let secrets: Arc<dyn secrets::Secrets> = Arc::new(secrets::Memory::default());
+        Service::with_secrets(store, default_dir, secrets)
+    }
+
+    /// Opens the service with proxy passwords kept in `secrets`.
+    fn with_secrets(
+        store: Store,
+        default_dir: PathBuf,
+        secrets: Arc<dyn secrets::Secrets>,
+    ) -> Result<Arc<Service>, UiError> {
         store.recover_interrupted().map_err(store_error)?;
         // Saved limits come back on launch; a damaged value is ignored, not fatal.
         let limiter = Arc::new(Limiter::default());
@@ -983,13 +1000,15 @@ impl Service {
                 ))
             })
             .collect();
-        let net_prefs: Vec<NetPref> = store
+        let mut net_prefs: Vec<NetPref> = store
             .setting("network_prefs")
             .ok()
             .flatten()
             .and_then(|v| serde_json::from_str::<Vec<NetPref>>(&v).ok())
             .map(|v| v.into_iter().filter_map(|p| p.validated().ok()).collect())
             .unwrap_or_default();
+        // Proxy passwords from the keychain; ones still in the settings move there.
+        let resave = secrets::fill(&*secrets, &mut net_prefs);
         if let Some(saved) = store
             .setting("limits")
             .ok()
@@ -1027,7 +1046,8 @@ impl Service {
             retries: Mutex::new(HashMap::new()),
             limiter,
             saved_limits: Mutex::new(saved_limits),
-            net_prefs: Mutex::new(net_prefs),
+            net_prefs: Mutex::new(net_prefs.clone()),
+            secrets,
             allowances: Mutex::new(allowances),
             usage: Mutex::new(usage),
             allowance_paused: Mutex::default(),
@@ -1050,6 +1070,10 @@ impl Service {
             watch_clipboard: std::sync::atomic::AtomicBool::new(watch_clipboard),
             last_clip: Mutex::new(None),
         });
+        if resave {
+            // Not fatal: the settings still hold what they held.
+            let _ = svc.persist_prefs(&net_prefs, net_prefs.clone());
+        }
         svc.apply_proxies();
         Ok(svc)
     }
@@ -1283,6 +1307,19 @@ impl Service {
             "\nSpeed limits: overall {} B/s, {} per-network",
             limits.global,
             limits.networks.len()
+        );
+        let homes: Vec<Option<secrets::PasswordHome>> = lock(&self.net_prefs)
+            .iter()
+            .filter_map(|p| p.proxy.as_ref().map(|x| x.password_in))
+            .collect();
+        let count = |h| homes.iter().filter(|x| **x == Some(h)).count();
+        let _ = writeln!(
+            r,
+            "\nProxies: {}; passwords: {} in the system keychain, {} in Fuselane's settings \
+             (no system keychain available)",
+            homes.len(),
+            count(secrets::PasswordHome::Keychain),
+            count(secrets::PasswordHome::Settings),
         );
         let _ = writeln!(r, "\nRecent downloads (newest first):");
         for j in self.store.list().unwrap_or_default().iter().take(20) {
@@ -2383,13 +2420,36 @@ impl Service {
             ));
         }
         all.sort_by(|a, b| a.name.cmp(&b.name));
-        let json = serde_json::to_string(&all).map_err(store_error)?;
-        self.store
-            .set_setting("network_prefs", &json)
-            .map_err(store_error)?;
-        *lock(&self.net_prefs) = all.clone();
+        let before = lock(&self.net_prefs).clone();
+        let all = self.persist_prefs(&before, all)?;
         // Names show in proxy messages, and proxies are used from now on.
         self.apply_proxies();
+        Ok(all)
+    }
+
+    /// Writes every network's prefs: proxy passwords into the keychain where
+    /// it takes them, the rest into the settings. Entries no longer used are
+    /// removed from the keychain once the settings are saved; if the settings
+    /// can't be saved, the keychain is put back as it was.
+    fn persist_prefs(
+        &self,
+        before: &[NetPref],
+        mut all: Vec<NetPref>,
+    ) -> Result<Vec<NetPref>, UiError> {
+        let (disk, done) = secrets::stash(&*self.secrets, before, &mut all);
+        let saved = serde_json::to_string(&disk)
+            .map_err(store_error)
+            .and_then(|json| {
+                self.store
+                    .set_setting("network_prefs", &json)
+                    .map_err(store_error)
+            });
+        if let Err(e) = saved {
+            secrets::rollback(&*self.secrets, before, done);
+            return Err(e);
+        }
+        secrets::forget_stale(&*self.secrets, before, &all);
+        *lock(&self.net_prefs) = all.clone();
         Ok(all)
     }
 
@@ -4968,7 +5028,8 @@ mod tests {
                     port: 1080,
                     username: None,
                     password: None,
-                    has_password: false,
+                    has_password: true,
+                    password_in: Some(secrets::PasswordHome::Keychain),
                 }),
             ),
             (

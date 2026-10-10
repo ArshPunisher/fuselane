@@ -381,7 +381,11 @@ export interface ProxyPref {
   port: number
   username: string | null
   hasPassword: boolean
+  /** Where the saved password is kept: the system keychain, or Fuselane's settings when there's none. */
+  passwordIn?: PasswordHome
 }
+
+export type PasswordHome = 'keychain' | 'settings'
 
 /** Sets a network's proxy. Leave out the password to keep the saved one; '' removes it. */
 export interface ProxyRequest {
