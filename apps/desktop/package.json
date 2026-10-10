@@ -6,6 +6,7 @@
     "dev": "vite --port 5190 --strictPort",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "i18n:check": "node scripts/i18n-check.ts",
     "test": "playwright test",
     "tauri": "tauri"
   },
