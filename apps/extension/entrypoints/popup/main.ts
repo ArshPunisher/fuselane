@@ -3,6 +3,7 @@ import { appStatus } from '../../lib/status.ts'
 import { offerLink } from '../../lib/handoff.ts'
 import { findOnPage, mediaList, type MediaItem } from '../../lib/media.ts'
 import { getSession } from '../../lib/session.ts'
+import { feedList, findFeeds, type FoundFeed } from '../../lib/feeds.ts'
 import './style.css'
 
 const status = document.querySelector<HTMLParagraphElement>('#status')!
@@ -64,6 +65,43 @@ async function onThisPage() {
         "Fuselane isn't running, or this version can't get videos yet. Open it and try again."
     }
   })
+  // A site with a feed (podcasts, blogs, releases): follow it in Fuselane, and
+  // new files download by themselves.
+  let feeds: FoundFeed[] = []
+  try {
+    const [res] = await browser.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: findFeeds,
+    })
+    feeds = feedList((res?.result as FoundFeed[]) ?? [], tab.url)
+  } catch {
+    feeds = []
+  }
+  const feedBox = document.querySelector<HTMLDivElement>('#feeds')!
+  for (const f of feeds) {
+    const b = document.createElement('button')
+    b.type = 'button'
+    b.className = 'video-btn'
+    b.textContent =
+      feeds.length > 1 && f.title
+        ? `Follow “${f.title}” in Fuselane`
+        : "Follow this site's feed in Fuselane"
+    b.title = f.href
+    b.addEventListener('click', async () => {
+      b.disabled = true
+      const reply = (await browser.runtime
+        .sendNativeMessage('app.fuselane.host', { v: 1, type: 'page.feed', url: f.href })
+        .catch(() => null)) as { type?: string } | null
+      if (reply?.type === 'page.feed.opened') {
+        window.close()
+      } else {
+        b.disabled = false
+        said.textContent =
+          "Fuselane isn't running, or this version can't follow feeds yet. Open it and try again."
+      }
+    })
+    feedBox.append(b)
+  }
   if (!items.length) {
     said.textContent = 'No videos or file links here.'
     return
