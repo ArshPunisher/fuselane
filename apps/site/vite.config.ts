@@ -17,6 +17,27 @@ const LISTED: [path: string, freq: string, priority: string, name: string][] = [
   ['/support/', 'monthly', '0.5', 'Support'],
 ]
 
+// Content Security Policy for Cloudflare Pages. Strict on purpose: only our own
+// scripts run (no inline script, no eval; the JSON-LD blocks are data, not
+// script), the only outside call is GitHub's API (star count, file sizes), no
+// page can be framed, and forms can't post anywhere. 'unsafe-inline' for styles
+// covers the layout variables in style attributes and the 404 page's own
+// stylesheet; images allow data: for the film grain.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "font-src 'self'",
+  "connect-src 'self' https://api.github.com",
+  "manifest-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+  'upgrade-insecure-requests',
+].join('; ')
+
 const text = (html: string) =>
   html
     .replace(/<[^>]+>/g, ' ')
@@ -144,6 +165,7 @@ function seo(): Plugin {
         fileName: '_headers',
         source: [
           '/*',
+          `  Content-Security-Policy: ${CSP}`,
           '  X-Content-Type-Options: nosniff',
           '  Referrer-Policy: strict-origin-when-cross-origin',
           '  Permissions-Policy: camera=(), microphone=(), geolocation=()',
