@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { defineConfig, type Plugin } from 'vite'
 
@@ -37,6 +38,40 @@ function sitemap() {
       `  <url>\n    <loc>${SITE}${p}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>${freq}</changefreq>\n    <priority>${priority}</priority>\n  </url>`,
   ).join('\n')
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`
+}
+
+/**
+ * Shared markup: `<!-- @nav -->` and `<!-- @footer -->` become the navbar and
+ * the footer, with links made relative to the page's depth and the current
+ * page marked, so it works without JavaScript and in both places it's hosted.
+ */
+function partials(): Plugin {
+  const dir = resolve(import.meta.dirname, 'partials')
+  const read = (name: string) => readFileSync(resolve(dir, `${name}.html`), 'utf8')
+  return {
+    name: 'fuselane-partials',
+    transformIndexHtml: {
+      order: 'pre',
+      handler(html, ctx) {
+        if (!html.includes('<!-- @nav -->') && !html.includes('<!-- @footer -->')) return html
+        const path = ctx.path.replace(/index\.html$/, '')
+        const depth = path.split('/').filter(Boolean).length
+        const base = depth ? '../'.repeat(depth) : './'
+        const fill = (part: string) =>
+          part
+            .replaceAll('{{base}}', base)
+            .replace(/ data-page="([^"]+)"/g, (_, page: string) =>
+              page === path ? ' aria-current="page"' : '',
+            )
+        return html
+          .replace('<!-- @nav -->', fill(read('nav')))
+          .replace('<!-- @footer -->', fill(read('footer')))
+      },
+    },
+    handleHotUpdate({ file, server }) {
+      if (file.startsWith(dir)) server.ws.send({ type: 'full-reload' })
+    },
+  }
 }
 
 /** Structured data, the sitemap and Cloudflare's headers, made from the pages themselves. */
@@ -126,7 +161,7 @@ function seo(): Plugin {
 
 export default defineConfig({
   base: './',
-  plugins: [seo()],
+  plugins: [partials(), seo()],
   build: {
     target: 'es2022',
     rollupOptions: {

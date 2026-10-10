@@ -64,70 +64,7 @@
     </script>
   </head>
   <body>
-    <a class="skip" href="#main">Skip to content</a>
-    <div class="nav-sentinel" aria-hidden="true"></div>
-    <header class="nav" data-nav>
-      <a class="wordmark" href="./" translate="no" aria-label="Fuselane home">
-        <svg class="mark" viewBox="0 0 512 512" aria-hidden="true">
-          <g fill="none" stroke-linecap="round" stroke-width="34">
-            <path
-              class="lane l1"
-              pathLength="1"
-              d="M70 150 C 180 150, 220 256, 300 256"
-              stroke="var(--lane-tide)"
-            />
-            <path class="lane l2" pathLength="1" d="M70 256 L 300 256" stroke="var(--lane-volt)" />
-            <path
-              class="lane l3"
-              pathLength="1"
-              d="M70 362 C 180 362, 220 256, 300 256"
-              stroke="var(--lane-iris)"
-            />
-            <path
-              class="fuse"
-              pathLength="1"
-              d="M300 256 L 442 256"
-              stroke="var(--fuse)"
-              stroke-width="46"
-            />
-          </g>
-        </svg>
-        <span>Fuselane</span>
-      </a>
-      <nav class="nav-main" aria-label="Main">
-        <div class="nav-track">
-          <span class="nav-glide" aria-hidden="true"></span>
-          <ul class="nav-links">
-            <li><a href="./#features">Features</a></li>
-            <li><a href="./#send">Send</a></li>
-            <li><a href="faq/">FAQ</a></li>
-            <li><a href="support/">Support</a></li>
-          </ul>
-        </div>
-        <a
-          class="star"
-          href="https://github.com/ArshPunisher/fuselane"
-          aria-label="Fuselane on GitHub (star it)"
-        >
-          <i data-icon="github"></i>
-          <span class="count num" data-stars></span>
-        </a>
-        <a class="nav-cta" href="download/"><i data-icon="download"></i>Download</a>
-      </nav>
-      <button class="nav-menu" type="button" aria-expanded="false" aria-controls="nav-sheet">
-        <i data-icon="menu"></i>
-        <span class="sr-only">Menu</span>
-      </button>
-    </header>
-    <nav class="nav-sheet" id="nav-sheet" aria-label="Pages" hidden>
-      <ul>
-        <li><a href="./#features">Features</a></li>
-        <li><a href="./#send">Send</a></li>
-        <li><a href="download/">Download</a></li>
-        <li><a href="faq/">FAQ</a></li>
-        <li><a href="support/">Support</a></li>
-      </ul>
-    </nav>
+    <!-- @nav -->
     <main id="main">
       <section class="hero wrap" aria-labelledby="hero-title">
         <div class="hero-text">
@@ -575,77 +512,7 @@
       </section>
     </main>
 
-    <footer class="foot">
-      <div class="wrap">
-        <div class="foot-grid">
-          <ul class="foot-links">
-            <li><a href="download/">Download</a></li>
-            <li><a href="faq/">FAQ</a></li>
-            <li><a href="support/">Support</a></li>
-            <li><a href="https://github.com/ArshPunisher/fuselane/releases">Release notes</a></li>
-            <li>
-              <a href="https://github.com/ArshPunisher/fuselane/blob/main/docs/PRIVACY.md"
-                >Privacy</a
-              >
-            </li>
-            <li><a href="https://github.com/ArshPunisher/fuselane">Source code</a></li>
-          </ul>
-          <small
-            >Free software under Apache-2.0. Made by
-            <a href="https://github.com/ArshPunisher">Arsh Ramgarhia</a>.</small
-          >
-        </div>
-        <svg
-          class="giant reveal"
-          viewBox="0 0 1000 200"
-          preserveAspectRatio="none"
-          aria-hidden="true"
-        >
-          <defs>
-            <filter id="giant-glow" x="-10%" y="-60%" width="120%" height="220%">
-              <feGaussianBlur stdDeviation="6" result="b" />
-              <feMerge>
-                <feMergeNode in="b" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-            <linearGradient
-              id="giant-fuse"
-              gradientUnits="userSpaceOnUse"
-              x1="540"
-              x2="992"
-              y1="100"
-              y2="100"
-            >
-              <stop offset="0" stop-color="var(--fuse-hot)" />
-              <stop offset="1" stop-color="var(--fuse)" stop-opacity="0.15" />
-            </linearGradient>
-          </defs>
-          <g fill="none" stroke-linecap="round" filter="url(#giant-glow)">
-            <path
-              pathLength="1"
-              d="M8 34 C 300 34, 380 100, 540 100"
-              stroke="var(--tide)"
-              stroke-width="7"
-            />
-            <path pathLength="1" d="M8 100 L 540 100" stroke="var(--iris)" stroke-width="7" />
-            <path
-              pathLength="1"
-              d="M8 166 C 300 166, 380 100, 540 100"
-              stroke="var(--volt)"
-              stroke-width="7"
-            />
-            <path
-              class="out"
-              pathLength="1"
-              d="M540 100 L 992 100"
-              stroke="url(#giant-fuse)"
-              stroke-width="14"
-            />
-          </g>
-        </svg>
-      </div>
-    </footer>
+    <!-- @footer -->
     <script type="module" src="/src/home.ts"></script>
   </body>
 </html>

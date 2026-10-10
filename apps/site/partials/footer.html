@@ -1,0 +1,64 @@
+<footer class="foot">
+  <div class="wrap">
+    <div class="foot-grid">
+      <ul class="foot-links">
+        <li><a href="{{base}}download/">Download</a></li>
+        <li><a href="{{base}}faq/">FAQ</a></li>
+        <li><a href="{{base}}support/">Support</a></li>
+        <li><a href="https://github.com/ArshPunisher/fuselane/releases">Release notes</a></li>
+        <li>
+          <a href="https://github.com/ArshPunisher/fuselane/blob/main/docs/PRIVACY.md">Privacy</a>
+        </li>
+        <li><a href="https://github.com/ArshPunisher/fuselane">Source code</a></li>
+      </ul>
+      <small
+        >Free software under Apache-2.0. Made by
+        <a href="https://github.com/ArshPunisher">Arsh Ramgarhia</a>.</small
+      >
+    </div>
+    <svg class="giant reveal" viewBox="0 0 1000 200" preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <filter id="giant-glow" x="-10%" y="-60%" width="120%" height="220%">
+          <feGaussianBlur stdDeviation="6" result="b" />
+          <feMerge>
+            <feMergeNode in="b" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <linearGradient
+          id="giant-fuse"
+          gradientUnits="userSpaceOnUse"
+          x1="540"
+          x2="992"
+          y1="100"
+          y2="100"
+        >
+          <stop offset="0" stop-color="var(--fuse-hot)" />
+          <stop offset="1" stop-color="var(--fuse)" stop-opacity="0.15" />
+        </linearGradient>
+      </defs>
+      <g fill="none" stroke-linecap="round" filter="url(#giant-glow)">
+        <path
+          pathLength="1"
+          d="M8 34 C 300 34, 380 100, 540 100"
+          stroke="var(--tide)"
+          stroke-width="7"
+        />
+        <path pathLength="1" d="M8 100 L 540 100" stroke="var(--iris)" stroke-width="7" />
+        <path
+          pathLength="1"
+          d="M8 166 C 300 166, 380 100, 540 100"
+          stroke="var(--volt)"
+          stroke-width="7"
+        />
+        <path
+          class="out"
+          pathLength="1"
+          d="M540 100 L 992 100"
+          stroke="url(#giant-fuse)"
+          stroke-width="14"
+        />
+      </g>
+    </svg>
+  </div>
+</footer>
