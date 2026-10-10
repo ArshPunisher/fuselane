@@ -178,6 +178,23 @@ export const hi: Readonly<Record<string, string>> = {
   Version: 'वर्ज़न',
   '{version}, demo data': '{version}, डेमो डेटा',
 
+  // The window shown when the download list can't be opened at launch (StartupProblem)
+  'Your download list is from a newer Fuselane': 'आपकी डाउनलोड सूची Fuselane के नए वर्ज़न की है',
+  'This copy is version {version}. Update to keep going. Your downloads are kept.':
+    'यह कॉपी वर्ज़न {version} है। आगे बढ़ने के लिए अपडेट करें। आपके डाउनलोड सुरक्षित रहेंगे।',
+  'Update now': 'अभी अपडेट करें',
+  'Looking for the update…': 'अपडेट ढूंढा जा रहा है…',
+  'No update was found for this copy.': 'इस कॉपी के लिए कोई अपडेट नहीं मिला।',
+  'Get the newest Fuselane from fuselane.app and install it over this one. Your downloads are kept.':
+    'fuselane.app से नया Fuselane लें और इसी के ऊपर इंस्टॉल करें। आपके डाउनलोड सुरक्षित रहेंगे।',
+  'You can also get the newest Fuselane from fuselane.app. Your downloads are kept.':
+    'आप fuselane.app से भी नया Fuselane ले सकते हैं। आपके डाउनलोड सुरक्षित रहेंगे।',
+  'Get Fuselane from fuselane.app': 'fuselane.app से Fuselane लें',
+  "Fuselane can't start": 'Fuselane शुरू नहीं हो पा रहा',
+  'Error details': 'गड़बड़ी की जानकारी',
+  'Open the folder': 'फ़ोल्डर खोलें',
+  'Copy details': 'जानकारी कॉपी करें',
+
   // Banners (UpdateBanner, CrashBanner, WhenDoneBanner, SlowMode) and the store's toasts
   'Installing {version}.': '{version} इंस्टॉल हो रहा है।',
   'Fuselane restarts in a moment and your downloads carry on.':

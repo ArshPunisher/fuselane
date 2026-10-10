@@ -594,6 +594,39 @@ export const hiBackend: Readonly<Record<string, string>> = {
     'फिर से कोशिश करें। जांच शुरू से होगी, और आपके डाउनलोड सुरक्षित हैं।',
   'Update cancelled.': 'अपडेट रद्द किया गया।',
   "Couldn't open the browser: {e}": 'ब्राउज़र नहीं खुल सका: {e}',
+  // Opening the download list at launch (src-tauri/src/startup.rs)
+  'This download list was made by a newer Fuselane.':
+    'यह डाउनलोड सूची Fuselane के नए वर्ज़न ने बनाई है।',
+  'Update Fuselane to keep going. Your downloads are kept.':
+    'आगे बढ़ने के लिए Fuselane अपडेट करें। आपके डाउनलोड सुरक्षित रहेंगे।',
+  "Fuselane couldn't find this computer's app data folder.":
+    'Fuselane को इस कंप्यूटर का ऐप डेटा फ़ोल्डर नहीं मिला।',
+  'Set FUSELANE_HOME to a folder you can write to, then open Fuselane again.':
+    'FUSELANE_HOME में ऐसा फ़ोल्डर डालें जिसमें आप लिख सकते हैं, फिर Fuselane दोबारा खोलें।',
+  "The drive with Fuselane's folder is full.": 'Fuselane के फ़ोल्डर वाली ड्राइव भर गई है।',
+  'Free some space on it, then open Fuselane again.':
+    'उसमें कुछ जगह खाली करें, फिर Fuselane दोबारा खोलें।',
+  "Fuselane isn't allowed to change its folder.":
+    'Fuselane को अपना फ़ोल्डर बदलने की अनुमति नहीं है।',
+  'Check that your account can write to the folder, then open Fuselane again.':
+    'देखें कि आपका अकाउंट इस फ़ोल्डर में लिख सकता है, फिर Fuselane दोबारा खोलें।',
+  'Another program is using the download list.':
+    'कोई दूसरा प्रोग्राम डाउनलोड सूची इस्तेमाल कर रहा है।',
+  'Quit any other copy of Fuselane or the fuselane command, then open Fuselane again.':
+    'Fuselane की कोई दूसरी कॉपी या fuselane कमांड बंद करें, फिर Fuselane दोबारा खोलें।',
+  "The download list is damaged and couldn't be moved aside.":
+    'डाउनलोड सूची खराब है और उसे अलग नहीं हटाया जा सका।',
+  'Open the folder and move jobs.db somewhere else. Fuselane starts a new list next time.':
+    'फ़ोल्डर खोलें और jobs.db को कहीं और रख दें। अगली बार Fuselane नई सूची शुरू करेगा।',
+  "Fuselane couldn't open your download list.": 'Fuselane आपकी डाउनलोड सूची नहीं खोल सका।',
+  'Open the folder to check it, then open Fuselane again. Copy the details if you ask for help.':
+    'फ़ोल्डर खोलकर जांचें, फिर Fuselane दोबारा खोलें। मदद मांगते समय जानकारी कॉपी करके भेजें।',
+  'Fuselane has no folder to show.': 'Fuselane के पास दिखाने के लिए कोई फ़ोल्डर नहीं है।',
+  "Couldn't open the folder: {e}": 'फ़ोल्डर नहीं खुल सका: {e}',
+  'It may not exist yet. Copy the details to see where it should be.':
+    'हो सकता है यह अभी बना ही न हो। यह कहां होना चाहिए, यह देखने के लिए जानकारी कॉपी करें।',
+  'Go to fuselane.app/download in your browser.': 'अपने ब्राउज़र में fuselane.app/download खोलें।',
+  "Couldn't copy: {e}": 'कॉपी नहीं हो सका: {e}',
   "Couldn't open the release notes: {e}": 'रिलीज़ नोट्स नहीं खुल सके: {e}',
   "Couldn't build the report: {e}": 'रिपोर्ट नहीं बन सकी: {e}',
   'Try again, or add Fuselane to your login items yourself.':
