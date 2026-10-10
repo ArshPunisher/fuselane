@@ -592,6 +592,13 @@ function Allowances() {
   )
 }
 
+type NetTab = 'setup' | 'check' | 'usage'
+const NET_TABS: [NetTab, string][] = [
+  ['setup', 'Setup'],
+  ['check', 'Check'],
+  ['usage', 'Usage'],
+]
+
 export function NetworksView() {
   const networks = useApp((s) => s.networks)
   const refresh = useApp((s) => s.refreshNetworks)
@@ -601,52 +608,104 @@ export function NetworksView() {
     return () => clearInterval(t)
   }, [refresh])
   const other = networks.filter((n) => !n.usable)
+  // Setup (networks, limits, when each helps, allowances), the check, and usage.
+  const [tab, setTab] = useState<NetTab>(() => {
+    try {
+      return (sessionStorage.getItem('fuselane.netTab') as NetTab | null) ?? 'setup'
+    } catch {
+      return 'setup'
+    }
+  })
+  const pick = (t: NetTab) => {
+    setTab(t)
+    try {
+      sessionStorage.setItem('fuselane.netTab', t)
+    } catch {
+      /* private mode: the tab lasts while the page is open */
+    }
+  }
   return (
     <section className="page" aria-labelledby="nets-title">
-      <header className="page-head">
+      <header className="page-head with-tabs">
         <h1 id="nets-title">Networks</h1>
-        <button className="btn btn-ghost" onClick={() => void refresh()}>
-          <ArrowClockwise size={16} aria-hidden /> Refresh
-        </button>
-      </header>
-      <p className="page-lead">
-        Every network here can carry part of each download. Plug in a phone or join another network
-        and it joins in.
-      </p>
-      <div className="nets-grid">
-        <NetworkList />
-        <div className="nets-side">
-          <NetworkLimits />
-          <NetworkUse />
-        </div>
-        <div className="nets-wide">
-          <NetCheck />
-          <DataUsed />
-          <Allowances />
-        </div>
-      </div>
-      {other.length > 0 && (
-        <details className="other-nets">
-          <summary>Not used ({other.length})</summary>
-          <ul className="netlist">
-            {other.map((n) => (
-              <li key={n.name} data-down>
-                <span className="orb-slot">
-                  <NetIcon kind={n.kind} />
-                </span>
-                <span className="netlist-text">
-                  <span className="net-name">{netTitle(n)}</span>
-                  <span className="net-kind">
-                    {kindLabel(n.kind)}, {n.name}.{' '}
-                    {n.kind === 'vpn'
-                      ? 'Tunnels are skipped so traffic stays where you expect.'
-                      : 'Not connected to the internet.'}
-                  </span>
-                </span>
-              </li>
+        <div className="nets-head-actions">
+          <div
+            className="segmented"
+            role="radiogroup"
+            aria-label="Networks view"
+            onKeyDown={(e) => {
+              if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+              e.preventDefault()
+              const i = NET_TABS.findIndex(([id]) => id === tab)
+              const next =
+                NET_TABS[
+                  (i + (e.key === 'ArrowRight' ? 1 : NET_TABS.length - 1)) % NET_TABS.length
+                ]![0]
+              pick(next)
+              e.currentTarget.querySelector<HTMLButtonElement>(`[data-id="${next}"]`)?.focus()
+            }}
+          >
+            {NET_TABS.map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="radio"
+                data-id={id}
+                aria-checked={tab === id}
+                tabIndex={tab === id ? 0 : -1}
+                onClick={() => pick(id)}
+              >
+                {label}
+              </button>
             ))}
-          </ul>
-        </details>
+          </div>
+          <button className="btn btn-ghost" onClick={() => void refresh()}>
+            <ArrowClockwise size={16} aria-hidden /> Refresh
+          </button>
+        </div>
+      </header>
+      {tab === 'check' && <NetCheck />}
+      {tab === 'usage' && <DataUsed />}
+      {tab === 'setup' && (
+        <>
+          <p className="page-lead">
+            Every network here can carry part of each download. Plug in a phone or join another
+            network and it joins in.
+          </p>
+          <div className="nets-grid">
+            <NetworkList />
+            <div className="nets-side">
+              <NetworkLimits />
+              <NetworkUse />
+            </div>
+            <div className="nets-wide">
+              <Allowances />
+            </div>
+          </div>
+          {other.length > 0 && (
+            <details className="other-nets">
+              <summary>Not used ({other.length})</summary>
+              <ul className="netlist">
+                {other.map((n) => (
+                  <li key={n.name} data-down>
+                    <span className="orb-slot">
+                      <NetIcon kind={n.kind} />
+                    </span>
+                    <span className="netlist-text">
+                      <span className="net-name">{netTitle(n)}</span>
+                      <span className="net-kind">
+                        {kindLabel(n.kind)}, {n.name}.{' '}
+                        {n.kind === 'vpn'
+                          ? 'Tunnels are skipped so traffic stays where you expect.'
+                          : 'Not connected to the internet.'}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </>
       )}
     </section>
   )

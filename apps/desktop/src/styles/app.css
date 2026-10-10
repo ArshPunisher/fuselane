@@ -4668,3 +4668,22 @@ html[data-hidden] .orb b {
 .net-hours input:disabled {
   opacity: 0.5;
 }
+
+.nets-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Phones: the title gets its own row; tabs and Refresh share the next. */
+@media (max-width: 640px) {
+  .page-head.with-tabs:has(.nets-head-actions) {
+    flex-wrap: wrap;
+  }
+  .nets-head-actions {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+  }
+}
