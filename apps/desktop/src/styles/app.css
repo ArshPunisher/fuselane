@@ -5618,7 +5618,6 @@ html[data-hidden] .orb b {
   flex-basis: 0;
   min-width: 6px;
   border-radius: var(--radius-pill);
-  transition: flex-grow var(--dur-slow) var(--ease-out);
 }
 
 .use-legend {
@@ -5808,9 +5807,7 @@ html[data-hidden] .orb b {
   overflow: hidden;
   border-radius: 5px 5px 2px 2px;
   transform-origin: bottom;
-  transition:
-    height var(--dur-slow) var(--ease-out),
-    opacity var(--dur-quick) var(--ease-out);
+  transition: opacity var(--dur-quick) var(--ease-out);
 }
 
 .use-stack span {

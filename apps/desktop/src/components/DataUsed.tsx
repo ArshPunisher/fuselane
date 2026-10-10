@@ -140,7 +140,7 @@ export function DataUsed() {
   }, [])
 
   if (!h || !allow) {
-    return <div className="use-loading" aria-busy="true" aria-label={t('Loading')} />
+    return <div className="use-loading" aria-busy="true" aria-label={t('Loading…')} />
   }
 
   // Every network that ever carried something, plus the ones here now.

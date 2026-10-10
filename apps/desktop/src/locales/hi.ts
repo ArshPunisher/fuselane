@@ -885,7 +885,7 @@ export const hi: Readonly<Record<string, string>> = {
   '{name}: no internet {n} times this week, {m} min in total.':
     '{name}: इस हफ़्ते {n} बार इंटरनेट गया, कुल {m} मिनट।',
   Speedtest: 'स्पीडटेस्ट',
-  Loading: 'लोड हो रहा है',
+  'Loading…': 'लोड हो रहा है…',
   'Nothing counted yet': 'अभी कुछ गिना नहीं गया',
   'Everything Fuselane downloads is counted here, per network and day by day, so you can see how much the phone carried. Start a download and watch it fill in.':
     'Fuselane जो भी डाउनलोड करता है, वह यहां हर नेटवर्क और हर दिन के हिसाब से गिना जाता है, ताकि आप देख सकें फ़ोन ने कितना डेटा चलाया। कोई डाउनलोड शुरू करें और इसे भरते देखें।',
