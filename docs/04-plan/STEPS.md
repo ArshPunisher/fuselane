@@ -214,7 +214,7 @@ The owner asked for more built-in features that cost nothing to run (no paid tie
 - [ ] 7.5 Localhost WebSocket fallback with pairing code + token + Origin/Host checks — T3, T4
 - [x] 7.6 Message schema v1 validated on both sides (shared vectors); the browser resumes on decline or timeout
 - [x] 7.7 Context menu "Download with Fuselane"
-- [ ] 7.8 Playwright extension e2e; `web-ext lint`
+- [x] 7.8 Playwright extension e2e; `web-ext lint` (native host and popup in a real Chromium; web-ext lint in CI: 0 errors, 0 warnings)
 - [ ] 7.9 Store listings on the free stores (Edge Add-ons, AMO) with a privacy policy; Chrome Web Store ($5 one-time) only with the owner's OK
 
 ## P8 Power features (0.5 → 0.9)
