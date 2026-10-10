@@ -157,7 +157,9 @@ export function FuseCore({
                 data-down={n.dead || undefined}
                 style={{ left: x, top: y, transform: `translate(${tx}, ${ty})`, textAlign: align }}
               >
-                <span className="name">{netTitle(n)}</span>
+                <span className="name" translate="no">
+                  {netTitle(n)}
+                </span>
                 <span className="num">{n.dead ? t('Offline') : rateText(n.rate)}</span>
               </li>
             )

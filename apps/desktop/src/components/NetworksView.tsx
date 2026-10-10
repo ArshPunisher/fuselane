@@ -757,7 +757,7 @@ export function NetworksView() {
                         {netTitle(n)}
                       </span>
                       <span className="net-kind">
-                        {kindLabel(n.kind)}, {n.name}.{' '}
+                        {kindLabel(n.kind)}, <span translate="no">{n.name}</span>.{' '}
                         {n.kind === 'vpn'
                           ? t('Tunnels are skipped so traffic stays where you expect.')
                           : t('Not connected to the internet.')}

@@ -130,7 +130,7 @@ function Peers({
               {net ? (
                 <>
                   <span className="peer-dot" style={{ background: `var(--lane-${lanes[i]})` }} />
-                  {netTitle(net)}
+                  <span translate="no">{netTitle(net)}</span>
                 </>
               ) : (
                 t('Came to you')
@@ -520,9 +520,11 @@ export function TorrentDetail({ t: tor, onBack }: { t: TorrentView; onBack: (() 
                               state={tor.status === 'downloading' && n.peers > 0 ? 'live' : 'idle'}
                             />
                             <span>
-                              <span className="net-name">{netTitle(n)}</span>
+                              <span className="net-name" translate="no">
+                                {netTitle(n)}
+                              </span>
                               <span className="net-kind">
-                                {kindLabel(n.kind)}, {n.name}
+                                {kindLabel(n.kind)}, <span translate="no">{n.name}</span>
                               </span>
                             </span>
                           </span>

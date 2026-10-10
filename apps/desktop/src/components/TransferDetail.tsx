@@ -696,9 +696,11 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
                           state={finished ? 'idle' : n.dead ? 'down' : 'live'}
                         />
                         <span>
-                          <span className="net-name">{netTitle(n)}</span>
+                          <span className="net-name" translate="no">
+                            {netTitle(n)}
+                          </span>
                           <span className="net-kind">
-                            {kindLabel(n.kind)}, {n.name}
+                            {kindLabel(n.kind)}, <span translate="no">{n.name}</span>
                           </span>
                         </span>
                       </span>
