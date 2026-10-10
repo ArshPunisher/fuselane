@@ -16,6 +16,7 @@ import { CrashBanner } from './components/CrashBanner'
 import { WhenDoneBanner } from './components/WhenDoneBanner'
 import { SlowToggle } from './components/SlowMode'
 import { Welcome } from './components/Welcome'
+import { Wordmark } from './components/Wordmark'
 import { mark, t, useLocale } from './lib/i18n'
 
 type Layout = 'compact' | 'regular' | 'wide'
@@ -89,17 +90,7 @@ function Brand() {
   const demo = useApp((s) => s.backend?.demo)
   return (
     <div className="brand">
-      <span className="wordmark" translate="no">
-        <svg className="mark" viewBox="0 0 512 512" aria-hidden="true">
-          <g fill="none" strokeLinecap="round" strokeWidth="34">
-            <path d="M70 150 C 180 150, 220 256, 300 256" stroke="var(--lane-tide)" />
-            <path d="M70 256 L 300 256" stroke="var(--lane-volt)" />
-            <path d="M70 362 C 180 362, 220 256, 300 256" stroke="var(--lane-iris)" />
-            <path d="M300 256 L 442 256" stroke="var(--fuse)" strokeWidth="46" />
-          </g>
-        </svg>
-        Fuselane
-      </span>
+      <Wordmark />
       {demo && (
         <span className="chip" title={t('Running in a browser: these transfers are simulated.')}>
           {t('Demo data')}
