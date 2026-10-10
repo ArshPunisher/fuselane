@@ -25,7 +25,8 @@ export default defineConfig({
           browser_specific_settings: {
             gecko: {
               id: 'fuselane@fuselane.app',
-              strict_min_version: '128.0',
+              // 140 is the first Firefox that reads data_collection_permissions.
+              strict_min_version: '140.0',
               // Required for new listings on addons.mozilla.org: Fuselane's
               // extension collects and sends nothing to anyone.
               data_collection_permissions: { required: ['none'] },
