@@ -148,6 +148,138 @@
         </figure>
       </section>
 
+      <section class="proof wrap" aria-labelledby="proof-title">
+        <h2 id="proof-title" class="proof-title">Measured on real machines</h2>
+        <ul class="proof-list">
+          <li class="reveal">
+            <span class="proof-num num"><span data-count="18.6">18.6</span> s</span>
+            <span class="proof-text">A 246 MB 1080p video, over Wi-Fi and Ethernet at once.</span>
+          </li>
+          <li class="reveal" style="--i: 1">
+            <span class="proof-num num"
+              ><span data-count="113">113</span> + <span data-count="117">117</span
+              ><small>Mbps</small></span
+            >
+            <span class="proof-text"
+              >Ethernet and Wi-Fi on the same Mac, each measured by the network check.</span
+            >
+          </li>
+          <li class="reveal" style="--i: 2">
+            <span class="proof-num num"><span data-count="50">50</span><small>MB/s</small></span>
+            <span class="proof-text"
+              >About that for a 300 MB file over Ethernet and Wi-Fi, byte for byte the same.</span
+            >
+          </li>
+        </ul>
+      </section>
+
+      <section class="story section" id="how" aria-labelledby="how-title">
+        <div class="wrap">
+          <div class="section-head reveal">
+            <h2 id="how-title">How one file rides every network</h2>
+            <p>No VPN, no relay server, no admin rights. It all happens on your computer.</p>
+          </div>
+          <div class="story-grid">
+            <div class="story-steps">
+              <article class="story-step" data-step="1">
+                <h3>Split</h3>
+                <p>
+                  Fuselane asks the server for the file in parts, the standard way a browser resumes
+                  a download.
+                </p>
+              </article>
+              <article class="story-step" data-step="2">
+                <h3>Spread</h3>
+                <p>
+                  Each part goes over whichever network is free. Faster networks simply carry more
+                  parts, so their speeds add up.
+                </p>
+              </article>
+              <article class="story-step" data-step="3">
+                <h3>Fuse</h3>
+                <p>
+                  Every part is checked before it joins the others. You get one file, exactly the
+                  one the server sent.
+                </p>
+                <p class="story-note">
+                  A server that doesn't allow parts sends the whole file over one network.
+                </p>
+              </article>
+            </div>
+            <div class="story-visual" data-step="2" aria-hidden="true">
+              <div class="sv-nets">
+                <span class="sv-net" style="--c: var(--tide)"><i data-icon="wifi"></i>Wi-Fi</span>
+                <span class="sv-net" style="--c: var(--iris)"
+                  ><i data-icon="ethernet"></i>Ethernet</span
+                >
+                <span class="sv-net" style="--c: var(--volt)"><i data-icon="phone"></i>Phone</span>
+              </div>
+              <div class="sv-air">
+                <b style="--d: 0; --c: var(--tide); --x0: 0.1667; --x1: 0.0208"></b>
+                <b style="--d: 1; --c: var(--iris); --x0: 0.5; --x1: 0.0625"></b>
+                <b style="--d: 2; --c: var(--tide); --x0: 0.1667; --x1: 0.1042"></b>
+                <b style="--d: 4; --c: var(--volt); --x0: 0.8333; --x1: 0.1458"></b>
+                <b style="--d: 3; --c: var(--iris); --x0: 0.5; --x1: 0.1875"></b>
+                <b style="--d: 5; --c: var(--tide); --x0: 0.1667; --x1: 0.2292"></b>
+                <b style="--d: 6; --c: var(--iris); --x0: 0.5; --x1: 0.2708"></b>
+                <b style="--d: 8; --c: var(--tide); --x0: 0.1667; --x1: 0.3125"></b>
+                <b style="--d: 7; --c: var(--tide); --x0: 0.1667; --x1: 0.3542"></b>
+                <b style="--d: 9; --c: var(--iris); --x0: 0.5; --x1: 0.3958"></b>
+                <b style="--d: 11; --c: var(--volt); --x0: 0.8333; --x1: 0.4375"></b>
+                <b style="--d: 10; --c: var(--tide); --x0: 0.1667; --x1: 0.4792"></b>
+                <b style="--d: 12; --c: var(--iris); --x0: 0.5; --x1: 0.5208"></b>
+                <b style="--d: 13; --c: var(--tide); --x0: 0.1667; --x1: 0.5625"></b>
+                <b style="--d: 15; --c: var(--iris); --x0: 0.5; --x1: 0.6042"></b>
+                <b style="--d: 14; --c: var(--volt); --x0: 0.8333; --x1: 0.6458"></b>
+                <b style="--d: 16; --c: var(--tide); --x0: 0.1667; --x1: 0.6875"></b>
+                <b style="--d: 17; --c: var(--iris); --x0: 0.5; --x1: 0.7292"></b>
+                <b style="--d: 19; --c: var(--tide); --x0: 0.1667; --x1: 0.7708"></b>
+                <b style="--d: 18; --c: var(--tide); --x0: 0.1667; --x1: 0.8125"></b>
+                <b style="--d: 20; --c: var(--iris); --x0: 0.5; --x1: 0.8542"></b>
+                <b style="--d: 22; --c: var(--volt); --x0: 0.8333; --x1: 0.8958"></b>
+                <b style="--d: 21; --c: var(--iris); --x0: 0.5; --x1: 0.9375"></b>
+                <b style="--d: 23; --c: var(--tide); --x0: 0.1667; --x1: 0.9792"></b>
+              </div>
+              <div class="sv-bar">
+                <i style="--i: 0; --d: 0; --c: var(--tide)"></i>
+                <i style="--i: 1; --d: 1; --c: var(--iris)"></i>
+                <i style="--i: 2; --d: 2; --c: var(--tide)"></i>
+                <i style="--i: 3; --d: 4; --c: var(--volt)"></i>
+                <i style="--i: 4; --d: 3; --c: var(--iris)"></i>
+                <i style="--i: 5; --d: 5; --c: var(--tide)"></i>
+                <i style="--i: 6; --d: 6; --c: var(--iris)"></i>
+                <i style="--i: 7; --d: 8; --c: var(--tide)"></i>
+                <i style="--i: 8; --d: 7; --c: var(--tide)"></i>
+                <i style="--i: 9; --d: 9; --c: var(--iris)"></i>
+                <i style="--i: 10; --d: 11; --c: var(--volt)"></i>
+                <i style="--i: 11; --d: 10; --c: var(--tide)"></i>
+                <i style="--i: 12; --d: 12; --c: var(--iris)"></i>
+                <i style="--i: 13; --d: 13; --c: var(--tide)"></i>
+                <i style="--i: 14; --d: 15; --c: var(--iris)"></i>
+                <i style="--i: 15; --d: 14; --c: var(--volt)"></i>
+                <i style="--i: 16; --d: 16; --c: var(--tide)"></i>
+                <i style="--i: 17; --d: 17; --c: var(--iris)"></i>
+                <i style="--i: 18; --d: 19; --c: var(--tide)"></i>
+                <i style="--i: 19; --d: 18; --c: var(--tide)"></i>
+                <i style="--i: 20; --d: 20; --c: var(--iris)"></i>
+                <i style="--i: 21; --d: 22; --c: var(--volt)"></i>
+                <i style="--i: 22; --d: 21; --c: var(--iris)"></i>
+                <i style="--i: 23; --d: 23; --c: var(--tide)"></i>
+              </div>
+              <div class="sv-caption">
+                <span class="sv-file num" translate="no">ubuntu-26.04-desktop-amd64.iso</span>
+                <span class="sv-say" data-say="1">1 file, asked for in 24 parts</span>
+                <span class="sv-say" data-say="2"
+                  ><b style="--c: var(--tide)">Wi-Fi 11</b><b style="--c: var(--iris)">Ethernet 9</b
+                  ><b style="--c: var(--volt)">Phone 4</b></span
+                >
+                <span class="sv-say" data-say="3"><i data-icon="seal"></i>Checked and joined</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="section wrap" id="features" aria-labelledby="features-title">
         <div class="section-head reveal">
           <h2 id="features-title">Everything a download manager should do. Over every network.</h2>

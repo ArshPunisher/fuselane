@@ -4,6 +4,7 @@ import { detectOs, fileUrl, latestVersion } from './common'
 import './site.css'
 import './css/home.css'
 import { startHero } from './hero'
+import { startProof, startStory } from './story'
 
 async function primaryDownload() {
   const btn = document.querySelector<HTMLAnchorElement>('#primary-download')
@@ -19,4 +20,6 @@ async function primaryDownload() {
 }
 
 startHero()
+startProof()
+startStory()
 void primaryDownload()

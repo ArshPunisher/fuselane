@@ -464,7 +464,6 @@ kbd {
   border-bottom-color: var(--hairline);
   background: var(--glass);
   backdrop-filter: blur(16px) saturate(150%);
-  -webkit-backdrop-filter: blur(16px) saturate(150%);
 }
 
 @media (prefers-reduced-transparency: reduce) {
@@ -472,7 +471,6 @@ kbd {
   .nav[data-open] {
     background: var(--canvas);
     backdrop-filter: none;
-    -webkit-backdrop-filter: none;
   }
 }
 

@@ -243,6 +243,26 @@ test('the combined speed rolls and keeps running, while the exact figure stays r
   await expect(page.locator('#total')).toHaveText(/^\d+\.\d$/)
 })
 
+test('how it works follows the scroll: split, spread, fuse, and back', async ({ page }) => {
+  await stub(page)
+  await page.goto('/')
+  const visual = page.locator('.story-visual')
+  for (const step of ['1', '2', '3', '1']) {
+    await page
+      .locator(`.story-step[data-step="${step}"]`)
+      .evaluate((el) => el.scrollIntoView({ block: 'center', behavior: 'instant' }))
+    await expect(visual).toHaveAttribute('data-step', step)
+    await expect(page.locator(`.story-step[data-step="${step}"]`)).toHaveAttribute(
+      'aria-current',
+      'step',
+    )
+  }
+  // The measured numbers end on their real values.
+  await page.locator('.proof').evaluate((el) => el.scrollIntoView({ behavior: 'instant' }))
+  await expect(page.locator('.proof [data-count]').first()).toHaveText('18.6')
+  await expect(page.locator('.proof-list')).toContainText('246 MB 1080p video')
+})
+
 test('the nav marks the current page and every page links to privacy', async ({ page }) => {
   await stub(page)
   for (const [path, name] of [

@@ -208,7 +208,6 @@
   cursor: pointer;
   touch-action: manipulation;
   backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
   transition:
     border-color var(--dur-base),
     color var(--dur-base),
@@ -374,4 +373,352 @@
 
 .odo-sep {
   display: inline-block;
+}
+
+/* ---------- Measured on real machines ---------- */
+
+.proof {
+  display: grid;
+  gap: 20px;
+  padding-block: 8px clamp(24px, 4vw, 48px);
+}
+
+.proof-title {
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.proof-list {
+  list-style: none;
+  display: grid;
+  border-top: 1px solid var(--hairline);
+}
+
+.proof-list li {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 22px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.proof-num {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.18em;
+  color: var(--ink);
+  font-size: clamp(2.2rem, 1.6rem + 2vw, 3.2rem);
+  font-weight: 600;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.proof-num small {
+  margin-left: 0.2em;
+  color: var(--mute);
+  font-size: 0.4em;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.proof-text {
+  max-width: 26em;
+  color: var(--body);
+  font-size: 15px;
+}
+
+@media (min-width: 860px) {
+  .proof-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border-bottom: 1px solid var(--hairline);
+  }
+  .proof-list li {
+    padding: 28px 28px 30px;
+    border-bottom: 0;
+  }
+  .proof-list li:first-child {
+    padding-left: 0;
+  }
+  .proof-list li + li {
+    border-left: 1px solid var(--hairline);
+  }
+}
+
+/* ---------- How it works: one file, split, spread and fused, as you scroll ---------- */
+
+.story-grid {
+  display: grid;
+  gap: 24px;
+}
+
+.story-steps {
+  display: grid;
+  order: 2;
+}
+
+.story-step {
+  display: grid;
+  align-content: center;
+  gap: 12px;
+  min-height: 46vh;
+  padding: 24px 0 24px 22px;
+  border-left: 2px solid var(--hairline);
+  transition: border-color var(--dur-slow);
+}
+
+.story-step h3 {
+  font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.25rem);
+  letter-spacing: -0.035em;
+  color: var(--mute);
+  transition: color var(--dur-slow);
+}
+
+.story-step p {
+  max-width: 28em;
+  font-size: 17px;
+}
+
+.story-step[aria-current='step'] {
+  border-left-color: var(--fuse);
+}
+
+.story-step[aria-current='step'] h3 {
+  color: var(--ink);
+}
+
+.story-note {
+  color: var(--mute);
+  font-size: 14.5px !important;
+}
+
+.story-visual {
+  --air: 120px;
+  position: sticky;
+  top: calc(var(--nav-h) + 8px);
+  z-index: 2;
+  order: 1;
+  display: grid;
+  gap: 0;
+  padding: 18px 16px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-panel);
+  background: var(--surface-1);
+  container-type: inline-size;
+  box-shadow: 0 -12px 0 var(--canvas);
+}
+
+.sv-nets {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  justify-items: center;
+}
+
+.sv-net {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in oklch, var(--c) 40%, transparent);
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--c) 10%, var(--surface-1));
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.sv-net svg {
+  width: 16px;
+  height: 16px;
+  fill: var(--c);
+}
+
+.sv-air {
+  position: relative;
+  height: var(--air);
+}
+
+.sv-air b {
+  position: absolute;
+  top: 6px;
+  left: calc(var(--x0) * 100%);
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  border-radius: 2px;
+  background: var(--c);
+  opacity: 0;
+}
+
+.sv-bar {
+  position: relative;
+  height: 30px;
+}
+
+/* The fused file: one seamless bar over the parts once they've joined. */
+.sv-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--fuse), var(--fuse-hot) 50%, var(--fuse));
+  box-shadow: 0 8px 24px -6px var(--fuse-glow);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.story-visual[data-step='3'] .sv-bar::after {
+  opacity: 1;
+  transition-delay: 0.75s;
+}
+
+.sv-bar i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--i) * 100% / 24);
+  width: calc(100% / 24);
+  border-radius: 3px;
+  background: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+  transform: scaleX(0.74);
+  transition:
+    transform 0.6s var(--ease-out),
+    background-color 0.5s ease;
+}
+
+/* Spread: each part lands in the colour of the network that carried it. */
+.story-visual[data-step='2'] .sv-bar i {
+  background: var(--c);
+  box-shadow: none;
+  transition-delay: calc(var(--d) * 70ms + 520ms);
+}
+
+/* Fuse: the gaps close and the parts become one warm file, left to right. */
+.story-visual[data-step='3'] .sv-bar i {
+  background: var(--fuse);
+  box-shadow: none;
+  transform: scaleX(1.04);
+  transition-delay: calc(var(--i) * 22ms);
+}
+
+.sv-caption {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  min-height: 58px;
+  margin-top: 14px;
+}
+
+.sv-file {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.sv-say {
+  position: absolute;
+  top: 24px;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  color: var(--body);
+  font-size: 14px;
+  opacity: 0;
+  transform: translateY(6px);
+  transition:
+    opacity var(--dur-base),
+    transform var(--dur-base) var(--ease-out);
+}
+
+.sv-say b {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.sv-say b::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--c);
+}
+
+.sv-say svg {
+  width: 18px;
+  height: 18px;
+  margin-right: 6px;
+  fill: var(--fuse);
+}
+
+.story-visual[data-step='1'] [data-say='1'],
+.story-visual[data-step='2'] [data-say='2'],
+.story-visual[data-step='3'] [data-say='3'] {
+  opacity: 1;
+  transform: none;
+  transition-delay: 0.15s;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* While on Spread, parts keep raining down from their networks. */
+  .story-visual[data-step='2'] .sv-air b {
+    animation: part-drop 2.4s var(--ease-in-out) infinite both;
+    animation-delay: calc(var(--d) * 100ms);
+  }
+  .story-visual:not([data-play]) .sv-air b {
+    animation-play-state: paused;
+  }
+}
+
+@keyframes part-drop {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.6);
+  }
+  4% {
+    opacity: 1;
+  }
+  24% {
+    opacity: 1;
+  }
+  26%,
+  100% {
+    opacity: 0;
+    transform: translate(calc((var(--x1) - var(--x0)) * 100cqw), calc(var(--air) - 4px)) scale(1);
+  }
+}
+
+@media (min-width: 960px) {
+  .story-grid {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: clamp(40px, 6vw, 96px);
+    align-items: start;
+  }
+  .story-steps {
+    order: 0;
+  }
+  .story-step {
+    min-height: 56vh;
+    padding-left: 28px;
+  }
+  .story-visual {
+    --air: 170px;
+    top: calc(50vh - 180px);
+    order: 0;
+    padding: 28px 28px 24px;
+    box-shadow: none;
+  }
+  .sv-net {
+    padding: 8px 14px;
+    font-size: 14px;
+  }
+  .sv-bar {
+    height: 44px;
+  }
 }
