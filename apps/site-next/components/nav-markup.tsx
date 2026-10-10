@@ -1,4 +1,4 @@
-// Ported from apps/site/partials/nav.html by scripts/convert.py.
+// Ported from the original plain-HTML site.
 import Link from 'next/link'
 import { Icon } from './icon'
 

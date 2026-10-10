@@ -1,4 +1,4 @@
-// Ported from apps/site/guide/index.html by scripts/convert.py.
+// Ported from the original plain-HTML site.
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Icon } from '@/components/icon'

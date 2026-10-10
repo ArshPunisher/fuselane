@@ -1,4 +1,4 @@
-// Ported from apps/site/privacy/index.html by scripts/convert.py.
+// Ported from the original plain-HTML site.
 import type { Metadata } from 'next'
 import { JsonLd } from '@/components/json-ld'
 import { PageScript } from '@/components/page-script'

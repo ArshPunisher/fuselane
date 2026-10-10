@@ -1,4 +1,4 @@
-// Ported from apps/site/404.html. Its styles are scoped in styles/notfound.css.
+// Ported from the original plain-HTML site; its styles are scoped in styles/notfound.css.
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import '@/styles/notfound.css'

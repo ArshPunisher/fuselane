@@ -1,4 +1,4 @@
-// Ported from apps/site/download/index.html by scripts/convert.py.
+// Ported from the original plain-HTML site.
 import type { Metadata } from 'next'
 import { Icon } from '@/components/icon'
 import { JsonLd } from '@/components/json-ld'

@@ -1,5 +1,5 @@
 /* The 404 page's own styles, scoped to .nf so they don't reach other pages
-   in the no-reload site. Same look as apps/site/404.html. */
+   in the no-reload site. Same look as the original 404 page. */
 .nf {
   --nf-hairline: oklch(1 0 0 / 0.16);
   --nf-ink: oklch(0.965 0.004 260);
