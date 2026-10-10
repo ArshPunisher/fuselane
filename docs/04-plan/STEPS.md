@@ -219,7 +219,7 @@ The owner asked for more built-in features that cost nothing to run (no paid tie
 
 ## P8 Power features (0.5 → 0.9)
 
-- [ ] 8.1 Scheduler (time windows, per-network schedules, "before midnight", power actions)
+- [x] 8.1 Scheduler (time windows, per-network schedules, "before midnight", power actions) (daily schedule window; start at a time B8.5; hours per network B10.6 with a "Before midnight" preset that, with a daily allowance, spends what is left of the day's data; when-done power actions)
 - [x] 8.2 Throttle detection and auto-move (pure detector: busy, still delivering, under 32 KB/s or a tenth of its best, while another network to the same server is 4× faster overall and per stream; benched networks hand their blocks back and get a one-stream check after 1, 2, 4, 5 minutes; the download says so; ENGINE-DOWNLOAD.md §13)
 - [x] 8.3 Mirrors / multi-source + Metalink (mirrors done in B8.9; Metalink 3 and 4 links add their files with mirrors and SHA-256, as a group; aria2.addMetalink too)
 - [x] 8.4 Proxy per network / per download (HTTP, SOCKS5) (per network: HTTP CONNECT and SOCKS5 with an optional login, pinned to the network, end-to-end TLS, names resolved by the proxy, checked on save, plain errors, password never sent back; torrents stay direct; per download left out, a download uses its networks' proxies; NETWORKING.md §3a)

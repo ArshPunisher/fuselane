@@ -1295,6 +1295,13 @@ test('a network can be used only at certain hours', async ({ page }) => {
   await expect(row.getByLabel('iPhone USB until')).toHaveValue('06:00')
   await row.getByRole('checkbox', { name: 'Only from' }).uncheck()
   await expect(from).toBeDisabled()
+  // Daily data expires at midnight: one click for the last two hours.
+  await row
+    .getByRole('button', { name: 'iPhone USB: only before midnight, 22:00 to 00:00' })
+    .click()
+  await expect(row.getByRole('checkbox', { name: 'Only from' })).toBeChecked()
+  await expect(from).toHaveValue('22:00')
+  await expect(row.getByLabel('iPhone USB until')).toHaveValue('00:00')
 })
 
 test('Download later adds it paused, ready to start', async ({ page }) => {
