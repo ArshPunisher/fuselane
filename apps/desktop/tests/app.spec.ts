@@ -1838,6 +1838,11 @@ test('remote control for aria2 apps: on, address, secret, network and port', asy
   // Devices on the network get their own address.
   await page.getByRole('checkbox', { name: /Allow phones and computers/ }).check()
   await expect(page.locator('.remote-facts')).toContainText('http://192.168.1.24:6800/jsonrpc')
+  // A code for the phone's remote page, only when asked for.
+  await expect(page.getByRole('img', { name: 'Code to scan with your phone' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Show a code for your phone' }).click()
+  await expect(page.getByRole('img', { name: 'Code to scan with your phone' })).toBeVisible()
+  await page.getByRole('button', { name: 'Hide the code' }).click()
   // A port below 1024 is refused with the reason, a good one is saved.
   const port = page.getByRole('spinbutton', { name: 'Port' })
   await port.fill('80')

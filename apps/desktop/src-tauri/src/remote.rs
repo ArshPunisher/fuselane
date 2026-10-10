@@ -48,6 +48,10 @@ pub struct RemoteView {
     pub urls: Vec<String>,
     /// Why it isn't running although it's on (the port is taken, say).
     pub problem: Option<String>,
+    /// The remote page for a phone, with the secret in its #fragment, and
+    /// that link as a QR code (SVG); only while the local network is allowed.
+    pub phone_url: Option<String>,
+    pub phone_qr: Option<String>,
 }
 
 /// The download list, as aria2 tools see it.
@@ -228,6 +232,20 @@ impl Remote {
                     .map(|ip| format!("http://{ip}:{}/jsonrpc", s.port)),
             );
         }
+        let phone_url = (s.on && s.lan)
+            .then(|| (self.addrs)().into_iter().next())
+            .flatten()
+            .map(|ip| format!("http://{ip}:{}/#secret={}", s.port, s.secret));
+        let phone_qr = phone_url.as_ref().and_then(|u| {
+            qrcode::QrCode::new(u.as_bytes()).ok().map(|c| {
+                c.render::<qrcode::render::svg::Color<'_>>()
+                    .quiet_zone(false)
+                    .min_dimensions(160, 160)
+                    .dark_color(qrcode::render::svg::Color("#1b1f27"))
+                    .light_color(qrcode::render::svg::Color("#ffffff"))
+                    .build()
+            })
+        });
         RemoteView {
             on: s.on,
             lan: s.lan,
@@ -235,6 +253,8 @@ impl Remote {
             secret: s.secret,
             urls,
             problem: lock(&self.problem).clone(),
+            phone_url,
+            phone_qr,
         }
     }
 
@@ -355,6 +375,10 @@ mod tests {
         let v = remote.set(true, false, port).await.unwrap();
         assert_eq!(v.urls, [format!("http://127.0.0.1:{port}/jsonrpc")]);
         assert_eq!(v.problem, None);
+        assert_eq!(
+            v.phone_url, None,
+            "no phone page while only this computer may connect"
+        );
         let secret = v.secret.clone();
 
         let body = format!(
@@ -405,5 +429,26 @@ mod tests {
                 .problem
                 .is_none()
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn the_phone_page_link_carries_the_secret_in_its_fragment() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = fuselane_core::Store::open(&dir.path().join("db")).unwrap();
+        let svc = Service::new(store, dir.path().to_path_buf()).unwrap();
+        let remote = Remote::new(&svc, Arc::new(|| vec![Ipv4Addr::new(192, 168, 1, 24)]));
+        let port = std::net::TcpListener::bind("0.0.0.0:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let v = remote.set(true, true, port).await.unwrap();
+        assert_eq!(
+            v.phone_url.as_deref(),
+            Some(format!("http://192.168.1.24:{port}/#secret={}", v.secret).as_str())
+        );
+        assert!(v.phone_qr.unwrap().contains("<svg"));
+        assert_eq!(v.urls.len(), 2, "this computer, then the network address");
+        remote.set(false, true, port).await.unwrap();
     }
 }

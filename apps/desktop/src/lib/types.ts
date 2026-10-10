@@ -561,6 +561,9 @@ export interface RemoteView {
   urls: string[]
   /** Why it isn't running although it's on. */
   problem: string | null
+  /** The remote page for a phone (secret in the #fragment) and its QR code. */
+  phoneUrl: string | null
+  phoneQr: string | null
 }
 
 export interface UsageHistory {

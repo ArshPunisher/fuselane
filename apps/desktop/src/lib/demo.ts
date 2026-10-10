@@ -8,7 +8,7 @@
 import type { Backend } from './backend'
 import { createDemoTorrents } from './demoTorrents'
 import { createDemoSends } from './demoSends'
-import { createDemoNearby } from './demoNearby'
+import { createDemoNearby, DEMO_QR } from './demoNearby'
 import type {
   WatchView,
   FeedView,
@@ -481,6 +481,11 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       ...(remote.lan ? [`http://192.168.1.24:${remote.port}/jsonrpc`] : []),
     ],
     problem: null,
+    phoneUrl:
+      remote.on && remote.lan
+        ? `http://192.168.1.24:${remote.port}/#secret=${remote.secret}`
+        : null,
+    phoneQr: remote.on && remote.lan ? DEMO_QR : null,
   })
   const netCheck: NetCheckView = {
     running: false,

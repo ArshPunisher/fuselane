@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Copy, Eye, EyeSlash } from '@phosphor-icons/react'
+import { Copy, Eye, EyeSlash, QrCode } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { toUiError } from '../lib/backend'
 import type { RemoteView, UiError } from '../lib/types'
@@ -13,6 +13,7 @@ export function RemoteSetting() {
   const [view, setView] = useState<RemoteView | null>(null)
   const [port, setPort] = useState('')
   const [shown, setShown] = useState(false)
+  const [code, setCode] = useState(false)
   const [error, setError] = useState<UiError | null>(null)
   const [status, setStatus] = useState('')
   useEffect(() => {
@@ -148,6 +149,35 @@ export function RemoteSetting() {
               </span>
             </span>
           </label>
+          {view.phoneUrl && view.phoneQr && (
+            <div className="remote-phone">
+              {code ? (
+                <>
+                  {/* The SVG is made by the app from the link; nothing from outside goes in. */}
+                  <span
+                    className="qr"
+                    role="img"
+                    aria-label="Code to scan with your phone"
+                    dangerouslySetInnerHTML={{ __html: view.phoneQr }}
+                  />
+                  <div>
+                    <p className="setting-name">Scan with your phone&apos;s camera</p>
+                    <p className="muted">
+                      A page opens with your downloads: add links, pause and resume. The code
+                      carries the secret, so show it only to your own phone.
+                    </p>
+                    <button type="button" className="btn btn-sm" onClick={() => setCode(false)}>
+                      Hide the code
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <button type="button" className="btn btn-sm" onClick={() => setCode(true)}>
+                  <QrCode size={16} aria-hidden /> Show a code for your phone
+                </button>
+              )}
+            </div>
+          )}
           <form
             className="remote-port"
             noValidate

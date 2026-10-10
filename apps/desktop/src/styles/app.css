@@ -2014,6 +2014,24 @@ kbd {
   display: block;
 }
 
+.remote-phone {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+}
+
+.remote-phone > .btn {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.remote-phone > div {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
 .remote-port {
   display: grid;
   grid-template-columns: minmax(0, 200px) auto;
