@@ -790,6 +790,11 @@ export const hi: Readonly<Record<string, string>> = {
   // NetworksView: when each network helps, and its hours
   'Only from': 'सिर्फ़ इस समय:',
   '{start} to {end}': '{start} से {end} तक',
+  'Before midnight': 'आधी रात से पहले',
+  '{name}: only before midnight, 22:00 to 00:00':
+    '{name}: सिर्फ़ आधी रात से पहले, 22:00 से 00:00 तक',
+  "22:00 to midnight. With a daily allowance, downloads use what's left of today's data before it runs out.":
+    '22:00 से आधी रात तक। रोज़ की डेटा लिमिट हो, तो खत्म होने से पहले आज का बचा डेटा डाउनलोड में लग जाता है।',
   '{name} from': '{name}: कब से',
   '{name} until': '{name}: कब तक',
   Always: 'हमेशा',
