@@ -281,7 +281,7 @@ test('the FAQ is grouped by topic and the topic list jumps to each', async ({ pa
     'aria-current',
     'true',
   )
-  await expect(page.locator('.qa details')).toHaveCount(15)
+  await expect(page.locator('.qa details')).toHaveCount(17)
 })
 
 test('without a known version the download page still reads well', async ({ page }) => {

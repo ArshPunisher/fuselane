@@ -2608,3 +2608,11 @@ body:not([data-link='ok']) .beam-path {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* The line under a section heading. */
+.section-head .section-lead {
+  max-width: 62ch;
+  margin-top: 10px;
+  color: var(--body);
+  font-size: 17px;
+}
