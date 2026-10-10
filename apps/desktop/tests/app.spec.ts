@@ -2019,3 +2019,27 @@ test('feeds: torrents start by themselves only when the feed allows it', async (
   await expect(waiting).toContainText('Torrent')
   await expect(waiting.getByRole('button', { name: 'Open' })).toBeVisible()
 })
+
+test('a download says when a network is throttled, comes back, or its proxy refuses', async ({
+  page,
+}) => {
+  await page.goto('/?drop=0&throttle=1&proxytrouble=1')
+  const notes = page.getByRole('list', { name: 'Network notes' })
+  await expect(notes).toContainText(
+    'iPhone USB slowed to 8.0 KB/s (throttled?), so the other networks carry the rest. Fuselane tries it again every few minutes.',
+  )
+  await expect(notes).toContainText(
+    "Wi-Fi's proxy at proxy.office.lan:3128 turned down the username and password.",
+  )
+  // The phone rests: no speed of its own while the others carry the rest.
+  await expect(page.getByRole('table', { name: 'Networks in this download' })).toContainText(
+    'iPhone USB',
+  )
+  await page.goto('/?drop=0&throttle=back')
+  await expect(page.getByRole('list', { name: 'Network notes' })).toContainText(
+    "iPhone USB is fast again (1.2 MB/s), so it's helping again.",
+  )
+  // Without news, no notes at all.
+  await page.goto('/?drop=0')
+  await expect(page.getByRole('list', { name: 'Network notes' })).toHaveCount(0)
+})

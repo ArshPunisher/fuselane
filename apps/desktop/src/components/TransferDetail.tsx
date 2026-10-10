@@ -26,6 +26,7 @@ import { LimitField } from './LimitField'
 import { LiveRate } from './LiveRate'
 import { BIN, RemoveDialog } from './RemoveDialog'
 import { HandoffDialog } from './HandoffDialog'
+import { NetworkNotes } from './NetworkNotes'
 import type { JobView, Live, ReportView } from '../lib/types'
 
 /** The platform's own words for showing a file in its folder. */
@@ -596,6 +597,8 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
               ))}
             </div>
           )}
+
+          <NetworkNotes notes={job.networkNotes} />
 
           {live && <Stream history={history} lanes={lanes} />}
 

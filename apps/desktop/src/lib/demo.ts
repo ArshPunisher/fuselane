@@ -4,7 +4,9 @@
 //
 // URL parameters: empty=1 (no sample jobs), speed=N (time multiplier),
 // seed=N, freeze=SECONDS (advance to that instant, then stop: for screenshots),
-// drop=0 (the phone never drops out), portal=en0 (that network shows a sign-in page).
+// drop=0 (the phone never drops out), portal=en0 (that network shows a sign-in page),
+// throttle=1 (the phone is benched as throttled), throttle=back (and came back),
+// proxytrouble=1 (Wi-Fi's proxy turns down the login).
 import type { Backend } from './backend'
 import { createDemoTorrents } from './demoTorrents'
 import { createDemoSends } from './demoSends'
@@ -137,6 +139,8 @@ export function createDemoBackend(params: URLSearchParams): Backend {
   let limits: LimitsView = { global: 0, networks: [], slow: false, slowRate: 1024 * 1024 }
   let prefs: NetPref[] = []
   let perNetDns = false
+  const throttle = params.get('throttle')
+  const proxyTrouble = params.get('proxytrouble') === '1'
   let allowances: AllowanceView[] = NETWORKS.filter((n) => n.usable).map((n) => ({
     name: n.name,
     allowance: n.name === 'en7' && params.get('allowance') === 'reached' ? 5 * 1024 ** 3 : null,
@@ -271,7 +275,28 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         'allowance',
       )
     }
-    make('ubuntu-26.04-desktop-amd64.iso', 1.1 * 1024 * MB, 'running', 0)
+    const ubuntu = make('ubuntu-26.04-desktop-amd64.iso', 1.1 * 1024 * MB, 'running', 0)
+    // What the engine reports when the phone is throttled, or a proxy refuses a login.
+    if (throttle === '1')
+      ubuntu.networkNotes = [
+        { name: 'en7', kind: 'slow', rate: 8 * 1024, best: 3.1 * MB, message: null },
+      ]
+    if (throttle === 'back')
+      ubuntu.networkNotes = [
+        { name: 'en7', kind: 'back', rate: 1.2 * MB, best: null, message: null },
+      ]
+    if (proxyTrouble)
+      ubuntu.networkNotes = [
+        ...ubuntu.networkNotes,
+        {
+          name: 'en0',
+          kind: 'trouble',
+          rate: null,
+          best: null,
+          message:
+            "Wi-Fi's proxy at proxy.office.lan:3128 turned down the username and password. Check them in Networks, under Proxy.",
+        },
+      ]
   }
 
   const view = (j: SimJob): JobView => {
@@ -281,8 +306,16 @@ export function createDemoBackend(params: URLSearchParams): Backend {
   const emitJobs = () => listener?.({ type: 'jobs', jobs: jobs.map(view) })
 
   function laneUp(lane: number, t: number) {
+    // Benched as throttled (resting, not down) or stopped by its proxy: no work.
+    if (resting(lane)) return false
+    if (proxyTrouble && lane === 0) return false
     // The phone drops out for a few seconds to show recovery.
     return !(drops && lane === 1 && t % 40 > 14 && t % 40 < 20)
+  }
+
+  /** The phone rests while benched as throttled: alive, but given no work. */
+  function resting(lane: number) {
+    return throttle === '1' && lane === 1
   }
 
   function wobble(seed: number, t: number) {
@@ -378,8 +411,8 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         rate: up
           ? Math.max(0.2 * MB, base * (1 + 0.22 * wobble(lane + 11, clock))) * share * cap
           : 0,
-        streams: up ? [8, 4, 12][lane]! : 0,
-        dead: !up,
+        streams: up ? [8, 4, 12][lane]! : resting(lane) ? 4 : 0,
+        dead: !up && !resting(lane),
       }
     })
     const ticks: number[] = []

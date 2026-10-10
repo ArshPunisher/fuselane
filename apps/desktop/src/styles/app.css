@@ -5229,3 +5229,31 @@ html[data-hidden] .orb b {
   font-size: 12px;
   overflow-wrap: anywhere;
 }
+
+/* ---------- A download's network notes (8.2, 8.4) ---------- */
+
+.net-notes {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.net-notes li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--body);
+  font-size: 13px;
+}
+
+.net-notes svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--warning);
+}
+
+.net-notes li[data-kind='back'] svg {
+  color: var(--success);
+}
