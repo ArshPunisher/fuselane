@@ -383,6 +383,48 @@ test('a link into the Mac guide opens the Mac panel on any system', async ({ bro
   await ctx.close()
 })
 
+for (const [width, height] of [
+  [375, 812],
+  [768, 1024],
+] as const) {
+  test(`at ${width} px no step of how it works ever sits under its sticky card`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height })
+    await stub(page)
+    await page.goto('/')
+    const range = await page.locator('.story-grid').evaluate((g) => {
+      const r = g.getBoundingClientRect()
+      return { from: r.top + scrollY - innerHeight, to: r.bottom + scrollY }
+    })
+    const seen = new Set<string>()
+    for (let y = range.from; y < range.to; y += 90) {
+      await page.evaluate((top) => window.scrollTo({ top, behavior: 'instant' }), y)
+      await page.waitForTimeout(40)
+      const { overlaps, step, words } = await page.evaluate(() => {
+        const card = document.querySelector('.story-visual')!.getBoundingClientRect()
+        const overlaps = [
+          ...document.querySelectorAll<HTMLElement>('.story-step h3, .story-step p'),
+        ]
+          .filter((el) => getComputedStyle(el.closest('.story-step')!).opacity !== '0')
+          .map((el) => el.getBoundingClientRect())
+          .filter((r) => r.bottom > card.top + 1 && r.top < card.bottom - 1 && r.height > 0).length
+        const visual = document.querySelector<HTMLElement>('.story-visual')!
+        return {
+          overlaps,
+          step: visual.dataset.step ?? '',
+          words: visual.querySelector('.sv-text h3')?.textContent ?? '',
+        }
+      })
+      expect(overlaps, `scrolled to ${y}`).toBe(0)
+      // The card carries the words of the step it shows.
+      expect(words).toBe({ '1': 'Split', '2': 'Spread', '3': 'Fuse' }[step])
+      seen.add(step)
+    }
+    expect([...seen].sort()).toEqual(['1', '2', '3'])
+  })
+}
+
 test('the nav marks the current page and every page links to privacy', async ({ page }) => {
   await stub(page)
   for (const [path, name] of [

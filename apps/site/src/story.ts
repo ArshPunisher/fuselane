@@ -6,17 +6,27 @@ import { prefersReduced, watch, whenSeen } from './motion'
 export function startStory() {
   const visual = document.querySelector<HTMLElement>('.story-visual')
   const steps = [...document.querySelectorAll<HTMLElement>('.story-step')]
+  const slot = visual?.querySelector<HTMLElement>('.sv-text')
   if (!visual || !steps.length || !('IntersectionObserver' in window)) return
+  const reduced = prefersReduced()
   const show = (n: string) => {
+    const changed = visual.dataset.step !== n
     visual.dataset.step = n
     steps.forEach((s) =>
       s.dataset.step === n
         ? s.setAttribute('aria-current', 'step')
         : s.removeAttribute('aria-current'),
     )
+    // On phones the card carries the current step's words (the card is hidden
+    // from screen readers, which read the steps themselves).
+    const step = steps.find((s) => s.dataset.step === n)
+    if (!slot || !step || (!changed && slot.childElementCount)) return
+    slot.replaceChildren(...[...step.children].map((c) => c.cloneNode(true)))
+    if (!reduced && changed)
+      slot.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 280, easing: 'ease-out' })
   }
   // Start from the first step when the section is still below the fold.
-  if (visual.getBoundingClientRect().top > innerHeight) show('1')
+  show(visual.getBoundingClientRect().top > innerHeight ? '1' : (visual.dataset.step ?? '1'))
   const io = new IntersectionObserver(
     (entries) => {
       for (const e of entries)

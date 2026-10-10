@@ -485,7 +485,7 @@
 
 .story-visual {
   --air: 120px;
-  position: sticky;
+  position: relative;
   top: calc(var(--nav-h) + 8px);
   z-index: 2;
   order: 1;
@@ -576,6 +576,47 @@
   transition:
     transform 0.6s var(--ease-out),
     background-color 0.5s ease;
+}
+
+/* Phones and tablets: the card sticks with the current step's text inside it,
+   so no text ever slides under it; the steps below are kept for screen readers
+   and as the scroll distance. Without script, the card sits above the steps. */
+.sv-text {
+  display: none;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--hairline);
+}
+
+.sv-text h3 {
+  color: var(--ink);
+  font-size: 1.5rem;
+  letter-spacing: -0.03em;
+}
+
+.sv-text p {
+  color: var(--body);
+  font-size: 16px;
+}
+
+.sv-text .story-note {
+  font-size: 14px !important;
+}
+
+@media (max-width: 959px) {
+  .js .story-visual {
+    position: sticky;
+    top: max(calc(var(--nav-h) + 12px), calc(50dvh - 230px));
+  }
+  .js .sv-text {
+    display: grid;
+  }
+  .js .story-step {
+    min-height: 55vh;
+    opacity: 0;
+    pointer-events: none;
+  }
 }
 
 /* Spread: each part lands in the colour of the network that carried it. */
@@ -697,6 +738,7 @@
   }
   .story-visual {
     --air: 170px;
+    position: sticky;
     top: calc(50vh - 180px);
     order: 0;
     padding: 28px 28px 24px;
