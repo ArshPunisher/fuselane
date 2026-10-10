@@ -4603,7 +4603,11 @@ mod tests {
         h.wait("running", |h| h.job(id).status == "running").await;
         #[cfg(target_os = "macos")]
         assert!(h.svc.keeping_awake(), "macOS always can");
-        h.wait("done", |h| h.job(id).status == "completed").await;
+        // "completed" is published a moment before the task lets go of its slot.
+        h.wait("done", |h| {
+            h.job(id).status == "completed" && h.svc.running() == 0
+        })
+        .await;
         h.svc.update_awake();
         assert!(!h.svc.keeping_awake());
         // Turned off: never held, even while running.
