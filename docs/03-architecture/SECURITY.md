@@ -22,6 +22,7 @@ User files and destinations · cookies and auth headers forwarded by the extensi
 | T12 | **Supply chain** (crates, npm packages) | Lockfiles committed; `cargo-deny` (licences + advisories); `cargo-audit`; `pnpm audit`; Renovate with review; GitHub Actions pinned by SHA. |
 | T13 | **Test knobs reaching production** | Compiled behind a `testkit` cargo feature that release builds never enable (L-100); a CI check greps the release binary. |
 | T14 | **Denial of service on servers** (seen as a leech) | Polite concurrency limits, honouring Retry-After, a remembered per-host ceiling, an honest User-Agent. |
+| T15 | **Remote control (aria2 JSON-RPC, ADR 0013) is abused** by a web page, a local process or a device on the network | Off by default; a 128-bit secret on every call, compared in constant time, with a delay after a wrong one; 127.0.0.1 unless the person allows the local network; Host must be `localhost` or an IP (blocks DNS rebinding); 1 MB request cap; adds only http/https links through the same checks as the window. |
 
 ## Tauri hardening checklist
 

@@ -21,6 +21,7 @@ fuselane-core = { path = "crates/core" }
 fuselane-api = { path = "crates/api" }
 fuselane-send = { path = "crates/send" }
 fuselane-nearby = { path = "crates/nearby" }
+fuselane-rpc = { path = "crates/rpc" }
 fuselane-testkit = { path = "crates/testkit" }
 
 [workspace.lints.rust]

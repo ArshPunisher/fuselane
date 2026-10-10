@@ -26,3 +26,5 @@ Template:
 | [0009](0009-zero-cost-policy.md) | Zero-cost policy: open source, free services only | Accepted |
 | [0010](0010-no-android-app.md) | No Android app (Android phones remain supported as tethered networks) | Accepted |
 | [0011](0011-fuse-send-p2p.md) | Fuse Send: peer-to-peer sharing replaces cloud uploads | Accepted (spike S7) |
+| [0012](0012-nearby-localsend.md) | Nearby speaks the LocalSend protocol | Accepted |
+| [0013](0013-aria2-remote-control.md) | Remote control speaks aria2's JSON-RPC | Proposed |

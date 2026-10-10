@@ -1811,6 +1811,7 @@ dependencies = [
  "fuselane-limits",
  "fuselane-nearby",
  "fuselane-netif",
+ "fuselane-rpc",
  "fuselane-send",
  "fuselane-storage",
  "fuselane-testkit",
@@ -1921,6 +1922,19 @@ dependencies = [
  "libc",
  "system-configuration 0.6.1",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "fuselane-rpc"
+version = "0.1.0-beta.9"
+dependencies = [
+ "bytes",
+ "getrandom 0.3.4",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
