@@ -8,9 +8,18 @@ import type {
   WhenDone,
   WindowPrefs,
 } from '../lib/types'
+import { mark, t } from '../lib/i18n'
 
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+/** Each day's short and full name, Monday first. */
+const DAYS: [string, string][] = [
+  [mark('Mon'), mark('Monday')],
+  [mark('Tue'), mark('Tuesday')],
+  [mark('Wed'), mark('Wednesday')],
+  [mark('Thu'), mark('Thursday')],
+  [mark('Fri'), mark('Friday')],
+  [mark('Sat'), mark('Saturday')],
+  [mark('Sun'), mark('Sunday')],
+]
 
 /** 75 → "01:15", for <input type="time">. */
 function hhmm(minutes: number): string {
@@ -47,18 +56,20 @@ export function DownloadsAtOnceSetting() {
     setStatus('')
     try {
       setN(await backend.setMaxRunning(next))
-      setStatus(next === 1 ? 'One at a time.' : `Up to ${next} at once.`)
+      setStatus(next === 1 ? t('One at a time.') : t('Up to {n} at once.', { n: next }))
     } catch {
-      setStatus("Couldn't save that. Try again.")
+      setStatus(t("Couldn't save that. Try again."))
     }
   }
   return (
     <div className="setting">
       <div>
         <p className="setting-name" id="at-once-label">
-          Downloads at once
+          {t('Downloads at once')}
         </p>
-        <p className="muted">Each one already uses every network. More start as others finish.</p>
+        <p className="muted">
+          {t('Each one already uses every network. More start as others finish.')}
+        </p>
         <p className="muted" role="status">
           {status}
         </p>
@@ -67,7 +78,7 @@ export function DownloadsAtOnceSetting() {
         <button
           type="button"
           className="btn"
-          aria-label="One fewer"
+          aria-label={t('One fewer')}
           disabled={n === null || n <= 1}
           onClick={() => n !== null && void change(n - 1)}
         >
@@ -79,7 +90,7 @@ export function DownloadsAtOnceSetting() {
         <button
           type="button"
           className="btn"
-          aria-label="One more"
+          aria-label={t('One more')}
           disabled={n === null || n >= 8}
           onClick={() => n !== null && void change(n + 1)}
         >
@@ -119,18 +130,18 @@ export function ScheduleSetting() {
     if (!settings) return
     setError('')
     const ok = await save({ ...settings, schedule: { ...settings.schedule, ...next } })
-    if (!ok) setError('Not saved. Check the times and days.')
+    if (!ok) setError(t('Not saved. Check the times and days.'))
   }
 
   return (
     <form
       className="setting setting-stack"
-      aria-label="Download schedule"
+      aria-label={t('Download schedule')}
       noValidate
       onSubmit={(e) => {
         e.preventDefault()
         if (a === null || b === null) {
-          setError('Enter times like 01:00.')
+          setError(t('Enter times like 01:00.'))
           return
         }
         void apply({ start: a, stop: b, days })
@@ -138,10 +149,11 @@ export function ScheduleSetting() {
     >
       <div className="setting-row">
         <div>
-          <p className="setting-name">Schedule</p>
+          <p className="setting-name">{t('Schedule')}</p>
           <p className="muted">
-            Only download between two times, for example at night when data is cheap. Downloads
-            outside it wait, and running ones pause and carry on next time.
+            {t(
+              'Only download between two times, for example at night when data is cheap. Downloads outside it wait, and running ones pause and carry on next time.',
+            )}
           </p>
           <p className="muted" role="status">
             {enabled && view?.next ? view.next : ''}
@@ -151,7 +163,7 @@ export function ScheduleSetting() {
           type="button"
           role="switch"
           className="switch"
-          aria-label="Download only on a schedule"
+          aria-label={t('Download only on a schedule')}
           aria-checked={enabled}
           onClick={() => void apply({ enabled: !enabled })}
         />
@@ -159,7 +171,7 @@ export function ScheduleSetting() {
       {enabled && (
         <div className="schedule-fields">
           <div className="field">
-            <label htmlFor="sched-start">From</label>
+            <label htmlFor="sched-start">{t('From')}</label>
             <input
               id="sched-start"
               name="start"
@@ -169,7 +181,7 @@ export function ScheduleSetting() {
             />
           </div>
           <div className="field">
-            <label htmlFor="sched-stop">Until</label>
+            <label htmlFor="sched-stop">{t('Until')}</label>
             <input
               id="sched-stop"
               name="stop"
@@ -179,26 +191,26 @@ export function ScheduleSetting() {
             />
           </div>
           <fieldset className="days">
-            <legend>Days</legend>
-            {DAYS.map((d, i) => (
+            <legend>{t('Days')}</legend>
+            {DAYS.map(([d, full], i) => (
               <button
                 key={d}
                 type="button"
                 className="day"
                 aria-pressed={days[i]}
-                aria-label={DAY_NAMES[i]}
+                aria-label={t(full)}
                 onClick={() => setDays(days.map((x, j) => (j === i ? !x : x)))}
               >
-                {d}
+                {t(d)}
               </button>
             ))}
           </fieldset>
           <button type="submit" className="btn" disabled={!changed}>
-            Save
+            {t('Save')}
           </button>
           {a !== null && b !== null && b < a && (
             <p className="field-help schedule-note">
-              Runs overnight: from {start} until {stop} the next morning.
+              {t('Runs overnight: from {start} until {stop} the next morning.', { start, stop })}
             </p>
           )}
           {error && (
@@ -213,10 +225,10 @@ export function ScheduleSetting() {
 }
 
 const WHEN_DONE: { id: WhenDone; label: string }[] = [
-  { id: 'nothing', label: 'Nothing' },
-  { id: 'sleep', label: 'Sleep' },
-  { id: 'shut-down', label: 'Shut down' },
-  { id: 'quit', label: 'Quit' },
+  { id: 'nothing', label: mark('Nothing') },
+  { id: 'sleep', label: mark('Sleep') },
+  { id: 'shut-down', label: mark('Shut down') },
+  { id: 'quit', label: mark('Quit') },
 ]
 
 export function WhenDoneSetting() {
@@ -228,12 +240,12 @@ export function WhenDoneSetting() {
     <div className="setting">
       <div>
         <p className="setting-name" id="when-done-label">
-          When everything finishes
+          {t('When everything finishes')}
         </p>
         <p className="muted">
           {current === 'nothing'
-            ? 'Fuselane just waits.'
-            : 'You get 60 seconds and a notification to cancel first.'}
+            ? t('Fuselane just waits.')
+            : t('You get 60 seconds and a notification to cancel first.')}
         </p>
       </div>
       <div
@@ -266,7 +278,7 @@ export function WhenDoneSetting() {
             tabIndex={current === w.id ? 0 : -1}
             onClick={() => pick(w.id)}
           >
-            {w.label}
+            {t(w.label)}
           </button>
         ))}
       </div>
@@ -308,8 +320,10 @@ export function KeepAwakeSetting() {
   if (!settings) return null
   return (
     <ToggleSetting
-      name="Keep the computer awake"
-      help="While something downloads, your computer won't go to sleep. The screen can still turn off."
+      name={t('Keep the computer awake')}
+      help={t(
+        "While something downloads, your computer won't go to sleep. The screen can still turn off.",
+      )}
       on={settings.keepAwake}
       onChange={(keepAwake) => void save({ ...settings, keepAwake })}
     />
@@ -383,19 +397,21 @@ export function NameTakenSetting() {
   const [settings, save] = useAutomation()
   if (!settings) return null
   const help: Record<NameTaken, string> = {
-    ask: 'New download asks when a file with the same name is already in the folder.',
-    'keep-both': 'The new file is saved as "name (1)" next to the old one.',
-    replace: `The old file goes to the ${/Win/i.test(navigator.platform) ? 'Recycle Bin' : 'Trash'} once the new one is complete.`,
+    ask: t('New download asks when a file with the same name is already in the folder.'),
+    'keep-both': t('The new file is saved as "name (1)" next to the old one.'),
+    replace: /Win/i.test(navigator.platform)
+      ? t('The old file goes to the Recycle Bin once the new one is complete.')
+      : t('The old file goes to the Trash once the new one is complete.'),
   }
   return (
     <ChoiceSetting<NameTaken>
       id="name-taken"
-      name="If the name is taken"
+      name={t('If the name is taken')}
       help={help[settings.nameTaken]}
       choices={[
-        { id: 'ask', label: 'Ask' },
-        { id: 'keep-both', label: 'Keep both' },
-        { id: 'replace', label: 'Replace' },
+        { id: 'ask', label: t('Ask') },
+        { id: 'keep-both', label: t('Keep both') },
+        { id: 'replace', label: t('Replace') },
       ]}
       value={settings.nameTaken}
       onChange={(nameTaken) => void save({ ...settings, nameTaken })}
@@ -407,19 +423,19 @@ export function AfterDownloadSetting() {
   const [settings, save] = useAutomation()
   if (!settings) return null
   const help: Record<AfterDownload, string> = {
-    nothing: 'Finished files stay where they are.',
-    open: 'Each finished file opens with its usual app.',
-    unpack: 'Zip and tar archives unpack into a folder next to them. The archive is kept.',
+    nothing: t('Finished files stay where they are.'),
+    open: t('Each finished file opens with its usual app.'),
+    unpack: t('Zip and tar archives unpack into a folder next to them. The archive is kept.'),
   }
   return (
     <ChoiceSetting<AfterDownload>
       id="after-download"
-      name="When a download finishes"
+      name={t('When a download finishes')}
       help={help[settings.afterDownload]}
       choices={[
-        { id: 'nothing', label: 'Nothing' },
-        { id: 'open', label: 'Open it' },
-        { id: 'unpack', label: 'Unpack it' },
+        { id: 'nothing', label: t('Nothing') },
+        { id: 'open', label: t('Open it') },
+        { id: 'unpack', label: t('Unpack it') },
       ]}
       value={settings.afterDownload}
       onChange={(afterDownload) => void save({ ...settings, afterDownload })}
@@ -431,20 +447,21 @@ export function LowBatterySetting() {
   const [settings, save] = useAutomation()
   if (!settings) return null
   const help: Record<LowBattery, string> = {
-    'keep-going': 'Downloads carry on whatever the battery.',
-    'leave-out-phone':
+    'keep-going': t('Downloads carry on whatever the battery.'),
+    'leave-out-phone': t(
       'Under 20% and unplugged, a phone tethered by cable is left out (it charges from this computer).',
-    pause: 'Under 20% and unplugged, downloads pause and carry on when you plug in.',
+    ),
+    pause: t('Under 20% and unplugged, downloads pause and carry on when you plug in.'),
   }
   return (
     <ChoiceSetting<LowBattery>
       id="low-battery"
-      name="On low battery"
+      name={t('On low battery')}
       help={help[settings.lowBattery]}
       choices={[
-        { id: 'keep-going', label: 'Keep going' },
-        { id: 'leave-out-phone', label: 'Leave out the phone' },
-        { id: 'pause', label: 'Pause' },
+        { id: 'keep-going', label: t('Keep going') },
+        { id: 'leave-out-phone', label: t('Leave out the phone') },
+        { id: 'pause', label: t('Pause') },
       ]}
       value={settings.lowBattery}
       onChange={(lowBattery) => void save({ ...settings, lowBattery })}
@@ -458,8 +475,11 @@ export function SortSetting() {
   if (!settings) return null
   return (
     <ToggleSetting
-      name="Sort into folders by type"
-      help={`Finished files go into Video, Music, Documents, Compressed and similar folders inside ${info?.defaultDir ?? 'your downloads folder'}. A folder you pick yourself is left alone.`}
+      name={t('Sort into folders by type')}
+      help={t(
+        'Finished files go into Video, Music, Documents, Compressed and similar folders inside {folder}. A folder you pick yourself is left alone.',
+        { folder: info?.defaultDir ?? t('your downloads folder') },
+      )}
       on={settings.sortByType}
       onChange={(sortByType) => void save({ ...settings, sortByType })}
     />
@@ -481,9 +501,9 @@ export function WindowSettings() {
     <>
       <div className="setting">
         <div>
-          <p className="setting-name">Start at login</p>
+          <p className="setting-name">{t('Start at login')}</p>
           <p className="muted">
-            Opens quietly in the tray when you sign in, so scheduled downloads run.
+            {t('Opens quietly in the tray when you sign in, so scheduled downloads run.')}
           </p>
           <p className="muted" role="status">
             {status}
@@ -493,7 +513,7 @@ export function WindowSettings() {
           type="button"
           role="switch"
           className="switch"
-          aria-label="Start at login"
+          aria-label={t('Start at login')}
           aria-checked={prefs.startAtLogin}
           onClick={async () => {
             setStatus('')
@@ -501,14 +521,16 @@ export function WindowSettings() {
               const on = await backend.setStartAtLogin(!prefs.startAtLogin)
               setPrefs({ ...prefs, startAtLogin: on })
             } catch (e) {
-              setStatus((e as { message?: string }).message ?? "Couldn't change it. Try again.")
+              setStatus((e as { message?: string }).message ?? t("Couldn't change it. Try again."))
             }
           }}
         />
       </div>
       <ToggleSetting
-        name="Keep running when the window closes"
-        help="Closing the window leaves Fuselane in the tray and downloads carry on. Quit from the tray menu."
+        name={t('Keep running when the window closes')}
+        help={t(
+          'Closing the window leaves Fuselane in the tray and downloads carry on. Quit from the tray menu.',
+        )}
         on={prefs.closeToTray}
         onChange={async (on) => {
           const saved = await backend.setCloseToTray(on).catch(() => prefs.closeToTray)
@@ -516,8 +538,10 @@ export function WindowSettings() {
         }}
       />
       <ToggleSetting
-        name="Catch copied download links"
-        help="When you copy a link to a file (a .zip, .iso, video and so on) or a magnet, Fuselane offers to download it. The clipboard is only read on this computer while this is on."
+        name={t('Catch copied download links')}
+        help={t(
+          'When you copy a link to a file (a .zip, .iso, video and so on) or a magnet, Fuselane offers to download it. The clipboard is only read on this computer while this is on.',
+        )}
         on={prefs.watchClipboard}
         onChange={async (on) => {
           const saved = await backend.setWatchClipboard(on).catch(() => prefs.watchClipboard)

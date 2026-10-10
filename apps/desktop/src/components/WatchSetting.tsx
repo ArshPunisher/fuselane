@@ -3,6 +3,7 @@ import { CheckCircle, FolderOpen, WarningCircle } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { toUiError } from '../lib/backend'
 import type { UiError, WatchView } from '../lib/types'
+import { t } from '../lib/i18n'
 
 /**
  * Watch folder (B10.9): .torrent files, Metalinks and lists of links put in
@@ -17,8 +18,8 @@ export function WatchSetting() {
     const load = () => void backend.watchState().then(setView)
     load()
     // The latest files handled change while the page is open.
-    const t = setInterval(load, 4000)
-    return () => clearInterval(t)
+    const timer = setInterval(load, 4000)
+    return () => clearInterval(timer)
   }, [backend])
 
   async function set(on: boolean, path: string) {
@@ -40,18 +41,18 @@ export function WatchSetting() {
     <div className="setting setting-stack">
       <div className="setting-row">
         <div>
-          <p className="setting-name">Add files from a folder</p>
+          <p className="setting-name">{t('Add files from a folder')}</p>
           <p className="muted">
-            Put a .torrent file, a Metalink or a .txt list of links in this folder and it starts by
-            itself; the file is then renamed to end in .added. Media tools that save .torrent files
-            to a folder work with it.
+            {t(
+              'Put a .torrent file, a Metalink or a .txt list of links in this folder and it starts by itself; the file is then renamed to end in .added. Media tools that save .torrent files to a folder work with it.',
+            )}
           </p>
         </div>
         <button
           type="button"
           role="switch"
           className="switch"
-          aria-label="Add files from a folder"
+          aria-label={t('Add files from a folder')}
           aria-checked={view?.on === true}
           disabled={view === null}
           onClick={async () => {
@@ -81,7 +82,7 @@ export function WatchSetting() {
                 if (path) void set(true, path)
               }}
             >
-              <FolderOpen size={16} aria-hidden /> Change…
+              <FolderOpen size={16} aria-hidden /> {t('Change…')}
             </button>
           </div>
           {view.problem && (
@@ -90,13 +91,13 @@ export function WatchSetting() {
             </p>
           )}
           {view.recent.length > 0 ? (
-            <ul className="watch-recent" aria-label="Files taken from the folder">
+            <ul className="watch-recent" aria-label={t('Files taken from the folder')}>
               {view.recent.slice(0, 5).map((h, i) => (
                 <li key={`${h.name}-${i}`} data-ok={h.ok}>
                   {h.ok ? (
-                    <CheckCircle size={16} weight="fill" aria-label="Added" />
+                    <CheckCircle size={16} weight="fill" aria-label={t('Added')} />
                   ) : (
-                    <WarningCircle size={16} weight="fill" aria-label="Not added" />
+                    <WarningCircle size={16} weight="fill" aria-label={t('Not added')} />
                   )}
                   <span className="watch-name" translate="no">
                     {h.name}
@@ -106,7 +107,7 @@ export function WatchSetting() {
               ))}
             </ul>
           ) : (
-            <p className="field-help">Watching. Nothing has been put in it yet.</p>
+            <p className="field-help">{t('Watching. Nothing has been put in it yet.')}</p>
           )}
         </div>
       )}

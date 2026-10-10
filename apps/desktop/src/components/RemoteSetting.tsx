@@ -3,6 +3,7 @@ import { Copy, Eye, EyeSlash, QrCode } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { toUiError } from '../lib/backend'
 import type { RemoteView, UiError } from '../lib/types'
+import { t } from '../lib/i18n'
 
 /**
  * Remote control for aria2 apps (8.7, ADR 0013): AriaNg, the Aria2 browser
@@ -36,12 +37,12 @@ export function RemoteSetting() {
     }
   }
 
-  async function copy(text: string, what: string) {
+  async function copy(text: string, copied: string, manual: string) {
     try {
       await navigator.clipboard.writeText(text)
-      setStatus(`${what} copied.`)
+      setStatus(copied)
     } catch {
-      setStatus(`Select the ${what.toLowerCase()} and copy it.`)
+      setStatus(manual)
     }
   }
 
@@ -50,10 +51,11 @@ export function RemoteSetting() {
     <div className="setting setting-stack">
       <div className="setting-row">
         <div>
-          <p className="setting-name">Remote control for aria2 apps</p>
+          <p className="setting-name">{t('Remote control for aria2 apps')}</p>
           <p className="muted">
-            AriaNg, the Aria2 browser extensions and phone remote apps can add downloads here and
-            watch them. What they add uses every network, like anything else.
+            {t(
+              'AriaNg, the Aria2 browser extensions and phone remote apps can add downloads here and watch them. What they add uses every network, like anything else.',
+            )}
           </p>
           <p className="muted" role="status">
             {status}
@@ -63,14 +65,14 @@ export function RemoteSetting() {
           type="button"
           role="switch"
           className="switch"
-          aria-label="Remote control for aria2 apps"
+          aria-label={t('Remote control for aria2 apps')}
           aria-checked={view?.on === true}
           disabled={view === null}
           onClick={() =>
             view &&
             void run(
               () => backend!.remoteSet(!view.on, view.lan, view.port),
-              view.on ? 'Remote control is off.' : '',
+              view.on ? t('Remote control is off.') : '',
             )
           }
         />
@@ -83,7 +85,7 @@ export function RemoteSetting() {
             </p>
           )}
           <dl className="remote-facts">
-            <dt>Address</dt>
+            <dt>{t('Address')}</dt>
             {view.urls.map((u) => (
               <dd key={u}>
                 <span className="num" translate="no">
@@ -92,14 +94,16 @@ export function RemoteSetting() {
                 <button
                   type="button"
                   className="icon-btn"
-                  aria-label={`Copy ${u}`}
-                  onClick={() => void copy(u, 'Address')}
+                  aria-label={t('Copy {address}', { address: u })}
+                  onClick={() =>
+                    void copy(u, t('Address copied.'), t('Select the address and copy it.'))
+                  }
                 >
                   <Copy size={14} aria-hidden />
                 </button>
               </dd>
             ))}
-            <dt>Secret</dt>
+            <dt>{t('Secret')}</dt>
             <dd>
               <span className="num" translate="no">
                 {shown ? view.secret : '•'.repeat(16)}
@@ -107,7 +111,7 @@ export function RemoteSetting() {
               <button
                 type="button"
                 className="icon-btn"
-                aria-label={shown ? 'Hide the secret' : 'Show the secret'}
+                aria-label={shown ? t('Hide the secret') : t('Show the secret')}
                 onClick={() => setShown(!shown)}
               >
                 {shown ? <EyeSlash size={14} aria-hidden /> : <Eye size={14} aria-hidden />}
@@ -115,24 +119,27 @@ export function RemoteSetting() {
               <button
                 type="button"
                 className="icon-btn"
-                aria-label="Copy the secret"
-                onClick={() => void copy(view.secret, 'Secret')}
+                aria-label={t('Copy the secret')}
+                onClick={() =>
+                  void copy(view.secret, t('Secret copied.'), t('Select the secret and copy it.'))
+                }
               >
                 <Copy size={14} aria-hidden />
               </button>
               <button
                 type="button"
                 className="btn btn-sm"
-                title="Apps using the old secret stop working until you give them the new one"
-                onClick={() => void run(() => backend!.remoteNewSecret(), 'New secret made.')}
+                title={t('Apps using the old secret stop working until you give them the new one')}
+                onClick={() => void run(() => backend!.remoteNewSecret(), t('New secret made.'))}
               >
-                New secret
+                {t('New secret')}
               </button>
             </dd>
           </dl>
           <p className="field-help">
-            In AriaNg: AriaNg Settings, then RPC. Enter the address (WebSocket or HTTP both work)
-            and the secret.
+            {t(
+              'In AriaNg: AriaNg Settings, then RPC. Enter the address (WebSocket or HTTP both work) and the secret.',
+            )}
           </p>
           <label className="check">
             <input
@@ -143,9 +150,11 @@ export function RemoteSetting() {
               }
             />
             <span>
-              Allow phones and computers on this network
+              {t('Allow phones and computers on this network')}
               <span className="field-help">
-                The secret travels unencrypted on the network, so use this only at home or work.
+                {t(
+                  'The secret travels unencrypted on the network, so use this only at home or work.',
+                )}
               </span>
             </span>
           </label>
@@ -157,23 +166,24 @@ export function RemoteSetting() {
                   <span
                     className="qr"
                     role="img"
-                    aria-label="Code to scan with your phone"
+                    aria-label={t('Code to scan with your phone')}
                     dangerouslySetInnerHTML={{ __html: view.phoneQr }}
                   />
                   <div>
-                    <p className="setting-name">Scan with your phone&apos;s camera</p>
+                    <p className="setting-name">{t("Scan with your phone's camera")}</p>
                     <p className="muted">
-                      A page opens with your downloads: add links, pause and resume. The code
-                      carries the secret, so show it only to your own phone.
+                      {t(
+                        'A page opens with your downloads: add links, pause and resume. The code carries the secret, so show it only to your own phone.',
+                      )}
                     </p>
                     <button type="button" className="btn btn-sm" onClick={() => setCode(false)}>
-                      Hide the code
+                      {t('Hide the code')}
                     </button>
                   </div>
                 </>
               ) : (
                 <button type="button" className="btn btn-sm" onClick={() => setCode(true)}>
-                  <QrCode size={16} aria-hidden /> Show a code for your phone
+                  <QrCode size={16} aria-hidden /> {t('Show a code for your phone')}
                 </button>
               )}
             </div>
@@ -183,11 +193,11 @@ export function RemoteSetting() {
             noValidate
             onSubmit={(e) => {
               e.preventDefault()
-              void run(() => backend!.remoteSet(true, view.lan, p), 'Saved.')
+              void run(() => backend!.remoteSet(true, view.lan, p), t('Saved.'))
             }}
           >
             <div className="field">
-              <label htmlFor="remote-port">Port</label>
+              <label htmlFor="remote-port">{t('Port')}</label>
               <input
                 id="remote-port"
                 name="port"
@@ -206,12 +216,12 @@ export function RemoteSetting() {
                 </p>
               ) : (
                 <p id="remote-port-help" className="field-help">
-                  6800 is what aria2 apps expect.
+                  {t('6800 is what aria2 apps expect.')}
                 </p>
               )}
             </div>
             <button type="submit" className="btn" disabled={p === view.port}>
-              Save
+              {t('Save')}
             </button>
           </form>
         </div>

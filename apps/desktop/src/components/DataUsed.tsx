@@ -3,6 +3,7 @@ import { useApp } from '../lib/store'
 import { bytes } from '../lib/format'
 import { assignLanes } from '../lib/lanes'
 import type { UsageHistory } from '../lib/types'
+import { intlLocale, t } from '../lib/i18n'
 
 const KIND: Record<string, string> = { 'iPhone USB': 'tether' }
 
@@ -22,8 +23,8 @@ export function DataUsed() {
         .then(setH)
         .catch(() => {})
     load()
-    const t = setInterval(load, 60_000)
-    return () => clearInterval(t)
+    const timer = setInterval(load, 60_000)
+    return () => clearInterval(timer)
   }, [backend])
   if (!h || !h.days.length) return null
   const names = [...new Set(h.days.flatMap((d) => Object.keys(d.nets)))]
@@ -41,9 +42,11 @@ export function DataUsed() {
   return (
     <section className="net-limits data-used" aria-labelledby="du-title">
       <h2 id="du-title" className="section-title">
-        Data used
+        {t('Data used')}
       </h2>
-      <p className="muted">What each network carried for Fuselane this month and day by day.</p>
+      <p className="muted">
+        {t('What each network carried for Fuselane this month and day by day.')}
+      </p>
       <ul className="du-totals">
         {names.map((n, i) => (
           <li key={n} style={{ '--lane': `var(--lane-${lanes[i]})` } as React.CSSProperties}>
@@ -56,7 +59,7 @@ export function DataUsed() {
       <div
         className="du-chart"
         role="img"
-        aria-label={`Data used per day for the last ${last30.length} days`}
+        aria-label={t('Data used per day for the last {n} days', { n: last30.length })}
       >
         {last30.map((d) => {
           const total = Object.values(d.nets).reduce((a, b) => a + b, 0)
@@ -64,7 +67,7 @@ export function DataUsed() {
             <div
               key={d.day}
               className="du-day"
-              title={`${new Date(d.day).toLocaleDateString([], { day: 'numeric', month: 'short' })}: ${bytes(total)}`}
+              title={`${new Date(d.day).toLocaleDateString(intlLocale(), { day: 'numeric', month: 'short' })}: ${bytes(total)}`}
             >
               <div className="du-stack" style={{ height: `${(total / max) * 100}%` }}>
                 {names.map((n, i) =>

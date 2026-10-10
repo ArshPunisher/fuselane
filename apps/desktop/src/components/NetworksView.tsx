@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { ArrowClockwise, PencilSimple } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { assignLanes, kindLabel, LANES, netTitle, type Lane } from '../lib/lanes'
@@ -10,6 +10,7 @@ import { LimitField } from './LimitField'
 import { NetCheck } from './NetCheck'
 import { DataUsed } from './DataUsed'
 import { NetworkProxy } from './NetworkProxy'
+import { intlLocale, mark, t, tr } from '../lib/i18n'
 
 /** Live speed per network, summed over running downloads. */
 export function useLiveRates(): Record<string, number> {
@@ -23,9 +24,9 @@ export function useLiveRates(): Record<string, number> {
     for (const n of l.networks) out[n.name] = (out[n.name] ?? 0) + (n.dead ? 0 : n.rate)
   }
   // Torrent traffic counts too.
-  for (const t of torrents) {
-    if (t.status !== 'downloading') continue
-    for (const n of t.networks) out[n.name] = (out[n.name] ?? 0) + n.rate
+  for (const tor of torrents) {
+    if (tor.status !== 'downloading') continue
+    for (const n of tor.networks) out[n.name] = (out[n.name] ?? 0) + n.rate
   }
   return out
 }
@@ -40,10 +41,10 @@ export function NetworksTotal() {
   return (
     <>
       <div className="net-total">
-        <h2 className="group">Networks</h2>
+        <h2 className="group">{t('Networks')}</h2>
         {total > 0 && <span className="num">{rateText(total)}</span>}
       </div>
-      {total > 0 && <p className="net-total-note">All downloads together</p>}
+      {total > 0 && <p className="net-total-note">{t('All downloads together')}</p>}
     </>
   )
 }
@@ -54,14 +55,28 @@ function SignIn({ net }: { net: NetView }) {
   return (
     <div className="signin" role="note">
       <p>
-        {netTitle(net)} wants you to sign in before it reaches the internet, so downloads leave it
-        out for now. Fuselane checks again every minute.
+        {t(
+          '{name} wants you to sign in before it reaches the internet, so downloads leave it out for now. Fuselane checks again every minute.',
+          { name: netTitle(net) },
+        )}
       </p>
       <button className="btn" onClick={() => act((b) => b.openSignIn())}>
-        Open sign-in page
+        {t('Open sign-in page')}
       </button>
     </div>
   )
+}
+
+/** The colours' names, for screen readers. */
+const LANE_NAME: Record<Lane, string> = {
+  tide: mark('tide'),
+  volt: mark('volt'),
+  iris: mark('iris'),
+  rose: mark('rose'),
+  mint: mark('mint'),
+  sky: mark('sky'),
+  lilac: mark('lilac'),
+  steel: mark('steel'),
 }
 
 /** Inline editor for a network's name and colour. */
@@ -91,7 +106,7 @@ function NetEditor({ net, lane, onDone }: { net: NetView; lane: Lane; onDone: ()
           onDone()
       }}
     >
-      <label htmlFor={id}>Name</label>
+      <label htmlFor={id}>{t('Name')}</label>
       <input
         id={id}
         value={label}
@@ -104,11 +119,11 @@ function NetEditor({ net, lane, onDone }: { net: NetView; lane: Lane; onDone: ()
       />
       {tooLong && (
         <p id={`${id}-err`} className="field-error" aria-live="polite">
-          Use up to 40 characters.
+          {t('Use up to 40 characters.')}
         </p>
       )}
       <fieldset className="swatches">
-        <legend>Colour</legend>
+        <legend>{t('Colour')}</legend>
         {LANES.map((l) => (
           <label
             key={l}
@@ -122,7 +137,7 @@ function NetEditor({ net, lane, onDone }: { net: NetView; lane: Lane; onDone: ()
               checked={color === l}
               onChange={() => setColor(l)}
             />
-            <span className="sr-only">{l}</span>
+            <span className="sr-only">{t(LANE_NAME[l])}</span>
           </label>
         ))}
       </fieldset>
@@ -143,13 +158,13 @@ function NetEditor({ net, lane, onDone }: { net: NetView; lane: Lane; onDone: ()
               onDone()
           }}
         >
-          Reset
+          {t('Reset')}
         </button>
         <button type="button" className="btn btn-ghost" onClick={onDone}>
-          Cancel
+          {t('Cancel')}
         </button>
         <button type="submit" className="btn btn-primary" disabled={tooLong}>
-          Save
+          {t('Save')}
         </button>
       </div>
     </form>
@@ -158,9 +173,17 @@ function NetEditor({ net, lane, onDone }: { net: NetView; lane: Lane; onDone: ()
 
 const hhmm = (m: number) =>
   `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
-const minutes = (t: string) => {
-  const [h, m] = t.split(':').map(Number)
+const minutes = (value: string) => {
+  const [h, m] = value.split(':').map(Number)
   return (h ?? 0) * 60 + (m ?? 0)
+}
+
+/** tr()'s output with each run of words in a <span>, as items of a flex row. */
+function spans(nodes: ReactNode): ReactNode {
+  if (!Array.isArray(nodes)) return nodes
+  return nodes.map((n: ReactNode, i) =>
+    typeof n === 'string' ? n.trim() ? <span key={`w${i}`}>{n.trim()}</span> : null : n,
+  )
 }
 
 /** "Only from 23:00 to 06:00" for one network (B10.6), e.g. a night data plan. */
@@ -181,43 +204,52 @@ function Hours({
           checked={hours !== null}
           onChange={(e) => onChange(e.target.checked ? { start: 23 * 60, stop: 6 * 60 } : null)}
         />
-        <span>Only from</span>
+        <span>{t('Only from')}</span>
       </label>
-      <input
-        type="time"
-        aria-label={`${name} from`}
-        disabled={!hours}
-        value={hhmm(hours?.start ?? 23 * 60)}
-        onChange={(e) => hours && onChange({ ...hours, start: minutes(e.target.value) })}
-      />
-      <span>to</span>
-      <input
-        type="time"
-        aria-label={`${name} until`}
-        disabled={!hours}
-        value={hhmm(hours?.stop ?? 6 * 60)}
-        onChange={(e) => hours && onChange({ ...hours, stop: minutes(e.target.value) })}
-      />
+      {spans(
+        tr('{start} to {end}', {
+          start: (
+            <input
+              type="time"
+              aria-label={t('{name} from', { name })}
+              disabled={!hours}
+              value={hhmm(hours?.start ?? 23 * 60)}
+              onChange={(e) => hours && onChange({ ...hours, start: minutes(e.target.value) })}
+            />
+          ),
+          end: (
+            <input
+              type="time"
+              aria-label={t('{name} until', { name })}
+              disabled={!hours}
+              value={hhmm(hours?.stop ?? 6 * 60)}
+              onChange={(e) => hours && onChange({ ...hours, stop: minutes(e.target.value) })}
+            />
+          ),
+        }),
+      )}
       {/* Daily data packs expire at midnight (8.1): the phone helps in the last two
           hours with what's left of today's data; if the pack runs out, the carrier's
           slowdown is caught by throttle detection (8.2). */}
       <button
         type="button"
         className="link-btn"
-        aria-label={`${name}: only before midnight, 22:00 to 00:00`}
-        title="22:00 to midnight. Daily data packs expire at midnight, so the phone helps with what's left of today's data. If it runs out, Fuselane notices the slowdown and stops using it."
+        aria-label={t('{name}: only before midnight, 22:00 to 00:00', { name })}
+        title={t(
+          "22:00 to midnight. Daily data packs expire at midnight, so the phone helps with what's left of today's data. If it runs out, Fuselane notices the slowdown and stops using it.",
+        )}
         onClick={() => onChange({ start: 22 * 60, stop: 0 })}
       >
-        Before midnight
+        {t('Before midnight')}
       </button>
     </div>
   )
 }
 
 const USES: { value: NetUse; label: string }[] = [
-  { value: 'always', label: 'Always' },
-  { value: 'long', label: 'Long downloads' },
-  { value: 'never', label: 'Never' },
+  { value: 'always', label: mark('Always') },
+  { value: 'long', label: mark('Long downloads') },
+  { value: 'never', label: mark('Never') },
 ]
 
 /**
@@ -243,10 +275,10 @@ function NetworkUse() {
   return (
     <section className="net-limits net-use" aria-labelledby="use-title">
       <h2 id="use-title" className="section-title">
-        When each network helps
+        {t('When each network helps')}
       </h2>
       <p className="muted">
-        A phone on a data plan can wait for the downloads where it makes a real difference.
+        {t('A phone on a data plan can wait for the downloads where it makes a real difference.')}
       </p>
       <ul className="use-list">
         {networks.map((n) => {
@@ -275,7 +307,7 @@ function NetworkUse() {
                       })
                     }
                   >
-                    {u.label}
+                    {t(u.label)}
                   </button>
                 ))}
               </div>
@@ -305,7 +337,7 @@ function NetworkUse() {
             void act(async (b) => setMinutes(await b.setLongMinutes(m)))
           }}
         >
-          <label htmlFor="long-min">A long download takes more than</label>
+          <label htmlFor="long-min">{t('A long download takes more than')}</label>
           <input
             id="long-min"
             className="num"
@@ -314,13 +346,14 @@ function NetworkUse() {
             onChange={(e) => setDraft(e.target.value.replace(/\D/g, '').slice(0, 3))}
             aria-describedby="long-help"
           />
-          <span>minutes without them.</span>
+          <span>{t('minutes without them.')}</span>
           <button type="submit" className="btn" disabled={draft === String(minutes) || !draft}>
-            Save
+            {t('Save')}
           </button>
           <p id="long-help" className="field-help">
-            Downloads start without them; once a download&apos;s speed shows it&apos;s long, they
-            join in and it carries on where it was.
+            {t(
+              "Downloads start without them; once a download's speed shows it's long, they join in and it carries on where it was.",
+            )}
           </p>
         </form>
       )}
@@ -339,7 +372,7 @@ export function NetworkList({ compact = false }: { compact?: boolean }) {
   if (!networks.length)
     return (
       <p className="muted">
-        No networks found. Join Wi-Fi, plug in Ethernet, or tether a phone over USB.
+        {t('No networks found. Join Wi-Fi, plug in Ethernet, or tether a phone over USB.')}
       </p>
     )
   return (
@@ -356,11 +389,11 @@ export function NetworkList({ compact = false }: { compact?: boolean }) {
                 </span>
                 <span className="net-kind num" data-reach={n.reach ?? undefined}>
                   {n.reach === 'portal'
-                    ? 'Sign in needed'
+                    ? t('Sign in needed')
                     : r > 0
                       ? rateText(r)
                       : compact
-                        ? 'Ready'
+                        ? t('Ready')
                         : `${kindLabel(n.kind)}, ${n.name}`}
                 </span>
               </span>
@@ -369,8 +402,8 @@ export function NetworkList({ compact = false }: { compact?: boolean }) {
                   <NetIcon kind={n.kind} />
                   <button
                     className="icon-btn"
-                    aria-label={`Rename or recolour ${netTitle(n)}`}
-                    title="Rename or recolour"
+                    aria-label={t('Rename or recolour {name}', { name: netTitle(n) })}
+                    title={t('Rename or recolour')}
                     aria-expanded={editing === n.name}
                     onClick={() => setEditing(editing === n.name ? null : n.name)}
                   >
@@ -417,22 +450,24 @@ function NetworkLimits() {
         const others = limits.networks.filter((l) => !networks.some((n) => n.name === l.name))
         if (await save({ ...limits, networks: [...others, ...next] })) {
           setDraft({})
-          setStatus('Saved. Running downloads follow these now.')
+          setStatus(t('Saved. Running downloads follow these now.'))
         }
       }}
     >
       <h2 id="limits-title" className="section-title">
-        Speed limit per network
+        {t('Speed limit per network')}
       </h2>
       <p className="muted">
-        Useful for a phone on a data plan: cap it, and the other networks carry the rest.
+        {t('Useful for a phone on a data plan: cap it, and the other networks carry the rest.')}
       </p>
       <ul className="limit-list">
         {networks.map((n) => (
           <li key={n.name}>
-            <span className="net-name">{netTitle(n)}</span>
+            <span className="net-name" translate="no">
+              {netTitle(n)}
+            </span>
             <LimitField
-              label={`${netTitle(n)} speed limit`}
+              label={t('{name} speed limit', { name: netTitle(n) })}
               hideLabel
               rate={current(n.name)}
               onChange={(r) => setDraft((d) => ({ ...d, [n.name]: r }))}
@@ -445,7 +480,7 @@ function NetworkLimits() {
           {status}
         </p>
         <button type="submit" className="btn" disabled={invalid || !changed}>
-          Save limits
+          {t('Save limits')}
         </button>
       </div>
     </form>
@@ -458,7 +493,7 @@ const MB = 1024 ** 2
 function shortDate(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number)
   if (!y || !m || !d) return iso
-  return new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' }).format(
+  return new Intl.DateTimeFormat(intlLocale(), { day: 'numeric', month: 'short' }).format(
     new Date(y, m - 1, d),
   )
 }
@@ -491,12 +526,20 @@ function AllowanceRow({
   return (
     <li className="allowance" data-reached={view.reached || undefined}>
       <div className="allowance-head">
-        <span className="net-name">{title}</span>
+        <span className="net-name" translate="no">
+          {title}
+        </span>
         <span className="muted num">
           {view.allowance
-            ? `${bytesText(view.used)} of ${bytesText(view.allowance)}`
-            : `${bytesText(view.used)} used`}
-          , resets {shortDate(view.resetsOn)}
+            ? t('{used} of {allowance}, resets {date}', {
+                used: bytesText(view.used),
+                allowance: bytesText(view.allowance),
+                date: shortDate(view.resetsOn),
+              })
+            : t('{used} used, resets {date}', {
+                used: bytesText(view.used),
+                date: shortDate(view.resetsOn),
+              })}
         </span>
       </div>
       {view.allowance ? (
@@ -506,7 +549,9 @@ function AllowanceRow({
       ) : null}
       {view.reached && (
         <p className="allowance-note">
-          Allowance reached: Fuselane won&apos;t use this network until {shortDate(view.resetsOn)}.
+          {t("Allowance reached: Fuselane won't use this network until {date}.", {
+            date: shortDate(view.resetsOn),
+          })}
         </p>
       )}
       <form
@@ -520,20 +565,20 @@ function AllowanceRow({
         }}
       >
         <label htmlFor={id} className="sr-only">
-          {title} monthly allowance
+          {t('{name} monthly allowance', { name: title })}
         </label>
         <div className="limit-inputs">
           <input
             id={id}
             inputMode="decimal"
             autoComplete="off"
-            placeholder="No limit"
+            placeholder={t('No limit')}
             value={text}
             aria-invalid={valid ? undefined : true}
             onChange={(e) => setText(e.target.value)}
           />
           <select
-            aria-label={`${title} allowance unit`}
+            aria-label={t('{name} allowance unit', { name: title })}
             value={unit}
             onChange={(e) => setUnit(e.target.value as 'MB' | 'GB')}
           >
@@ -542,9 +587,9 @@ function AllowanceRow({
           </select>
         </div>
         <label className="reset-day">
-          <span className="muted">Resets on day</span>
+          <span className="muted">{t('Resets on day')}</span>
           <select
-            aria-label={`${title} reset day`}
+            aria-label={t('{name} reset day', { name: title })}
             value={day}
             onChange={(e) => setDay(Number(e.target.value))}
           >
@@ -556,10 +601,10 @@ function AllowanceRow({
           </select>
         </label>
         <button type="submit" className="btn" disabled={!changed}>
-          Save
+          {t('Save')}
         </button>
       </form>
-      {!valid && <p className="field-error">Enter a number, like 5 or 2.5.</p>}
+      {!valid && <p className="field-error">{t('Enter a number, like 5 or 2.5.')}</p>}
     </li>
   )
 }
@@ -576,21 +621,22 @@ function Allowances() {
         .then((v) => live && setViews(v))
         .catch(() => {})
     void load()
-    const t = setInterval(load, 5000)
+    const timer = setInterval(load, 5000)
     return () => {
       live = false
-      clearInterval(t)
+      clearInterval(timer)
     }
   }, [backend])
   if (!views.length) return null
   return (
     <section className="net-limits" aria-labelledby="allow-title">
       <h2 id="allow-title" className="section-title">
-        Monthly data allowance
+        {t('Monthly data allowance')}
       </h2>
       <p className="muted">
-        For a phone on a data plan: when a network reaches its allowance, Fuselane stops using it
-        until the reset day.
+        {t(
+          'For a phone on a data plan: when a network reaches its allowance, Fuselane stops using it until the reset day.',
+        )}
       </p>
       <ul className="allowance-list">
         {views.map((v) => (
@@ -607,9 +653,9 @@ function Allowances() {
 
 type NetTab = 'setup' | 'check' | 'usage'
 const NET_TABS: [NetTab, string][] = [
-  ['setup', 'Setup'],
-  ['check', 'Check'],
-  ['usage', 'Usage'],
+  ['setup', mark('Setup')],
+  ['check', mark('Check')],
+  ['usage', mark('Usage')],
 ]
 
 export function NetworksView() {
@@ -617,8 +663,8 @@ export function NetworksView() {
   const refresh = useApp((s) => s.refreshNetworks)
   useEffect(() => {
     void refresh()
-    const t = setInterval(() => void refresh(), 10000)
-    return () => clearInterval(t)
+    const timer = setInterval(() => void refresh(), 10000)
+    return () => clearInterval(timer)
   }, [refresh])
   const other = networks.filter((n) => !n.usable)
   // Setup (networks, limits, when each helps, allowances), the check, and usage.
@@ -629,10 +675,10 @@ export function NetworksView() {
       return 'setup'
     }
   })
-  const pick = (t: NetTab) => {
-    setTab(t)
+  const pick = (next: NetTab) => {
+    setTab(next)
     try {
-      sessionStorage.setItem('fuselane.netTab', t)
+      sessionStorage.setItem('fuselane.netTab', next)
     } catch {
       /* private mode: the tab lasts while the page is open */
     }
@@ -640,12 +686,12 @@ export function NetworksView() {
   return (
     <section className="page" aria-labelledby="nets-title">
       <header className="page-head with-tabs">
-        <h1 id="nets-title">Networks</h1>
+        <h1 id="nets-title">{t('Networks')}</h1>
         <div className="nets-head-actions">
           <div
             className="segmented"
             role="radiogroup"
-            aria-label="Networks view"
+            aria-label={t('Networks view')}
             onKeyDown={(e) => {
               if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
               e.preventDefault()
@@ -668,12 +714,12 @@ export function NetworksView() {
                 tabIndex={tab === id ? 0 : -1}
                 onClick={() => pick(id)}
               >
-                {label}
+                {t(label)}
               </button>
             ))}
           </div>
           <button className="btn btn-ghost" onClick={() => void refresh()}>
-            <ArrowClockwise size={16} aria-hidden /> Refresh
+            <ArrowClockwise size={16} aria-hidden /> {t('Refresh')}
           </button>
         </div>
       </header>
@@ -682,8 +728,9 @@ export function NetworksView() {
       {tab === 'setup' && (
         <>
           <p className="page-lead">
-            Every network here can carry part of each download. Plug in a phone or join another
-            network and it joins in.
+            {t(
+              'Every network here can carry part of each download. Plug in a phone or join another network and it joins in.',
+            )}
           </p>
           <div className="nets-grid">
             <NetworkList />
@@ -698,7 +745,7 @@ export function NetworksView() {
           </div>
           {other.length > 0 && (
             <details className="other-nets">
-              <summary>Not used ({other.length})</summary>
+              <summary>{t('Not used ({n})', { n: other.length })}</summary>
               <ul className="netlist">
                 {other.map((n) => (
                   <li key={n.name} data-down>
@@ -706,12 +753,14 @@ export function NetworksView() {
                       <NetIcon kind={n.kind} />
                     </span>
                     <span className="netlist-text">
-                      <span className="net-name">{netTitle(n)}</span>
+                      <span className="net-name" translate="no">
+                        {netTitle(n)}
+                      </span>
                       <span className="net-kind">
                         {kindLabel(n.kind)}, {n.name}.{' '}
                         {n.kind === 'vpn'
-                          ? 'Tunnels are skipped so traffic stays where you expect.'
-                          : 'Not connected to the internet.'}
+                          ? t('Tunnels are skipped so traffic stays where you expect.')
+                          : t('Not connected to the internet.')}
                       </span>
                     </span>
                   </li>
