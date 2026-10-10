@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { FileText, Gauge, Stop } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import type { CheckRun, NetResult, Outage } from '../lib/types'
-import { intlLocale, t, tr } from '../lib/i18n'
+import { intlLocale, t, tb, tr } from '../lib/i18n'
 
 const mbps = (bps: number | null) => (bps === null ? '–' : `${((bps * 8) / 1e6).toFixed(1)}`)
 const ms = (v: number | null) => (v === null ? '–' : `${Math.round(v)}`)
@@ -19,7 +19,7 @@ function when(unix: number): string {
 
 /** Plain words for a result, so the numbers mean something. */
 function verdict(r: NetResult): string {
-  if (r.problem) return r.problem
+  if (r.problem) return tb(r.problem)
   const g = r.grade ?? ''
   if (g === 'D' || g === 'F')
     return t('Gets very slow while busy: calls and games stutter when something downloads.')
@@ -208,7 +208,7 @@ export function NetCheck() {
       </div>
       <p className="nc-status muted" role="status">
         {view?.running
-          ? (view.phase ?? t('Checking…'))
+          ? (tb(view.phase) ?? t('Checking…'))
           : run
             ? t('Last checked {when}.', { when: when(run.at) })
             : ''}

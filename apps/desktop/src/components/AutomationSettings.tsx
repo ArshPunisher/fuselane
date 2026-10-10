@@ -8,7 +8,7 @@ import type {
   WhenDone,
   WindowPrefs,
 } from '../lib/types'
-import { mark, t } from '../lib/i18n'
+import { mark, t, tb } from '../lib/i18n'
 
 /** Each day's short and full name, Monday first. */
 const DAYS: [string, string][] = [
@@ -156,7 +156,7 @@ export function ScheduleSetting() {
             )}
           </p>
           <p className="muted" role="status">
-            {enabled && view?.next ? view.next : ''}
+            {enabled && view?.next ? tb(view.next) : ''}
           </p>
         </div>
         <button
@@ -531,7 +531,9 @@ export function WindowSettings() {
               const on = await backend.setStartAtLogin(!prefs.startAtLogin)
               setPrefs({ ...prefs, startAtLogin: on })
             } catch (e) {
-              setStatus((e as { message?: string }).message ?? t("Couldn't change it. Try again."))
+              setStatus(
+                tb((e as { message?: string }).message) ?? t("Couldn't change it. Try again."),
+              )
             }
           }}
         />

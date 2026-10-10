@@ -38,7 +38,7 @@ import type {
   UiEvent,
   UpdateInfo,
 } from './types'
-import { t } from './i18n'
+import { t, tb } from './i18n'
 
 /** A drag of files over the window (desktop app only). */
 export interface FileDrop {
@@ -261,20 +261,23 @@ export interface Backend {
   revealReceived(id: string): Promise<void>
 }
 
-/** Turns anything thrown across IPC into a UiError the UI can show. */
+/**
+ * Turns anything thrown across IPC into a UiError the UI can show, in the language in
+ * use (the core writes English; tb() translates what it knows, the code stays as is).
+ */
 export function toUiError(e: unknown): UiError {
   if (e && typeof e === 'object' && 'message' in e && 'code' in e) {
     const o = e as { code: unknown; message: unknown; hint?: unknown }
     return {
       code: String(o.code),
-      message: String(o.message),
-      hint: typeof o.hint === 'string' ? o.hint : null,
+      message: tb(String(o.message)),
+      hint: typeof o.hint === 'string' ? tb(o.hint) : null,
     }
   }
   const text = typeof e === 'string' ? e : e instanceof Error ? e.message : ''
   return {
     code: 'unexpected',
-    message: text || t('Something went wrong.'),
+    message: text ? tb(text) : t('Something went wrong.'),
     hint: t('Try again. If it keeps happening, restart Fuselane.'),
   }
 }

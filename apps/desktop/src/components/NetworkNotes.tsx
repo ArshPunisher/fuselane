@@ -3,7 +3,7 @@ import { useApp } from '../lib/store'
 import { netTitle } from '../lib/lanes'
 import { rateText } from '../lib/format'
 import type { NetNote } from '../lib/types'
-import { t } from '../lib/i18n'
+import { t, tb } from '../lib/i18n'
 
 /** What a note says, with the person's name for the network and their speed unit. */
 export function noteText(n: NetNote, title: string): string {
@@ -26,7 +26,7 @@ export function noteText(n: NetNote, title: string): string {
     case 'back':
       return t("{network} is fast again ({rate}), so it's helping again.", { network: title, rate })
     case 'trouble':
-      return n.message ?? t("{network} can't connect.", { network: title })
+      return n.message ? tb(n.message) : t("{network} can't connect.", { network: title })
   }
 }
 

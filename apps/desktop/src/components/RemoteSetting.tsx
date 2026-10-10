@@ -3,7 +3,7 @@ import { Copy, Eye, EyeSlash, QrCode } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { toUiError } from '../lib/backend'
 import type { RemoteView, UiError } from '../lib/types'
-import { t } from '../lib/i18n'
+import { t, tb } from '../lib/i18n'
 
 /**
  * Remote control for aria2 apps (8.7, ADR 0013): AriaNg, the Aria2 browser
@@ -81,7 +81,7 @@ export function RemoteSetting() {
         <div className="remote">
           {view.problem && (
             <p className="field-error" role="alert">
-              {view.problem}
+              {tb(view.problem)}
             </p>
           )}
           <dl className="remote-facts">

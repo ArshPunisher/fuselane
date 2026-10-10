@@ -28,7 +28,7 @@ import { BIN, RemoveDialog } from './RemoveDialog'
 import { HandoffDialog } from './HandoffDialog'
 import { NetworkNotes } from './NetworkNotes'
 import type { JobView, Live, ReportView } from '../lib/types'
-import { mark, t, tn, tr } from '../lib/i18n'
+import { mark, t, tb, tn, tr } from '../lib/i18n'
 
 /** The platform's own words for showing a file in its folder (marked: show it with t()). */
 export const REVEAL_LABEL = /Mac/i.test(navigator.platform)
@@ -130,7 +130,7 @@ function ErrorPanel({ job }: { job: JobView }) {
     <div className="notice" role="alert">
       <WarningCircle size={18} weight="fill" aria-hidden className="ic-danger" />
       <div className="notice-body">
-        <p>{job.error}</p>
+        <p>{tb(job.error)}</p>
         {job.retryIn !== null && (
           <p className="field-help">
             {job.retryIn < 60
@@ -592,7 +592,7 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
           ) : (
             <Lightning size={18} aria-hidden />
           )}
-          <span>{job.error}</span>
+          <span>{tb(job.error)}</span>
         </p>
       )}
       {job.error && job.status !== 'running' && !WAITS.includes(job.errorAction) && (
@@ -661,7 +661,7 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
               </p>
               {job.mirrorNotes.map((n) => (
                 <p key={n} className="field-help warn">
-                  {n}
+                  {tb(n)}
                 </p>
               ))}
             </div>

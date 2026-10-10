@@ -3,7 +3,7 @@ import { ArrowClockwise, Rss, Trash, X } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { toUiError } from '../lib/backend'
 import type { FeedView, UiError } from '../lib/types'
-import { mark, t } from '../lib/i18n'
+import { mark, t, tb } from '../lib/i18n'
 
 const EVERY: { mins: number; label: string }[] = [
   { mins: 15, label: mark('Every 15 minutes') },
@@ -132,7 +132,7 @@ function FeedCard({
       </div>
       {feed.problem && (
         <p className="field-error" role="alert">
-          {t('Last check: {problem}', { problem: feed.problem })}
+          {t('Last check: {problem}', { problem: tb(feed.problem) })}
         </p>
       )}
       {error && (
@@ -173,7 +173,7 @@ function FeedCard({
                 {r.title || r.url}
               </span>
               <span className="chip" data-state={r.state}>
-                {r.note ?? t(STATE_WORD[r.state])}
+                {r.note ? tb(r.note) : t(STATE_WORD[r.state])}
               </span>
               {(r.state === 'torrent' || (r.state === 'failed' && isTorrentLink(r.url))) && (
                 <button

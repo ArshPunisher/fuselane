@@ -15,7 +15,7 @@ import { bytes } from '../lib/format'
 import type { ReceiveView, ShareView, UiError } from '../lib/types'
 import { SEND_PAGE } from '../lib/sendLink'
 import { NearbyPanel } from './NearbyPanel'
-import { mark, t, tn } from '../lib/i18n'
+import { mark, t, tb, tn } from '../lib/i18n'
 
 function shareStatus(s: ShareView): string {
   switch (s.state) {
@@ -130,7 +130,7 @@ function ShareRow({ s }: { s: ShareView }) {
       )}
       {s.error && (
         <p className="send-error">
-          <WarningCircle size={14} aria-hidden weight="fill" /> {s.error}
+          <WarningCircle size={14} aria-hidden weight="fill" /> {tb(s.error)}
         </p>
       )}
     </li>
@@ -215,7 +215,7 @@ function ReceiveRow({ r }: { r: ReceiveView }) {
       )}
       {r.error && (
         <p className="send-error">
-          <WarningCircle size={14} aria-hidden weight="fill" /> {r.error}
+          <WarningCircle size={14} aria-hidden weight="fill" /> {tb(r.error)}
         </p>
       )}
     </li>

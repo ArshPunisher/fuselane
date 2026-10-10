@@ -3,7 +3,7 @@ import { useApp } from '../lib/store'
 import { netTitle, setNetPrefs } from '../lib/lanes'
 import { toUiError } from '../lib/backend'
 import type { NetPref, NetView, ProxyPref, ProxyType, UiError } from '../lib/types'
-import { t } from '../lib/i18n'
+import { t, tb } from '../lib/i18n'
 
 const TYPES: { value: ProxyType; label: string; port: string }[] = [
   { value: 'http', label: 'HTTP', port: '8080' },
@@ -349,7 +349,7 @@ function ProxyRow({ net, pref }: { net: NetView; pref: NetPref | undefined }) {
       )}
       <div className="proxy-status" aria-live="polite" data-state={check?.state}>
         {check?.state === 'busy' && <p className="field-help">{t('Checking the proxy…')}</p>}
-        {check?.state === 'ok' && <p className="field-help proxy-ok">{check.text}</p>}
+        {check?.state === 'ok' && <p className="field-help proxy-ok">{tb(check.text)}</p>}
         {check?.state === 'error' && (
           <p className="field-error">
             {check.error.message}

@@ -15,7 +15,7 @@ import { FilePicker } from './FilePicker'
 import { PagePicker } from './PagePicker'
 import { REVEAL_LABEL } from './TransferDetail'
 import { bytes, clockTime, nextAt, when } from '../lib/format'
-import { intlLocale, t, tn, tr } from '../lib/i18n'
+import { intlLocale, t, tb, tn, tr } from '../lib/i18n'
 
 /** Quick local check so obvious mistakes show before a round trip; the backend decides. */
 function looksLikeLink(s: string): boolean {
@@ -1145,7 +1145,7 @@ export function NewDownload() {
                     <span className="num" translate="no">
                       {s.url}
                     </span>
-                    : {s.reason}
+                    : {tb(s.reason)}
                   </li>
                 ))}
                 {skipped.length > 5 && <li>{t('and {n} more.', { n: skipped.length - 5 })}</li>}

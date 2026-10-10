@@ -21,7 +21,7 @@ import { BIN, RemoveDialog } from './RemoveDialog'
 import { Orb } from './Orb'
 import { PiecesMap } from './PiecesMap'
 import { REVEAL_LABEL } from './TransferDetail'
-import { mark, t } from '../lib/i18n'
+import { mark, t, tb } from '../lib/i18n'
 import type { FilePriority, NetView, PeerView, TorrentNetView, TorrentView } from '../lib/types'
 
 export const TORRENT_WORD: Record<TorrentView['status'], string> = {
@@ -378,7 +378,7 @@ export function TorrentDetail({ t: tor, onBack }: { t: TorrentView; onBack: (() 
         <div className="notice" role="alert">
           <WarningCircle size={18} weight="fill" aria-hidden className="ic-danger" />
           <div className="notice-body">
-            <p>{tor.error}</p>
+            <p>{tb(tor.error)}</p>
           </div>
         </div>
       )}

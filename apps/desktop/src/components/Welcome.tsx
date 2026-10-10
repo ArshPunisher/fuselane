@@ -3,7 +3,7 @@ import { ArrowRight, Clipboard, FolderSimple, Gauge, PuzzlePiece } from '@phosph
 import { useApp } from '../lib/store'
 import type { CheckRun } from '../lib/types'
 import { NetIcon } from './NetIcon'
-import { t, tr } from '../lib/i18n'
+import { t, tb, tr } from '../lib/i18n'
 
 type Step = 'networks' | 'check' | 'ready'
 const STEPS: Step[] = ['networks', 'check', 'ready']
@@ -226,7 +226,7 @@ export function Welcome() {
                         {r.label}
                       </span>
                       <span className="num">
-                        {r.downBps ? mbps(r.downBps) : (r.problem ?? t('No answer'))}
+                        {r.downBps ? mbps(r.downBps) : (tb(r.problem) ?? t('No answer'))}
                       </span>
                     </li>
                   ))}
@@ -234,7 +234,7 @@ export function Welcome() {
               )}
               <p className="welcome-verdict" role="status">
                 {check?.running
-                  ? (check.phase ?? t('Checking…'))
+                  ? (tb(check.phase) ?? t('Checking…'))
                   : run && started
                     ? verdict(run)
                     : ''}

@@ -17,7 +17,7 @@ import {
 } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { bytes } from '../lib/format'
-import { intlLocale, mark, t, tn, tr } from '../lib/i18n'
+import { intlLocale, mark, t, tb, tn, tr } from '../lib/i18n'
 import type {
   DeviceView,
   NearbyRequest,
@@ -320,7 +320,7 @@ function Transfer({ x }: { x: NearbyTransfer }) {
           {tr(x.direction === 'out' ? 'To {device}.' : 'From {device}.', {
             device: <span translate="no">{x.device}</span>,
           })}{' '}
-          {x.error ?? t(STATE_WORD[x.state])}
+          {x.error ? tb(x.error) : t(STATE_WORD[x.state])}
           {running && x.size > 0 && x.state !== 'asking' && (
             <span>
               {' '}
@@ -470,7 +470,7 @@ function SyncCard({ syncs, trusted }: { syncs: SyncView[]; trusted: TrustedDevic
                 </span>
                 <span className="muted">
                   {syncWord(s)}
-                  {s.note ? `. ${s.note}` : ''}
+                  {s.note ? `. ${tb(s.note)}` : ''}
                 </span>
               </span>
               <button
@@ -688,7 +688,7 @@ export function NearbyPanel() {
         <Visibility seconds={nearby.everyoneFor} />
         {nearby.problem && (
           <p className="field-help warn" role="status">
-            {nearby.problem}
+            {tb(nearby.problem)}
           </p>
         )}
         <section aria-labelledby="near-devices" className="nearby-devices">

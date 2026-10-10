@@ -3,7 +3,7 @@ import { CheckCircle, FolderOpen, WarningCircle } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { toUiError } from '../lib/backend'
 import type { UiError, WatchView } from '../lib/types'
-import { t } from '../lib/i18n'
+import { t, tb } from '../lib/i18n'
 
 /**
  * Watch folder (B10.9): .torrent files, Metalinks and lists of links put in
@@ -87,7 +87,7 @@ export function WatchSetting() {
           </div>
           {view.problem && (
             <p className="field-error" role="alert">
-              {view.problem}
+              {tb(view.problem)}
             </p>
           )}
           {view.recent.length > 0 ? (
@@ -102,7 +102,7 @@ export function WatchSetting() {
                   <span className="watch-name" translate="no">
                     {h.name}
                   </span>
-                  <span className="muted">{h.note}</span>
+                  <span className="muted">{tb(h.note)}</span>
                 </li>
               ))}
             </ul>
