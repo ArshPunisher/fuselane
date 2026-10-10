@@ -231,11 +231,16 @@ const WHEN_DONE: { id: WhenDone; label: string }[] = [
   { id: 'quit', label: mark('Quit') },
 ]
 
+/** Sleep and Shut down need systemctl, which a Flatpak doesn't have (flatpak.rs). */
+const NOT_IN_FLATPAK: WhenDone[] = ['sleep', 'shut-down']
+
 export function WhenDoneSetting() {
   const [settings, save] = useAutomation()
+  const flatpak = useApp((s) => s.info?.flatpak ?? false)
   if (!settings) return null
   const current = settings.whenDone
   const pick = (id: WhenDone) => void save({ ...settings, whenDone: id })
+  const offered = flatpak ? WHEN_DONE.filter((w) => !NOT_IN_FLATPAK.includes(w.id)) : WHEN_DONE
   return (
     <div className="setting">
       <div>
@@ -247,13 +252,18 @@ export function WhenDoneSetting() {
             ? t('Fuselane just waits.')
             : t('You get 60 seconds and a notification to cancel first.')}
         </p>
+        {flatpak && (
+          <p className="muted" data-testid="when-done-flatpak">
+            {t("The Flatpak version can't put the computer to sleep or shut it down.")}
+          </p>
+        )}
       </div>
       <div
         className="segmented"
         role="radiogroup"
         aria-labelledby="when-done-label"
         onKeyDown={(e) => {
-          const i = WHEN_DONE.findIndex((w) => w.id === current)
+          const i = offered.findIndex((w) => w.id === current)
           const step =
             e.key === 'ArrowRight' || e.key === 'ArrowDown'
               ? 1
@@ -262,14 +272,14 @@ export function WhenDoneSetting() {
                 : 0
           if (!step) return
           e.preventDefault()
-          const next = WHEN_DONE[(i + step + WHEN_DONE.length) % WHEN_DONE.length]
+          const next = offered[(i + step + offered.length) % offered.length]
           if (next) {
             pick(next.id)
             e.currentTarget.querySelector<HTMLButtonElement>(`[data-id="${next.id}"]`)?.focus()
           }
         }}
       >
-        {WHEN_DONE.map((w) => (
+        {offered.map((w) => (
           <button
             key={w.id}
             data-id={w.id}

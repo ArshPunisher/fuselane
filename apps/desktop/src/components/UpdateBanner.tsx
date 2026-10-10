@@ -22,18 +22,20 @@ export function UpdateBanner() {
   const cancel = useApp((s) => s.cancelUpdate)
   const progress = useApp((s) => s.updateProgress)
   const error = useApp((s) => s.updateError)
+  // Unknown until the app says; a Flatpak never checks (Flathub updates it).
+  const flatpak = useApp((s) => s.info?.flatpak ?? null)
 
   useEffect(() => {
-    if (!backend) return
+    if (!backend || flatpak !== false) return
     const first = setTimeout(() => void check(true), backend.demo ? 300 : 8000)
     const again = setInterval(() => void check(true), 6 * 60 * 60 * 1000)
     return () => {
       clearTimeout(first)
       clearInterval(again)
     }
-  }, [backend, check])
+  }, [backend, check, flatpak])
 
-  if (!update || (dismissed && !progress)) return null
+  if (flatpak !== false || !update || (dismissed && !progress)) return null
   const version = <span className="num">{update.version}</span>
 
   if (progress?.phase === 'installing')

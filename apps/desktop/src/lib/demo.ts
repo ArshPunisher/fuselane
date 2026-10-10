@@ -220,6 +220,8 @@ export function createDemoBackend(params: URLSearchParams): Backend {
   const proxyTrouble = params.get('proxytrouble') === '1'
   // Like a Linux machine without a Secret Service: passwords stay in the settings.
   const noKeychain = params.get('nokeychain') === '1'
+  // ?flatpak=1: the app as a Flatpak (no in-app updates, no sleep or shut down, no extension).
+  const flatpak = params.get('flatpak') === '1'
   let allowances: AllowanceView[] = NETWORKS.filter((n) => n.usable).map((n) => ({
     name: n.name,
     allowance: n.name === 'en7' && params.get('allowance') === 'reached' ? 5 * 1024 ** 3 : null,
@@ -656,6 +658,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       version: '0.0.0',
       defaultDir: '~/Downloads',
       updatedFrom: params.get('updated'),
+      flatpak,
     }),
     openReleaseNotes: async () => {},
     listJobs: async () => jobs.map(view),
@@ -808,6 +811,12 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     },
     automation: async () => automationView(),
     setAutomation: async (settings) => {
+      if (flatpak && (settings.whenDone === 'sleep' || settings.whenDone === 'shut-down'))
+        throw err(
+          'flatpak-power',
+          "The Flatpak version can't put the computer to sleep or shut it down.",
+          'Pick Quit or Nothing, or use the .deb or AppImage for this.',
+        )
       const s = settings.schedule
       if (s.start < 0 || s.start >= 1440 || s.stop < 0 || s.stop >= 1440)
         throw err('bad-value', 'Times must be between 00:00 and 23:59.', null)
@@ -1084,6 +1093,12 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     },
     pickFolder: async () => (params.get('pick') === 'cancel' ? null : '/Users/demo/Movies'),
     checkUpdate: async () => {
+      if (flatpak)
+        throw err(
+          'update-flatpak',
+          'Updates come through your software centre (Flatpak).',
+          'Update Fuselane there, or run flatpak update.',
+        )
       if (params.get('update') === 'offline')
         throw err('update-check', "Couldn't check for updates: you're offline.", null)
       return ['1', 'bad', 'slow'].includes(params.get('update') ?? '')

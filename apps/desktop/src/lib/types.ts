@@ -317,6 +317,8 @@ export interface AppInfo {
   defaultDir: string
   /** Set on the first launch after an update. */
   updatedFrom: string | null
+  /** Running as a Flatpak: Flathub updates it, and the browser extension can't reach it. */
+  flatpak: boolean
 }
 
 export interface PreviewView {

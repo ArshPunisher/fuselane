@@ -474,8 +474,18 @@ function LookupSetting() {
 function UpdateSetting() {
   const check = useApp((s) => s.checkUpdate)
   const update = useApp((s) => s.update)
+  const flatpak = useApp((s) => s.info?.flatpak ?? false)
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
+  if (flatpak)
+    return (
+      <div className="setting" data-testid="updates-flatpak">
+        <div>
+          <p className="setting-name">{t('Updates')}</p>
+          <p className="muted">{t('Updates come through your software centre (Flatpak).')}</p>
+        </div>
+      </div>
+    )
   return (
     <div className="setting">
       <div>
@@ -727,6 +737,18 @@ export function SettingsView() {
           <LookupSetting />
         </Group>
         <Group id="other-apps" title={t('Other apps')}>
+          {info?.flatpak && (
+            <div className="setting" data-testid="extension-flatpak">
+              <div>
+                <p className="setting-name">{t('Browser extension')}</p>
+                <p className="muted">
+                  {t(
+                    "The browser extension can't talk to the Flatpak version yet; use the .deb or AppImage for it.",
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
           <RemoteSetting />
         </Group>
         <Group id="about" title={t('About')}>

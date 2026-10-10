@@ -127,6 +127,13 @@ export const hi: Readonly<Record<string, string>> = {
   'Fuselane checks a signed update feed. Nothing about you is sent.':
     'Fuselane एक साइन किया हुआ अपडेट फ़ीड देखता है। आपके बारे में कुछ नहीं भेजा जाता।',
   "You're up to date.": 'आपके पास सबसे नया वर्ज़न है।',
+  'Updates come through your software centre (Flatpak).':
+    'अपडेट आपके सॉफ़्टवेयर सेंटर (Flatpak) से आते हैं।',
+  'Browser extension': 'ब्राउज़र एक्सटेंशन',
+  "The browser extension can't talk to the Flatpak version yet; use the .deb or AppImage for it.":
+    'ब्राउज़र एक्सटेंशन अभी Flatpak वर्ज़न से बात नहीं कर सकता; इसके लिए .deb या AppImage इस्तेमाल करें।',
+  "The Flatpak version can't put the computer to sleep or shut it down.":
+    'Flatpak वर्ज़न कंप्यूटर को स्लीप या बंद नहीं कर सकता।',
   'Version {version} is ready to install.': 'वर्ज़न {version} इंस्टॉल के लिए तैयार है।',
   'Checking…': 'जांच हो रही है…',
   'Check again': 'फिर से जांचें',

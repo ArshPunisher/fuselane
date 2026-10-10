@@ -274,10 +274,14 @@ export function Welcome() {
                 <li>
                   <PuzzlePiece size={20} aria-hidden />
                   <span>
-                    {tr(
-                      '{extension} hands big downloads to Fuselane by itself. Get it from fuselane.app.',
-                      { extension: <b>{t('The browser extension')}</b> },
-                    )}
+                    {info?.flatpak
+                      ? t(
+                          "The browser extension can't talk to the Flatpak version yet; use the .deb or AppImage for it.",
+                        )
+                      : tr(
+                          '{extension} hands big downloads to Fuselane by itself. Get it from fuselane.app.',
+                          { extension: <b>{t('The browser extension')}</b> },
+                        )}
                   </span>
                 </li>
                 <li>
