@@ -67,6 +67,8 @@ jobs:
           pnpm --filter @fuselane/desktop exec playwright test
       - name: Download page tests
         run: pnpm --filter @fuselane/site exec playwright test
+      - name: Website (Next.js, fuselane.app) builds with its CSP headers
+        run: pnpm --filter @fuselane/site-next build
 
   commits:
     name: Commit messages
