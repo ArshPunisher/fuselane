@@ -10,6 +10,7 @@ pub mod clip;
 pub mod feeds;
 pub mod grab;
 pub mod job;
+pub mod metalink;
 pub mod netcheck;
 pub mod runner;
 pub mod store;
