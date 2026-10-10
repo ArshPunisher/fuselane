@@ -3,7 +3,6 @@
 // toward it, and hovering a network lights up its share of the ring).
 import { createCore, type CoreNet, type CoreFile, type CoreState } from './core'
 import { duration, loop, prefersReduced, approach, watch } from './motion'
-import { odometer } from './odometer'
 import { isStill } from './common'
 
 const NETS: CoreNet[] = [
@@ -32,12 +31,29 @@ export function startHero() {
   const switches = [...root.querySelectorAll<HTMLButtonElement>('.sat')]
   const rateEls = [...root.querySelectorAll<HTMLElement>('[data-lane-rate]')]
   const total = root.querySelector<HTMLElement>('#total')
-  const odoEl = root.querySelector<HTMLElement>('.odo')
-  const roll = odoEl ? odometer(odoEl) : () => {}
+  const numEl = root.querySelector<HTMLElement>('.core-num')
   const gain = root.querySelector<HTMLElement>('#gain')
   const fileName = root.querySelector<HTMLElement>('#file-name')
   const fileLeft = root.querySelector<HTMLElement>('#file-left')
   const live = root.querySelector<HTMLElement>('#core-live')
+
+  // The speed changes about once a second and is readable at every instant:
+  // the new value replaces the old at once, and only the digits that changed
+  // glow briefly (colour only, nothing moves or overlaps).
+  let shown = numEl?.textContent ?? ''
+  const showNumber = (text: string) => {
+    if (!numEl || text === shown) return
+    const prev = shown
+    shown = text
+    numEl.replaceChildren(
+      ...[...text].map((ch, i) => {
+        const cell = document.createElement('span')
+        cell.textContent = ch
+        if (!reduced && prev.length === text.length && prev[i] !== ch) cell.className = 'changed'
+        return cell
+      }),
+    )
+  }
 
   const show = (s: CoreState) => {
     s.rates.forEach((r, i) => {
@@ -46,7 +62,7 @@ export function startHero() {
     })
     const sum = s.rates.reduce((a, b) => a + b, 0)
     if (total) total.textContent = fmt.format(sum)
-    roll(fmt.format(sum))
+    showNumber(fmt.format(sum))
     const best = Math.max(...s.rates.filter((_, i) => s.on[i]), 0)
     root.classList.toggle('core-done', s.done)
     if (gain)

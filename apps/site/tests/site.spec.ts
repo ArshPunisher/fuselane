@@ -253,26 +253,30 @@ test('the navbar tightens once the page scrolls, and its highlight follows the p
   await expect(nav).toHaveAttribute('data-scrolled', '')
 })
 
-test('the combined speed rolls and keeps running, while the exact figure stays readable', async ({
-  page,
-}) => {
+test('the hero speed is a readable number at any moment, and keeps changing', async ({ page }) => {
   await stub(page)
   await page.goto('/')
-  const odo = page.locator('.core .odo')
-  await expect(odo.locator('.odo-d')).toHaveCount(3) // 87.4
-  const read = () =>
-    odo.evaluate((el) =>
-      [...el.children]
-        .map((c) =>
-          c.classList.contains('odo-d')
-            ? getComputedStyle(c.firstElementChild!).getPropertyValue('--n')
-            : '.',
-        )
-        .join(''),
-    )
-  const first = await read()
-  await expect.poll(read, { timeout: 6000 }).not.toBe(first)
-  await expect(page.locator('#total')).toHaveText(/^\d+\.\d$/)
+  const shown = page.locator('.core .core-num')
+  const seen = new Set<string>()
+  // Read it at a few random moments, as a still frame would.
+  for (let i = 0; i < 6; i++) {
+    await page.waitForTimeout(150 + Math.floor(Math.random() * 700))
+    const { text, exact } = await page.evaluate(() => ({
+      text: (document.querySelector('.core .core-num') as HTMLElement).innerText,
+      exact: document.querySelector('#total')?.textContent ?? '',
+    }))
+    expect(text).toMatch(/^\d{1,3}\.\d$/)
+    expect(Number.isFinite(Number(text))).toBe(true)
+    // What's on screen is exactly what screen readers get.
+    expect(text).toBe(exact)
+    seen.add(text)
+  }
+  await expect.poll(() => shown.innerText(), { timeout: 4000 }).not.toBe([...seen].at(-1))
+  // Nothing in the readout moves: changed digits only change colour.
+  const moving = await shown.evaluate((el) =>
+    [...el.querySelectorAll('*')].some((c) => getComputedStyle(c).transform !== 'none'),
+  )
+  expect(moving).toBe(false)
 })
 
 test('how it works follows the scroll: split, spread, fuse, and back', async ({ page }) => {

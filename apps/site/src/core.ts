@@ -269,7 +269,8 @@ export function createCore(
     for (const c of comets) c.t += dt * c.speed
     comets = comets.filter((c) => c.t < 1)
     sinceState += dt
-    if (sinceState >= 0.5) emitState()
+    // Numbers on the page change about once a second, so they can be read.
+    if (sinceState >= 1) emitState()
   }
 
   function emitState() {

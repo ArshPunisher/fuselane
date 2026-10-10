@@ -346,33 +346,21 @@
   }
 }
 
-/* ---------- Rolling digits ---------- */
+/* ---------- The speed readout: a new value at once, changed digits glow ---------- */
 
-.odo {
-  display: inline-flex;
-  line-height: 1;
+.core-num {
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.odo-d {
-  display: inline-block;
-  height: 1em;
-  overflow: hidden;
-  /* Soft top and bottom edges, so digits roll in and out of view. */
-  mask-image: linear-gradient(transparent, #000 18%, #000 82%, transparent);
+.core-num .changed {
+  animation: digit-glow 0.6s var(--ease-out);
 }
 
-.odo-strip {
-  /* "0123456789" one character wide: each digit wraps onto its own 1em line. */
-  display: block;
-  width: 1ch;
-  transform: translateY(calc(var(--n, 0) * -1em));
-  transition: transform 0.9s var(--ease-out);
-  word-break: break-all;
-}
-
-.odo-sep {
-  display: inline-block;
+@keyframes digit-glow {
+  from {
+    color: var(--fuse);
+  }
 }
 
 /* ---------- Measured on real machines ---------- */
