@@ -4,7 +4,7 @@
 
 ## Now
 
-- **Phase:** **P3 desktop app** in progress on top of a working P2 core + CLI. P1 hardware spikes still wait on a phone to tether.
+- **Phase:** **P4 beta**: 0.1.0-beta.10 is ready on main and waits for the owner to tag it (PENDING.md). Remaining before 1.0: the real-hardware checklist (needs a phone and other computers), two weeks of 24 h soaks, Windows signing, store listings.
 - **P3 done (tested, committed):**
   - Engine snapshots for the UI (per-network bytes, rates, streams; 180 ring ticks with fill, owner, in-flight).
   - `core::runner`: one job runner shared by the CLI and the desktop app (link checks, network choice, Happy Eyeballs connects, store bookkeeping, plain-language errors). `core::home`: one shared download list.
@@ -26,6 +26,18 @@
 - **Environment:** Rust via rustup (`source ~/.cargo/env`), cargo-nextest, cargo-deny, actionlint (Homebrew), Node 24, pnpm 11, Playwright WebKit + Chromium, gh logged in as ArshPunisher. macOS has no `timeout` command. Screen recording is granted (capture a window with `screencapture -l<id>`; find the id with a CGWindowList script); clicking is not (no Accessibility), so drive the real window with `FUSELANE_DEV_ADD=<url>` in debug builds. macOS notifications only work from a bundle: `pnpm --filter @fuselane/desktop tauri build --debug --bundles app`, then run `target/debug/bundle/macos/Fuselane.app/Contents/MacOS/fuselane-desktop`.
 
 ## Log
+
+### 2026-10-10, evening (owner away; beta.10 finished, waiting for the owner's tag)
+
+- **Built with four agents in git worktrees, merged into main one by one, full gate after each merge, all pushed:**
+  - Throttle detection (8.2): a network that collapses while others keep going is benched, its parts handed over, retried every few minutes; the download says so.
+  - Proxy per network (8.4): HTTP CONNECT and SOCKS5 with login, pinned to the network, checked on save, plain errors; system proxies ignored (L-66). Probe now retries dropped connections (found by the soak).
+  - aria2 push notifications on the WebSocket; feeds can start torrents by themselves (opt-in); Flatpak manifest (`app.fuselane.Fuselane`) and winget manifests with generators; `tools/soak.sh` (3-minute run clean).
+  - Hindi (8.8): a small translation layer, 808 strings, a check that fails on a missing one; Settings → Language.
+  - Website redesign: the live Fuse Core hero with network switches, a scroll story, a race from measured speeds, real app screens, an illustrated Open Anyway guide (4.2), a user guide with honest limits (9.2), a strict CSP.
+- **Built here:** a welcome on the first launch with platform tips (3.8); "Before midnight" hours preset (8.1); popup e2e and web-ext lint in CI (7.8; 0 errors, 0 warnings); Firefox `data_collection_permissions`; magnet links offered on Linux; the real-hardware checklist and results; the launch plan (9.4); shellcheck in the local gate.
+- **Checked for real:** the packaged-style app's self-test (download over 2 networks and Nearby, byte-exact); the real window shows the welcome with this Mac's Ethernet and Wi‑Fi; AriaNg 1.3.15 over HTTP and WebSocket.
+- **Version:** `chore(release): 0.1.0-beta.10` is on main. Tagging, the release workflow (even a dry run) and site deploys are refused for the agent; steps for the owner are in PENDING.md.
 
 ### 2026-10-10, night (owner away; more zero-cost features for beta.10, not released)
 
