@@ -695,6 +695,12 @@ pub async fn find_checksum(link: &str, file: &str) -> Option<(String, String)> {
 /// Reads a web page (at most `grab::MAX_PAGE`) to list the files it links to
 /// (B9.3). Returns the page's final address, after redirects, and its text.
 pub async fn fetch_page(link: &str) -> Result<(String, String), String> {
+    fetch_text(link, crate::grab::MAX_PAGE).await
+}
+
+/// Reads a text document of at most `max` bytes (a page, a feed). Returns its
+/// final address, after redirects, and its text.
+pub async fn fetch_text(link: &str, max: usize) -> Result<(String, String), String> {
     let tuning = Tuning {
         connect_timeout: Duration::from_secs(8),
         first_byte_timeout: Duration::from_secs(10),
@@ -710,14 +716,18 @@ pub async fn fetch_page(link: &str) -> Result<(String, String), String> {
         .first()
         .ok_or_else(|| "No network can reach that site.".to_string())?;
     let body = tokio::time::timeout(
-        Duration::from_secs(20),
-        fuselane_engine_http::download::read_small(&source, net, &tuning, crate::grab::MAX_PAGE),
+        // 20 s, plus 2 s per MB allowed: a big feed on a slow line still fits.
+        Duration::from_secs(20 + 2 * (max / (1024 * 1024)) as u64),
+        fuselane_engine_http::download::read_small(&source, net, &tuning, max),
     )
     .await
     .ok()
     .flatten()
     .ok_or_else(|| {
-        "Couldn't read that page: it didn't answer, isn't a page, or is over 8 MB.".to_string()
+        format!(
+            "Couldn't read that address: it didn't answer, isn't text, or is over {} MB.",
+            max / (1024 * 1024)
+        )
     })?;
     Ok((place, String::from_utf8_lossy(&body).into_owned()))
 }

@@ -1789,6 +1789,7 @@ dependencies = [
  "fuselane-transport",
  "percent-encoding",
  "proptest",
+ "quick-xml 0.42.0",
  "rusqlite",
  "tempfile",
  "thiserror 2.0.21",
