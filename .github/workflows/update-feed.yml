@@ -1,8 +1,8 @@
 name: Update feed
 
-# When a release is published (never while it is a draft), builds the download
-# page (apps/site), writes the signed updater feed next to it, and deploys both to
-# GitHub Pages. Fuselane reads
+# When a release is published (never while it is a draft), writes the signed
+# updater feed next to the small GitHub Pages files in packaging/pages (old
+# Fuse Send links, redirects to fuselane.app) and deploys them. Fuselane reads
 # https://arshpunisher.github.io/fuselane/updates/latest.json (L-77: our own
 # feed, because GitHub's /releases/latest skips pre-releases).
 
@@ -43,19 +43,12 @@ jobs:
           gh release download "$TAG" --pattern '*.sig' --dir sigs
           gh release view "$TAG" --json body --jq .body > notes.md
           ls sigs
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Build the site
-        run: pnpm --filter @fuselane/site build
-      - name: Write the feed next to the page
+      - name: Write the feed next to the pages
         run: |
           version="${TAG#v}"
           mkdir -p site
-          cp -R apps/site/dist/. site/
+          cp -R packaging/pages/. site/
+          rm site/README.md
           mkdir -p site/updates
           python3 tools/update_feed.py "$version" \
             "https://github.com/${{ github.repository }}/releases/download/$TAG" sigs notes.md > site/updates/latest.json
