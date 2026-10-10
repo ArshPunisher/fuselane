@@ -3,6 +3,10 @@
 //! Serves a [`Content`] at `/file.bin` and follows a script of [`Rule`]s: each
 //! rule skips some requests, then applies a [`Fault`] a number of times. Every
 //! request is logged so tests can assert what the client actually sent.
+//!
+//! Extra addresses ("lanes", [`RangeServer::lane`]) serve the same file and
+//! stand for one network's path to the server, so a test can cap one network's
+//! speed (a phone throttled after its daily quota) and leave the others alone.
 
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -100,6 +104,21 @@ struct State {
     swap_at: Option<(usize, Content, String)>,
     /// Small extra files at their own paths (a SHA256SUMS next to the file).
     extra: std::collections::HashMap<String, Vec<u8>>,
+    /// Other ways in, one per simulated network path.
+    lanes: Vec<Lane>,
+}
+
+/// One extra address and the link it simulates.
+#[derive(Debug)]
+struct Lane {
+    addr: SocketAddr,
+    /// Bytes per second shared by every connection through it, once `after`
+    /// bytes have gone through; None = full speed.
+    cap: Option<u64>,
+    after: u64,
+    sent: u64,
+    /// When the simulated link is free to send the next slice.
+    free_at: Option<tokio::time::Instant>,
 }
 
 /// A running server; stops when dropped (the runtime task is aborted).
@@ -108,12 +127,44 @@ pub struct RangeServer {
     addr: SocketAddr,
     state: Arc<Mutex<State>>,
     task: tokio::task::JoinHandle<()>,
+    lane_tasks: Mutex<Vec<tokio::task::JoinHandle<()>>>,
 }
 
 impl Drop for RangeServer {
     fn drop(&mut self) {
         self.task.abort();
+        for t in self
+            .lane_tasks
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .drain(..)
+        {
+            t.abort();
+        }
     }
+}
+
+/// Accepts connections on `listener`, serving them from `state` (through `lane`, if any).
+fn serve(
+    listener: TcpListener,
+    state: Arc<Mutex<State>>,
+    lane: Option<usize>,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        loop {
+            let Ok((stream, _)) = listener.accept().await else {
+                continue;
+            };
+            let st = state.clone();
+            tokio::spawn(async move {
+                let svc = service_fn(move |req| handle(st.clone(), req, lane));
+                let _ = hyper::server::conn::http1::Builder::new()
+                    .keep_alive(true)
+                    .serve_connection(TokioIo::new(stream), svc)
+                    .await;
+            });
+        }
+    })
 }
 
 impl RangeServer {
@@ -131,24 +182,61 @@ impl RangeServer {
             max_concurrent: None,
             swap_at: None,
             extra: std::collections::HashMap::new(),
+            lanes: vec![],
         }));
-        let st = state.clone();
-        let task = tokio::spawn(async move {
-            loop {
-                let Ok((stream, _)) = listener.accept().await else {
-                    continue;
-                };
-                let st = st.clone();
-                tokio::spawn(async move {
-                    let svc = service_fn(move |req| handle(st.clone(), req));
-                    let _ = hyper::server::conn::http1::Builder::new()
-                        .keep_alive(true)
-                        .serve_connection(TokioIo::new(stream), svc)
-                        .await;
-                });
-            }
-        });
-        Ok(RangeServer { addr, state, task })
+        let task = serve(listener, state.clone(), None);
+        Ok(RangeServer {
+            addr,
+            state,
+            task,
+            lane_tasks: Mutex::new(vec![]),
+        })
+    }
+
+    /// Opens another address serving the same file (same rules, same log),
+    /// standing for one network's path to the server. [`RangeServer::cap_lane`]
+    /// slows it without touching the main address or other lanes.
+    pub async fn lane(&self) -> std::io::Result<SocketAddr> {
+        let listener = TcpListener::bind("127.0.0.1:0").await?;
+        let addr = listener.local_addr()?;
+        let index = {
+            let mut s = self.lock();
+            s.lanes.push(Lane {
+                addr,
+                cap: None,
+                after: 0,
+                sent: 0,
+                free_at: None,
+            });
+            s.lanes.len() - 1
+        };
+        let task = serve(listener, self.state.clone(), Some(index));
+        self.lane_tasks
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(task);
+        Ok(addr)
+    }
+
+    /// Caps everything sent through the lane at `addr` to `bps` bytes per second
+    /// in total, shared by all its connections like a real link, once it has sent
+    /// `after` bytes. `None` lifts the cap.
+    pub fn cap_lane(&self, addr: SocketAddr, bps: Option<u64>, after: u64) {
+        let mut s = self.lock();
+        if let Some(l) = s.lanes.iter_mut().find(|l| l.addr == addr) {
+            l.cap = bps.map(|b| b.max(1));
+            l.after = after;
+            l.free_at = None;
+        }
+    }
+
+    /// Body bytes sent through the lane at `addr` so far.
+    pub fn lane_sent(&self, addr: SocketAddr) -> u64 {
+        self.lock()
+            .lanes
+            .iter()
+            .find(|l| l.addr == addr)
+            .map_or(0, |l| l.sent)
     }
 
     pub fn addr(&self) -> SocketAddr {
@@ -245,9 +333,41 @@ fn parse_range(v: &str, size: u64) -> Option<(u64, u64)> {
     (first <= last).then_some((first, last))
 }
 
+/// How a lane lets `want` bytes through now: how many (a small slice while it's
+/// capped, so a slow link still trickles steadily) and when the link has carried
+/// them. Counts them as sent.
+fn lane_slice(state: &Mutex<State>, lane: usize, want: u64) -> (u64, Option<tokio::time::Instant>) {
+    let mut s = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let Some(l) = s.lanes.get_mut(lane) else {
+        return (want, None);
+    };
+    match l.cap.filter(|_| l.sent >= l.after) {
+        None => {
+            let n = match l.cap {
+                Some(_) => want.min(l.after - l.sent), // stop at the point the cap starts
+                None => want,
+            };
+            l.sent += n;
+            (n, None)
+        }
+        Some(bps) => {
+            let n = want.min((bps / 20).max(1));
+            let now = tokio::time::Instant::now();
+            let start = l.free_at.filter(|t| *t > now).unwrap_or(now);
+            let done = start + Duration::from_micros(1_000_000 * n / bps);
+            l.free_at = Some(done);
+            l.sent += n;
+            (n, Some(done))
+        }
+    }
+}
+
 async fn handle(
     state: Arc<Mutex<State>>,
     req: Request<hyper::body::Incoming>,
+    lane: Option<usize>,
 ) -> Result<Response<Body>, std::io::Error> {
     let header = |name| {
         req.headers()
@@ -378,6 +498,7 @@ async fn handle(
 
     let (tx, rx) = mpsc::channel::<Result<Frame<Bytes>, std::io::Error>>(4);
     let guard = ActiveGuard::new(state.clone());
+    let lane_state = state.clone();
     tokio::spawn(async move {
         let _guard = guard;
         let mut off = first;
@@ -390,6 +511,17 @@ async fn handle(
             if let Some(bps) = throttle {
                 tokio::time::sleep(Duration::from_millis(1000 * n / bps.max(1))).await;
             }
+            // A capped lane: every connection through it shares the link's speed.
+            let n = match lane {
+                Some(lane) => {
+                    let (n, done) = lane_slice(&lane_state, lane, n);
+                    if let Some(done) = done {
+                        tokio::time::sleep_until(done).await;
+                    }
+                    n
+                }
+                None => n,
+            };
             let mut buf = vec![0u8; n as usize];
             content.fill(off, &mut buf);
             if tx.send(Ok(Frame::data(Bytes::from(buf)))).await.is_err() {
