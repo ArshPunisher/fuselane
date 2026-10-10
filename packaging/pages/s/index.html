@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Someone sent you a file with Fuselane</title>
+    <script>
+      // Links made by older versions of Fuselane point here. Forward to the
+      // same link on fuselane.app; the key in the #fragment stays in the browser.
+      location.replace('https://fuselane.app/s/' + location.hash)
+    </script>
+  </head>
+  <body>
+    <p>
+      Open this link on <a href="https://fuselane.app/s/" id="go">fuselane.app</a> to receive the
+      file.
+    </p>
+    <script>
+      document.getElementById('go').href = 'https://fuselane.app/s/' + location.hash
+    </script>
+  </body>
+</html>
