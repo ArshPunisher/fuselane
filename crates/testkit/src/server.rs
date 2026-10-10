@@ -201,6 +201,22 @@ impl RangeServer {
         self.lock().log.clone()
     }
 
+    /// Takes the request log, leaving it empty, so a server that runs for hours
+    /// (the soak test) keeps flat memory and still counts what it served. The
+    /// request count that [`swap_at_request`](Self::swap_at_request) waits for
+    /// starts over.
+    pub fn take_requests(&self) -> Vec<RequestLog> {
+        std::mem::take(&mut self.lock().log)
+    }
+
+    /// Drops used-up rules and says how many still have faults to apply, so a
+    /// long run can add the next fault only once the last one has fired.
+    pub fn pending_rules(&self) -> usize {
+        let mut s = self.lock();
+        s.rules.retain(|r| r.times > 0);
+        s.rules.len()
+    }
+
     fn lock(&self) -> std::sync::MutexGuard<'_, State> {
         self.state
             .lock()
@@ -422,4 +438,39 @@ impl Drop for ActiveGuard {
 /// Adapts an mpsc receiver into a `Stream` without pulling in tokio-stream.
 fn tokio_stream_from<T>(mut rx: mpsc::Receiver<T>) -> impl futures_core::Stream<Item = T> {
     futures_util::stream::poll_fn(move |cx| rx.poll_recv(cx))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    /// One request on its own connection; the raw reply (empty after a reset).
+    async fn get(addr: SocketAddr) -> Vec<u8> {
+        let mut s = tokio::net::TcpStream::connect(addr).await.unwrap();
+        s.write_all(b"GET /file.bin HTTP/1.1\r\nHost: t\r\nConnection: close\r\n\r\n")
+            .await
+            .unwrap();
+        let mut out = Vec::new();
+        let _ = s.read_to_end(&mut out).await;
+        out
+    }
+
+    #[tokio::test]
+    async fn a_long_run_can_drain_the_log_and_script_the_next_fault() {
+        let server = RangeServer::start(Content::new(1000, 1)).await.unwrap();
+        server.add_rule(Rule {
+            skip: 1,
+            times: 1,
+            fault: Fault::Reset,
+        });
+        assert_eq!(server.pending_rules(), 1);
+        assert!(get(server.addr()).await.starts_with(b"HTTP/1.1 200"));
+        assert!(get(server.addr()).await.is_empty(), "the second is reset");
+        assert_eq!(server.pending_rules(), 0, "the used-up rule is dropped");
+        let log = server.take_requests();
+        assert_eq!(log.len(), 2);
+        assert_eq!(log[1].fault, Some(Fault::Reset));
+        assert!(server.requests().is_empty(), "taking empties the log");
+    }
 }
