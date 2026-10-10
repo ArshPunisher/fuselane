@@ -68,7 +68,7 @@ async function sizes(version: string) {
 }
 
 async function links() {
-  const version = await latestVersion('../')
+  const version = await latestVersion()
   document.querySelectorAll<HTMLAnchorElement>('a[data-file]').forEach((a) => {
     a.href = version ? fileUrl(version, a.dataset.file ?? '') : `${REPO}/releases`
   })

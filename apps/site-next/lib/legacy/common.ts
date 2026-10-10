@@ -293,15 +293,36 @@ export function detectOs(ua: string, platform: string): Os {
   return 'other'
 }
 
-/** The version in the signed update feed, or null (offline, not deployed yet). */
-export async function latestVersion(base: string): Promise<string | null> {
+/** The newest released version (from GitHub), or null when GitHub can't be reached. */
+export async function latestVersion(): Promise<string | null> {
   try {
-    const r = await fetch(`${base}updates/latest.json`, { cache: 'no-cache' })
-    if (r.ok) return ((await r.json()) as { version?: string }).version ?? null
+    const cached = sessionStorage.getItem('fuselane.version')
+    if (cached) return cached
   } catch {
-    /* fall back to the releases page */
+    /* storage blocked */
   }
-  return null
+  try {
+    // Newest published release (pre-releases included; drafts aren't listed).
+    const r = await fetch(
+      'https://api.github.com/repos/ArshPunisher/fuselane/releases?per_page=1',
+      {
+        headers: { Accept: 'application/vnd.github+json' },
+      },
+    )
+    if (!r.ok) return null
+    const [latest] = (await r.json()) as { tag_name?: string }[]
+    const version = latest?.tag_name?.replace(/^v/, '') ?? null
+    if (version) {
+      try {
+        sessionStorage.setItem('fuselane.version', version)
+      } catch {
+        /* storage blocked */
+      }
+    }
+    return version
+  } catch {
+    return null // offline or rate-limited: the buttons keep linking to the download page
+  }
 }
 
 export function fileUrl(version: string, suffix: string, cli = false) {

@@ -15,7 +15,7 @@ async function primaryDownload() {
     document
       .querySelectorAll<HTMLElement>('[data-dl-label]')
       .forEach((l) => (l.textContent = `Download for ${names[os]}`))
-  const version = await latestVersion('/')
+  const version = await latestVersion()
   if (!version) return
   const file =
     os === 'mac' ? 'macos-universal.dmg' : os === 'windows' ? 'windows-x64-setup.exe' : null
