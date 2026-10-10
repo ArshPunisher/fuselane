@@ -130,7 +130,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [x] 4.7 Updater e2e: install N-1, update to N, data intact (2026-10-08: real beta.1 → beta.2 on macOS; a 31% download resumed in beta.2, byte-exact)
 - [x] 4.8 Landing page (`apps/site`): OS/arch detection, signed downloads, checksums (use the design skills)
 - [x] 4.9 Local diagnostics bundle + privacy policy (no crash-reporting service, ADR 0009)
-- [ ] 4.10 Real-hardware matrix pass → tag `v0.1.0-beta.1`
+- [ ] 4.10 Real-hardware matrix pass → tag `v0.1.0-beta.1` (step-by-step checks: [HARDWARE-CHECKLIST.md](../05-quality/HARDWARE-CHECKLIST.md); results: [HARDWARE-RESULTS.md](../05-quality/HARDWARE-RESULTS.md))
 
 ## Beta.8 round: approved Figma designs (2026-10-09)
 
@@ -235,7 +235,7 @@ The owner asked for more built-in features that cost nothing to run (no paid tie
 - [ ] 9.1 Weekly 24 h soak clean for 2 weeks; performance pass
 - [ ] 9.2 User docs site; FAQ honest about limits
 - [ ] 9.3 winget, Homebrew cask, Flathub
-- [ ] 9.4 Launch plan (Product Hunt, Reddit, HN, YouTube/Instagram demos, Indian tech communities)
+- [ ] 9.4 Launch plan (Product Hunt, Reddit, HN, YouTube/Instagram demos, Indian tech communities) (plan written: [LAUNCH.md](LAUNCH.md); carried out at 1.0)
 - [ ] 9.5 Tag `v1.0.0`
 
 ## P10 Android: dropped
