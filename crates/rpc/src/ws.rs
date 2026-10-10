@@ -1,12 +1,14 @@
 //! WebSocket for the same JSON-RPC (RFC 6455), because AriaNg connects that
-//! way by default. Text messages in, replies out; no notifications yet
-//! (front ends poll anyway). Written by hand: the protocol needs only a
-//! handshake hash and a small frame format.
+//! way by default. Text messages in, replies out, and aria2's
+//! `aria2.onDownload*` notifications pushed once the socket has shown the
+//! secret. Written by hand: the protocol needs only a handshake hash and a
+//! small frame format.
 
 use std::sync::Arc;
 
 use hyper::StatusCode;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::sync::broadcast::error::RecvError;
 
 use crate::{Host, MAX_BODY, Rpc};
 
@@ -54,6 +56,13 @@ async fn read_frame<R: AsyncRead + Unpin>(r: &mut R) -> std::io::Result<(bool, u
     Ok((fin, opcode, data))
 }
 
+/// [`read_frame`] owning the reader, so one read can stay pending across many
+/// waits: dropping a half-read frame would lose its bytes.
+async fn read_owned<R: AsyncRead + Unpin>(mut r: R) -> (R, std::io::Result<(bool, u8, Vec<u8>)>) {
+    let frame = read_frame(&mut r).await;
+    (r, frame)
+}
+
 async fn write_frame<W: AsyncWrite + Unpin>(
     w: &mut W,
     opcode: u8,
@@ -77,20 +86,46 @@ async fn write_frame<W: AsyncWrite + Unpin>(
 }
 
 /// Serves one WebSocket until the client closes it.
-pub async fn serve<H: Host, S: AsyncRead + AsyncWrite + Unpin>(rpc: Arc<Rpc<H>>, mut io: S) {
+pub async fn serve<H: Host, S: AsyncRead + AsyncWrite + Unpin>(rpc: Arc<Rpc<H>>, io: S) {
+    let (reader, mut io) = tokio::io::split(io);
+    let mut reading = Box::pin(read_owned(reader));
     let mut message: Vec<u8> = Vec::new();
     let mut stopped = rpc.stopped.clone();
+    let mut notices = rpc.notices.subscribe();
+    let mut listening = true;
+    // Notifications go only to a socket that has shown the secret once.
+    let mut authed = false;
     loop {
         if *stopped.borrow() {
             let _ = write_frame(&mut io, 0x8, &1001u16.to_be_bytes()).await;
             return;
         }
         let frame = tokio::select! {
-            f = read_frame(&mut io) => f,
+            // Notifications before the next message: one sent before this
+            // socket showed the secret is dropped, never delivered late.
+            biased;
             // The server stopped (turned off, or a new secret): "going away".
             _ = stopped.changed() => {
                 let _ = write_frame(&mut io, 0x8, &1001u16.to_be_bytes()).await;
                 return;
+            }
+            notice = notices.recv(), if listening => {
+                match notice {
+                    Ok(n) if authed => {
+                        if write_frame(&mut io, 0x1, &n.to_json()).await.is_err() {
+                            return;
+                        }
+                    }
+                    // Not shown the secret, or fell behind: the front end's
+                    // own polling catches up.
+                    Ok(_) | Err(RecvError::Lagged(_)) => {}
+                    Err(RecvError::Closed) => listening = false,
+                }
+                continue;
+            }
+            (r, frame) = &mut reading => {
+                reading.set(read_owned(r));
+                frame
             }
         };
         let Ok((fin, opcode, data)) = frame else {
@@ -127,9 +162,12 @@ pub async fn serve<H: Host, S: AsyncRead + AsyncWrite + Unpin>(rpc: Arc<Rpc<H>>,
         }
         let body = std::mem::take(&mut message);
         let r = rpc.clone();
-        let Ok((code, value)) = tokio::task::spawn_blocking(move || r.handle(&body)).await else {
+        let Ok((code, value, shown)) =
+            tokio::task::spawn_blocking(move || r.handle_checked(&body)).await
+        else {
             return;
         };
+        authed |= shown;
         if code == StatusCode::UNAUTHORIZED {
             tokio::time::sleep(std::time::Duration::from_millis(250)).await;
         }

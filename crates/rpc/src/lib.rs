@@ -9,7 +9,9 @@
 //! page from reaching it through DNS rebinding.
 //!
 //! The protocol lives here; [`Host`] is what the app provides. Over HTTP POST
-//! or a WebSocket (AriaNg's default), at `/jsonrpc`.
+//! or a WebSocket (AriaNg's default), at `/jsonrpc`. WebSockets that have
+//! shown the secret also get aria2's `aria2.onDownload*` notifications, which
+//! the app sends through [`Server::notify`].
 
 mod ws;
 
@@ -70,6 +72,79 @@ impl Status {
 
     fn stopped(self) -> bool {
         matches!(self, Status::Complete | Status::Error)
+    }
+}
+
+/// A change aria2 tells WebSocket clients about, so front ends refresh at once
+/// instead of waiting for their next poll.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Event {
+    /// It started downloading.
+    Start,
+    /// It was paused.
+    Pause,
+    /// It was stopped by the person (removed before it finished).
+    Stop,
+    /// It finished.
+    Complete,
+    /// It failed.
+    Error,
+}
+
+impl Event {
+    /// The JSON-RPC method name aria2 uses for it.
+    pub fn method(self) -> &'static str {
+        match self {
+            Event::Start => "aria2.onDownloadStart",
+            Event::Pause => "aria2.onDownloadPause",
+            Event::Stop => "aria2.onDownloadStop",
+            Event::Complete => "aria2.onDownloadComplete",
+            Event::Error => "aria2.onDownloadError",
+        }
+    }
+}
+
+/// Every notification this endpoint sends (`system.listNotifications`).
+const NOTIFICATIONS: &[Event] = &[
+    Event::Start,
+    Event::Pause,
+    Event::Stop,
+    Event::Complete,
+    Event::Error,
+];
+
+/// How many notifications wait for a slow WebSocket before the oldest are
+/// dropped; front ends poll too, so a dropped one costs a couple of seconds.
+const NOTICE_BACKLOG: usize = 256;
+
+/// One notification on its way to the open WebSockets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Notice {
+    id: i64,
+    event: Event,
+}
+
+impl Notice {
+    /// `{"jsonrpc":"2.0","method":"aria2.onDownloadStart","params":[{"gid":"…"}]}`
+    fn to_json(self) -> Vec<u8> {
+        serde_json::to_vec(&json!({
+            "jsonrpc": "2.0",
+            "method": self.event.method(),
+            "params": [{"gid": gid(self.id)}],
+        }))
+        .unwrap_or_default()
+    }
+}
+
+/// Sends notifications to a running server's WebSockets. Cheap to clone, and
+/// never blocks: with nobody listening, a notification is simply dropped.
+#[derive(Debug, Clone)]
+pub struct Notifier(tokio::sync::broadcast::Sender<Notice>);
+
+impl Notifier {
+    /// Tells every WebSocket that has shown the secret that download `id` changed.
+    pub fn notify(&self, id: i64, event: Event) {
+        let _ = self.0.send(Notice { id, event });
     }
 }
 
@@ -193,6 +268,8 @@ pub struct Rpc<H> {
     /// Turns true when the server stops, which ends open WebSockets.
     stopped: tokio::sync::watch::Receiver<bool>,
     stop: tokio::sync::watch::Sender<bool>,
+    /// Notifications for the open WebSockets; each one subscribes.
+    notices: tokio::sync::broadcast::Sender<Notice>,
 }
 
 impl<H> std::fmt::Debug for Rpc<H> {
@@ -204,40 +281,57 @@ impl<H> std::fmt::Debug for Rpc<H> {
 impl<H: Host> Rpc<H> {
     pub fn new(host: Arc<H>, secret: String) -> Self {
         let (stop, stopped) = tokio::sync::watch::channel(false);
+        let (notices, _) = tokio::sync::broadcast::channel(NOTICE_BACKLOG);
         Rpc {
             host,
             secret,
             session: new_secret(),
             stopped,
             stop,
+            notices,
         }
+    }
+
+    /// Sends notifications to this endpoint's WebSockets.
+    pub fn notifier(&self) -> Notifier {
+        Notifier(self.notices.clone())
     }
 
     /// Handles a request body: one call or a batch. Returns the HTTP status
     /// and the JSON reply.
     pub fn handle(&self, body: &[u8]) -> (StatusCode, Value) {
+        let (code, reply, _) = self.handle_checked(body);
+        (code, reply)
+    }
+
+    /// [`Rpc::handle`], also saying whether a call in it carried the right
+    /// secret: a WebSocket that has shown it once gets notifications.
+    fn handle_checked(&self, body: &[u8]) -> (StatusCode, Value, bool) {
+        let mut authed = false;
         let Ok(req) = serde_json::from_slice::<Value>(body) else {
             return (
                 StatusCode::BAD_REQUEST,
                 json!({"jsonrpc": "2.0", "id": null,
                        "error": {"code": -32700, "message": "Parse error."}}),
+                false,
             );
         };
-        match req {
+        let (code, reply) = match req {
             Value::Array(calls) if !calls.is_empty() => {
-                let out: Vec<Value> = calls.iter().map(|c| self.one(c).1).collect();
+                let out: Vec<Value> = calls.iter().map(|c| self.one(c, &mut authed).1).collect();
                 (StatusCode::OK, Value::Array(out))
             }
-            Value::Object(_) => self.one(&req),
+            Value::Object(_) => self.one(&req, &mut authed),
             _ => (
                 StatusCode::BAD_REQUEST,
                 json!({"jsonrpc": "2.0", "id": null,
                        "error": {"code": -32600, "message": "Invalid Request."}}),
             ),
-        }
+        };
+        (code, reply, authed)
     }
 
-    fn one(&self, req: &Value) -> (StatusCode, Value) {
+    fn one(&self, req: &Value, authed: &mut bool) -> (StatusCode, Value) {
         let id = req.get("id").cloned().unwrap_or(Value::Null);
         let method = req.get("method").and_then(Value::as_str).unwrap_or("");
         let params = match req.get("params") {
@@ -251,7 +345,7 @@ impl<H: Host> Rpc<H> {
                 );
             }
         };
-        match self.dispatch(method, params) {
+        match self.dispatch(method, params, authed) {
             Ok(result) => (
                 StatusCode::OK,
                 json!({"jsonrpc": "2.0", "id": id, "result": result}),
@@ -284,12 +378,22 @@ impl<H: Host> Rpc<H> {
         }
     }
 
-    fn dispatch(&self, method: &str, mut params: Vec<Value>) -> Result<Value, Fault> {
+    /// Runs one call. `authed` turns true when it carried the right secret.
+    fn dispatch(
+        &self,
+        method: &str,
+        mut params: Vec<Value>,
+        authed: &mut bool,
+    ) -> Result<Value, Fault> {
         match method {
             // aria2 answers these two without the secret.
             "system.listMethods" => return Ok(json!(METHODS)),
-            "system.listNotifications" => return Ok(json!([])),
-            "system.multicall" => return self.multicall(params),
+            "system.listNotifications" => {
+                return Ok(Value::Array(
+                    NOTIFICATIONS.iter().map(|e| json!(e.method())).collect(),
+                ));
+            }
+            "system.multicall" => return self.multicall(params, authed),
             _ => {}
         }
         if !METHODS.contains(&method) {
@@ -300,6 +404,7 @@ impl<H: Host> Rpc<H> {
             });
         }
         self.authorize(&mut params)?;
+        *authed = true;
         let p = |i: usize| params.get(i);
         match method {
             "aria2.addUri" => self.add(&params),
@@ -419,7 +524,7 @@ impl<H: Host> Rpc<H> {
         }
     }
 
-    fn multicall(&self, params: Vec<Value>) -> Result<Value, Fault> {
+    fn multicall(&self, params: Vec<Value>, authed: &mut bool) -> Result<Value, Fault> {
         let Some(Value::Array(calls)) = params.into_iter().next() else {
             return Err(fault("system.multicall needs a list of calls."));
         };
@@ -434,7 +539,7 @@ impl<H: Host> Rpc<H> {
                     Some(Value::Array(p)) => p.clone(),
                     _ => vec![],
                 };
-                match self.dispatch(method, params) {
+                match self.dispatch(method, params, authed) {
                     Ok(v) => json!([v]),
                     Err(f) => json!({"code": f.code, "message": f.message}),
                 }
@@ -813,6 +918,7 @@ pub struct Server {
     pub addr: SocketAddr,
     task: Option<tokio::task::JoinHandle<()>>,
     stop: tokio::sync::watch::Sender<bool>,
+    notifier: Notifier,
 }
 
 impl std::fmt::Debug for Server {
@@ -833,6 +939,19 @@ impl Drop for Server {
 }
 
 impl Server {
+    /// Tells the WebSockets that have shown the secret that download `id`
+    /// changed (`aria2.onDownloadStart` and the rest).
+    pub fn notify(&self, id: i64, event: Event) {
+        self.notifier.notify(id, event);
+    }
+
+    /// A handle for sending notifications from elsewhere (an event listener,
+    /// say) without holding on to the server. It goes quiet once the server
+    /// stops.
+    pub fn notifier(&self) -> Notifier {
+        self.notifier.clone()
+    }
+
     /// Stops and waits until the port is free again.
     pub async fn stop(mut self) {
         let _ = self.stop.send(true);
@@ -859,6 +978,7 @@ impl Server {
         let addr = listener.local_addr()?;
         let rpc = Arc::new(Rpc::new(host, secret));
         let stop = rpc.stop.clone();
+        let notifier = rpc.notifier();
         let task = tokio::spawn(async move {
             // Connections live in here, so stopping ends them too: one kept
             // open can't go on using a secret that has since been replaced.
@@ -882,6 +1002,7 @@ impl Server {
             addr,
             task: Some(task),
             stop,
+            notifier,
         })
     }
 }

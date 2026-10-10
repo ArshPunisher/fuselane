@@ -4,7 +4,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use fuselane_rpc::{Add, Host, Job, Rpc, Server, Status, gid};
+use fuselane_rpc::{Add, Event, Host, Job, Rpc, Server, Status, gid};
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -140,6 +140,20 @@ fn a_wrong_or_missing_secret_is_refused() {
             .as_array()
             .unwrap()
             .contains(&json!("aria2.addUri"))
+    );
+    // Nor does the list of notifications a WebSocket can get.
+    let body = json!({"jsonrpc": "2.0", "id": 1, "method": "system.listNotifications"});
+    let (code, v) = rpc.handle(body.to_string().as_bytes());
+    assert_eq!(code.as_u16(), 200);
+    assert_eq!(
+        v["result"],
+        json!([
+            "aria2.onDownloadStart",
+            "aria2.onDownloadPause",
+            "aria2.onDownloadStop",
+            "aria2.onDownloadComplete",
+            "aria2.onDownloadError"
+        ])
     );
     // Not JSON, an unknown method: a reason each.
     assert_eq!(rpc.handle(b"{nope").0.as_u16(), 400);
@@ -433,16 +447,10 @@ async fn ws_read(s: &mut tokio::net::TcpStream) -> (u8, Vec<u8>) {
     (h[0] & 0x0f, data)
 }
 
-#[tokio::test]
-async fn websocket_like_ariang_and_closed_when_stopped() {
-    let server = Server::start(
-        Arc::new(Fake::default()),
-        "127.0.0.1:0".parse().unwrap(),
-        SECRET.into(),
-    )
-    .await
-    .unwrap();
-    let mut s = tokio::net::TcpStream::connect(server.addr).await.unwrap();
+/// Opens a WebSocket to `/jsonrpc` the way a browser does; returns the socket
+/// and the handshake reply (lowercased).
+async fn ws_open(addr: std::net::SocketAddr) -> (tokio::net::TcpStream, String) {
+    let mut s = tokio::net::TcpStream::connect(addr).await.unwrap();
     s.write_all(
         b"GET /jsonrpc HTTP/1.1\r\nHost: 127.0.0.1:6800\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nOrigin: http://ariang.example\r\n\r\n",
     )
@@ -455,7 +463,28 @@ async fn websocket_like_ariang_and_closed_when_stopped() {
         s.read_exact(&mut b).await.unwrap();
         head.push(b[0]);
     }
-    let head = String::from_utf8(head).unwrap().to_ascii_lowercase();
+    (s, String::from_utf8(head).unwrap().to_ascii_lowercase())
+}
+
+/// One JSON text message from the server, within two seconds.
+async fn ws_json(s: &mut tokio::net::TcpStream) -> Value {
+    let (op, data) = tokio::time::timeout(std::time::Duration::from_secs(2), ws_read(s))
+        .await
+        .expect("a message within 2 s");
+    assert_eq!(op, 0x1, "a text message");
+    serde_json::from_slice(&data).unwrap()
+}
+
+#[tokio::test]
+async fn websocket_like_ariang_and_closed_when_stopped() {
+    let server = Server::start(
+        Arc::new(Fake::default()),
+        "127.0.0.1:0".parse().unwrap(),
+        SECRET.into(),
+    )
+    .await
+    .unwrap();
+    let (mut s, head) = ws_open(server.addr).await;
     assert!(head.starts_with("http/1.1 101"), "{head}");
     assert!(head.contains("sec-websocket-accept: s3pplmbitxaq9kygzzhzrbk+xoo="));
 
@@ -481,4 +510,85 @@ async fn websocket_like_ariang_and_closed_when_stopped() {
         .await
         .unwrap();
     assert_eq!((op, data), (0x8, 1001u16.to_be_bytes().to_vec()));
+}
+
+#[tokio::test]
+async fn websockets_that_showed_the_secret_get_notifications() {
+    let server = Server::start(
+        Arc::new(Fake::default()),
+        "127.0.0.1:0".parse().unwrap(),
+        SECRET.into(),
+    )
+    .await
+    .unwrap();
+    let call = |id: &str, token: &str| {
+        json!({"jsonrpc": "2.0", "id": id, "method": "aria2.getVersion",
+               "params": [format!("token:{token}")]})
+        .to_string()
+    };
+    let (mut shown, _) = ws_open(server.addr).await;
+    let (mut stranger, _) = ws_open(server.addr).await;
+
+    // Before showing the secret, nothing is pushed: the reply is the next
+    // message, and the notification sent before it never arrives late.
+    server.notify(10, Event::Start);
+    shown
+        .write_all(&ws_frame(0x1, call("auth", SECRET).as_bytes()))
+        .await
+        .unwrap();
+    assert_eq!(ws_json(&mut shown).await["id"], "auth");
+
+    // A wrong secret doesn't count (its refusal waits 250 ms).
+    stranger
+        .write_all(&ws_frame(0x1, call("guess", "nope-nope-nope").as_bytes()))
+        .await
+        .unwrap();
+    assert_eq!(
+        ws_json(&mut stranger).await["error"]["message"],
+        "Unauthorized"
+    );
+
+    // Each change reaches the socket that showed the secret, as aria2 sends it.
+    for (id, event, method) in [
+        (10, Event::Start, "aria2.onDownloadStart"),
+        (10, Event::Pause, "aria2.onDownloadPause"),
+        (11, Event::Stop, "aria2.onDownloadStop"),
+        (12, Event::Complete, "aria2.onDownloadComplete"),
+        (13, Event::Error, "aria2.onDownloadError"),
+    ] {
+        server.notify(id, event);
+        let v = ws_json(&mut shown).await;
+        assert_eq!(
+            v,
+            json!({"jsonrpc": "2.0", "method": method, "params": [{"gid": gid(id)}]})
+        );
+        assert!(v.get("id").is_none(), "a notification has no id");
+    }
+
+    // The other socket got none of them: a ping's pong is its next message.
+    stranger.write_all(&ws_frame(0x9, b"hi")).await.unwrap();
+    assert_eq!(ws_read(&mut stranger).await, (0xA, b"hi".to_vec()));
+
+    // Calls still work alongside; a notifier handle reaches sockets too, and
+    // a multicall with the secret authenticates the socket as well.
+    let (mut multi, _) = ws_open(server.addr).await;
+    let body = json!({"jsonrpc": "2.0", "id": "m", "method": "system.multicall", "params": [[
+        {"methodName": "aria2.getGlobalStat", "params": [format!("token:{SECRET}")]},
+    ]]});
+    multi
+        .write_all(&ws_frame(0x1, body.to_string().as_bytes()))
+        .await
+        .unwrap();
+    assert_eq!(ws_json(&mut multi).await["id"], "m");
+    let notifier = server.notifier();
+    notifier.notify(14, Event::Complete);
+    assert_eq!(
+        ws_json(&mut multi).await["method"],
+        "aria2.onDownloadComplete"
+    );
+    assert_eq!(ws_json(&mut shown).await["params"][0]["gid"], gid(14));
+
+    // After stopping, the notifier goes quiet without failing.
+    server.stop().await;
+    notifier.notify(15, Event::Start);
 }
