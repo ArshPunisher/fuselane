@@ -27,6 +27,12 @@
 
 ## Log
 
+### 2026-10-10, startup problems (worktree `wt/startup`, not merged)
+
+- **Done:** the app no longer exits silently when it can't open its list. It opens a problem window (`apps/desktop/src-tauri/src/startup.rs`, `StartupProblem.tsx`): a list from a newer Fuselane offers Update now through the normal updater (else fuselane.app and Quit); any other problem shows what to do, Open the folder and Copy details. Typed `core::home::OpenError`; a newer list is refused before anything writes to it; debug builds use `app.fuselane.dev` (and their own API pipe on Windows). Rust tests, Playwright at 1440 and 375 px, Hindi, FAQ entry, beta.11 notes. Checked in the real window on this Mac with a v15 list in a temp `FUSELANE_HOME` (unchanged checksum).
+- **Next:** merge to main; after beta.11 ships, check Update now from the problem window against a real newer release.
+- **Note:** a debug app shares the single-instance id with the installed app, so while the installed Fuselane runs a debug launch only focuses it (build with `TAURI_CONFIG='{"identifier":"app.fuselane.startuptest"}'` to try one alongside).
+
 ### 2026-10-10, evening (owner away; beta.10 finished, waiting for the owner's tag)
 
 - **Built with four agents in git worktrees, merged into main one by one, full gate after each merge, all pushed:**
