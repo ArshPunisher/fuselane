@@ -227,7 +227,7 @@ The owner asked for more built-in features that cost nothing to run (no paid tie
 - [x] 8.6 Per-job speed limit (live, kept with the job)
 - [x] 8.10 IDM parity, small things: Download later, export/import the list, catch copied links (opt-in), logins in links (HTTP Basic), redirects followed (up to 5, credentials never cross sites)
 - [x] 8.7 Remote control: local web UI + aria2-compatible JSON-RPC (with auth) (aria2 JSON-RPC over HTTP and WebSocket with a secret, ADR 0013, Settings → Other apps, checked with AriaNg 1.3.15; a remote page for phones at / with a QR code)
-- [x] 8.8 i18n framework + Hindi (our own small layer, the English sentence is the key; Settings → Look and feel → Language: System / English / हिन्दी; numbers and dates through Intl `hi-IN`; `scripts/i18n-check.ts` fails on a string without Hindi; core error messages stay English for now; docs/07-design/I18N.md)
+- [x] 8.8 i18n framework + Hindi (our own small layer, the English sentence is the key; Settings → Look and feel → Language: System / English / हिन्दी; numbers and dates through Intl `hi-IN`; `scripts/i18n-check.ts` fails on a string without Hindi; core messages translated in the app from `locales/hi-backend.ts` (exact sentences and `{name}` templates), the rest stays English; docs/07-design/I18N.md)
 - [ ] 8.9 Bring-your-own S3 bucket for uploads (keychain credentials)
 
 ## P9 1.0 launch
