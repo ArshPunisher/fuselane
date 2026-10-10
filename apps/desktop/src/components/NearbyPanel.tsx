@@ -510,6 +510,7 @@ function SyncCard({ syncs, trusted }: { syncs: SyncView[]; trusted: TrustedDevic
 /** A phone without an app: show a code; it opens a page from this computer (B8.12). */
 function PhoneCard({ phone }: { phone: PhoneView | null }) {
   const act = useApp((s) => s.act)
+  const [text, setText] = useState('')
   if (!phone)
     return (
       <section className="phone-card">
@@ -562,6 +563,45 @@ function PhoneCard({ phone }: { phone: PhoneView | null }) {
           ))}
         </ul>
       )}
+      {phone.text !== null ? (
+        <div className="phone-note">
+          <p className="muted">
+            On the phone&apos;s page: <q translate="no">{phone.text}</q>
+          </p>
+          <button
+            className="icon-btn"
+            aria-label="Take the text away from the phone's page"
+            onClick={() => act((b) => b.nearbyPhoneText(null, true))}
+          >
+            <X size={14} aria-hidden />
+          </button>
+        </div>
+      ) : (
+        <div className="phone-say">
+          <input
+            type="text"
+            aria-label="Text for the phone"
+            maxLength={65536}
+            placeholder="Text or a link for the phone, or leave empty for what you copied"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+          />
+          <button
+            className="btn btn-sm"
+            onClick={() =>
+              act(async (b) => {
+                await b.nearbyPhoneText(text.trim() ? text : null, false)
+                setText('')
+              })
+            }
+          >
+            {text.trim() ? 'Offer text' : 'Offer what I copied'}
+          </button>
+        </div>
+      )}
+      <p className="muted phone-hint">
+        Text typed on the phone lands on this computer&apos;s clipboard.
+      </p>
       <div className="phone-actions">
         <button
           className="btn btn-sm"

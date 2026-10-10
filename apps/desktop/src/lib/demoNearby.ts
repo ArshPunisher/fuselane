@@ -302,7 +302,9 @@ export function createDemoNearby(params: URLSearchParams, emit: () => (e: UiEven
       return () => drops.delete(cb)
     },
     nearbyPhone: async (on: boolean) => {
-      view.phone = on ? { url: 'http://192.168.1.24:7380/p/7f3c9a', qr: DEMO_QR, offers: [] } : null
+      view.phone = on
+        ? { url: 'http://192.168.1.24:7380/p/7f3c9a', qr: DEMO_QR, offers: [], text: null }
+        : null
       send()
       return clone()
     },
@@ -315,6 +317,15 @@ export function createDemoNearby(params: URLSearchParams, emit: () => (e: UiEven
           name: p.split('/').pop() ?? p,
           size: 212 * 1024,
         })
+      send()
+      return clone()
+    },
+    nearbyPhoneText: async (text: string | null, clear: boolean) => {
+      if (!view.phone) throw err('nearby-phone', 'The phone page is off.', null)
+      const t = clear ? null : (text ?? 'https://fuselane.app/faq/')
+      if (t !== null && !t.trim())
+        throw err('send-text-empty', "There's no text to offer.", 'Type some, or copy some first.')
+      view.phone.text = t
       send()
       return clone()
     },

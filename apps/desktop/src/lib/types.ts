@@ -162,6 +162,8 @@ export interface PhoneView {
   /** The link as a QR code (SVG made by the app). */
   qr: string
   offers: { id: string; name: string; size: number }[]
+  /** Text offered to the phone (B10.7). */
+  text: string | null
 }
 
 export interface NearbyView {

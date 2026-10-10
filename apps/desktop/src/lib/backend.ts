@@ -210,6 +210,8 @@ export interface Backend {
    */
   onFileDrop(cb: (e: FileDrop) => void): () => void
   nearbyPhoneOffer(add: string[], remove: string | null): Promise<NearbyView>
+  /** Offers text to the phone page: `text`, the clipboard when null, or nothing with `clear`. */
+  nearbyPhoneText(text: string | null, clear: boolean): Promise<NearbyView>
   /** Stops sharing; the file itself stays. */
   stopSend(id: string): Promise<void>
   /** Stop sharing by itself once a full copy has been sent. */
@@ -381,6 +383,7 @@ async function tauriBackend(): Promise<Backend> {
       }
     },
     nearbyPhoneOffer: (add, remove) => call('nearby_phone_offer', { add, remove }),
+    nearbyPhoneText: (text, clear) => call('nearby_phone_text', { text, clear }),
     stopSend: (id) => call('stop_send', { id }),
     sendOnce: (id, on) => call('send_once', { id, on }),
     receiveLink: (link, dir) => call('receive_link', { link, dir }),

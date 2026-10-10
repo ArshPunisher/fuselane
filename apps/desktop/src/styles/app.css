@@ -3676,6 +3676,39 @@ select.prio[data-level='skip'] {
   gap: 8px;
 }
 
+.phone-say {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.phone-say input {
+  min-width: 0;
+}
+
+.phone-note {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.phone-note q {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.phone-hint {
+  margin: -4px 0 0;
+  font-size: 12px;
+}
+
+@container (max-width: 480px) {
+  .phone-say {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .offers {
   display: grid;
   gap: 4px;

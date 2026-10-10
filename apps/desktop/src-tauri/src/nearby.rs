@@ -101,6 +101,8 @@ pub struct PhoneView {
     /// The link as a QR code (SVG).
     pub qr: String,
     pub offers: Vec<OfferView>,
+    /// Text offered to the phone (B10.7).
+    pub text: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -837,6 +839,7 @@ impl Nearby {
             url,
             qr,
             offers: vec![],
+            text: None,
         });
         *page = Some(started);
         drop(page);
@@ -886,6 +889,41 @@ impl Nearby {
         }
         if let Some(page) = self.phone.lock().await.as_ref() {
             page.offer(lock(&self.offers).clone());
+        }
+        self.publish();
+        Ok(self.view())
+    }
+
+    /// Offers text to the phone page, or takes it away with `None` (B10.7).
+    pub async fn phone_text(&self, text: Option<String>) -> Result<NearbyView, UiError> {
+        if text.as_deref().is_some_and(|t| t.trim().is_empty()) {
+            return Err(err(
+                "send-text-empty",
+                "There's no text to offer.",
+                Some("Type some, or copy some first."),
+            ));
+        }
+        if text
+            .as_ref()
+            .is_some_and(|t| t.len() > fuselane_nearby::proto::MAX_TEXT)
+        {
+            return Err(err(
+                "send-text-long",
+                "That's more text than can go this way (64 KB).",
+                Some("Save it to a file and offer the file instead."),
+            ));
+        }
+        let page = self.phone.lock().await;
+        let Some(page) = page.as_ref() else {
+            return Err(err(
+                "nearby-phone",
+                "The phone page is off.",
+                Some("Turn it on and scan the code with the phone first."),
+            ));
+        };
+        page.offer_text(text.clone());
+        if let Some(v) = lock(&self.phone_view).as_mut() {
+            v.text = text;
         }
         self.publish();
         Ok(self.view())
@@ -1196,6 +1234,31 @@ impl fuselane_nearby::web::PageHost for PhoneHost {
         }
         n.publish();
     }
+
+    fn text(&self, text: &str) {
+        let Some(n) = self.0.upgrade() else { return };
+        let id = format!("text-in-{}", n.next_request.fetch_add(1, Ordering::Relaxed));
+        lock(&n.incoming).insert(
+            id.clone(),
+            TransferView {
+                id,
+                direction: "in",
+                device: "A phone (browser)".into(),
+                name: text.lines().next().unwrap_or("").chars().take(80).collect(),
+                size: text.len() as u64,
+                done: text.len() as u64,
+                state: "done",
+                text: Some(text.to_string()),
+                ..TransferView::default()
+            },
+        );
+        // Only someone who scanned the code can send, so it goes straight to
+        // the clipboard, like text from a trusted computer.
+        if let Some(f) = lock(&n.on_text).clone() {
+            f("your phone", text, true);
+        }
+        n.publish();
+    }
 }
 
 #[cfg(test)]
@@ -1471,7 +1534,50 @@ mod tests {
             .await
             .unwrap();
         assert!(v.phone.unwrap().offers.is_empty());
+
+        // Text both ways (B10.7): offered text shows in the view; text from
+        // the phone lands in Activity and on the clipboard.
+        let v = n.phone_text(Some("wifi: hunter2".into())).await.unwrap();
+        assert_eq!(v.phone.unwrap().text.as_deref(), Some("wifi: hunter2"));
+        let copied: Arc<Mutex<Vec<(String, String, bool)>>> = Arc::default();
+        n.set_on_text({
+            let copied = copied.clone();
+            Arc::new(move |from, text, trusted| {
+                lock(&copied).push((from.into(), text.into(), trusted))
+            })
+        });
+        let url = n.view().phone.unwrap().url;
+        let rest = url.trim_start_matches("http://");
+        let (host, path) = rest.split_at(rest.find('/').unwrap());
+        let mut tcp = tokio::net::TcpStream::connect(host).await.unwrap();
+        let body = "ssh studio@192.168.1.9";
+        let req = format!(
+            "POST {path}/text HTTP/1.1\r\nHost: x\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        tokio::io::AsyncWriteExt::write_all(&mut tcp, req.as_bytes())
+            .await
+            .unwrap();
+        let mut out = String::new();
+        tokio::io::AsyncReadExt::read_to_string(&mut tcp, &mut out)
+            .await
+            .unwrap();
+        assert!(out.starts_with("HTTP/1.1 200"), "{out}");
+        assert_eq!(
+            lock(&copied).as_slice(),
+            [("your phone".to_string(), body.to_string(), true)]
+        );
+        assert!(
+            n.view()
+                .transfers
+                .iter()
+                .any(|t| t.text.as_deref() == Some(body))
+        );
         assert!(n.set_phone(false).await.unwrap().phone.is_none());
+        assert_eq!(
+            n.phone_text(Some("late".into())).await.unwrap_err().code,
+            "nearby-phone"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

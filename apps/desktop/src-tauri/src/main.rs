@@ -1174,6 +1174,24 @@ async fn nearby_phone_offer(
     near.phone_offer(add, remove).await
 }
 
+/// Offers text to the phone page (B10.7): `text`, what's on the clipboard,
+/// or nothing with `clear`.
+#[tauri::command]
+async fn nearby_phone_text(
+    app: tauri::AppHandle,
+    near: Near<'_>,
+    text: Option<String>,
+    clear: bool,
+) -> Result<nearby::NearbyView, UiError> {
+    use tauri_plugin_clipboard_manager::ClipboardExt;
+    let text = match (clear, text) {
+        (true, _) => None,
+        (false, Some(t)) => Some(t),
+        (false, None) => Some(app.clipboard().read_text().unwrap_or_default()),
+    };
+    near.phone_text(text).await
+}
+
 #[tauri::command]
 fn nearby_forget(near: Near<'_>, fingerprint: String) -> nearby::NearbyView {
     near.forget(&fingerprint)
@@ -1829,6 +1847,7 @@ fn main() {
             nearby_forget,
             nearby_phone,
             nearby_phone_offer,
+            nearby_phone_text,
             nearby_cancel,
             nearby_clear,
             nearby_reveal,

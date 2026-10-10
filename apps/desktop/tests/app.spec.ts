@@ -1802,6 +1802,13 @@ test.describe('Nearby', () => {
     await expect(offers).toContainText('Holiday video.mov')
     await offers.getByRole('button', { name: 'Stop offering Holiday video.mov' }).click()
     await expect(offers).toHaveCount(0)
+    // Text for the phone: typed, or what was copied; then taken away.
+    await page.getByRole('textbox', { name: 'Text for the phone' }).fill('wifi: hunter2')
+    await page.getByRole('button', { name: 'Offer text' }).click()
+    await expect(page.locator('.phone-note')).toContainText('wifi: hunter2')
+    await page.getByRole('button', { name: "Take the text away from the phone's page" }).click()
+    await page.getByRole('button', { name: 'Offer what I copied' }).click()
+    await expect(page.locator('.phone-note')).toContainText('fuselane.app/faq')
     await page.getByRole('button', { name: 'Stop', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Show a code to scan' })).toBeVisible()
   })

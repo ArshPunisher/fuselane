@@ -175,6 +175,7 @@ The owner asked for more built-in features that cost nothing to run (no paid tie
 - [x] B10.6 Hours per network: use a network only between set times every day (a night plan); running downloads move over when a window opens or closes
 - [x] B10.5 Data used: bytes per network per day for two months, this month's total per network and a 30-day chart
 - [x] B10.4 Video and audio from pages: hand pages to a yt-dlp the person installs (detected, never bundled), downloads run over every network
+- [x] B10.7 Text on the phone page: a phone without the app sends text or a link to this computer's clipboard, and copies text this computer offers
 
 ## P5 Torrents (0.2)
 
