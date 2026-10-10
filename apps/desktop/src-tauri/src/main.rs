@@ -1545,7 +1545,7 @@ fn watch_for_shell(app: tauri::AppHandle, svc: &Arc<Service>) {
 }
 
 fn open_service() -> Result<Arc<Service>, String> {
-    let store = fuselane_core::open_default()?;
+    let store = fuselane_core::open_default().map_err(|e| e.to_string())?;
     if let Some(aside) = &store.recovered_from {
         eprintln!(
             "fuselane: the download list was damaged, so a fresh one was started. The old file is kept at {}.",
