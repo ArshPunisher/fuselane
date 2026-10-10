@@ -30,6 +30,7 @@ use crate::headers::{self, ContentRange, RangeError};
 use crate::plan::Plan;
 use crate::retry::{Decision, DiskFailure, Failure, StreamRetry};
 use crate::scheduler::{self, Attempt, Block, HedgePolicy, NetId, Requester, StreamId};
+use crate::throttle::{self, ThrottlePolicy};
 
 /// Anything a connector can hand back.
 pub trait Io: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static {}
@@ -134,6 +135,32 @@ pub struct ProgressFn(pub Arc<dyn Fn(u64, Option<u64>) + Send + Sync>);
 impl std::fmt::Debug for ProgressFn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("ProgressFn")
+    }
+}
+
+/// Something worth telling the person about one network during a download.
+#[derive(Debug, Clone, PartialEq)]
+pub enum LaneEvent {
+    /// `name` slowed to `rate` bytes per second (its best was `best`; 0 when
+    /// never measured) while another network kept going. It gets no new work and
+    /// hands back what it held until a check finds it fast again (STEPS 8.2).
+    Throttled {
+        net: NetId,
+        name: String,
+        rate: f64,
+        best: f64,
+    },
+    /// A check found it fast again (`rate` bytes per second on one stream).
+    Restored { net: NetId, name: String, rate: f64 },
+}
+
+/// Receives [`LaneEvent`]s. Called outside the engine's locks; keep it cheap.
+#[derive(Clone)]
+pub struct LaneEventFn(pub Arc<dyn Fn(&LaneEvent) + Send + Sync>);
+
+impl std::fmt::Debug for LaneEventFn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("LaneEventFn")
     }
 }
 
@@ -347,6 +374,10 @@ pub struct Tuning {
     pub filename: Option<String>,
     /// A browser session's cookies and referrer, sent on every request.
     pub headers: Headers,
+    /// When a network counts as throttled, and how often it's tried again.
+    pub throttle: ThrottlePolicy,
+    /// Hears when a network is benched as throttled or comes back.
+    pub lane_events: Option<LaneEventFn>,
 }
 
 impl Default for Tuning {
@@ -375,6 +406,8 @@ impl Default for Tuning {
             headers: Headers::default(),
             limiter: None,
             job_limit: None,
+            throttle: ThrottlePolicy::default(),
+            lane_events: None,
         }
     }
 }
@@ -711,6 +744,14 @@ struct Shared {
     block_net_bytes: Vec<Vec<(NetId, u64)>>,
     meters: HashMap<NetId, crate::measure::Meter>,
     total_meter: crate::measure::Meter,
+    /// Every byte each network received, races included: its real speed (8.2).
+    raw_bytes: HashMap<NetId, u64>,
+    /// Networks benched as throttled: they get no work while others can carry it.
+    benched: HashSet<NetId>,
+    /// A check may start on these benched networks (the first stream to ask runs it)...
+    probe_open: HashSet<NetId>,
+    /// ...and this stream is running it.
+    prober: HashMap<NetId, StreamId>,
 }
 
 #[derive(Debug, Default)]
@@ -726,6 +767,21 @@ struct NetStats {
 impl Shared {
     fn all_complete(&self) -> bool {
         self.blocks.iter().all(Block::complete)
+    }
+
+    /// Whether `stream` on `net` must stand aside: its network is benched as
+    /// throttled, it isn't running the network's check, and another network can
+    /// carry the work (a benched network still works when it's the last one).
+    fn resting(&self, ctx: &Ctx, net: NetId, stream: StreamId) -> bool {
+        self.benched.contains(&net)
+            && self.prober.get(&net) != Some(&stream)
+            && ctx.lanes.iter().any(|(id, name)| {
+                *id != net
+                    && !self.dead_networks.contains(id)
+                    && !self.benched.contains(id)
+                    && self.nets.get(id).is_some_and(|n| n.live > 0)
+                    && !ctx.tuning.limiter.as_ref().is_some_and(|l| l.blocked(name))
+            })
     }
 
     /// Advances `secured` through contiguous written intervals.
@@ -759,6 +815,8 @@ struct Ctx {
     staging_path: PathBuf,
     filename: String,
     last_modified: Option<String>,
+    /// Every lane's id and network name.
+    lanes: Vec<(NetId, String)>,
 }
 
 impl Ctx {
@@ -817,6 +875,27 @@ async fn run_stream(ctx: Arc<Ctx>, net: Network, stream: StreamId) {
                     return; // nothing left to stand aside for
                 }
             }
+            conn = None;
+            tokio::select! {
+                _ = ctx.wake.notified() => {}
+                _ = tokio::time::sleep(Duration::from_millis(500)) => {}
+            }
+            continue;
+        }
+        // A network benched as throttled rests while the others carry the work,
+        // except for the one stream running its check (8.2).
+        let rest = {
+            let mut s = ctx.lock();
+            if s.benched.contains(&net.id)
+                && s.prober.get(&net.id) != Some(&stream)
+                && s.probe_open.remove(&net.id)
+            {
+                s.prober.insert(net.id, stream);
+                last_rate = None; // judge the check on its own, not the crawl before it
+            }
+            s.resting(&ctx, net.id, stream) && s.fatal.is_none() && !s.all_complete()
+        };
+        if rest {
             conn = None;
             tokio::select! {
                 _ = ctx.wake.notified() => {}
@@ -990,14 +1069,21 @@ async fn run_stream(ctx: Arc<Ctx>, net: Network, stream: StreamId) {
                         let entry = s.link_refused.entry(net.id).or_insert((code, 0));
                         *entry = (code, entry.1 + 1);
                         // Expired only when every live network keeps refusing: brief 403s
-                        // from rate limiting must not end a download (chaos seed 43).
+                        // from rate limiting must not end a download (chaos seed 43). A
+                        // network benched as throttled isn't asking, so it can't vote.
                         let dead = s.dead_networks.clone();
+                        let resting = s.benched.iter().filter(|n| !dead.contains(n)).count();
                         let persistent = s
                             .link_refused
                             .iter()
-                            .filter(|(n, (_, c))| !dead.contains(n) && *c >= LINK_EXPIRED_AFTER)
+                            .filter(|(n, (_, c))| {
+                                !dead.contains(n)
+                                    && !s.benched.contains(n)
+                                    && *c >= LINK_EXPIRED_AFTER
+                            })
                             .count()
                             + dead.len()
+                            + resting
                             >= ctx.live_networks;
                         if persistent {
                             s.fatal.get_or_insert(JobError::LinkExpired(code));
@@ -1043,6 +1129,97 @@ async fn run_stream(ctx: Arc<Ctx>, net: Network, stream: StreamId) {
 
 /// Consecutive refusals on every network before a link counts as expired.
 const LINK_EXPIRED_AFTER: u32 = 4;
+
+/// One tick of throttle detection (8.2): feeds the detector each network's
+/// bytes and attempts, applies what it decides, and tells the listener.
+fn watch_throttling(
+    ctx: &Arc<Ctx>,
+    networks: &[Network],
+    groups: &HashMap<NetId, u32>,
+    detector: &mut throttle::Detector,
+) {
+    let limits = ctx.tuning.limiter.as_ref().map(|l| l.settings());
+    let shaped = limits.as_ref().is_some_and(|l| l.global > 0)
+        || ctx.tuning.job_limit.as_ref().is_some_and(|j| j.rate() > 0);
+    let now = ctx.now_ms();
+    let mut events = vec![];
+    let wake = {
+        let mut s = ctx.lock();
+        let mut attempts: HashMap<NetId, u32> = HashMap::new();
+        for a in s.blocks.iter().flat_map(|b| &b.attempts) {
+            *attempts.entry(a.network).or_default() += 1;
+        }
+        let samples: Vec<throttle::Sample> = networks
+            .iter()
+            .map(|n| throttle::Sample {
+                net: n.id,
+                group: groups.get(&n.id).copied().unwrap_or(0),
+                bytes: s.raw_bytes.get(&n.id).copied().unwrap_or(0),
+                attempts: attempts.get(&n.id).copied().unwrap_or(0),
+                limited: limits
+                    .as_ref()
+                    .is_some_and(|l| l.networks.iter().any(|(name, r)| *name == n.name && *r > 0)),
+                out: s.dead_networks.contains(&n.id)
+                    || ctx
+                        .tuning
+                        .limiter
+                        .as_ref()
+                        .is_some_and(|l| l.blocked(&n.name)),
+            })
+            .collect();
+        let total = s.plan.total;
+        let name = |id: NetId| {
+            networks
+                .iter()
+                .find(|n| n.id == id)
+                .map(|n| n.name.clone())
+                .unwrap_or_default()
+        };
+        for change in detector.tick(now, &samples, total, shaped) {
+            match change {
+                throttle::Change::Bench { net, rate, best } => {
+                    s.benched.insert(net);
+                    s.probe_open.remove(&net);
+                    s.prober.remove(&net);
+                    events.push(LaneEvent::Throttled {
+                        net,
+                        name: name(net),
+                        rate,
+                        best,
+                    });
+                }
+                throttle::Change::Probe { net } => {
+                    s.probe_open.insert(net);
+                }
+                throttle::Change::Restore { net, rate } => {
+                    s.benched.remove(&net);
+                    s.probe_open.remove(&net);
+                    s.prober.remove(&net);
+                    events.push(LaneEvent::Restored {
+                        net,
+                        name: name(net),
+                        rate,
+                    });
+                }
+                throttle::Change::Rest { net, .. } => {
+                    // Still slow (or nothing to measure): the check's stream rests too.
+                    s.probe_open.remove(&net);
+                    s.prober.remove(&net);
+                }
+            }
+        }
+        // Wake resting streams: one may take a check, or all may go back to work.
+        !events.is_empty() || !s.probe_open.is_empty()
+    };
+    if wake {
+        ctx.wake.notify_waiters();
+    }
+    if let Some(sink) = &ctx.tuning.lane_events {
+        for e in &events {
+            (sink.0)(e);
+        }
+    }
+}
 
 fn scaled(ms: u64, t: &Tuning) -> Duration {
     Duration::from_millis((ms as f64 * t.retry_delay_scale.clamp(0.0, 1.0)) as u64)
@@ -1417,7 +1594,11 @@ async fn fetch_block(
     loop {
         let lost = {
             let s = ctx.lock();
-            s.blocks[work.block].complete() || s.fatal.is_some() || ctx.stop.load(Ordering::Acquire)
+            s.blocks[work.block].complete()
+                || s.fatal.is_some()
+                || ctx.stop.load(Ordering::Acquire)
+                // Benched as throttled: hand the rest of the block to the others (8.2).
+                || s.resting(ctx, net.id, stream)
         };
         if lost {
             *conn = None;
@@ -1525,6 +1706,7 @@ fn advance(ctx: &Ctx, block: usize, stream: StreamId, net: NetId, position: u64,
         *m = (*m).max(position);
     }
     s.wasted_bytes += new_bytes - useful;
+    *s.raw_bytes.entry(net).or_default() += new_bytes;
     s.meters.entry(net).or_default().add(new_bytes, now);
     s.total_meter.add(useful, now);
     if let Some(row) = s.block_net_bytes.get_mut(block) {
@@ -1838,6 +2020,10 @@ pub async fn download_with(
             block_net_bytes: vec![Vec::new(); n_blocks],
             meters: HashMap::new(),
             total_meter: crate::measure::Meter::default(),
+            raw_bytes: HashMap::new(),
+            benched: HashSet::new(),
+            probe_open: HashSet::new(),
+            prober: HashMap::new(),
         }),
         file,
         wake: tokio::sync::Notify::new(),
@@ -1850,6 +2036,7 @@ pub async fn download_with(
         last_modified: resumed_validators
             .as_ref()
             .map_or(probe.last_modified.clone(), |(_, lm)| lm.clone()),
+        lanes: networks.iter().map(|n| (n.id, n.name.clone())).collect(),
     });
 
     // A resumed download re-checks a few windows of what the checkpoint calls secured.
@@ -1913,6 +2100,22 @@ pub async fn download_with(
     let cancel = tuning.cancel.clone().unwrap_or_default();
     let mut ticker = tokio::time::interval(tuning.controller_tick);
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let mut detector = throttle::Detector::new(tuning.throttle);
+    // Lanes to the same server share a group: mirrors are only compared with
+    // lanes to the same mirror.
+    let groups: HashMap<NetId, u32> = networks
+        .iter()
+        .map(|n| {
+            let group = n.mirror.as_ref().map_or(0, |m| {
+                networks
+                    .iter()
+                    .filter_map(|o| o.mirror.as_ref())
+                    .position(|o| Arc::ptr_eq(o, m))
+                    .map_or(0, |i| i as u32 + 1)
+            });
+            (n.id, group)
+        })
+        .collect();
     loop {
         tokio::select! {
             joined = tasks.join_next() => {
@@ -1961,6 +2164,7 @@ pub async fn download_with(
                         .collect();
                     (ticks, spare)
                 };
+                watch_throttling(&ctx, &networks, &groups, &mut detector);
                 if ticks.is_empty() { continue; }
                 let now = ctx.now_ms();
                 for action in controller.tick(now, &ticks, spare, crate::concurrency::Disk::Unknown) {
