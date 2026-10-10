@@ -580,6 +580,8 @@ function PhoneCard({ phone }: { phone: PhoneView | null }) {
         <div className="phone-say">
           <input
             type="text"
+            name="phone-text"
+            autoComplete="off"
             aria-label="Text for the phone"
             maxLength={65536}
             placeholder="Text or a link for the phone, or leave empty for what you copied"

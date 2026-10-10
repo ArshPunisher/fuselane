@@ -184,7 +184,13 @@
       <form id="login" class="card" hidden>
         <p>Enter the secret shown in Fuselane, in Settings → Other apps.</p>
         <label class="mute" for="secret">Secret</label>
-        <input id="secret" autocomplete="off" autocapitalize="off" spellcheck="false" />
+        <input
+          id="secret"
+          name="secret"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+        />
         <button class="primary" type="submit">Connect</button>
         <p class="err" id="loginerr" role="alert"></p>
       </form>
@@ -194,6 +200,7 @@
           <div class="row">
             <input
               id="link"
+              name="link"
               type="url"
               inputmode="url"
               placeholder="https://…"

@@ -187,6 +187,7 @@ function FilterFields(p: {
         <label htmlFor={`${p.idBase}-inc`}>Only titles with</label>
         <input
           id={`${p.idBase}-inc`}
+          name="include"
           type="text"
           autoComplete="off"
           spellCheck={false}
@@ -199,6 +200,7 @@ function FilterFields(p: {
         <label htmlFor={`${p.idBase}-exc`}>Skip titles with</label>
         <input
           id={`${p.idBase}-exc`}
+          name="exclude"
           type="text"
           autoComplete="off"
           spellCheck={false}
@@ -211,6 +213,7 @@ function FilterFields(p: {
         <label htmlFor={`${p.idBase}-every`}>Check</label>
         <select
           id={`${p.idBase}-every`}
+          name="every"
           value={p.every}
           onChange={(e) => p.setEvery(Number(e.target.value))}
         >
@@ -320,6 +323,7 @@ export function FeedsDialog({ open, onClose }: { open: boolean; onClose: () => v
               <label htmlFor="feed-url">Feed address</label>
               <input
                 id="feed-url"
+                name="feed"
                 type="url"
                 inputMode="url"
                 autoComplete="off"
