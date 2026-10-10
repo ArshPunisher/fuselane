@@ -1,0 +1,23 @@
+{
+  "name": "@fuselane/site-next",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 5196",
+    "build": "next build && node scripts/headers.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "16.4.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@phosphor-icons/core": "2.1.1",
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "geist": "^1.7.2",
+    "typescript": "~5.9.3"
+  }
+}
