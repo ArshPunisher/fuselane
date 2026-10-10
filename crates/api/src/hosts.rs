@@ -11,8 +11,12 @@ use std::path::{Path, PathBuf};
 use serde_json::json;
 
 pub const HOST_NAME: &str = "app.fuselane.host";
-/// Chrome Web Store id. Edge and Brave install from the Chrome Web Store too.
-pub const CHROME_EXTENSION_IDS: &[&str] = &["nggljghjikdkigiekdciocigdnnhponl"];
+/// The Chrome Web Store id (Brave, Vivaldi and Opera install from it too).
+pub const CHROME_STORE_ID: &str = "nggljghjikdkigiekdciocigdnnhponl";
+/// The Edge Add-ons store gives the same extension a different id. Edge can
+/// install from either store, so both are allowed.
+pub const EDGE_STORE_ID: &str = "aeacngcllkfecpfoclekcfhpokjhijgc";
+pub const CHROME_EXTENSION_IDS: &[&str] = &[CHROME_STORE_ID, EDGE_STORE_ID];
 /// Fixed in the Firefox build's manifest (`apps/extension/wxt.config.ts`).
 pub const FIREFOX_EXTENSION_ID: &str = "fuselane@fuselane.app";
 
@@ -443,16 +447,22 @@ mod tests {
     const EXE: &str = "/Applications/Fuselane.app/Contents/MacOS/fuselane-desktop";
 
     #[test]
-    fn chrome_manifests_name_the_store_id_and_the_exact_path() {
+    fn chrome_manifests_name_both_store_ids_and_the_exact_path() {
         let m: Value =
             serde_json::from_str(&manifest(Kind::Chromium, Path::new(EXE), &[])).unwrap();
         assert_eq!(m["name"], HOST_NAME);
         assert_eq!(m["path"], EXE);
         assert_eq!(m["type"], "stdio");
+        // The Edge Add-ons copy has its own id; without it Edge users' extension
+        // couldn't reach the app and every download stayed in the browser.
         assert_eq!(
             m["allowed_origins"],
-            json!(["chrome-extension://nggljghjikdkigiekdciocigdnnhponl/"])
+            json!([
+                "chrome-extension://nggljghjikdkigiekdciocigdnnhponl/",
+                "chrome-extension://aeacngcllkfecpfoclekcfhpokjhijgc/"
+            ])
         );
+        assert!(CHROME_EXTENSION_IDS.iter().all(|id| valid_chrome_id(id)));
         assert!(m.get("allowed_extensions").is_none());
     }
 
@@ -472,7 +482,10 @@ mod tests {
         assert!(extra_ids(None).is_empty());
         let m: Value =
             serde_json::from_str(&manifest(Kind::Chromium, Path::new(EXE), &ids)).unwrap();
-        assert_eq!(m["allowed_origins"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            m["allowed_origins"].as_array().unwrap().len(),
+            CHROME_EXTENSION_IDS.len() + 1
+        );
     }
 
     #[cfg(unix)]
