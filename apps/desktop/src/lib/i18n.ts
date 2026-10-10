@@ -4,6 +4,8 @@
 import { cloneElement, isValidElement, type ReactNode } from 'react'
 import { create } from 'zustand'
 import { hi } from '../locales/hi'
+import { hiBackend } from '../locales/hi-backend'
+import { compileBackend, translateBackend, type BackendTable, type Compiled } from './backendMatch'
 
 export type Locale = 'en' | 'hi'
 /** What the person picked in Settings; 'system' follows the computer's language. */
@@ -11,6 +13,9 @@ export type LangPref = 'system' | Locale
 export type Vars = Record<string, string | number>
 
 const CATALOGUES: Record<Locale, Readonly<Record<string, string>> | null> = { en: null, hi }
+/** Text the core sends, by language (lib/backendMatch.ts). */
+const BACKEND: Record<Locale, BackendTable | null> = { en: null, hi: hiBackend }
+const compiled = new Map<Locale, Compiled>()
 const KEY = 'fuselane.lang'
 
 /** The desktop app; anything else is the demo in a plain browser (pnpm dev, Playwright). */
@@ -122,6 +127,25 @@ function lookup(en: string): string {
 
 function fill(s: string, vars: Vars): string {
   return s.replace(/\{(\w+)\}/g, (m, k: string) => (Object.hasOwn(vars, k) ? String(vars[k]) : m))
+}
+
+/**
+ * Translates text the Rust core sent (an error, a hint, a note on a download). The core
+ * writes English; unknown text is shown as sent. Call it where the text is shown, so a
+ * language change applies at once.
+ */
+export function tb(text: string): string
+export function tb(text: string | null | undefined): string | null
+export function tb(text: string | null | undefined): string | null {
+  if (text == null) return null
+  const table = BACKEND[current]
+  if (!table) return text
+  let c = compiled.get(current)
+  if (!c) {
+    c = compileBackend(table)
+    compiled.set(current, c)
+  }
+  return translateBackend(text, c)
 }
 
 /** Translates an English sentence; `{name}` is filled from `vars`. Use a literal string. */
