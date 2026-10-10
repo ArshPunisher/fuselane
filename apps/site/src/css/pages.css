@@ -999,3 +999,25 @@
 .doc code {
   white-space: nowrap;
 }
+
+/* ---------- Privacy and terms ---------- */
+
+.doc.legal {
+  max-width: 72ch;
+  margin-bottom: 64px;
+}
+
+.legal-date {
+  color: var(--mute);
+  font-size: 14px;
+}
+
+.legal ul {
+  display: grid;
+  gap: 8px;
+  padding-left: 20px;
+}
+
+.legal li {
+  color: var(--body);
+}

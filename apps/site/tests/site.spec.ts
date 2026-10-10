@@ -387,43 +387,47 @@ for (const [width, height] of [
   [375, 812],
   [768, 1024],
 ] as const) {
-  test(`at ${width} px no step of how it works ever sits under its sticky card`, async ({
+  test(`at ${width} px how it works plays by itself, and its tabs pick a step`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height })
     await stub(page)
     await page.goto('/')
-    const range = await page.locator('.story-grid').evaluate((g) => {
-      const r = g.getBoundingClientRect()
-      return { from: r.top + scrollY - innerHeight, to: r.bottom + scrollY }
-    })
-    const seen = new Set<string>()
-    for (let y = range.from; y < range.to; y += 90) {
-      await page.evaluate((top) => window.scrollTo({ top, behavior: 'instant' }), y)
-      await page.waitForTimeout(40)
-      const { overlaps, step, words } = await page.evaluate(() => {
-        const card = document.querySelector('.story-visual')!.getBoundingClientRect()
-        const overlaps = [
-          ...document.querySelectorAll<HTMLElement>('.story-step h3, .story-step p'),
-        ]
-          .filter((el) => getComputedStyle(el.closest('.story-step')!).opacity !== '0')
-          .map((el) => el.getBoundingClientRect())
-          .filter((r) => r.bottom > card.top + 1 && r.top < card.bottom - 1 && r.height > 0).length
-        const visual = document.querySelector<HTMLElement>('.story-visual')!
-        return {
-          overlaps,
-          step: visual.dataset.step ?? '',
-          words: visual.querySelector('.sv-text h3')?.textContent ?? '',
-        }
-      })
-      expect(overlaps, `scrolled to ${y}`).toBe(0)
-      // The card carries the words of the step it shows.
-      expect(words).toBe({ '1': 'Split', '2': 'Spread', '3': 'Fuse' }[step])
-      seen.add(step)
-    }
-    expect([...seen].sort()).toEqual(['1', '2', '3'])
+    const visual = page.locator('.story-visual')
+    await visual.scrollIntoViewIfNeeded()
+    // No long scroll: on screen, it moves through the steps by itself.
+    await expect(visual).toHaveAttribute('data-step', '1')
+    await expect(visual).toHaveAttribute('data-step', '2', { timeout: 6000 })
+    await expect(visual.locator('.sv-text h3')).toHaveText('Spread')
+    const tabs = page.getByRole('tablist', { name: 'Steps' })
+    await tabs.getByRole('tab', { name: 'Fuse' }).click()
+    await expect(visual).toHaveAttribute('data-step', '3')
+    await expect(tabs.getByRole('tab', { name: 'Fuse' })).toHaveAttribute('aria-selected', 'true')
+    // The tabs sit below the card, never under it.
+    const card = await visual.boundingBox()
+    const bar = await tabs.boundingBox()
+    expect(bar!.y).toBeGreaterThanOrEqual(card!.y + card!.height - 1)
+    // The steps are still there for screen readers.
+    await expect(page.locator('.story-step')).toHaveCount(3)
   })
 }
+
+test('with reduced motion the steps wait for a tap', async ({ browser }) => {
+  const ctx = await browser.newContext({
+    viewport: { width: 375, height: 812 },
+    reducedMotion: 'reduce',
+  })
+  const page = await ctx.newPage()
+  await stub(page)
+  await page.goto('/')
+  const visual = page.locator('.story-visual')
+  await visual.scrollIntoViewIfNeeded()
+  await page.waitForTimeout(4500)
+  await expect(visual).toHaveAttribute('data-step', '1')
+  await page.getByRole('tab', { name: 'Spread' }).click()
+  await expect(visual).toHaveAttribute('data-step', '2')
+  await ctx.close()
+})
 
 test('the nav marks the current page and every page links to privacy', async ({ page }) => {
   await stub(page)
@@ -439,7 +443,11 @@ test('the nav marks the current page and every page links to privacy', async ({ 
     ).toHaveAttribute('aria-current', 'page')
     await expect(page.getByRole('link', { name: 'Privacy', exact: true })).toHaveAttribute(
       'href',
-      /PRIVACY\.md$/,
+      /privacy\/$/,
+    )
+    await expect(page.getByRole('link', { name: 'Terms', exact: true })).toHaveAttribute(
+      'href',
+      /terms\/$/,
     )
   }
 })

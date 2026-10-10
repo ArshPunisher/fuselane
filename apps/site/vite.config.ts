@@ -15,6 +15,8 @@ const LISTED: [path: string, freq: string, priority: string, name: string][] = [
   ['/guide/', 'monthly', '0.8', 'Guide'],
   ['/faq/', 'monthly', '0.7', 'Questions'],
   ['/support/', 'monthly', '0.5', 'Support'],
+  ['/privacy/', 'yearly', '0.3', 'Privacy'],
+  ['/terms/', 'yearly', '0.3', 'Terms'],
 ]
 
 // Content Security Policy for Cloudflare Pages. Strict on purpose: only our own
@@ -205,6 +207,8 @@ export default defineConfig({
         guide: resolve(import.meta.dirname, 'guide/index.html'),
         faq: resolve(import.meta.dirname, 'faq/index.html'),
         support: resolve(import.meta.dirname, 'support/index.html'),
+        privacy: resolve(import.meta.dirname, 'privacy/index.html'),
+        terms: resolve(import.meta.dirname, 'terms/index.html'),
         send: resolve(import.meta.dirname, 's/index.html'),
         notFound: resolve(import.meta.dirname, '404.html'),
       },

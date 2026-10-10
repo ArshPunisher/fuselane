@@ -18,6 +18,7 @@ import terminal from '@phosphor-icons/core/assets/regular/terminal-window.svg?ra
 import share from '@phosphor-icons/core/assets/regular/share-network.svg?raw'
 import bug from '@phosphor-icons/core/assets/regular/bug.svg?raw'
 import bulb from '@phosphor-icons/core/assets/regular/lightbulb.svg?raw'
+import heart from '@phosphor-icons/core/assets/regular/heart.svg?raw'
 import code from '@phosphor-icons/core/assets/regular/code.svg?raw'
 import notes from '@phosphor-icons/core/assets/regular/notepad.svg?raw'
 import moon from '@phosphor-icons/core/assets/regular/moon.svg?raw'
@@ -96,6 +97,7 @@ const ICONS: Record<string, string> = {
   share,
   bug,
   bulb,
+  heart,
   code,
   notes,
   moon,
