@@ -257,6 +257,11 @@ impl RangeServer {
         self.lock().rules.push(rule);
     }
 
+    /// Drops every rule: the server behaves from now on.
+    pub fn clear_rules(&self) {
+        self.lock().rules.clear();
+    }
+
     /// Changes the ETag from now on (same bytes: a load balancer relabelling).
     pub fn set_etag(&self, etag: &str) {
         self.lock().etag = etag.to_string();

@@ -1020,3 +1020,49 @@ async fn a_mirror_with_a_different_file_is_dropped_and_the_file_stays_exact() {
     assert_exact(&report, content);
     assert_eq!(report.bytes_by_network.get(&2).copied().unwrap_or(0), 0);
 }
+
+#[tokio::test]
+async fn a_dropped_probe_is_retried_instead_of_failing_the_download() {
+    // One network, and the very first request is reset: that alone used to fail
+    // the whole download with "couldn't reach the server".
+    let content = Content::new(400 * KB, 31);
+    let (res, server, _dir) = run(content, &[Rule::once(Fault::Reset)], vec![plain(1)]).await;
+    assert_exact(&res.unwrap(), content);
+    let probes = server
+        .requests()
+        .iter()
+        .filter(|r| r.range.as_deref() == Some("bytes=0-0"))
+        .count();
+    assert_eq!(probes, 2, "the dropped probe was asked once more");
+}
+
+#[tokio::test]
+async fn a_probe_that_keeps_dropping_gives_up_after_a_few_tries() {
+    let content = Content::new(64 * KB, 32);
+    let started = std::time::Instant::now();
+    let (res, server, _dir) = run(content, &[Rule::always(Fault::Reset)], vec![plain(1)]).await;
+    let err = res.unwrap_err();
+    assert!(
+        matches!(&err, JobError::Unreachable(why) if why == "net1 got no answer"),
+        "{err:?}"
+    );
+    // The first try and three retry rounds, then a plain error: never forever.
+    assert_eq!(server.requests().len(), 4);
+    assert!(started.elapsed() < Duration::from_secs(10));
+}
+
+#[tokio::test]
+async fn every_network_is_tried_in_a_round_before_any_is_retried() {
+    // A dead first network doesn't hold the probe: the second answers at once.
+    let content = Content::new(200 * KB, 33);
+    let (res, server, _dir) = run(content, &[], vec![dead(1), plain(2)]).await;
+    assert_exact(&res.unwrap(), content);
+    assert_eq!(
+        server
+            .requests()
+            .iter()
+            .filter(|r| r.range.as_deref() == Some("bytes=0-0"))
+            .count(),
+        1
+    );
+}

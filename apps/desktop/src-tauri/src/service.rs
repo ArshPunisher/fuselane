@@ -3064,16 +3064,15 @@ mod tests {
     async fn a_download_that_fails_for_a_passing_reason_tries_again_by_itself() {
         let content = Content::new(256 * KB, 96);
         let server = RangeServer::start(content).await.unwrap();
-        // The server is unreachable at first (the network dropped), then fine.
-        server.add_rule(Rule {
-            skip: 0,
-            times: 4,
-            fault: Fault::Reset,
-        });
+        // The server is unreachable at first (the network dropped), then fine. The
+        // probe retries a dropped connection a few times, so it stays dropped
+        // until the download has failed.
+        server.add_rule(Rule::always(Fault::Reset));
         let h = harness(3);
         let id = h.svc.add(&link(&server), None).unwrap();
         h.wait("the failure", |h| h.job(id).status == "failed")
             .await;
+        server.clear_rules();
         let job = h.job(id);
         assert_eq!(job.error_action.as_deref(), Some("retry"));
         assert!(job.retry_in.is_some(), "a retry is planned");

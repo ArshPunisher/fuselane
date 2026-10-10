@@ -630,100 +630,152 @@ pub async fn read_small(src: &Source, net: &Network, t: &Tuning, max: usize) -> 
 const PROBE_BUSY_RETRIES: u32 = 3;
 /// Longest Retry-After the probe honours (a server asking for an hour is answered later).
 const PROBE_RETRY_AFTER_CAP_MS: u64 = 30_000;
+/// Rounds of retries after every network's probe dropped (a reset, a refused,
+/// closed or timed-out connection): one dropped connection must not end a
+/// download, any more than one busy answer does (L-110).
+const PROBE_DROP_RETRIES: u32 = 3;
+/// Wait before the first retry round; it doubles each round.
+const PROBE_DROP_BACKOFF_MS: u64 = 500;
+/// No retry round starts once the probe has taken this long, so a dead path
+/// can't hold a download (or the New download dialog) for minutes.
+const PROBE_DROP_BUDGET: Duration = Duration::from_secs(30);
+
+/// Why one network's probe got no usable answer.
+enum ProbeMiss {
+    /// The connector explained it (a proxy turning down the login).
+    Trouble(LaneTrouble),
+    /// Couldn't connect, or the connection dropped before an answer.
+    Dropped(String),
+}
+
+/// One network's `bytes=0-0` request, patient with busy answers (L-110).
+async fn probe_on(
+    net: &Network,
+    src: &Source,
+    t: &Tuning,
+) -> Result<Response<hyper::body::Incoming>, ProbeMiss> {
+    let mut busy = 0;
+    loop {
+        let mut conn = match connect(net, src, t).await {
+            Ok(c) => c,
+            Err(Failure::Lane(why)) => return Err(ProbeMiss::Trouble(why)),
+            Err(_) => return Err(ProbeMiss::Dropped(format!("{} couldn't connect", net.name))),
+        };
+        let res = match send(&mut conn, request(src, t, Some((0, Some(0))), None), t).await {
+            Ok(r) => r,
+            Err(_) => return Err(ProbeMiss::Dropped(format!("{} got no answer", net.name))),
+        };
+        let status = res.status().as_u16();
+        // A busy server (429, 503...) gets a few patient retries before we give up,
+        // honouring Retry-After (L-110): one rate-limit answer must not end a download.
+        if crate::retry::is_busy(status) && busy < PROBE_BUSY_RETRIES {
+            let wait = header(&res, hyper::header::RETRY_AFTER)
+                .and_then(|v| crate::retry::parse_retry_after(&v, now_unix()))
+                .unwrap_or(2_000 << busy)
+                .min(PROBE_RETRY_AFTER_CAP_MS);
+            busy += 1;
+            drop(res);
+            tokio::time::sleep(scaled(wait, t)).await;
+            continue;
+        }
+        return Ok(res);
+    }
+}
 
 /// Probes with `Range: bytes=0-0` on the first network that answers (L-01, L-04).
+/// When every network's attempt drops, it tries them all again a few times,
+/// with a short backoff, within `PROBE_DROP_BUDGET`. Each round goes through
+/// the networks in order, so a dead first network can't hold up the others.
 pub async fn probe(src: &Source, networks: &[Network], t: &Tuning) -> Result<Probe, JobError> {
+    let started = Instant::now();
     let mut last = String::from("no networks");
     // A reason a connector gave (a proxy turning down the login) beats "couldn't connect".
     let mut trouble: Option<String> = None;
-    for net in networks.iter().filter(|n| n.mirror.is_none()) {
-        let mut busy = 0;
-        let res = loop {
-            let mut conn = match connect(net, src, t).await {
-                Ok(c) => c,
-                Err(Failure::Lane(why)) => {
-                    trouble = Some(why.message);
-                    break None;
-                }
-                Err(_) => {
-                    last = format!("{} couldn't connect", net.name);
-                    break None;
-                }
-            };
-            let res = match send(&mut conn, request(src, t, Some((0, Some(0))), None), t).await {
-                Ok(r) => r,
-                Err(_) => {
-                    last = format!("{} got no answer", net.name);
-                    break None;
-                }
-            };
-            let status = res.status().as_u16();
-            // A busy server (429, 503...) gets a few patient retries before we give up,
-            // honouring Retry-After (L-110): one rate-limit answer must not end a download.
-            if crate::retry::is_busy(status) && busy < PROBE_BUSY_RETRIES {
-                let wait = header(&res, hyper::header::RETRY_AFTER)
-                    .and_then(|v| crate::retry::parse_retry_after(&v, now_unix()))
-                    .unwrap_or(2_000 << busy)
-                    .min(PROBE_RETRY_AFTER_CAP_MS);
-                busy += 1;
-                drop(res);
-                tokio::time::sleep(scaled(wait, t)).await;
+    // Networks whose connector said retrying can't help.
+    let mut given_up: HashSet<NetId> = HashSet::new();
+    for round in 0..=PROBE_DROP_RETRIES {
+        if round > 0 {
+            let wait = scaled(PROBE_DROP_BACKOFF_MS << (round - 1), t);
+            if started.elapsed() + wait >= PROBE_DROP_BUDGET {
+                break;
+            }
+            tokio::time::sleep(wait).await;
+        }
+        let mut tried = false;
+        for net in networks.iter().filter(|n| n.mirror.is_none()) {
+            if given_up.contains(&net.id) {
                 continue;
             }
-            break Some(res);
-        };
-        let Some(res) = res else { continue };
-        let status = res.status().as_u16();
-        if (300..400).contains(&status)
-            && status != 304
-            && let Some(location) = header(&res, LOCATION).filter(|l| !l.trim().is_empty())
-        {
-            return Err(JobError::Redirect {
-                status,
-                location: location.trim().to_string(),
-            });
+            tried = true;
+            match probe_on(net, src, t).await {
+                Ok(res) => return read_probe(res, src),
+                Err(ProbeMiss::Trouble(why)) => {
+                    if why.lasting {
+                        given_up.insert(net.id);
+                    }
+                    trouble = Some(why.message);
+                }
+                Err(ProbeMiss::Dropped(why)) => last = why,
+            }
         }
-        let raw_etag = header(&res, ETAG)
-            .map(|e| e.trim().to_string())
-            .filter(|e| !e.is_empty());
-        let etag = raw_etag
-            .as_deref()
-            .map(headers::normalize_etag)
-            .filter(|e| !e.is_empty());
-        let last_modified = header(&res, LAST_MODIFIED);
-        let disposition = header(&res, CONTENT_DISPOSITION)
-            .and_then(|v| headers::content_disposition_filename(&v));
-        let from_path = headers::filename_from_path(src.path.split('?').next().unwrap_or(""));
-        let filename = disposition
-            .or(from_path)
-            .unwrap_or_else(|| "download".into());
-        let content_type = header(&res, CONTENT_TYPE).map(|v| {
-            v.split(';')
-                .next()
-                .unwrap_or_default()
-                .trim()
-                .to_ascii_lowercase()
-        });
-        let cr = header(&res, CONTENT_RANGE).and_then(|v| headers::parse_content_range(&v));
-        let cl = header(&res, CONTENT_LENGTH).and_then(|v| v.parse::<u64>().ok());
-        let (total, ranges) = match (status, cr) {
-            (206, Some(ContentRange::Bytes { total, .. })) => (total, total.is_some()),
-            (416, Some(ContentRange::Unsatisfied { total: 0 })) => (Some(0), false),
-            (200, _) => (cl, false), // Content-Length is trusted only on a 200 (L-04)
-            (s, _) => return Err(JobError::ProbeStatus(s)),
-        };
-        drop(res);
-        return Ok(Probe {
-            total,
-            ranges,
-            etag,
-            raw_etag,
-            last_modified,
-            filename,
-            content_type,
-        });
+        if !tried {
+            break;
+        }
     }
     Err(trouble.map_or(JobError::Unreachable(last), JobError::Lane))
+}
+
+/// What a probe answer says about the file (or the error it means).
+fn read_probe(res: Response<hyper::body::Incoming>, src: &Source) -> Result<Probe, JobError> {
+    let status = res.status().as_u16();
+    if (300..400).contains(&status)
+        && status != 304
+        && let Some(location) = header(&res, LOCATION).filter(|l| !l.trim().is_empty())
+    {
+        return Err(JobError::Redirect {
+            status,
+            location: location.trim().to_string(),
+        });
+    }
+    let raw_etag = header(&res, ETAG)
+        .map(|e| e.trim().to_string())
+        .filter(|e| !e.is_empty());
+    let etag = raw_etag
+        .as_deref()
+        .map(headers::normalize_etag)
+        .filter(|e| !e.is_empty());
+    let last_modified = header(&res, LAST_MODIFIED);
+    let disposition =
+        header(&res, CONTENT_DISPOSITION).and_then(|v| headers::content_disposition_filename(&v));
+    let from_path = headers::filename_from_path(src.path.split('?').next().unwrap_or(""));
+    let filename = disposition
+        .or(from_path)
+        .unwrap_or_else(|| "download".into());
+    let content_type = header(&res, CONTENT_TYPE).map(|v| {
+        v.split(';')
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase()
+    });
+    let cr = header(&res, CONTENT_RANGE).and_then(|v| headers::parse_content_range(&v));
+    let cl = header(&res, CONTENT_LENGTH).and_then(|v| v.parse::<u64>().ok());
+    let (total, ranges) = match (status, cr) {
+        (206, Some(ContentRange::Bytes { total, .. })) => (total, total.is_some()),
+        (416, Some(ContentRange::Unsatisfied { total: 0 })) => (Some(0), false),
+        (200, _) => (cl, false), // Content-Length is trusted only on a 200 (L-04)
+        (s, _) => return Err(JobError::ProbeStatus(s)),
+    };
+    drop(res);
+    Ok(Probe {
+        total,
+        ranges,
+        etag,
+        raw_etag,
+        last_modified,
+        filename,
+        content_type,
+    })
 }
 
 // ---------- shared state ----------
