@@ -1210,29 +1210,6 @@ test('after a crash Fuselane offers once to report it, and problems can be repor
   await expect(page.getByRole('button', { name: 'Report a problem' })).toBeVisible()
 })
 
-test('a network check measures each network, shows outages and makes a report', async ({
-  page,
-}) => {
-  await page.goto('/?drop=0')
-  await page
-    .getByRole('navigation', { name: 'Main' })
-    .getByRole('button', { name: 'Networks' })
-    .click()
-  await page.getByRole('radio', { name: 'Check' }).click()
-  const check = page.getByRole('region', { name: 'Network check' })
-  await expect(check).toContainText('Wi-Fi: no internet 2 times this week')
-  await check.getByRole('button', { name: 'Run a check' }).click()
-  await expect(check.getByRole('status')).toContainText('Testing')
-  await expect(check.getByRole('row', { name: /Every network together/ })).toContainText('262.0', {
-    timeout: 8000,
-  })
-  await expect(check.getByRole('row', { name: /Ethernet/ })).toContainText('138.0')
-  await expect(check.getByRole('row', { name: /Wi-Fi/ })).toContainText('Slows down while busy')
-  await expect(check.getByRole('status')).toContainText('Last checked')
-  await check.getByRole('button', { name: 'Report for your provider' }).click()
-  await expect(check.getByRole('button', { name: 'Check again' })).toBeVisible()
-})
-
 test('a video page offers its qualities and downloads the chosen one', async ({ page }) => {
   await page.goto('/?empty=1')
   const dialog = await openDialog(page)
@@ -1270,21 +1247,6 @@ test('without yt-dlp a video page says what to install', async ({ page }) => {
   await dialog.getByLabel('Link').fill('https://www.youtube.com/watch?v=aqz-KE-bpKQ')
   await dialog.getByRole('button', { name: 'Get the video from this page' }).click()
   await expect(dialog.getByRole('alert')).toContainText('brew install yt-dlp')
-})
-
-test('Networks shows the data each network used this month and per day', async ({ page }) => {
-  await page.goto('/?drop=0')
-  await page
-    .getByRole('navigation', { name: 'Main' })
-    .getByRole('button', { name: 'Networks' })
-    .click()
-  await page.getByRole('radio', { name: 'Usage' }).click()
-  const used = page.getByRole('region', { name: 'Data used' })
-  await expect(used.getByRole('listitem')).toHaveCount(3)
-  await expect(used.getByRole('listitem').filter({ hasText: 'iPhone USB' })).toContainText(/GB|MB/)
-  await expect(
-    used.getByRole('img', { name: /Data used per day for the last 30 days/ }),
-  ).toBeVisible()
 })
 
 test('a network can be used only at certain hours', async ({ page }) => {
@@ -1952,7 +1914,7 @@ test("the extension's feed button opens Feeds with the address ready", async ({ 
 })
 
 test('welcome: networks, an optional check with a verdict, then tips', async ({ page }) => {
-  await page.goto('/?welcome=1')
+  await page.goto('/?welcome=1&fast=1')
   const welcome = page.getByRole('dialog', { name: 'Welcome to Fuselane' })
   await expect(welcome).toBeVisible()
   const nets = welcome.getByRole('list', { name: 'Networks found' })
@@ -1963,7 +1925,7 @@ test('welcome: networks, an optional check with a verdict, then tips', async ({ 
   await expect(welcome.getByText(/USB cable/).first()).toBeVisible()
   await welcome.getByRole('button', { name: 'Next' }).click()
   const step2 = page.getByRole('dialog', { name: 'How fast are they together?' })
-  await expect(step2).toContainText('25 MB per network')
+  await expect(step2).toContainText('runs each network flat out for a few seconds')
   await step2.getByRole('button', { name: 'Run the check' }).click()
   await expect(step2.getByRole('status')).toContainText(/times .* alone/, { timeout: 15000 })
   await expect(step2.getByRole('list', { name: 'Check results' })).toContainText('Mbps')

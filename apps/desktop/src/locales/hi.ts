@@ -768,8 +768,8 @@ export const hi: Readonly<Record<string, string>> = {
   'One network so far. To go faster, plug in your phone with a USB cable and turn on USB tethering (Personal Hotspot on iPhone), or use Wi‑Fi and Ethernet together. New networks join by themselves.':
     'अभी एक ही नेटवर्क है। तेज़ी के लिए अपना फ़ोन USB केबल से जोड़ें और USB टेदरिंग चालू करें (iPhone पर पर्सनल हॉटस्पॉट), या Wi‑Fi और Ethernet एक साथ इस्तेमाल करें। नए नेटवर्क अपने आप जुड़ जाते हैं।',
   'How fast are they together?': 'एक साथ ये कितने तेज़ हैं?',
-  'A quick check measures each network, then all of them at once. It takes about a minute and uses roughly 25 MB per network, so skip it on a tight data plan.':
-    'एक छोटी जांच हर नेटवर्क को, फिर सभी को एक साथ मापती है। इसमें लगभग एक मिनट लगता है और हर नेटवर्क पर करीब 25 MB डेटा खर्च होता है, इसलिए कम डेटा वाले प्लान पर इसे छोड़ दें।',
+  'A quick check measures each network, then all of them at once. It takes under a minute and runs each network flat out for a few seconds, so skip it on a tight data plan.':
+    'एक छोटी जांच हर नेटवर्क को, फिर सभी को एक साथ मापती है। इसमें एक मिनट से कम लगता है और हर नेटवर्क कुछ सेकंड पूरी स्पीड पर चलता है, इसलिए कम डेटा वाले प्लान पर इसे छोड़ दें।',
   'Check results': 'जांच के नतीजे',
   'No answer': 'कोई जवाब नहीं',
   'Run the check': 'जांच चलाएं',
@@ -874,12 +874,7 @@ export const hi: Readonly<Record<string, string>> = {
     'अस्थिर: डाउनलोड के लिए ठीक, कॉल रुक-रुक कर चलती है।',
   'Healthy.': 'ठीक है।',
   'Download (Mbps)': 'डाउनलोड (Mbps)',
-  'Latency (ms)': 'देरी (ms)',
-  'Jitter (ms)': 'जिटर (ms)',
-  'Under load (ms)': 'लोड में (ms)',
-  'DNS (ms)': 'DNS (ms)',
   'Every network together': 'सभी नेटवर्क एक साथ',
-  'What Fuselane can use at once.': 'Fuselane एक साथ इतना इस्तेमाल कर सकता है।',
   '{name}: sign-in page from {from}, still going on': '{name}: {from} से साइन-इन पेज, अब भी जारी',
   '{name}: sign-in page from {from}, {m} min': '{name}: {from} से साइन-इन पेज, {m} मिनट',
   '{name}: offline from {from}, still going on': '{name}: {from} से ऑफ़लाइन, अब भी जारी',
@@ -889,19 +884,53 @@ export const hi: Readonly<Record<string, string>> = {
     '{name}: इस हफ़्ते एक बार इंटरनेट गया, कुल {m} मिनट।',
   '{name}: no internet {n} times this week, {m} min in total.':
     '{name}: इस हफ़्ते {n} बार इंटरनेट गया, कुल {m} मिनट।',
-  'Network check': 'नेटवर्क जांच',
-  'Why is the internet slow? Each network is measured on its own: speed, delay, how it copes when busy, and name lookups. About a minute; uses roughly 25 MB per network.':
-    'इंटरनेट धीमा क्यों है? हर नेटवर्क अलग से मापा जाता है: स्पीड, देरी, व्यस्त होने पर वह कैसा चलता है, और नाम खोजने में कितना समय लगता है। लगभग एक मिनट लगता है; हर नेटवर्क पर करीब 25 MB खर्च होता है।',
-  'Run a check': 'जांच शुरू करें',
+  Speedtest: 'स्पीडटेस्ट',
+  Loading: 'लोड हो रहा है',
+  'Nothing counted yet': 'अभी कुछ गिना नहीं गया',
+  'Everything Fuselane downloads is counted here, per network and day by day, so you can see how much the phone carried. Start a download and watch it fill in.':
+    'Fuselane जो भी डाउनलोड करता है, वह यहां हर नेटवर्क और हर दिन के हिसाब से गिना जाता है, ताकि आप देख सकें फ़ोन ने कितना डेटा चलाया। कोई डाउनलोड शुरू करें और इसे भरते देखें।',
+  'This month': 'इस महीने',
+  '{size} today': 'आज {size}',
+  'Share of each network this month': 'इस महीने हर नेटवर्क का हिस्सा',
+  'Right now': 'अभी',
+  Idle: 'खाली',
+  'Last {n} days': 'पिछले {n} दिन',
+  'About {size} a day': 'रोज़ लगभग {size}',
+  Today: 'आज',
+  '{used} of {limit}, resets {date}': '{limit} में से {used}, {date} को फिर से शुरू',
+  'Finding the speed server': 'स्पीड सर्वर ढूंढा जा रहा है',
+  Ping: 'पिंग',
+  Upload: 'अपलोड',
+  Jitter: 'जिटर',
+  'While busy': 'व्यस्त होने पर',
+  DNS: 'DNS',
+  Loss: 'नुकसान',
+  Steps: 'चरण',
+  When: 'कब',
+  Outages: 'इंटरनेट कब गया',
+  Again: 'फिर से',
+  '{n} ms': '{n} ms',
+  'server in {city}': 'सर्वर {city} में',
+  'How well it copes when busy, A+ to F': 'व्यस्त होने पर यह कितना अच्छा चलता है, A+ से F तक',
+  'Used {size}.': '{size} खर्च हुआ।',
+  'What Fuselane can pull in at once, for one download.':
+    'एक डाउनलोड के लिए Fuselane एक साथ कितना ला सकता है।',
+  '{x}× your fastest network': 'आपके सबसे तेज़ नेटवर्क से {x} गुना',
+  'Earlier tests ({n})': 'पिछले टेस्ट ({n})',
+  'Upload (Mbps)': 'अपलोड (Mbps)',
+  'Ping (ms)': 'पिंग (ms)',
+  'Testing {network}': '{network} जांचा जा रहा है',
+  'Last test {when}.': 'आखिरी टेस्ट: {when}।',
+  'Measures each network on its own (ping, download, upload, and how it copes when busy), then every network together.':
+    'हर नेटवर्क को अलग से मापता है (पिंग, डाउनलोड, अपलोड, और व्यस्त होने पर वह कैसा चलता है), फिर सभी नेटवर्क एक साथ।',
+  'About {s} seconds. Each network runs flat out for a few seconds, the way public speed tests do, so it uses data on metered connections.':
+    'लगभग {s} सेकंड। सार्वजनिक स्पीड टेस्ट की तरह हर नेटवर्क कुछ सेकंड पूरी स्पीड पर चलता है, इसलिए सीमित डेटा वाले कनेक्शन पर डेटा खर्च होता है।',
   'A dated page with every check and outage, to send your internet provider (print it to PDF)':
     'हर जांच और इंटरनेट जाने के समय का तारीख वाला पेज, अपने इंटरनेट प्रोवाइडर को भेजने के लिए (PDF में प्रिंट करें)',
   'Report for your provider': 'प्रोवाइडर के लिए रिपोर्ट',
-  'Last checked {when}.': 'आखिरी जांच: {when}।',
 
   // DataUsed
   'Data used': 'इस्तेमाल हुआ डेटा',
-  'What each network carried for Fuselane this month and day by day.':
-    'इस महीने और हर दिन, हर नेटवर्क ने Fuselane के लिए कितना डेटा लिया।',
   'Data used per day for the last {n} days': 'पिछले {n} दिनों में हर दिन इस्तेमाल हुआ डेटा',
 
   // AutomationSettings: downloads at once and the schedule

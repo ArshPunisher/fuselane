@@ -340,6 +340,16 @@ export const hiBackend: Readonly<Record<string, string>> = {
   'No answer through this network: it may be offline or behind a sign-in page.':
     'इस नेटवर्क से कोई जवाब नहीं आया: शायद यह ऑफ़लाइन है या साइन-इन पेज के पीछे है।',
   "The speed test didn't finish: {e}": 'स्पीड टेस्ट पूरा नहीं हुआ: {e}',
+  'Skipped: this network has used its data allowance for the month.':
+    'छोड़ा गया: इस नेटवर्क ने इस महीने का अपना डेटा इस्तेमाल कर लिया है।',
+  "Couldn't look up the speed server.": 'स्पीड सर्वर नहीं मिला।',
+  "Couldn't look up the speed server: {e}": 'स्पीड सर्वर नहीं मिला: {e}',
+  'The speed server answered {status}.': 'स्पीड सर्वर ने {status} जवाब दिया।',
+  'The server closed the connection.': 'सर्वर ने कनेक्शन बंद कर दिया।',
+  "The server's answer didn't make sense.": 'सर्वर का जवाब समझ में नहीं आया।',
+  'No address for the speed server.': 'स्पीड सर्वर का कोई पता नहीं मिला।',
+  "The speed server didn't answer in time.": 'स्पीड सर्वर ने समय पर जवाब नहीं दिया।',
+  'Too little got through to measure.': 'मापने के लिए बहुत कम डेटा आया।',
 
   // ==== Feeds ====
   'Only http and https links to .torrent files are fetched.':

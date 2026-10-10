@@ -7,7 +7,6 @@ import { bytes as bytesText, rateText } from '../lib/format'
 import { NetIcon } from './NetIcon'
 import { Orb } from './Orb'
 import { LimitField } from './LimitField'
-import { NetCheck } from './NetCheck'
 import { DataUsed } from './DataUsed'
 import { NetworkProxy } from './NetworkProxy'
 import { intlLocale, mark, t, tr } from '../lib/i18n'
@@ -651,10 +650,9 @@ function Allowances() {
   )
 }
 
-type NetTab = 'setup' | 'check' | 'usage'
+type NetTab = 'setup' | 'usage'
 const NET_TABS: [NetTab, string][] = [
   ['setup', mark('Setup')],
-  ['check', mark('Check')],
   ['usage', mark('Usage')],
 ]
 
@@ -667,10 +665,11 @@ export function NetworksView() {
     return () => clearInterval(timer)
   }, [refresh])
   const other = networks.filter((n) => !n.usable)
-  // Setup (networks, limits, when each helps, allowances), the check, and usage.
+  // Setup (networks, limits, when each helps, allowances) and usage.
   const [tab, setTab] = useState<NetTab>(() => {
     try {
-      return (sessionStorage.getItem('fuselane.netTab') as NetTab | null) ?? 'setup'
+      const saved = sessionStorage.getItem('fuselane.netTab')
+      return saved === 'usage' ? 'usage' : 'setup'
     } catch {
       return 'setup'
     }
@@ -687,43 +686,42 @@ export function NetworksView() {
     <section className="page" aria-labelledby="nets-title">
       <header className="page-head with-tabs">
         <h1 id="nets-title">{t('Networks')}</h1>
-        <div className="nets-head-actions">
-          <div
-            className="segmented"
-            role="radiogroup"
-            aria-label={t('Networks view')}
-            onKeyDown={(e) => {
-              if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
-              e.preventDefault()
-              const i = NET_TABS.findIndex(([id]) => id === tab)
-              const next =
-                NET_TABS[
-                  (i + (e.key === 'ArrowRight' ? 1 : NET_TABS.length - 1)) % NET_TABS.length
-                ]![0]
-              pick(next)
-              e.currentTarget.querySelector<HTMLButtonElement>(`[data-id="${next}"]`)?.focus()
-            }}
-          >
-            {NET_TABS.map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                role="radio"
-                data-id={id}
-                aria-checked={tab === id}
-                tabIndex={tab === id ? 0 : -1}
-                onClick={() => pick(id)}
-              >
-                {t(label)}
-              </button>
-            ))}
-          </div>
+        <div
+          className="segmented"
+          role="radiogroup"
+          aria-label={t('Networks view')}
+          onKeyDown={(e) => {
+            if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+            e.preventDefault()
+            const i = NET_TABS.findIndex(([id]) => id === tab)
+            const next =
+              NET_TABS[
+                (i + (e.key === 'ArrowRight' ? 1 : NET_TABS.length - 1)) % NET_TABS.length
+              ]![0]
+            pick(next)
+            e.currentTarget.querySelector<HTMLButtonElement>(`[data-id="${next}"]`)?.focus()
+          }}
+        >
+          {NET_TABS.map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="radio"
+              data-id={id}
+              aria-checked={tab === id}
+              tabIndex={tab === id ? 0 : -1}
+              onClick={() => pick(id)}
+            >
+              {t(label)}
+            </button>
+          ))}
+        </div>
+        <div className="page-head-end">
           <button className="btn btn-ghost" onClick={() => void refresh()}>
             <ArrowClockwise size={16} aria-hidden /> {t('Refresh')}
           </button>
         </div>
       </header>
-      {tab === 'check' && <NetCheck />}
       {tab === 'usage' && <DataUsed />}
       {tab === 'setup' && (
         <>

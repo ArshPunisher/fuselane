@@ -7,6 +7,7 @@ import { t } from './i18n'
 import type {
   NearbyView,
   NetCheckView,
+  SpeedLive,
   AppInfo,
   Automation,
   AutomationView,
@@ -31,7 +32,7 @@ export interface History {
 }
 const HISTORY = 300
 
-export type View = 'transfers' | 'send' | 'networks' | 'settings'
+export type View = 'transfers' | 'send' | 'speedtest' | 'networks' | 'settings'
 export type Theme = 'system' | 'light' | 'dark'
 
 interface State {
@@ -45,6 +46,8 @@ interface State {
   /** Nearby: devices, visibility, requests and transfers (null until started). */
   nearby: NearbyView | null
   netCheck: NetCheckView | null
+  /** The speed test as it runs; null when nothing runs. */
+  speedLive: SpeedLive | null
   receives: ReceiveView[]
   /** A Fuse Send link handed to the Send page by paste or drop. */
   receiveDraft: string
@@ -147,6 +150,7 @@ export const useApp = create<State>((set, get) => ({
   shares: [],
   nearby: null,
   netCheck: null,
+  speedLive: null,
   receives: [],
   receiveDraft: '',
   sendTab: 'nearby',
@@ -430,6 +434,10 @@ async function startOnce(): Promise<void> {
       }
       if (e.type === 'netCheck') {
         set({ netCheck: e.view })
+        return
+      }
+      if (e.type === 'speedLive') {
+        set({ speedLive: e.live })
         return
       }
       if (e.type === 'update') {

@@ -383,12 +383,22 @@ h2 {
 }
 
 .nav-tabs .nav-item {
+  flex: 1 1 0;
   flex-direction: column;
   gap: 2px;
   min-height: 48px;
-  min-width: 72px;
+  min-width: 0;
+  padding: 0 2px;
   justify-content: center;
   font-size: 11px;
+}
+
+.nav-tabs .nav-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .nav-tabs .nav-item[aria-current='page'] {
@@ -3420,17 +3430,52 @@ select.prio[data-level='skip'] {
 
 /* ---------- Nearby: the space view (B and C hybrid) ---------- */
 
+/* Pages with tabs: title left, tabs in the middle, actions right. The page
+   keeps one width whatever tab is open, so the tabs never move. */
 .page-head.with-tabs {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
 }
 
-/* Nearby uses the whole window: the radar grows, activity sits beside it. */
-.send-page:has(.nearby) {
+.page-head.with-tabs > .segmented {
+  grid-column: 2;
+  justify-self: center;
+}
+
+.page-head-end {
+  grid-column: 3;
+  justify-self: end;
+  display: flex;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .page-head.with-tabs {
+    grid-template-columns: 1fr auto;
+  }
+  .page-head.with-tabs > .segmented {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .page-head-end {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+
+/* Nearby uses the whole window: the radar grows, activity sits beside it.
+   Link keeps the same page width (so the tabs stay put); its own content stays
+   a comfortable reading width. */
+.send-page {
   max-width: 1360px;
   container-type: inline-size;
+}
+
+.send-page > .page-lead,
+.send-page > .send-section {
+  max-width: 664px;
 }
 
 .nearby {
@@ -4264,7 +4309,7 @@ html[data-hidden] .orb b {
 /* ---------- Wide windows: Networks and Settings use the room ---------- */
 
 .page:has(.settings-groups),
-.page:has(.nets-grid) {
+.page[aria-labelledby='nets-title'] {
   max-width: 1240px;
   container-type: inline-size;
 }
@@ -4677,96 +4722,642 @@ html[data-hidden] .orb b {
   max-width: 260px;
 }
 
-/* ---------- Network check (B10.1) ---------- */
+/* ---------- Speedtest (B10.1) ---------- */
 
-.nc-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px 24px;
+.speed-page {
+  max-width: 1100px;
 }
 
-.nc-head > div:first-child {
+/* The stage: the speedometer in the middle of a soft colour field. */
+.speed-stage {
+  position: relative;
+  isolation: isolate;
   display: grid;
-  gap: 6px;
-  max-width: 62ch;
+  justify-items: center;
+  gap: 14px;
+  padding: 28px 20px 24px;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  background: var(--surface-1);
+  text-align: center;
 }
 
-.nc-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.speed-stage::before {
+  content: '';
+  position: absolute;
+  inset: -30%;
+  z-index: -1;
+  background:
+    radial-gradient(
+      closest-side at 30% 40%,
+      color-mix(in oklch, var(--lane-tide) 22%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      closest-side at 70% 35%,
+      color-mix(in oklch, var(--lane-iris) 20%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      closest-side at 55% 75%,
+      color-mix(in oklch, var(--fuse) 16%, transparent),
+      transparent
+    );
+  opacity: 0.55;
+  pointer-events: none;
 }
 
-.nc-table-wrap {
-  overflow-x: auto;
+.speed-overall {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: transparent;
 }
 
-.nc-table {
-  width: 100%;
-  min-width: 620px;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.nc-table th,
-.nc-table td {
-  padding: 10px 10px;
-  border-bottom: 1px solid var(--hairline);
-  text-align: left;
-  vertical-align: top;
-}
-
-.nc-table thead th {
-  color: var(--mute);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.nc-table tbody th {
-  display: grid;
-  gap: 2px;
-  font-weight: 400;
-}
-
-.nc-name {
-  color: var(--ink);
-  font-weight: 500;
-}
-
-.nc-verdict {
-  color: var(--mute);
-  font-size: 12px;
-}
-
-.nc-speed {
+.speed-overall span {
   display: block;
+  height: 100%;
+  transform-origin: left;
+  background: linear-gradient(
+    90deg,
+    var(--lane-mint),
+    var(--lane-sky),
+    var(--lane-iris),
+    var(--lane-rose),
+    var(--fuse)
+  );
+  transition: transform 200ms linear;
+}
+
+.gauge {
+  position: relative;
+  container-type: inline-size;
+  width: min(440px, 100%);
+  aspect-ratio: 320 / 300;
+}
+
+.gauge-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.gauge-track,
+.gauge-ghost,
+.gauge-fill,
+.gauge-glow {
+  fill: none;
+  stroke-linecap: round;
+}
+
+.gauge-track {
+  stroke: var(--surface-3);
+  stroke-width: 18;
+}
+
+/* The colour band shows faintly even at rest, so the dial reads as a scale. */
+.gauge-ghost {
+  stroke-width: 18;
+  opacity: 0.16;
+}
+
+.gauge-fill {
+  stroke-width: 18;
+  transition: stroke-dashoffset 900ms var(--ease-out);
+}
+
+.gauge-glow {
+  stroke-width: 26;
+  opacity: 0;
+  transition:
+    stroke-dashoffset 900ms var(--ease-out),
+    opacity var(--dur-slow) var(--ease-out);
+}
+
+.gauge[data-running] .gauge-fill,
+.gauge[data-running] .gauge-glow {
+  transition-duration: 140ms;
+  transition-timing-function: linear;
+}
+
+.gauge[data-running] .gauge-glow {
+  opacity: 0.5;
+}
+
+.gauge-mark line {
+  stroke: var(--hairline-strong);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.gauge-mark text {
+  fill: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  transition: fill var(--dur-base) var(--ease-out);
+}
+
+.gauge-mark[data-on] text {
+  fill: var(--ink);
+}
+
+.gauge-needle {
+  transform-box: view-box;
+  transform-origin: 160px 160px;
+  fill: var(--ink);
+  transition: transform 160ms var(--ease-out);
+}
+
+.gauge[data-idle] .gauge-needle,
+.gauge[data-idle] .gauge-hub {
+  opacity: 0;
+}
+
+.gauge-tip {
+  fill: var(--fuse);
+}
+
+.gauge-hub {
+  fill: var(--surface-1);
+  stroke: var(--ink);
+  stroke-width: 3;
+}
+
+/* Start sits over the hub; the figure sits in the open bottom of the dial. */
+.gauge-middle {
+  position: absolute;
+  left: 50%;
+  top: 53.3%;
+  translate: -50% -50%;
+}
+
+.gauge-readout {
+  position: absolute;
+  inset: auto 0 2% 0;
+  display: grid;
+  justify-items: center;
+  gap: 0;
+}
+
+.gauge-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--mute);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.gauge[data-step='down'] .gauge-step {
+  color: var(--lane-tide);
+}
+
+.gauge[data-step='up'] .gauge-step {
+  color: var(--lane-iris);
+}
+
+.gauge[data-step='together'] .gauge-step {
+  color: var(--fuse-text);
+}
+
+.gauge-value {
   color: var(--ink);
-  font-size: 15px;
+  font-size: 46px;
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.gauge-unit {
+  color: var(--mute);
+  font-size: 12px;
+}
+
+/* While it finds the server: three dots in the size of the figure. */
+.gauge-wait {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+}
+
+.gauge-wait span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--lane-sky);
+}
+
+.gauge-wait span:nth-child(2) {
+  background: var(--lane-iris);
+}
+
+.gauge-wait span:nth-child(3) {
+  background: var(--lane-rose);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .gauge-wait span {
+    animation: gauge-bounce 900ms var(--ease-in-out) infinite;
+  }
+  .gauge-wait span:nth-child(2) {
+    animation-delay: 150ms;
+  }
+  .gauge-wait span:nth-child(3) {
+    animation-delay: 300ms;
+  }
+}
+
+@keyframes gauge-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateY(-8px);
+    opacity: 1;
+  }
+}
+
+/* The Start button: a ring of colour that turns slowly, asking to be pressed. */
+.speed-go {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: clamp(88px, 29cqi, 128px);
+  aspect-ratio: 1;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface-1);
+  box-shadow: var(--shadow-float);
+  color: var(--ink);
+  cursor: pointer;
+  transition: scale var(--dur-quick) var(--ease-out);
+}
+
+.speed-go:hover {
+  scale: 1.04;
+}
+
+.speed-go:active {
+  scale: 0.97;
+}
+
+.speed-go:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.speed-go-ring {
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--lane-mint),
+    var(--lane-sky),
+    var(--lane-iris),
+    var(--lane-rose),
+    var(--fuse),
+    var(--lane-mint)
+  );
+  mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
+}
+
+.speed-go-label {
+  position: relative;
+  font-size: clamp(17px, 5cqi, 22px);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.speed-now {
+  max-width: 56ch;
+  color: var(--body);
+}
+
+.speed-now strong {
+  color: var(--ink);
   font-weight: 600;
 }
 
-.nc-bar {
-  display: block;
-  width: 110px;
+.speed-fine {
+  max-width: 60ch;
+  font-size: 12px;
+}
+
+.speed-trace {
+  width: min(560px, 100%);
+  height: 64px;
+  color: var(--lane-tide);
+}
+
+.speed-trace[data-step='up'] {
+  color: var(--lane-iris);
+}
+
+.speed-trace[data-step='together'] {
+  color: var(--fuse);
+}
+
+.speed-trace-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.step-rail {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step-rail li {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 12px 4px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.step-dot {
+  position: relative;
+  width: 18px;
   height: 4px;
-  margin-top: 6px;
   overflow: hidden;
   border-radius: var(--radius-pill);
   background: var(--surface-3);
 }
 
-.nc-bar span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--lane-tide, var(--fuse));
-  transition: width 600ms var(--ease-out);
+.step-fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: left;
+  background: var(--fuse);
+  transition: transform 140ms linear;
 }
 
-.nc-all .nc-bar span {
-  background: var(--fuse);
+.step-rail li[data-state='now'] {
+  background: var(--fuse-soft);
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.step-rail li[data-state='done'] {
+  color: var(--body);
+}
+
+.step-rail li[data-state='done'] .step-dot {
+  background: var(--success);
+}
+
+/* Results */
+
+.speed-results {
+  display: grid;
+  gap: 14px;
+}
+
+.speed-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 14px;
+}
+
+.speed-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  background: var(--surface-1);
+  box-shadow: inset 0 3px 0 var(--lane);
+}
+
+.speed-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.speed-card-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: color-mix(in oklch, var(--lane) 16%, transparent);
+  color: var(--lane);
+}
+
+.speed-card-name {
+  display: grid;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.speed-card-isp {
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.speed-card-big {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.speed-card-big > div {
+  display: grid;
+}
+
+.speed-card-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.speed-card-num {
+  color: var(--ink);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.speed-card-unit {
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.speed-card-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+  gap: 10px 12px;
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+}
+
+.speed-card-stats div {
+  display: grid;
+  gap: 2px;
+}
+
+.speed-card-stats dt {
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.speed-card-stats dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.speed-card-verdict {
+  font-size: 13px;
+}
+
+.speed-together {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-panel);
+  background:
+    linear-gradient(var(--surface-1), var(--surface-1)) padding-box,
+    linear-gradient(110deg, var(--lane-tide), var(--lane-iris), var(--lane-rose), var(--fuse))
+      border-box;
+}
+
+.speed-together > div:nth-child(2) {
+  display: grid;
+  gap: 2px;
+}
+
+.speed-together h3 {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.speed-together-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--fuse-soft);
+  color: var(--fuse-text);
+}
+
+.speed-together-num {
+  display: grid;
+  justify-items: end;
+}
+
+.speed-together-num .num {
+  color: var(--ink);
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.speed-together-x {
+  color: var(--fuse-text);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+@media (max-width: 640px) {
+  .speed-together {
+    grid-template-columns: auto 1fr;
+  }
+  .speed-together-num {
+    grid-column: 1 / -1;
+    justify-items: start;
+  }
+  .gauge-value {
+    font-size: 38px;
+  }
+}
+
+.speed-history summary,
+.speed-outages .group {
+  color: var(--body);
+}
+
+.speed-history summary {
+  cursor: pointer;
+}
+
+.speed-history table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.speed-history th,
+.speed-history td {
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.speed-history thead th {
+  color: var(--mute);
+  font-weight: 500;
+  border-bottom: 1px solid var(--hairline);
+}
+
+/* Motion that says "it's live": the colour field drifts and the Start ring
+   turns. Off for people who ask for less motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .speed-go-ring {
+    animation: spin 9s linear infinite;
+  }
+  .speed-stage[data-running]::before {
+    animation: speed-drift 7s var(--ease-in-out) infinite alternate;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gauge-needle,
+  .gauge-fill,
+  .gauge-glow,
+  .step-fill,
+  .speed-overall span {
+    transition: none;
+  }
+}
+
+@keyframes speed-drift {
+  from {
+    transform: rotate(0deg) scale(1);
+    opacity: 0.55;
+  }
+  to {
+    transform: rotate(18deg) scale(1.08);
+    opacity: 0.8;
+  }
 }
 
 .nc-grade {
@@ -4939,66 +5530,518 @@ html[data-hidden] .orb b {
   font-size: 12px;
 }
 
-/* ---------- Data used (B10.5) ---------- */
+/* ---------- Usage (B10.5) ---------- */
 
-.du-totals {
+.usage {
+  display: grid;
+  gap: 16px;
+}
+
+.use-loading {
+  height: 220px;
+  border-radius: var(--radius-panel);
+  background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2));
+  background-size: 200% 100%;
+}
+
+.use-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mute);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* The top: this month's total and its colours, and what's moving now. */
+.use-hero {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 28px;
+  padding: 22px 24px;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  background: var(--surface-1);
+}
+
+.use-hero::before {
+  content: '';
+  position: absolute;
+  inset: -40%;
+  z-index: -1;
+  background:
+    radial-gradient(
+      closest-side at 25% 45%,
+      color-mix(in oklch, var(--lane-tide) 18%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      closest-side at 80% 30%,
+      color-mix(in oklch, var(--lane-iris) 16%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      closest-side at 60% 85%,
+      color-mix(in oklch, var(--lane-mint) 14%, transparent),
+      transparent
+    );
+  pointer-events: none;
+}
+
+.use-month {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+.use-big {
+  color: var(--ink);
+  font-size: 44px;
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.use-share {
+  display: flex;
+  gap: 3px;
+  height: 14px;
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+}
+
+.use-share span {
+  flex-basis: 0;
+  min-width: 6px;
+  border-radius: var(--radius-pill);
+  transition: flex-grow var(--dur-slow) var(--ease-out);
+}
+
+.use-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 22px;
-  margin: 0;
+  gap: 6px 18px;
+  margin: 4px 0 0;
   padding: 0;
   list-style: none;
 }
 
-.du-totals li {
-  display: flex;
+.use-legend li {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   color: var(--body);
+  font-size: 13px;
 }
 
-.du-totals .num {
+.use-legend .num {
   color: var(--ink);
   font-weight: 600;
 }
 
-.du-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
+.use-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
   background: var(--lane);
 }
 
-.du-chart {
+.use-live {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding-left: 24px;
+  border-left: 1px solid var(--hairline);
+}
+
+.use-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mute);
+}
+
+.use-live[data-on] .use-pulse {
+  background: var(--success);
+}
+
+.use-rate {
+  color: var(--ink);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.use-live-list {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.use-live-list li {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) 120px 84px;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.use-breath {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--lane);
+  opacity: 0.35;
+}
+
+.use-live-list li[data-on] .use-breath {
+  opacity: 1;
+  box-shadow: 0 0 0 0 color-mix(in oklch, var(--lane) 60%, transparent);
+}
+
+.use-live-name {
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.use-spark {
+  width: 120px;
+  height: 28px;
+  color: var(--lane);
+}
+
+.use-spark-area {
+  fill: currentColor;
+  opacity: 0.18;
+}
+
+.use-spark-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.use-live-rate {
+  color: var(--body);
+  text-align: right;
+}
+
+.use-live-list li[data-on] .use-live-rate {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* Last 30 days */
+.use-chart-card {
+  display: grid;
+  gap: 10px;
+  padding: 18px 20px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  background: var(--surface-1);
+}
+
+.use-chart-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 16px;
+}
+
+.use-chart-head h3 {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.use-chart {
+  position: relative;
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
   align-items: end;
-  gap: 3px;
-  height: 120px;
-  padding-top: 6px;
-  border-bottom: 1px solid var(--hairline);
+  gap: 4px;
+  height: 180px;
+  margin-top: 18px;
+  border-bottom: 1px solid var(--hairline-strong);
 }
 
-.du-day {
+.use-grid {
+  position: absolute;
+  inset-inline: 0;
+  border-top: 1px dashed var(--hairline);
+  pointer-events: none;
+}
+
+.use-grid .num {
+  position: absolute;
+  right: 0;
+  bottom: 2px;
+  color: var(--mute);
+  font-size: 11px;
+}
+
+.use-day {
   display: flex;
   align-items: flex-end;
   height: 100%;
+  cursor: default;
 }
 
-.du-stack {
+.use-stack {
   display: flex;
   flex-direction: column-reverse;
+  gap: 1px;
   width: 100%;
-  min-height: 2px;
+  min-height: 3px;
   overflow: hidden;
-  border-radius: 3px 3px 0 0;
+  border-radius: 5px 5px 2px 2px;
+  transform-origin: bottom;
+  transition:
+    height var(--dur-slow) var(--ease-out),
+    opacity var(--dur-quick) var(--ease-out);
 }
 
-.du-stack span {
+.use-stack span {
   display: block;
-  min-height: 1px;
+  min-height: 2px;
   flex-basis: 0;
+}
+
+.use-chart:hover .use-day:not([data-hover]) .use-stack {
+  opacity: 0.45;
+}
+
+.use-day[data-today] .use-stack {
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--fuse) 55%, transparent);
+}
+
+.use-axis {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 4px;
+  color: var(--mute);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.use-axis span {
+  overflow: visible;
+}
+
+.use-axis span:last-child {
+  color: var(--fuse-text);
+  font-weight: 600;
+  text-align: right;
+}
+
+/* One card per network */
+.use-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 14px;
+}
+
+.use-card {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 16px 18px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  background: var(--surface-1);
+  box-shadow: inset 0 3px 0 var(--lane);
+}
+
+.use-card header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.use-card-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: color-mix(in oklch, var(--lane) 16%, transparent);
+  color: var(--lane);
+}
+
+.use-card-big {
+  color: var(--ink);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.use-allow {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.use-allow-bar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+}
+
+.use-allow-bar span {
+  display: block;
+  height: 100%;
+  transform-origin: left;
+  background: var(--lane);
+  transition: transform var(--dur-slow) var(--ease-out);
+}
+
+.use-allow[data-near] .use-allow-bar span {
+  background: var(--warning);
+}
+
+.use-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  max-width: 520px;
+  margin: 24px auto;
+  padding: 32px 24px;
+  border: 1px dashed var(--hairline-strong);
+  border-radius: var(--radius-panel);
+  text-align: center;
+}
+
+.use-empty h2 {
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.use-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklch, var(--lane-tide) 22%, transparent),
+    color-mix(in oklch, var(--lane-iris) 22%, transparent)
+  );
+  color: var(--lane-iris);
+}
+
+@media (max-width: 760px) {
+  .use-hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+    padding: 18px;
+  }
+  .use-live {
+    padding: 18px 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--hairline);
+  }
+  .use-live-list li {
+    grid-template-columns: 12px minmax(0, 1fr) 80px 72px;
+  }
+  .use-spark {
+    width: 80px;
+  }
+  .use-big {
+    font-size: 36px;
+  }
+  .use-chart {
+    height: 140px;
+    gap: 2px;
+  }
+}
+
+/* Live motion: dots breathe while their network moves data, bars grow in,
+   and the loading block shimmers. Still for people who ask for less motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .use-live[data-on] .use-pulse {
+    animation: use-ping 1.6s var(--ease-out) infinite;
+  }
+  .use-live-list li[data-on] .use-breath {
+    animation: use-breathe 1.8s var(--ease-in-out) infinite;
+  }
+  .use-stack {
+    animation: use-grow 700ms var(--ease-out) both;
+    animation-delay: calc(var(--i, 0) * 18ms);
+  }
+  .use-day[data-today] .use-stack {
+    animation:
+      use-grow 700ms var(--ease-out) both,
+      use-today 2.4s var(--ease-in-out) 800ms infinite;
+  }
+  .use-loading {
+    animation: use-shimmer 1.4s linear infinite;
+  }
+  .use-hero::before {
+    animation: speed-drift 12s var(--ease-in-out) infinite alternate;
+  }
+}
+
+@keyframes use-grow {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes use-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--lane) 55%, transparent);
+    scale: 1;
+  }
+  50% {
+    box-shadow: 0 0 0 7px color-mix(in oklch, var(--lane) 0%, transparent);
+    scale: 1.15;
+  }
+}
+
+@keyframes use-ping {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--success) 60%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 9px color-mix(in oklch, var(--success) 0%, transparent);
+  }
+}
+
+@keyframes use-today {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px color-mix(in oklch, var(--fuse) 55%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in oklch, var(--fuse) 25%, transparent);
+  }
+}
+
+@keyframes use-shimmer {
+  to {
+    background-position: -200% 0;
+  }
 }
 
 /* ---------- Network hours (B10.6) ---------- */
@@ -5019,25 +6062,6 @@ html[data-hidden] .orb b {
 
 .net-hours input:disabled {
   opacity: 0.5;
-}
-
-.nets-head-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-/* Phones: the title gets its own row; tabs and Refresh share the next. */
-@media (max-width: 640px) {
-  .page-head.with-tabs:has(.nets-head-actions) {
-    flex-wrap: wrap;
-  }
-  .nets-head-actions {
-    width: 100%;
-    justify-content: space-between;
-    flex-wrap: nowrap;
-  }
 }
 
 /* ---------- Welcome (guided first run) ---------- */

@@ -25,6 +25,7 @@ import type {
   Live,
   LiveNet,
   NetCheckView,
+  SpeedLive,
   NetPref,
   NetView,
   PreviewView,
@@ -603,6 +604,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         : null,
     phoneQr: remote.on && remote.lan ? DEMO_QR : null,
   })
+  let demoStop = () => {}
   const netCheck: NetCheckView = {
     running: false,
     phase: null,
@@ -1155,7 +1157,10 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     },
     setFindChecksums: async (on) => (findSums = on),
     setPerNetworkDns: async (on) => (perNetDns = on),
-    allowances: async () => structuredClone(allowances),
+    allowances: async () =>
+      params.get('usage') === 'none'
+        ? allowances.map((a) => ({ ...a, used: 0 }))
+        : structuredClone(allowances),
     setAllowance: async (req) => {
       const bad = (m: string) =>
         err('bad-allowance', m, 'Use an amount like 5 GB and a reset day from 1 to 28.')
@@ -1272,14 +1277,21 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       return `Works: ${label} reaches the internet through this proxy.`
     },
     usageHistory: async () => {
+      const labels = { en0: 'Wi-Fi', en7: 'iPhone USB', en5: 'Ethernet' }
+      // ?usage=none: nothing counted yet. ?usage=month: a month's total but no
+      // day-by-day history (lists from before it was kept).
+      if (params.get('usage') === 'none' || params.get('usage') === 'month')
+        return { days: [], labels }
       // Thirty days of made-up but believable use: home Wi-Fi most days, the phone
-      // on weekends and a busy week.
+      // on weekends and a busy week. Days are local, like the app's.
+      const local = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
       const days = Array.from({ length: 30 }, (_, i) => {
         const d = new Date(Date.now() - (29 - i) * 86400_000)
         const weekend = d.getDay() === 0 || d.getDay() === 6
         const wave = Math.sin(i * 1.3) * 0.5 + 1
         return {
-          day: d.toISOString().slice(0, 10),
+          day: local(d),
           nets: {
             en0: Math.round((weekend ? 1.2 : 3.1) * wave * 1024 * MB),
             en7: Math.round((weekend ? 0.9 : 0.15) * wave * 1024 * MB),
@@ -1287,7 +1299,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
           },
         }
       })
-      return { days, labels: { en0: 'Wi-Fi', en7: 'iPhone USB', en5: 'Ethernet' } }
+      return { days, labels }
     },
     // The demo shows the welcome only with ?welcome=1.
     welcomeSeen: async () => params.get('welcome') !== '1',
@@ -1412,94 +1424,167 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     netCheckState: async () => structuredClone(netCheck),
     netCheckStart: async () => {
       if (netCheck.running) return structuredClone(netCheck)
-      // A check that walks the three networks like the real one, a little faster.
+      // A run that walks the three networks like the real one: ping, download,
+      // upload, then all together, with the live speed ten times a second.
+      // Steps are shortened (?fast=1 shortens them more, for tests).
       const sample = [
         {
           name: 'en0',
           label: 'Wi-Fi',
           kind: 'wifi',
-          mbps: 92,
+          down: 92,
+          up: 38,
           idle: 18,
           jitter: 3,
           loaded: 142,
+          loadedUp: 96,
           dns: 21,
+          isp: 'Airtel Broadband',
+          server: 'Mumbai',
         },
         {
           name: 'en7',
           label: 'iPhone USB',
           kind: 'tether',
-          mbps: 41,
+          down: 41,
+          up: 12,
           idle: 46,
           jitter: 11,
           loaded: 88,
+          loadedUp: 120,
           dns: 38,
+          isp: 'Reliance Jio',
+          server: 'Mumbai',
         },
         {
           name: 'en5',
           label: 'Ethernet',
           kind: 'ethernet',
-          mbps: 138,
+          down: 138,
+          up: 96,
           idle: 9,
           jitter: 1,
           loaded: 14,
+          loadedUp: 18,
           dns: 12,
+          isp: 'Airtel Broadband',
+          server: 'Mumbai',
         },
       ]
+      const scale = params.get('fast') === '1' ? 0.15 : 1
+      const ping = 600 * scale
+      const downMs = 3200 * scale
+      const upMs = 2600 * scale
+      const total = sample.length * (ping + downMs + upMs) + downMs
+      let done = 0
+      let stopped = false
+      demoStop = () => {
+        stopped = true
+      }
       netCheck.running = true
+      netCheck.phase = 'Starting…'
       netCheck.current = { at: Math.floor(Date.now() / 1000), results: [], togetherBps: null }
       const send = () => listener?.({ type: 'netCheck', view: structuredClone(netCheck) })
-      sample.forEach((n, i) => {
-        setTimeout(() => {
+      const live = (l: SpeedLive | null) => listener?.({ type: 'speedLive', live: l })
+      const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+      const grade = (idle: number, loaded: number) => {
+        const add = loaded - idle
+        return add < 5
+          ? 'A+'
+          : add < 30
+            ? 'A'
+            : add < 60
+              ? 'B'
+              : add < 200
+                ? 'C'
+                : add < 400
+                  ? 'D'
+                  : 'F'
+      }
+      /** Plays one step: a ramp-up, then a plateau that wobbles. */
+      const step = async (
+        kind: SpeedLive['step'],
+        network: string | null,
+        mbps: number,
+        ms: number,
+      ) => {
+        const trace: number[] = []
+        const n = Math.max(4, Math.round(ms / 100))
+        for (let i = 1; i <= n && !stopped; i++) {
+          const x = i / n
+          const ramp = 1 - Math.exp(-x * 9)
+          const wobble = 1 + Math.sin(i * 1.7) * 0.05 + Math.sin(i * 0.43) * 0.04
+          const bps = (mbps * ramp * wobble * 1e6) / 8
+          trace.push(bps)
+          live({
+            step: kind,
+            network,
+            bps,
+            progress: x,
+            overall: Math.min(1, (done + x * ms) / total),
+            trace: [...trace],
+          })
+          await wait(ms / n)
+        }
+        done += ms
+      }
+      void (async () => {
+        for (const n of sample) {
+          if (stopped) break
           netCheck.phase = `Testing ${n.label}…`
           send()
-        }, i * 700)
-        setTimeout(
-          () => {
-            const add = n.loaded - n.idle
-            const grade =
-              add < 5
-                ? 'A+'
-                : add < 30
-                  ? 'A'
-                  : add < 60
-                    ? 'B'
-                    : add < 200
-                      ? 'C'
-                      : add < 400
-                        ? 'D'
-                        : 'F'
-            netCheck.current!.results.push({
-              name: n.name,
-              label: n.label,
-              kind: n.kind,
-              downBps: (n.mbps * 1e6) / 8,
-              idleMs: n.idle,
-              jitterMs: n.jitter,
-              loss: 0,
-              loadedMs: n.loaded,
-              grade,
-              dnsMs: n.dns,
-              problem: null,
-            })
-            send()
-          },
-          i * 700 + 600,
-        )
-      })
-      setTimeout(() => {
-        netCheck.phase = 'Testing every network together…'
-        send()
-      }, 2200)
-      setTimeout(() => {
-        netCheck.current!.togetherBps = (262 * 1e6) / 8
-        netCheck.history.unshift(structuredClone(netCheck.current!))
+          live({
+            step: 'ping',
+            network: n.label,
+            bps: 0,
+            progress: 0,
+            overall: done / total,
+            trace: [],
+          })
+          await wait(ping)
+          done += ping
+          await step('down', n.label, n.down, downMs)
+          await step('up', n.label, n.up, upMs)
+          if (stopped) break
+          const worse = Math.max(n.loaded, n.loadedUp)
+          netCheck.current!.results.push({
+            name: n.name,
+            label: n.label,
+            kind: n.kind,
+            downBps: (n.down * 1e6) / 8,
+            upBps: (n.up * 1e6) / 8,
+            idleMs: n.idle,
+            jitterMs: n.jitter,
+            loss: 0,
+            loadedMs: n.loaded,
+            loadedUpMs: n.loadedUp,
+            grade: grade(n.idle, worse),
+            dnsMs: n.dns,
+            isp: n.isp,
+            server: n.server,
+            bytes: Math.round(((n.down * 8 + n.up * 7) * 1e6) / 8),
+            problem: null,
+          })
+          send()
+        }
+        if (!stopped) {
+          netCheck.phase = 'Testing every network together…'
+          send()
+          await step('together', null, 262, downMs)
+          netCheck.current!.togetherBps = (262 * 1e6) / 8
+        }
+        if (netCheck.current!.results.length)
+          netCheck.history.unshift(structuredClone(netCheck.current!))
         netCheck.running = false
         netCheck.phase = null
+        live(null)
         send()
-      }, 2900)
+      })()
       return structuredClone(netCheck)
     },
-    netCheckCancel: async () => {},
+    netCheckCancel: async () => {
+      demoStop()
+    },
     netCheckReport: async () => '/Users/demo/Downloads/Fuselane network report.html',
     // crash=1 shows the banner offered after a crash.
     unseenCrash: async () =>

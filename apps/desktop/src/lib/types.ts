@@ -125,6 +125,7 @@ export type UiEvent =
   | { type: 'update'; progress: UpdateProgress }
   | { type: 'nearby'; view: NearbyView }
   | { type: 'netCheck'; view: NetCheckView }
+  | { type: 'speedLive'; live: SpeedLive | null }
 
 /** A device on the network (Nearby, B8.11). */
 export interface DeviceView {
@@ -508,22 +509,47 @@ export interface PageFiles {
   files: { url: string; name: string }[]
 }
 
-/** One network's numbers from a network check (B10.1). */
+/** One network's numbers from a speed test (B10.1). */
 export interface NetResult {
   name: string
   label: string
   kind: string
   /** Bytes per second. */
   downBps: number | null
+  /** Bytes per second (older runs have none). */
+  upBps?: number | null
   idleMs: number | null
   jitterMs: number | null
   /** 0..1 */
   loss: number | null
+  /** Latency while downloading. */
   loadedMs: number | null
+  /** Latency while uploading. */
+  loadedUpMs?: number | null
   /** Bufferbloat, A+ to F. */
   grade: string | null
   dnsMs: number | null
+  /** The internet provider behind this network. */
+  isp?: string | null
+  /** Where the speed server is. */
+  server?: string | null
+  /** Data the test used, both ways. */
+  bytes?: number
   problem: string | null
+}
+
+/** The speed test while it runs (ten updates a second). */
+export interface SpeedLive {
+  step: 'ping' | 'down' | 'up' | 'together'
+  network: string | null
+  /** Bytes per second now. */
+  bps: number
+  /** 0..1 through this step. */
+  progress: number
+  /** 0..1 through the whole run. */
+  overall: number
+  /** This step's speed every tenth of a second, bytes per second. */
+  trace: number[]
 }
 
 export interface CheckRun {

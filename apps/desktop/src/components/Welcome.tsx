@@ -212,7 +212,7 @@ export function Welcome() {
               <h2 id="welcome-title">{t('How fast are they together?')}</h2>
               <p className="welcome-lead">
                 {t(
-                  'A quick check measures each network, then all of them at once. It takes about a minute and uses roughly 25 MB per network, so skip it on a tight data plan.',
+                  'A quick check measures each network, then all of them at once. It takes under a minute and runs each network flat out for a few seconds, so skip it on a tight data plan.',
                 )}
               </p>
               {run && run.results.length > 0 && (

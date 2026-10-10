@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react'
-import { DownloadSimple, Gear, PaperPlaneTilt, Plus, ShareNetwork } from '@phosphor-icons/react'
+import {
+  DownloadSimple,
+  Gauge,
+  Gear,
+  PaperPlaneTilt,
+  Plus,
+  ShareNetwork,
+} from '@phosphor-icons/react'
 import { useApp, type View } from './lib/store'
 import { TransferList } from './components/TransferList'
 import { TransferDetail } from './components/TransferDetail'
@@ -9,6 +16,7 @@ import { NetworkList, NetworksTotal, NetworksView } from './components/NetworksV
 import { NearbyRequestDialog } from './components/NearbyPanel'
 import { SettingsView } from './components/SettingsView'
 import { SendView } from './components/SendView'
+import { SpeedtestView } from './components/SpeedtestView'
 import { isSendLink } from './lib/sendLink'
 import { Toast } from './components/Toast'
 import { UpdateBanner, UpdatedBanner } from './components/UpdateBanner'
@@ -36,6 +44,7 @@ function useLayout(): Layout {
 const NAV: { id: View; label: string; Icon: typeof DownloadSimple }[] = [
   { id: 'transfers', label: mark('Downloads'), Icon: DownloadSimple },
   { id: 'send', label: mark('Send'), Icon: PaperPlaneTilt },
+  { id: 'speedtest', label: mark('Speedtest'), Icon: Gauge },
   { id: 'networks', label: mark('Networks'), Icon: ShareNetwork },
   { id: 'settings', label: mark('Settings'), Icon: Gear },
 ]
@@ -164,12 +173,20 @@ export function App() {
         setAdding(true)
         return
       }
-      if (mod && (k === ',' || k === '1' || k === '2' || k === '3' || k === '4')) {
+      if (mod && (k === ',' || k === '1' || k === '2' || k === '3' || k === '4' || k === '5')) {
         e.preventDefault()
         useApp
           .getState()
           .setView(
-            k === '2' ? 'networks' : k === '1' ? 'transfers' : k === '4' ? 'send' : 'settings',
+            k === '2'
+              ? 'networks'
+              : k === '1'
+                ? 'transfers'
+                : k === '4'
+                  ? 'send'
+                  : k === '5'
+                    ? 'speedtest'
+                    : 'settings',
           )
         return
       }
@@ -285,6 +302,8 @@ export function App() {
     <SettingsView />
   ) : view === 'send' ? (
     <SendView />
+  ) : view === 'speedtest' ? (
+    <SpeedtestView />
   ) : (
     <Transfers layout={layout} />
   )
