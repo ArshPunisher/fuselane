@@ -7,25 +7,67 @@
   </head>
   <body>
     <main id="app">
-      <h1>Fuselane</h1>
-      <p id="status" role="status">Checking for the Fuselane app…</p>
-      <label class="row">
-        <input type="checkbox" id="enabled" />
-        <span>Hand big downloads to Fuselane</span>
-      </label>
-      <p class="help">
-        Big downloads go to the app when it is running. Others stay in the browser.
-      </p>
-      <a id="settings" href="/options.html">Size, sites and file types…</a>
+      <header class="top">
+        <h1 class="wordmark" translate="no">
+          <svg class="mark" viewBox="0 0 512 512" aria-hidden="true">
+            <g fill="none" stroke-linecap="round" stroke-width="34">
+              <path d="M70 150 C 180 150, 220 256, 300 256" stroke="var(--lane-tide)" />
+              <path d="M70 256 L 300 256" stroke="var(--lane-volt)" />
+              <path d="M70 362 C 180 362, 220 256, 300 256" stroke="var(--lane-iris)" />
+              <path d="M300 256 L 442 256" stroke="var(--fuse)" stroke-width="46" />
+            </g>
+          </svg>
+          Fuselane
+        </h1>
+        <span id="chip" class="chip" data-state="checking">Checking…</span>
+        <a
+          id="settings"
+          class="icon-btn"
+          href="/options.html"
+          aria-label="Settings"
+          title="Settings"
+          ><span class="ic" data-icon="gear"></span
+        ></a>
+      </header>
+
+      <p id="status" class="sr-only" role="status">Checking for the Fuselane app…</p>
+
+      <!-- Shown when the app isn't there or isn't running; filled in by main.ts. -->
+      <section id="app-card" class="card" hidden></section>
+
+      <div class="setting" id="handoff-row">
+        <div>
+          <p class="setting-name" id="enabled-label">Hand big downloads to Fuselane</p>
+          <p class="muted" id="handoff-summary">Big downloads go to the app when it is running.</p>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="enabled" role="switch" aria-labelledby="enabled-label" />
+          <span aria-hidden="true"></span>
+        </label>
+      </div>
+
       <section id="page" aria-labelledby="page-title" hidden>
         <h2 id="page-title">On this page</h2>
-        <button type="button" id="video" class="video-btn">
+        <button type="button" id="video" class="btn btn-block">
+          <span class="ic" data-icon="film-strip"></span>
           Get this page's video in Fuselane
         </button>
         <div id="feeds"></div>
-        <ul id="media"></ul>
-        <p id="media-status" class="help" role="status"></p>
+        <ul id="media" aria-label="Videos and files on this page"></ul>
+        <p id="media-status" class="muted small" role="status"></p>
       </section>
+
+      <footer class="foot">
+        <a id="more-settings" href="/options.html">Size, sites and file types…</a>
+        <a
+          class="powered"
+          href="https://clearcraftlabs.com/?ref=fuselane-extension"
+          target="_blank"
+          rel="noopener"
+          translate="no"
+          >by ClearCraft Labs</a
+        >
+      </footer>
     </main>
     <script type="module" src="./main.ts"></script>
   </body>

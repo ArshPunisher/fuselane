@@ -1,41 +1,151 @@
-import { normalizeRules } from '@fuselane/capture'
-import { appStatus } from '../../lib/status.ts'
+import { formatSize, normalizeRules } from '@fuselane/capture'
+import { appStatus, browserId, sendHandoff, settle, type Status } from '../../lib/status.ts'
 import { offerLink } from '../../lib/handoff.ts'
 import { findOnPage, mediaList, type MediaItem } from '../../lib/media.ts'
 import { getSession } from '../../lib/session.ts'
 import { feedList, findFeeds, type FoundFeed } from '../../lib/feeds.ts'
+import { fillIcons, icon, type IconName } from './icons.ts'
 import './style.css'
 
-const status = document.querySelector<HTMLParagraphElement>('#status')!
-const enabled = document.querySelector<HTMLInputElement>('#enabled')!
+const HOST = 'app.fuselane.host'
+const DOWNLOAD_PAGE = 'https://fuselane.app/download/?ref=extension'
+
+const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!
+const status = $<HTMLParagraphElement>('#status')
+const chip = $<HTMLSpanElement>('#chip')
+const card = $<HTMLElement>('#app-card')
+const enabled = $<HTMLInputElement>('#enabled')
+const summary = $<HTMLParagraphElement>('#handoff-summary')
+
+const ask = (m: unknown) => browser.runtime.sendNativeMessage(HOST, m as object)
+const hello = () => ({
+  browser: browserId(navigator.userAgent, 'brave' in navigator),
+  version: browser.runtime.getManifest().version,
+})
+
+/** What the switch's line says, in the app's terms. */
+function describe(on: boolean, minBytes: number, state: Status['state']): string {
+  if (!on) return 'Off: every download stays in the browser.'
+  const what = minBytes > 0 ? `Downloads over ${formatSize(minBytes)}` : 'Every download'
+  return state === 'connected'
+    ? `${what} go to Fuselane.`
+    : `${what} go to Fuselane when it's running.`
+}
+
+function el<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  props: Partial<HTMLElementTagNameMap[K]> = {},
+  ...kids: (Node | string)[]
+): HTMLElementTagNameMap[K] {
+  const e = Object.assign(document.createElement(tag), props)
+  e.append(...kids)
+  return e
+}
+
+/** The card for an app that's missing or closed: what's wrong and the one fix. */
+function showCard(s: Status) {
+  card.replaceChildren()
+  card.dataset.state = s.state
+  if (s.state === 'connected') {
+    card.hidden = true
+    return
+  }
+  const missing = s.state === 'not-installed'
+  const go = el(
+    'a',
+    {
+      className: 'btn btn-primary btn-block',
+      href: missing ? DOWNLOAD_PAGE : 'fuselane://open',
+      target: '_blank',
+      rel: 'noopener',
+    },
+    icon(missing ? 'download-simple' : 'power'),
+    missing ? 'Get the Fuselane app' : 'Open Fuselane',
+  )
+  if (!missing) {
+    // The OS starts the app for its own link; look again once it's had a moment.
+    go.addEventListener('click', () => setTimeout(() => void load(), 2500))
+  }
+  card.append(
+    el(
+      'div',
+      { className: 'card-head' },
+      el('span', { className: 'card-ic' }, icon('desktop')),
+      el(
+        'div',
+        {},
+        el('p', { className: 'card-title' }, missing ? 'Get the free app' : 'Fuselane is closed'),
+        el(
+          'p',
+          { className: 'muted small' },
+          missing
+            ? 'The extension hands downloads to the Fuselane app, which splits them across Wi‑Fi, Ethernet and your phone at once. Until then, downloads stay in the browser.'
+            : 'Open it and big downloads go to it again. Until then, they stay in the browser.',
+        ),
+      ),
+    ),
+    go,
+  )
+  if (missing)
+    card.append(el('p', { className: 'muted small center' }, 'Free for Windows, macOS and Linux.'))
+  card.hidden = false
+}
 
 async function load() {
-  const { rules } = await browser.storage.local.get('rules')
-  enabled.checked = normalizeRules(rules).enabled
-  const s = await appStatus((m) =>
-    browser.runtime.sendNativeMessage('app.fuselane.host', m as object),
+  const stored = await browser.storage.local.get(['rules', 'handoffPending'])
+  const s = await appStatus(ask, hello())
+  // The app decides where downloads go, unless we have a change it hasn't seen.
+  const { rules, pending } = await settle(
+    s,
+    normalizeRules(stored.rules),
+    stored.handoffPending === true,
+    ask,
   )
+  await browser.storage.local.set({ rules, handoffPending: pending })
+  enabled.checked = rules.enabled
+  summary.textContent = describe(rules.enabled, rules.minBytes, s.state)
   status.textContent = s.text
+  chip.dataset.state = s.state
+  chip.textContent =
+    s.state === 'connected' ? 'Connected' : s.state === 'not-running' ? 'App closed' : 'No app'
+  chip.title = s.text
+  showCard(s)
+  return s
 }
 
 enabled.addEventListener('change', async () => {
   const { rules } = await browser.storage.local.get('rules')
-  await browser.storage.local.set({ rules: { ...normalizeRules(rules), enabled: enabled.checked } })
+  const next = { ...normalizeRules(rules), enabled: enabled.checked }
+  // Tell the app too, so its Browser extension page and other browsers agree; if
+  // it's closed, the change waits and goes with the next ping.
+  const delivered = await sendHandoff(ask, next)
+  await browser.storage.local.set({ rules: next, handoffPending: !delivered })
+  summary.textContent = describe(
+    next.enabled,
+    next.minBytes,
+    delivered ? 'connected' : 'not-running',
+  )
 })
 
-document.querySelector('#settings')!.addEventListener('click', (e) => {
-  e.preventDefault()
-  void browser.runtime.openOptionsPage()
-  window.close()
-})
+for (const link of [$<HTMLAnchorElement>('#settings'), $<HTMLAnchorElement>('#more-settings')]) {
+  link.addEventListener('click', (e) => {
+    e.preventDefault()
+    void browser.runtime.openOptionsPage()
+    window.close()
+  })
+}
 
-const KIND = { video: 'Video', audio: 'Audio', link: 'File' } as const
+const KIND: Record<MediaItem['kind'], { word: string; icon: IconName }> = {
+  video: { word: 'Video', icon: 'video-camera' },
+  audio: { word: 'Audio', icon: 'music-note' },
+  link: { word: 'File', icon: 'file' },
+}
 
 /** Lists the tab's videos, audio and file links (activeTab: only now, only this tab). */
 async function onThisPage() {
-  const section = document.querySelector<HTMLElement>('#page')!
-  const list = document.querySelector<HTMLUListElement>('#media')!
-  const said = document.querySelector<HTMLParagraphElement>('#media-status')!
+  const section = $<HTMLElement>('#page')
+  const list = $<HTMLUListElement>('#media')
+  const said = $<HTMLParagraphElement>('#media-status')
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true })
   if (!tab?.id || !tab.url || !/^https?:/.test(tab.url)) return
   let items: MediaItem[] = []
@@ -51,12 +161,12 @@ async function onThisPage() {
   section.hidden = false
   // A video page (YouTube and many more): the app finds the real video and its
   // qualities, then downloads it over every network.
-  const video = document.querySelector<HTMLButtonElement>('#video')!
+  const video = $<HTMLButtonElement>('#video')
   video.addEventListener('click', async () => {
     video.disabled = true
-    const reply = (await browser.runtime
-      .sendNativeMessage('app.fuselane.host', { v: 1, type: 'page.video', url: tab.url })
-      .catch(() => null)) as { type?: string } | null
+    const reply = (await ask({ v: 1, type: 'page.video', url: tab.url }).catch(() => null)) as {
+      type?: string
+    } | null
     if (reply?.type === 'page.video.opened') {
       window.close()
     } else {
@@ -77,21 +187,21 @@ async function onThisPage() {
   } catch {
     feeds = []
   }
-  const feedBox = document.querySelector<HTMLDivElement>('#feeds')!
+  const feedBox = $<HTMLDivElement>('#feeds')
   for (const f of feeds) {
-    const b = document.createElement('button')
-    b.type = 'button'
-    b.className = 'video-btn'
-    b.textContent =
+    const b = el(
+      'button',
+      { type: 'button', className: 'btn btn-block', title: f.href },
+      icon('rss'),
       feeds.length > 1 && f.title
         ? `Follow “${f.title}” in Fuselane`
-        : "Follow this site's feed in Fuselane"
-    b.title = f.href
+        : "Follow this site's feed in Fuselane",
+    )
     b.addEventListener('click', async () => {
       b.disabled = true
-      const reply = (await browser.runtime
-        .sendNativeMessage('app.fuselane.host', { v: 1, type: 'page.feed', url: f.href })
-        .catch(() => null)) as { type?: string } | null
+      const reply = (await ask({ v: 1, type: 'page.feed', url: f.href }).catch(() => null)) as {
+        type?: string
+      } | null
       if (reply?.type === 'page.feed.opened') {
         window.close()
       } else {
@@ -107,37 +217,41 @@ async function onThisPage() {
     return
   }
   for (const m of items) {
-    const li = document.createElement('li')
-    const text = document.createElement('span')
-    text.className = 'm-name'
-    text.title = m.url
-    text.textContent = m.name
-    const kind = document.createElement('span')
-    kind.className = 'm-kind'
-    kind.textContent = m.label ? `${KIND[m.kind]} · ${m.label}` : KIND[m.kind]
-    text.append(kind)
-    const button = document.createElement('button')
-    button.type = 'button'
-    button.textContent = 'Download'
+    const kind = KIND[m.kind]
+    const button = el(
+      'button',
+      { type: 'button', className: 'icon-btn', title: 'Download' },
+      icon('download-simple'),
+    )
     button.setAttribute('aria-label', `Download ${m.name}`)
     button.addEventListener('click', async () => {
       button.disabled = true
-      const took = await offerLink(
-        m.url,
-        tab.url,
-        (msg) => browser.runtime.sendNativeMessage('app.fuselane.host', msg as object),
-        getSession,
-        (u) => browser.downloads.download({ url: u }),
+      const took = await offerLink(m.url, tab.url, ask, getSession, (u) =>
+        browser.downloads.download({ url: u }),
       )
-      button.textContent = took ? 'Sent' : 'In browser'
+      button.replaceChildren(icon('check'))
+      button.dataset.done = took ? 'app' : 'browser'
       said.textContent = took
         ? `${m.name} is downloading in Fuselane.`
         : `Fuselane isn't running, so the browser is downloading ${m.name}.`
     })
-    li.append(text, button)
-    list.append(li)
+    list.append(
+      el(
+        'li',
+        {},
+        el('span', { className: 'm-ic' }, icon(kind.icon)),
+        el(
+          'span',
+          { className: 'm-text' },
+          el('span', { className: 'm-name', title: m.url }, m.name),
+          el('span', { className: 'm-kind' }, m.label ? `${kind.word} · ${m.label}` : kind.word),
+        ),
+        button,
+      ),
+    )
   }
 }
 
+fillIcons()
 void load()
 void onThisPage()

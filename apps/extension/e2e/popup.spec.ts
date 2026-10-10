@@ -39,11 +39,21 @@ test('the popup opens, explains the app is missing, and remembers its switch', a
   await expect(page.getByRole('status').first()).not.toHaveText('Checking for the Fuselane app…', {
     timeout: 10_000,
   })
+  // Without the app, the popup offers it, linking to the download page.
+  const get = page.getByRole('link', { name: 'Get the Fuselane app' })
+  await expect(get).toBeVisible()
+  expect(await get.getAttribute('href')).toMatch(/^https:\/\/fuselane\.app\/download\//)
+  await expect(page.locator('#chip')).toHaveText('No app')
   const toggle = page.getByLabel('Hand big downloads to Fuselane')
   const was = await toggle.isChecked()
   await toggle.setChecked(!was)
   await page.reload()
   await expect(page.getByLabel('Hand big downloads to Fuselane')).toBeChecked({ checked: !was })
   await expect(page.getByRole('link', { name: /Size, sites and file types/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Settings' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'by ClearCraft Labs' })).toHaveAttribute(
+    'href',
+    /^https:\/\/clearcraftlabs\.com\//,
+  )
   expect(errors).toEqual([])
 })
