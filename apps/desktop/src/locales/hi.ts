@@ -793,8 +793,8 @@ export const hi: Readonly<Record<string, string>> = {
   'Before midnight': 'आधी रात से पहले',
   '{name}: only before midnight, 22:00 to 00:00':
     '{name}: सिर्फ़ आधी रात से पहले, 22:00 से 00:00 तक',
-  "22:00 to midnight. With a daily allowance, downloads use what's left of today's data before it runs out.":
-    '22:00 से आधी रात तक। रोज़ की डेटा लिमिट हो, तो खत्म होने से पहले आज का बचा डेटा डाउनलोड में लग जाता है।',
+  "22:00 to midnight. Daily data packs expire at midnight, so the phone helps with what's left of today's data. If it runs out, Fuselane notices the slowdown and stops using it.":
+    '22:00 से आधी रात तक। रोज़ के डेटा पैक आधी रात को खत्म हो जाते हैं, इसलिए फ़ोन आज के बचे डेटा से मदद करता है। डेटा खत्म हो जाए, तो Fuselane धीमी स्पीड पहचानकर उसका इस्तेमाल बंद कर देता है।',
   '{name} from': '{name}: कब से',
   '{name} until': '{name}: कब तक',
   Always: 'हमेशा',
