@@ -1,14 +1,18 @@
 # Pending: what's left, and who does it
 
 The short list of open work, kept current. Details live in [STEPS.md](STEPS.md); this page
-says what is waiting and on whom. Last updated 2026-10-09.
+says what is waiting and on whom. Last updated 2026-10-10.
 
 ## Waiting on the owner
 
 | What | Why it's needed | How |
 |---|---|---|
+| **Review and release beta.10** | Everything since beta.9 is built, tested and pushed, but not released | Look at the demo (`pnpm --filter @fuselane/desktop dev`, then http://localhost:5191) and the notes in `docs/release-notes/v0.1.0-beta.10.md`; say "release" and the agent bumps the version, tags, verifies and publishes |
+| **Approve ADR 0013** (remote control for aria2 apps) | It adds a listening port (off by default; secret required; this computer only unless allowed) | Read `docs/adr/0013-aria2-remote-control.md`; say yes, or what to change |
+| Deploy the site after the release | fuselane.app lists features that ship in beta.10 | `tools/deploy-site.sh` (the agent can run it once Cloudflare is logged in on this Mac) |
+| Upload extension 0.2.0 with the new store images | The listing shows 0.1.0 | Upload `apps/extension` 0.2.0 zip and the images in `apps/extension/store` in the Chrome Web Store dashboard |
+| Google Search Console Domain property for fuselane.app | Search indexing | Add the domain in Search Console (verified through Cloudflare DNS), then submit `https://fuselane.app/sitemap.xml` |
 | Firefox Add-ons and Edge Add-ons listings (free) | Same, for Firefox and Edge users | Same zip flow; Firefox gets its own build (`build:firefox`) |
-| Google Search Console verification (postponed) | Search indexing of the download page | Owner adds the site in Search Console and sends the verification tag |
 | SignPath approval (applied 2026-10-08) | Signed Windows installers | Wait for their email, then add the secrets |
 | Renovate app (optional) | Automatic dependency updates | Install the free Renovate GitHub app on the repo |
 | A phone to tether (Q10) | Real tests of USB tethering on macOS, Windows and Linux | Plug in a phone when convenient |
