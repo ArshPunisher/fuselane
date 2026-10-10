@@ -1,0 +1,123 @@
+/* The 404 page's own styles, scoped to .nf so they don't reach other pages
+   in the no-reload site. Same look as apps/site/404.html. */
+.nf {
+  --nf-hairline: oklch(1 0 0 / 0.16);
+  --nf-ink: oklch(0.965 0.004 260);
+  --nf-body: oklch(0.82 0.008 260);
+  --nf-fuse: oklch(0.74 0.17 50);
+  --nf-fuse-ink: oklch(0.155 0.01 260);
+  --nf-tide: oklch(0.78 0.12 215);
+  --nf-volt: oklch(0.85 0.17 128);
+  --nf-iris: oklch(0.72 0.13 280);
+  display: grid;
+  min-height: 80dvh;
+  place-items: center;
+  padding: 120px 16px 48px;
+  color: var(--nf-body);
+}
+@media (prefers-color-scheme: light) {
+  .nf {
+    --nf-hairline: oklch(0.21 0.015 260 / 0.18);
+    --nf-ink: oklch(0.21 0.015 260);
+    --nf-body: oklch(0.36 0.015 260);
+    --nf-fuse: oklch(0.56 0.165 42);
+    --nf-fuse-ink: oklch(0.99 0 0);
+    --nf-tide: oklch(0.52 0.095 222);
+    --nf-volt: oklch(0.52 0.13 130);
+    --nf-iris: oklch(0.52 0.16 280);
+  }
+}
+.nf-inner {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  max-width: 520px;
+  text-align: center;
+}
+.nf svg {
+  width: 168px;
+  height: 168px;
+}
+.nf .t {
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+.nf .tide {
+  stroke: var(--nf-tide);
+}
+.nf .iris {
+  stroke: var(--nf-iris);
+}
+.nf .volt {
+  stroke: var(--nf-volt);
+}
+.nf .gap {
+  stroke: var(--nf-fuse);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 0.1 4.5;
+}
+.nf .code {
+  fill: var(--nf-ink);
+  font:
+    600 30px ui-monospace,
+    'SF Mono',
+    monospace;
+  letter-spacing: -0.04em;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .nf .t {
+    animation: nf-tick 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: calc(var(--i) * 22ms);
+  }
+  .nf .gap {
+    animation: nf-blink 1.4s ease-in-out 1.2s infinite;
+  }
+}
+@keyframes nf-tick {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes nf-blink {
+  50% {
+    opacity: 0.2;
+  }
+}
+.nf h1 {
+  margin: 0;
+  color: var(--nf-ink);
+  font-size: clamp(28px, 6vw, 40px);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+.nf p {
+  margin: 0;
+}
+.nf-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.nf-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--nf-hairline);
+  border-radius: 8px;
+  color: var(--nf-ink);
+  text-decoration: none;
+}
+.nf-links a:first-child {
+  border-color: transparent;
+  background: var(--nf-fuse);
+  color: var(--nf-fuse-ink);
+  font-weight: 600;
+}
+.nf-links a:focus-visible {
+  outline: 2px solid var(--nf-fuse);
+  outline-offset: 2px;
+}
