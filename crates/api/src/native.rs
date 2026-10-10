@@ -81,18 +81,45 @@ async fn handle(endpoint: &Path, msg: &[u8]) -> Value {
             Ok(reply) => reply,
             Err(_) => decline("unsupported"),
         },
-        Some("ping") => match crate::client::request(endpoint, "ping", Value::Null, wait).await {
-            Ok(r) => json!({"v": 1, "type": "pong", "app": r}),
-            Err(e) => json!({"v": 1, "type": "pong", "error": e}),
-        },
+        Some("ping") => {
+            // Which browser and copy this is, so the app can show it as connected.
+            // The store comes from how the browser started us, not from the message.
+            let params = json!({
+                "browser": v.get("browser").cloned().unwrap_or(Value::Null),
+                "version": v.get("version").cloned().unwrap_or(Value::Null),
+                "store": CALLER.get().map(String::as_str).unwrap_or(""),
+            });
+            match crate::client::request(endpoint, "ping", params, wait).await {
+                Ok(r) => json!({"v": 1, "type": "pong", "app": r}),
+                Err(e) => json!({"v": 1, "type": "pong", "error": e}),
+            }
+        }
+        // The extension's "where downloads go" setting, kept in the app.
+        Some("handoff.set") => {
+            let params = json!({
+                "enabled": v.get("enabled").cloned().unwrap_or(Value::Null),
+                "minBytes": v.get("minBytes").cloned().unwrap_or(Value::Null),
+            });
+            match crate::client::request(endpoint, "handoff.set", params, wait).await {
+                Ok(r) => json!({"v": 1, "type": "handoff", "handoff": r}),
+                Err(e) => json!({"v": 1, "type": "handoff", "error": e}),
+            }
+        }
         _ => decline("invalid"),
     }
 }
+
+/// The store of the extension that started this host ("chrome", "edge",
+/// "firefox"), read once from the command line.
+static CALLER: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
 /// Runs as the host for the app whose data lives in `home`, until the browser
 /// closes the pipe. Returns the process exit code. Nothing but framed messages may
 /// reach stdout: the browser reads it.
 pub fn run_host(home: &Path) -> i32 {
+    let args: Vec<String> = std::env::args().collect();
+    let store = crate::browsers::caller_store(&args).map_or("", |s| s.word());
+    let _ = CALLER.set(store.to_string());
     let endpoint = crate::client::endpoint(home);
     let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
         .enable_all()

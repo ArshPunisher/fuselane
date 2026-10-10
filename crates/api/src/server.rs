@@ -39,6 +39,53 @@ impl Decline {
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
+/// What the extension says about itself when it pings: the app's Browser
+/// extension page shows which browsers are connected.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Seen {
+    /// The browser it runs in, as the extension sees it ("chrome", "edge", …).
+    pub browser: String,
+    /// Which store's copy started the host ("chrome", "edge", "firefox", or "").
+    pub store: String,
+    pub version: String,
+}
+
+/// Where the browser's downloads go, set in the app and followed by the
+/// extension: off (all stay in the browser), or every download from `min_bytes`
+/// up goes to the app (0 = all of them).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Handoff {
+    pub enabled: bool,
+    pub min_bytes: u64,
+}
+
+impl Handoff {
+    /// Anything above this is a mistake (1 TiB).
+    pub const MAX_MIN_BYTES: u64 = 1 << 40;
+
+    pub fn to_json(self) -> Value {
+        json!({"enabled": self.enabled, "minBytes": self.min_bytes})
+    }
+
+    pub fn from_json(v: &Value) -> Option<Handoff> {
+        let enabled = v.get("enabled")?.as_bool()?;
+        let min_bytes = v.get("minBytes")?.as_u64()?;
+        (min_bytes <= Self::MAX_MIN_BYTES).then_some(Handoff { enabled, min_bytes })
+    }
+}
+
+/// A short word from the extension: lowercase letters, digits, dots and dashes.
+fn word(v: Option<&Value>, max: usize) -> String {
+    v.and_then(Value::as_str)
+        .filter(|s| {
+            s.len() <= max
+                && s.bytes()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'.' || c == b'-')
+        })
+        .unwrap_or("")
+        .to_string()
+}
+
 /// What the app does with requests (the desktop service, or a test double).
 pub trait Handler: Send + Sync + 'static {
     /// Takes a checked offer; Ok(job id) or a reason to hand it back.
@@ -54,6 +101,16 @@ pub trait Handler: Send + Sync + 'static {
     /// feed"): the app opens Feeds with it. False when it can't.
     fn page_feed(&self, _url: String) -> bool {
         false
+    }
+    /// The extension checked in (each ping).
+    fn extension_seen(&self, _seen: Seen) {}
+    /// Where the browser's downloads should go, if the app has a say.
+    fn handoff(&self) -> Option<Handoff> {
+        None
+    }
+    /// The extension's settings changed it; returns what's now in effect.
+    fn set_handoff(&self, _handoff: Handoff) -> Option<Handoff> {
+        None
     }
 }
 
@@ -92,7 +149,30 @@ pub async fn answer(handler: &dyn Handler, line: &str) -> Value {
     }
     match req.get("method").and_then(Value::as_str) {
         Some("ping") => {
-            json!({"id": id, "result": {"app": "fuselane", "version": handler.version(), "v": 1}})
+            let params = req.get("params").cloned().unwrap_or(Value::Null);
+            let browser = word(params.get("browser"), 16);
+            if !browser.is_empty() {
+                handler.extension_seen(Seen {
+                    browser,
+                    store: word(params.get("store"), 16),
+                    version: word(params.get("version"), 24),
+                });
+            }
+            let mut result = json!({"app": "fuselane", "version": handler.version(), "v": 1});
+            if let Some(h) = handler.handoff() {
+                result["handoff"] = h.to_json();
+            }
+            json!({"id": id, "result": result})
+        }
+        Some("handoff.set") => {
+            let params = req.get("params").cloned().unwrap_or(Value::Null);
+            match Handoff::from_json(&params) {
+                Some(h) => match handler.set_handoff(h) {
+                    Some(now) => json!({"id": id, "result": now.to_json()}),
+                    None => error(&id, "unsupported", "this app can't change it"),
+                },
+                None => error(&id, "bad-request", "enabled and minBytes are needed"),
+            }
         }
         Some("download.offer") => {
             let params = req.get("params").cloned().unwrap_or(Value::Null);
@@ -386,6 +466,104 @@ mod tests {
             answer(&Fake, r#"{"id":{"x":1},"method":"ping"}"#).await["error"]["code"],
             "bad-request"
         );
+    }
+
+    /// Records what the extension said and keeps a hand-off setting.
+    #[derive(Default)]
+    struct Settings {
+        seen: std::sync::Mutex<Vec<Seen>>,
+        handoff: std::sync::Mutex<Option<Handoff>>,
+    }
+    impl Handler for Settings {
+        fn offer(&self, _: Offer) -> BoxFuture<'_, Result<String, Decline>> {
+            Box::pin(async { Err(Decline::Unsupported) })
+        }
+        fn version(&self) -> String {
+            "1.0.0".into()
+        }
+        fn extension_seen(&self, seen: Seen) {
+            self.seen.lock().unwrap().push(seen);
+        }
+        fn handoff(&self) -> Option<Handoff> {
+            *self.handoff.lock().unwrap()
+        }
+        fn set_handoff(&self, h: Handoff) -> Option<Handoff> {
+            *self.handoff.lock().unwrap() = Some(h);
+            Some(h)
+        }
+    }
+
+    #[tokio::test]
+    async fn a_ping_says_which_browser_and_gets_the_handoff_setting() {
+        let s = Settings::default();
+        *s.handoff.lock().unwrap() = Some(Handoff {
+            enabled: true,
+            min_bytes: 2_000_000_000,
+        });
+        let r = answer(&s, r#"{"id":1,"method":"ping","params":{"browser":"edge","store":"edge","version":"0.3.0"}}"#).await;
+        assert_eq!(
+            r["result"]["handoff"],
+            json!({"enabled": true, "minBytes": 2_000_000_000u64})
+        );
+        assert_eq!(
+            s.seen.lock().unwrap()[0],
+            Seen {
+                browser: "edge".into(),
+                store: "edge".into(),
+                version: "0.3.0".into()
+            }
+        );
+        // Odd words are dropped, not stored; a ping with no browser records nothing.
+        answer(
+            &s,
+            r#"{"id":2,"method":"ping","params":{"browser":"<script>","version":"1"}}"#,
+        )
+        .await;
+        answer(&s, r#"{"id":3,"method":"ping"}"#).await;
+        assert_eq!(s.seen.lock().unwrap().len(), 1);
+        // An app without the setting still answers pings.
+        assert!(
+            answer(&Fake, r#"{"id":4,"method":"ping"}"#).await["result"]
+                .get("handoff")
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn the_handoff_setting_is_checked_before_it_is_kept() {
+        let s = Settings::default();
+        let ok = answer(
+            &s,
+            r#"{"id":1,"method":"handoff.set","params":{"enabled":false,"minBytes":0}}"#,
+        )
+        .await;
+        assert_eq!(ok["result"], json!({"enabled": false, "minBytes": 0}));
+        for bad in [
+            r#"{"id":2,"method":"handoff.set","params":{"enabled":"yes","minBytes":0}}"#,
+            r#"{"id":3,"method":"handoff.set","params":{"enabled":true,"minBytes":-1}}"#,
+            r#"{"id":4,"method":"handoff.set","params":{"enabled":true,"minBytes":99999999999999999}}"#,
+            r#"{"id":5,"method":"handoff.set","params":{"enabled":true}}"#,
+            r#"{"id":6,"method":"handoff.set"}"#,
+        ] {
+            assert_eq!(
+                answer(&s, bad).await["error"]["code"],
+                "bad-request",
+                "{bad}"
+            );
+        }
+        assert_eq!(
+            *s.handoff.lock().unwrap(),
+            Some(Handoff {
+                enabled: false,
+                min_bytes: 0
+            })
+        );
+        let old = answer(
+            &Fake,
+            r#"{"id":7,"method":"handoff.set","params":{"enabled":true,"minBytes":1}}"#,
+        )
+        .await;
+        assert_eq!(old["error"]["code"], "unsupported");
     }
 
     #[cfg(unix)]
