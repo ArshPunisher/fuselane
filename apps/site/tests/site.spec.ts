@@ -729,7 +729,7 @@ test('the landing pages load, are in the sitemap and are linked from the footer'
     ['/idm-alternative/', 'A free IDM alternative'],
     ['/combine-internet/', 'Combine Wi-Fi and mobile data'],
     ['/send-large-files/', 'Send large files free'],
-  ]) {
+  ] as const) {
     await page.goto(path)
     await expect(page.getByRole('heading', { level: 1 })).toContainText(heading)
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
