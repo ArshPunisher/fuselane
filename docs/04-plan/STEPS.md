@@ -170,7 +170,7 @@ The owner asked for all ten ideas from the feature list. Each one is tested at t
 The owner asked for more built-in features that cost nothing to run (no paid tiers, no hosted service) and save installing separate apps.
 
 - [x] B10.1 Network check: per-network speed, latency, jitter, bufferbloat grade and DNS time, every network together, an outage log from the minute-by-minute reach checks, and a dated report for the internet provider
-- [ ] B10.2 Clipboard between your computers: copy on one Fuselane computer, paste on another (Nearby, LAN only, encrypted)
+- [x] B10.2 Clipboard between your computers: copy on one Fuselane computer, paste on another (Nearby, LAN only, encrypted)
 - [ ] B10.3 Shared folders between your own computers over Nearby (no cloud)
 - [ ] B10.4 Video and audio from pages: hand pages to a yt-dlp the person installs (detected, never bundled), downloads run over every network
 

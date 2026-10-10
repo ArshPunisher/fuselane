@@ -1687,6 +1687,24 @@ test.describe('Nearby', () => {
     await expect(row.getByRole('button', { name: /^Cancel/ })).toHaveCount(0)
   })
 
+  test('text goes to another computer, and incoming text shows what it says', async ({ page }) => {
+    await openNearby(page, '&nearby=text')
+    const ask = page.getByRole('dialog', { name: /wants to send you text/ })
+    await expect(ask).toContainText('ssh studio@192.168.1.9')
+    await ask.getByRole('button', { name: 'Accept' }).click()
+    const got = page.locator('.activity[data-dir="in"]').first()
+    await expect(got).toContainText('ssh studio@192.168.1.9')
+    await expect(got.getByRole('button', { name: /Copy text from STUDIO-PC/ })).toBeVisible()
+    const card = page.getByRole('region', { name: 'Send text' })
+    await card.getByLabel('Text to send').fill('hello from the laptop')
+    await card.getByLabel('Send to').selectOption({ label: 'STUDIO-PC' })
+    await card.getByRole('button', { name: 'Send', exact: true }).click()
+    await expect(page.locator('.activity[data-dir="out"]').first()).toContainText(
+      'hello from the laptop',
+    )
+    await expect(card.getByRole('button', { name: 'Send what I copied' })).toBeVisible()
+  })
+
   test('a phone without the app gets a code, offered files, and Stop', async ({ page }) => {
     await openNearby(page)
     await page.getByRole('button', { name: 'Show a code to scan' }).click()

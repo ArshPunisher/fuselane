@@ -58,10 +58,12 @@ pub struct RequestView {
     pub total: u64,
     /// Its identity was checked by connecting back to it.
     pub verified: bool,
+    /// When it's a text message rather than files, the text (B10.2).
+    pub text: Option<String>,
 }
 
 /// A transfer to or from a device.
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct TransferView {
     pub id: String,
@@ -76,6 +78,8 @@ pub struct TransferView {
     pub error: Option<String>,
     /// Where a received file was saved.
     pub path: Option<String>,
+    /// A text message instead of a file (B10.2): what it says.
+    pub text: Option<String>,
 }
 
 /// A file offered to the phone page.
@@ -162,7 +166,15 @@ pub struct Nearby {
     /// (a download handed over from another Fuselane, B9.9).
     received: Mutex<HashMap<String, Vec<PathBuf>>>,
     on_received: Mutex<Option<Received>>,
+    /// Puts received text on the clipboard (set by the app), and whether the
+    /// message now arriving came from a verified, trusted computer.
+    on_text: Mutex<Option<OnText>>,
+    auto_copy: std::sync::atomic::AtomicBool,
 }
+
+/// Called with a received text message: who from, the text, and whether it may
+/// go straight to the clipboard (a trusted computer).
+pub type OnText = Arc<dyn Fn(&str, &str, bool) + Send + Sync>;
 
 /// Called with the files of a finished incoming transfer.
 pub type Received = Arc<dyn Fn(Vec<PathBuf>) + Send + Sync>;
@@ -262,6 +274,8 @@ impl Nearby {
             offers: Mutex::new(Vec::new()),
             received: Mutex::new(HashMap::new()),
             on_received: Mutex::new(None),
+            on_text: Mutex::new(None),
+            auto_copy: std::sync::atomic::AtomicBool::new(false),
         })
     }
 
@@ -515,6 +529,91 @@ impl Nearby {
     }
 
     /// Sends `paths` to a device on the list.
+    /// Hears about received text messages (to copy them, or say they arrived).
+    pub fn set_on_text(&self, f: OnText) {
+        *lock(&self.on_text) = Some(f);
+    }
+
+    /// Sends text (what was copied, usually) to a device: Fuselane copies it
+    /// there; LocalSend shows it as a message.
+    pub async fn send_text(
+        self: &Arc<Self>,
+        fingerprint: &str,
+        text: &str,
+    ) -> Result<NearbyView, UiError> {
+        if text.trim().is_empty() {
+            return Err(err(
+                "nothing-to-send",
+                "There's no text to send. Copy something first.",
+                None,
+            ));
+        }
+        if text.len() > fuselane_nearby::proto::MAX_TEXT {
+            return Err(err(
+                "too-big",
+                "That's more than 64 KB of text.",
+                Some("Save it as a file and send the file instead."),
+            ));
+        }
+        let (info, addr) = lock(&self.devices)
+            .get(fingerprint)
+            .map(|s| (s.info.clone(), s.addr))
+            .ok_or_else(|| {
+                err(
+                    "nearby-gone",
+                    "That device isn't on the network anymore.",
+                    Some("Ask them to open Fuselane or LocalSend, then try again."),
+                )
+            })?;
+        let target = Target {
+            addr,
+            fingerprint: (!fingerprint.is_empty()).then(|| fingerprint.to_string()),
+        };
+        let id = format!("text-{}", self.next_request.fetch_add(1, Ordering::Relaxed));
+        let first = text
+            .lines()
+            .next()
+            .unwrap_or("")
+            .chars()
+            .take(80)
+            .collect::<String>();
+        let mut view = TransferView {
+            id: id.clone(),
+            direction: "out",
+            device: info.alias.clone(),
+            name: first,
+            size: text.len() as u64,
+            done: 0,
+            state: "asking",
+            text: Some(text.to_string()),
+            ..TransferView::default()
+        };
+        lock(&self.outgoing).push(Out {
+            view: view.clone(),
+            sent: Arc::new(AtomicU64::new(0)),
+            cancel: Arc::new(AtomicBool::new(false)),
+        });
+        self.publish();
+        let me = self.info();
+        let result = fuselane_nearby::client::send_text(&me, &target, text).await;
+        match result {
+            Ok(()) => {
+                view.state = "done";
+                view.done = view.size;
+            }
+            Err(fuselane_nearby::client::SendError::Declined) => view.state = "declined",
+            Err(e) => {
+                view.state = "failed";
+                view.error = Some(e.to_string());
+            }
+        }
+        if let Some(o) = lock(&self.outgoing).iter_mut().find(|o| o.view.id == id) {
+            o.view = view;
+        }
+        self.publish();
+        Ok(self.view())
+    }
+
     /// Hears about the files of each finished incoming transfer.
     pub fn set_on_received(&self, f: Received) {
         *lock(&self.on_received) = Some(f);
@@ -587,6 +686,7 @@ impl Nearby {
                 state: "asking",
                 error: None,
                 path: None,
+                text: None,
             },
             sent: sent.clone(),
             cancel: cancel.clone(),
@@ -825,6 +925,8 @@ impl Host for Receiver {
             };
             let trusted = verified.as_deref().is_some_and(|fp| n.is_trusted(fp));
             if trusted {
+                // Text from a verified, trusted computer goes straight to the clipboard.
+                n.auto_copy.store(true, Ordering::Relaxed);
                 return Decision::Accept {
                     dir: n.inbox.clone(),
                     only: None,
@@ -857,6 +959,10 @@ impl Host for Receiver {
                         .collect(),
                     total: req.files.values().map(|f| f.size).sum(),
                     verified: verified.is_some(),
+                    text: (req.files.len() == 1)
+                        .then(|| req.files.values().next().and_then(|f| f.message()))
+                        .flatten()
+                        .map(str::to_string),
                 },
                 answer: tx,
                 fingerprint: verified,
@@ -896,6 +1002,7 @@ impl Host for Receiver {
                 state: "receiving",
                 error: None,
                 path: None,
+                text: None,
             },
         );
         n.publish();
@@ -923,6 +1030,7 @@ impl Host for Receiver {
                 state: "receiving",
                 error: None,
                 path: None,
+                text: None,
             });
         // One file: its saved name (it may have been numbered). Several: the folder.
         if !v.name.ends_with(" files") {
@@ -937,6 +1045,30 @@ impl Host for Receiver {
             .entry(session.to_string())
             .or_default()
             .push(path.to_path_buf());
+        n.publish();
+    }
+
+    fn message(&self, from: &DeviceInfo, text: &str) {
+        let Some(n) = self.0.upgrade() else { return };
+        let trusted = n.auto_copy.swap(false, Ordering::Relaxed);
+        let id = format!("text-in-{}", n.next_request.fetch_add(1, Ordering::Relaxed));
+        lock(&n.incoming).insert(
+            id.clone(),
+            TransferView {
+                id,
+                direction: "in",
+                device: from.alias.clone(),
+                name: text.lines().next().unwrap_or("").chars().take(80).collect(),
+                size: text.len() as u64,
+                done: text.len() as u64,
+                state: "done",
+                text: Some(text.to_string()),
+                ..TransferView::default()
+            },
+        );
+        if let Some(f) = lock(&n.on_text).clone() {
+            f(&from.alias, text, trusted);
+        }
         n.publish();
     }
 
@@ -1005,6 +1137,7 @@ impl fuselane_nearby::web::PageHost for PhoneHost {
                 state: "receiving",
                 error: None,
                 path: None,
+                text: None,
             },
         );
         n.publish();
@@ -1133,6 +1266,67 @@ mod tests {
             .collect();
         assert!(names.contains(&"os.iso.fuselane".to_string()));
         assert!(names.contains(&"os.iso.fuselane-handoff".to_string()));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn copied_text_goes_to_another_computer_and_only_a_trusted_one_copies_it() {
+        let a = side("Maya's MacBook Air").await;
+        let b = side("STUDIO-PC").await;
+        introduce(&a, &b).await;
+        introduce(&b, &a).await;
+        let (fa, fb) = (a.n.fingerprint(), b.n.fingerprint());
+        until("b to list a", || {
+            b.n.view().devices.iter().any(|d| d.fingerprint == fa)
+        })
+        .await;
+        let got: Arc<Mutex<Vec<(String, String, bool)>>> = Arc::default();
+        a.n.set_on_text({
+            let got = got.clone();
+            Arc::new(move |from, text, trusted| {
+                lock(&got).push((from.into(), text.into(), trusted));
+            })
+        });
+        // Not trusted yet: a is asked, sees the text, accepts; nothing is auto-copied.
+        a.n.set_everyone(true).await;
+        let sending = {
+            let b = b.n.clone();
+            let fa = fa.clone();
+            tokio::spawn(async move { b.send_text(&fa, "ssh studio@192.168.1.9").await })
+        };
+        until("the request", || a.n.view().request.is_some()).await;
+        let req = a.n.view().request.unwrap();
+        assert_eq!(req.text.as_deref(), Some("ssh studio@192.168.1.9"));
+        a.n.answer(req.id, true, true).unwrap();
+        sending.await.unwrap().unwrap();
+        until("the text", || lock(&got).len() == 1).await;
+        assert_eq!(
+            lock(&got)[0],
+            ("STUDIO-PC".into(), "ssh studio@192.168.1.9".into(), false)
+        );
+        assert!(
+            a.n.view()
+                .transfers
+                .iter()
+                .any(|t| t.text.as_deref() == Some("ssh studio@192.168.1.9"))
+        );
+        assert!(
+            b.n.view()
+                .transfers
+                .iter()
+                .any(|t| t.state == "done" && t.text.is_some())
+        );
+        // Trusted now (the box was ticked): the next text is copied without asking.
+        a.n.set_everyone(false).await;
+        b.n.send_text(&fa, "second").await.unwrap();
+        until("the second text", || lock(&got).len() == 2).await;
+        assert!(lock(&got)[1].2, "trusted, so copied");
+        assert!(a.n.view().request.is_none());
+        let _ = fb;
+        // Nothing to send is refused before anything goes out.
+        assert_eq!(
+            b.n.send_text(&fa, "  ").await.unwrap_err().code,
+            "nothing-to-send"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

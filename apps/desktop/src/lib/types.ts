@@ -138,6 +138,8 @@ export interface NearbyRequest {
   files: string[]
   total: number
   verified: boolean
+  /** A text message instead of files: the text. */
+  text: string | null
 }
 
 export interface NearbyTransfer {
@@ -150,6 +152,8 @@ export interface NearbyTransfer {
   state: 'asking' | 'sending' | 'receiving' | 'done' | 'declined' | 'failed' | 'cancelled'
   error: string | null
   path: string | null
+  /** A text message instead of a file: the text. */
+  text: string | null
 }
 
 /** The phone page while it's on (B8.12). */

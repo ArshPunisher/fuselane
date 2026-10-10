@@ -1046,6 +1046,22 @@ async fn nearby_set_everyone(near: Near<'_>, on: bool) -> Result<nearby::NearbyV
     Ok(near.inner().set_everyone(on).await)
 }
 
+/// Sends text to a device (B10.2): `text`, or what's on the clipboard.
+#[tauri::command]
+async fn nearby_send_text(
+    app: tauri::AppHandle,
+    near: Near<'_>,
+    fingerprint: String,
+    text: Option<String>,
+) -> Result<nearby::NearbyView, UiError> {
+    use tauri_plugin_clipboard_manager::ClipboardExt;
+    let text = match text {
+        Some(t) => t,
+        None => app.clipboard().read_text().unwrap_or_default(),
+    };
+    near.inner().send_text(&fingerprint, &text).await
+}
+
 /// Hands a paused download to another Fuselane over Nearby (B9.9): its partial
 /// file and a manifest go there, and it carries on on that computer.
 #[tauri::command]
@@ -1480,6 +1496,7 @@ fn main() {
     let tor = open_torrents(&svc);
     let snd = open_sends(&svc);
     let near = open_nearby(&svc);
+    let for_text = near.clone();
     {
         // A download handed over from another Fuselane continues here (B9.9).
         let weak = Arc::downgrade(&svc);
@@ -1569,6 +1586,33 @@ fn main() {
         .manage(snd.clone())
         .manage(near.clone())
         .setup(move |app| {
+            {
+                // Text from another computer (B10.2): from a trusted one it goes straight
+                // to the clipboard; either way a notification says it arrived.
+                let app = app.handle().clone();
+                for_text.set_on_text(Arc::new(move |from, text, trusted| {
+                    use tauri_plugin_clipboard_manager::ClipboardExt;
+                    use tauri_plugin_notification::NotificationExt;
+                    if trusted {
+                        let _ = app.clipboard().write_text(text.to_string());
+                    }
+                    let first: String = text.chars().take(60).collect();
+                    let _ = app
+                        .notification()
+                        .builder()
+                        .title(if trusted {
+                            format!("Copied from {from}")
+                        } else {
+                            format!("Text from {from}")
+                        })
+                        .body(if trusted {
+                            format!("{first}. Paste it anywhere.")
+                        } else {
+                            format!("{first}. Open Send to copy it.")
+                        })
+                        .show();
+                }));
+            }
             // "Open it" when a download finishes uses the system's default app.
             {
                 use tauri_plugin_opener::OpenerExt;
@@ -1684,6 +1728,7 @@ fn main() {
             netcheck_report,
             report_problem,
             nearby_handoff,
+            nearby_send_text,
             set_ready_by,
             rename_group,
             files_on_page,

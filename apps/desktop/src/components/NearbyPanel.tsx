@@ -11,6 +11,8 @@ import {
   PaperPlaneTilt,
   QrCode,
   ShieldCheck,
+  TextT,
+  Copy,
   X,
 } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
@@ -294,7 +296,9 @@ function Transfer({ t }: { t: NearbyTransfer }) {
           value={t.state === 'done' ? 1 : running && t.state !== 'asking' ? pct : null}
           size={38}
         />
-        {t.state === 'done' ? (
+        {t.text !== null && t.state === 'done' ? (
+          <TextT size={16} weight="bold" className="done-check" />
+        ) : t.state === 'done' ? (
           <Check size={16} weight="bold" className="done-check" />
         ) : t.direction === 'out' ? (
           <PaperPlaneTilt size={16} />
@@ -303,8 +307,8 @@ function Transfer({ t }: { t: NearbyTransfer }) {
         )}
       </span>
       <span className="activity-text">
-        <span className="activity-name" translate="no" title={t.name}>
-          {t.name}
+        <span className="activity-name" translate="no" title={t.text ?? t.name}>
+          {t.text !== null ? `“${t.name}”` : t.name}
         </span>
         <span className="activity-meta">
           {t.direction === 'out' ? 'To' : 'From'} <span translate="no">{t.device}</span>.{' '}
@@ -333,6 +337,15 @@ function Transfer({ t }: { t: NearbyTransfer }) {
           </button>
         ) : (
           <>
+            {t.text !== null && t.state === 'done' && (
+              <button
+                className="btn btn-sm"
+                aria-label={`Copy text from ${t.device}`}
+                onClick={() => void navigator.clipboard?.writeText(t.text ?? '')}
+              >
+                <Copy size={16} aria-hidden /> Copy
+              </button>
+            )}
             {t.direction === 'in' && t.state === 'done' && t.path && (
               <button className="btn btn-sm" onClick={() => act((b) => b.nearbyReveal(t.id))}>
                 <FolderOpen size={16} aria-hidden /> Show
@@ -349,6 +362,59 @@ function Transfer({ t }: { t: NearbyTransfer }) {
         )}
       </span>
     </li>
+  )
+}
+
+/**
+ * Text between your devices (B10.2): send what you copied, or type something.
+ * A trusted Fuselane computer puts it on its clipboard; LocalSend shows it.
+ */
+function TextCard({ devices }: { devices: DeviceView[] }) {
+  const act = useApp((s) => s.act)
+  const [to, setTo] = useState('')
+  const [text, setText] = useState('')
+  const target = devices.find((d) => d.fingerprint === to) ?? devices[0]
+  if (!devices.length) return null
+  return (
+    <section className="text-card" aria-labelledby="text-title">
+      <h2 className="group" id="text-title">
+        Send text
+      </h2>
+      <textarea
+        aria-label="Text to send"
+        rows={2}
+        maxLength={65536}
+        placeholder="Type or paste, or leave empty to send what you copied"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+      />
+      <div className="text-card-row">
+        <select
+          aria-label="Send to"
+          value={target?.fingerprint ?? ''}
+          onChange={(e) => setTo(e.target.value)}
+        >
+          {devices.map((d) => (
+            <option key={d.fingerprint} value={d.fingerprint}>
+              {d.alias}
+            </option>
+          ))}
+        </select>
+        <button
+          className="btn"
+          disabled={!target}
+          onClick={() =>
+            target &&
+            void act(async (b) => {
+              await b.nearbySendText(target.fingerprint, text.trim() ? text : null)
+              setText('')
+            })
+          }
+        >
+          <PaperPlaneTilt size={16} aria-hidden /> {text.trim() ? 'Send' : 'Send what I copied'}
+        </button>
+      </div>
+    </section>
   )
 }
 
@@ -506,6 +572,7 @@ export function NearbyPanel() {
             </ul>
           )}
         </section>
+        <TextCard devices={nearby.devices} />
         <PhoneCard phone={nearby.phone} />
         {nearby.trusted.length > 0 && (
           <section aria-labelledby="near-trusted">
@@ -583,7 +650,11 @@ export function NearbyRequestDialog() {
               <div>
                 <h2 id="nr-title">
                   <span translate="no">{r.alias}</span> wants to send you{' '}
-                  {r.files.length === 1 ? 'a file' : `${r.files.length} files`}
+                  {r.text !== null
+                    ? 'text'
+                    : r.files.length === 1
+                      ? 'a file'
+                      : `${r.files.length} files`}
                 </h2>
                 <p className="muted">
                   {deviceSub({
@@ -595,20 +666,28 @@ export function NearbyRequestDialog() {
               </div>
             </div>
           </header>
-          <div className="file-summary">
-            <span aria-hidden>
-              <FolderOpen size={18} />
-            </span>
-            <span>
-              <b translate="no">{r.files.length === 1 ? r.files[0] : `${r.files.length} files`}</b>
-              <span className="muted num">{bytes(r.total)}, saves to your downloads folder</span>
-            </span>
-          </div>
+          {r.text !== null ? (
+            <pre className="req-text" translate="no">
+              {r.text}
+            </pre>
+          ) : (
+            <div className="file-summary">
+              <span aria-hidden>
+                <FolderOpen size={18} />
+              </span>
+              <span>
+                <b translate="no">
+                  {r.files.length === 1 ? r.files[0] : `${r.files.length} files`}
+                </b>
+                <span className="muted num">{bytes(r.total)}, saves to your downloads folder</span>
+              </span>
+            </div>
+          )}
           <label className="check">
             <input type="checkbox" checked={trust} onChange={(e) => setTrust(e.target.checked)} />
             <span>
               Trust <span translate="no">{r.alias}</span>. Its files arrive without asking next
-              time.
+              time, and its text goes straight to your clipboard.
             </span>
           </label>
           <footer className="dialog-foot">

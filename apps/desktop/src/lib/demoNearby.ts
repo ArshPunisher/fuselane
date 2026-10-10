@@ -99,6 +99,20 @@ export function createDemoNearby(params: URLSearchParams, emit: () => (e: UiEven
       if (!view.on) {
         view.on = true
         setInterval(send, 1000)
+        if (mode === 'text')
+          setTimeout(() => {
+            view.request = {
+              id: next++,
+              alias: 'STUDIO-PC',
+              kind: 'desktop',
+              model: 'Fuselane (windows)',
+              files: ['message.txt'],
+              total: 22,
+              verified: true,
+              text: 'ssh studio@192.168.1.9',
+            }
+            send()
+          }, 600)
         if (mode === 'request')
           setTimeout(() => {
             view.request = {
@@ -109,6 +123,7 @@ export function createDemoNearby(params: URLSearchParams, emit: () => (e: UiEven
               files: ['Holiday video.mov'],
               total: 2.4 * 1024 * MB,
               verified: true,
+              text: null,
             }
             send()
           }, 600)
@@ -143,6 +158,7 @@ export function createDemoNearby(params: URLSearchParams, emit: () => (e: UiEven
         state: 'asking',
         error: null,
         path: null,
+        text: null,
       }
       view.transfers.unshift(t)
       send()
@@ -160,11 +176,45 @@ export function createDemoNearby(params: URLSearchParams, emit: () => (e: UiEven
       )
       return clone()
     },
+    nearbySendText: async (fingerprint: string, text: string | null) => {
+      const d = devices.find((x) => x.fingerprint === fingerprint)
+      if (!d) throw err('nearby-gone', "That device isn't on the network anymore.", null)
+      const body = text ?? 'https://releases.example.org/26.04/ubuntu-26.04-desktop-amd64.iso'
+      if (!body.trim())
+        throw err('nothing-to-send', "There's no text to send. Copy something first.", null)
+      view.transfers.unshift({
+        id: `text-${next++}`,
+        direction: 'out',
+        device: d.alias,
+        name: body.split('\n')[0]!.slice(0, 80),
+        size: body.length,
+        done: body.length,
+        state: 'done',
+        error: null,
+        path: null,
+        text: body,
+      })
+      send()
+      return clone()
+    },
     nearbyAnswer: async (id: number, accept: boolean, trust: boolean) => {
       const r = view.request
       if (!r || r.id !== id) throw err('nearby-gone', 'That request has ended.', null)
       view.request = null
-      if (accept) {
+      if (accept && r.text !== null) {
+        view.transfers.unshift({
+          id: `text-in-${next++}`,
+          direction: 'in',
+          device: r.alias,
+          name: r.text.split('\n')[0]!.slice(0, 80),
+          size: r.text.length,
+          done: r.text.length,
+          state: 'done',
+          error: null,
+          path: null,
+          text: r.text,
+        })
+      } else if (accept) {
         if (trust) {
           view.trusted.push({ fingerprint: 'C3', alias: r.alias, since: '2026-10-09' })
           const d = devices.find((x) => x.alias === r.alias)
@@ -180,6 +230,7 @@ export function createDemoNearby(params: URLSearchParams, emit: () => (e: UiEven
           state: 'receiving',
           error: null,
           path: null,
+          text: null,
         }
         view.transfers.unshift(t)
         progress(t, 0.08 * t.size, () => {

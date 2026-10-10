@@ -4452,3 +4452,47 @@ html[data-hidden] .orb b {
   color: var(--mute);
   font-size: 13px;
 }
+
+/* ---------- Text between devices (B10.2) ---------- */
+
+.text-card {
+  display: grid;
+  gap: 8px;
+}
+
+.text-card textarea {
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+  color: var(--ink);
+  font: inherit;
+  resize: vertical;
+}
+
+.text-card-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.text-card-row select {
+  flex: 1;
+  min-width: 140px;
+}
+
+.req-text {
+  max-height: 160px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--ink);
+  font: 13px/1.5 var(--font-mono, ui-monospace);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

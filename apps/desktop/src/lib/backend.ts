@@ -182,6 +182,8 @@ export interface Backend {
   nearbySetEveryone(on: boolean): Promise<NearbyView>
   nearbyPick(): Promise<string[]>
   nearbySend(fingerprint: string, paths: string[]): Promise<NearbyView>
+  /** Sends text to a device; null sends what's on the clipboard. */
+  nearbySendText(fingerprint: string, text: string | null): Promise<NearbyView>
   /** Hands a paused download to another Fuselane, which carries on with it. */
   nearbyHandoff(id: number, fingerprint: string): Promise<NearbyView>
   nearbyAnswer(id: number, accept: boolean, trust: boolean): Promise<NearbyView>
@@ -326,6 +328,7 @@ async function tauriBackend(): Promise<Backend> {
     sendsState: () => call('sends_state'),
     nearbyStart: () => call('nearby_start'),
     nearbyHandoff: (id, fingerprint) => call('nearby_handoff', { id, fingerprint }),
+    nearbySendText: (fingerprint, text) => call('nearby_send_text', { fingerprint, text }),
     nearbyState: () => call('nearby_state'),
     nearbySetEveryone: (on) => call('nearby_set_everyone', { on }),
     nearbyPick: () => call('nearby_pick'),
