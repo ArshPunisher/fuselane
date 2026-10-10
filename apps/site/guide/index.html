@@ -338,8 +338,27 @@
                 <dt>Hours, and long downloads only</dt>
                 <dd>
                   Use a network only between set times, such as the phone on a night plan; downloads
-                  move over by themselves. Or choose Always, Long downloads or Never per network, so
-                  short downloads leave your phone&rsquo;s data alone.
+                  move over by themselves. <b>Before midnight</b> sets 22:00 to 00:00, for a phone
+                  on a daily data pack that expires at midnight. Or choose Always, Long downloads or
+                  Never per network, so short downloads leave your phone&rsquo;s data alone.
+                </dd>
+              </div>
+              <div>
+                <dt>Throttled networks</dt>
+                <dd>
+                  When one network slows to a crawl while the others keep going (a phone cut to
+                  64&nbsp;kbps after its daily data, say), Fuselane stops giving it work and the
+                  others carry the rest. The download says so, and the network is tried again every
+                  few minutes. A server that is slow on every network doesn&rsquo;t count.
+                </dd>
+              </div>
+              <div>
+                <dt>Proxy per network</dt>
+                <dd>
+                  For a network that only reaches the internet through a proxy, set an HTTP or
+                  SOCKS5 proxy for it in Setup. Downloads on it go through the proxy; https stays
+                  encrypted end to end. Your system&rsquo;s proxy settings aren&rsquo;t used, and
+                  torrents still connect directly.
                 </dd>
               </div>
               <div>
