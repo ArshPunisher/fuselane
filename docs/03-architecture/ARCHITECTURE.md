@@ -140,3 +140,4 @@ storage, limits, crypto are leaves used by the engines/core.
 | Error taxonomy and messages | [ERRORS.md](ERRORS.md) |
 | Threat model | [SECURITY.md](SECURITY.md) |
 | Per-OS specifics and packaging | [PLATFORMS.md](PLATFORMS.md) |
+| Translations (English, Hindi): adding a string or a language | [I18N.md](../07-design/I18N.md) |
