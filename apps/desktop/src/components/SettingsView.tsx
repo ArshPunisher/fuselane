@@ -659,6 +659,7 @@ function Group({
 export function SettingsView() {
   const info = useApp((s) => s.info)
   const demo = useApp((s) => s.backend?.demo)
+  const act = useApp((s) => s.act)
   return (
     <section className="page" aria-labelledby="set-title">
       <header className="page-head">
@@ -742,6 +743,15 @@ export function SettingsView() {
           </div>
           <ShortcutsSetting />
           <DiagnosticsSetting />
+          <div className="setting" data-testid="made-by">
+            <div>
+              <p className="setting-name">{t('Made by ClearCraft Labs')}</p>
+              <p className="muted">{t('An independent studio making clear, useful software.')}</p>
+            </div>
+            <button type="button" className="btn" onClick={() => void act((b) => b.openMaker())}>
+              {t('Visit the website')}
+            </button>
+          </div>
           <div className="setting">
             <div>
               <p className="setting-name">{t('Version')}</p>

@@ -35,6 +35,7 @@ const ATTRS = new Set([
 /** Not translated: brand names, standards and units (docs/07-design/I18N.md). */
 const KEEP = [
   'Fuselane',
+  'ClearCraft Labs',
   'Fuse Send',
   'LocalSend',
   'AriaNg',

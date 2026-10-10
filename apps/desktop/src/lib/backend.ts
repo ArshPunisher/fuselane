@@ -185,6 +185,8 @@ export interface Backend {
   nameTaken(dir: string | null, name: string): Promise<boolean>
   /** Opens this version's release notes in the browser. */
   openReleaseNotes(): Promise<void>
+  /** Opens ClearCraft Labs' website (who makes Fuselane). */
+  openMaker(): Promise<void>
   /** Saves limits (validated by the backend); returns what was saved. */
   setLimits(limits: LimitsView): Promise<LimitsView>
   /** Continues a stopped download from a new link to the same file. */
@@ -386,6 +388,7 @@ async function tauriBackend(): Promise<Backend> {
     cancelUpdate: () => call('cancel_update'),
     nameTaken: (dir, name) => call('name_taken', { dir, name }),
     openReleaseNotes: () => call('open_release_notes'),
+    openMaker: () => call('open_maker'),
     setLimits: (limits) => call('set_limits', { limits }),
     fixLink: (id, url) => call('fix_link', { id, url }),
     startOver: (id) => call('start_over', { id }),

@@ -38,9 +38,10 @@
     "category": "Utility",
     "shortDescription": "Downloads over every network at once",
     "longDescription": "Fuselane splits each download across Wi-Fi, Ethernet and a tethered phone at the same time, then fuses the parts into one file.",
-    "copyright": "Copyright 2026 The Fuselane Authors",
+    "publisher": "ClearCraft Labs",
+    "copyright": "Copyright 2026 ClearCraft Labs",
     "license": "Apache-2.0",
-    "homepage": "https://github.com/ArshPunisher/fuselane",
+    "homepage": "https://fuselane.app",
     "macOS": {
       "signingIdentity": "-",
       "minimumSystemVersion": "13.3"

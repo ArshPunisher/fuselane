@@ -676,4 +676,5 @@ export const hiBackend: Readonly<Record<string, string>> = {
     'ब्राउज़र खुद खोलें और उसके स्टोर में Fuselane खोजें।',
   'That size is too big.': 'यह साइज़ बहुत बड़ा है।',
   'Pick a size up to 1 TB.': '1 TB तक का साइज़ चुनें।',
+  "Couldn't open the website: {e}": 'वेबसाइट नहीं खुल सकी: {e}',
 }

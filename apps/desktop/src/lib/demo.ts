@@ -707,6 +707,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       flatpak,
     }),
     openReleaseNotes: async () => {},
+    openMaker: async () => void opened.push('maker'),
     listJobs: async () => jobs.map(view),
     listNetworks: async () =>
       NETWORKS.map((n) => ({

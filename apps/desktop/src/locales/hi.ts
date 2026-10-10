@@ -1118,6 +1118,10 @@ export const hi: Readonly<Record<string, string>> = {
     'एक्सटेंशन जोड़ें, फिर ब्राउज़र के डाउनलोड अपने आप यहां आएंगे।',
   'Turn on in {browser}': '{browser} में चालू करें',
   'Not now': 'अभी नहीं',
+  'Made by ClearCraft Labs': 'ClearCraft Labs ने बनाया',
+  'An independent studio making clear, useful software.':
+    'एक स्वतंत्र स्टूडियो, जो साफ़ और काम का सॉफ़्टवेयर बनाता है।',
+  'Visit the website': 'वेबसाइट देखें',
   'Looking at your browsers': 'आपके ब्राउज़र देखे जा रहे हैं',
   'No supported browser found. Fuselane works with Chrome, Edge, Brave, Vivaldi and Firefox.':
     'कोई समर्थित ब्राउज़र नहीं मिला। Fuselane Chrome, Edge, Brave, Vivaldi और Firefox के साथ चलता है।',

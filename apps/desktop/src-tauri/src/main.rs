@@ -178,6 +178,15 @@ async fn report_problem(
 
 /// Opens this version's release notes in the browser. The URL is built here from
 /// the app's own version, so the window can't open arbitrary links.
+/// Opens ClearCraft Labs' site (the studio that makes Fuselane), from About.
+#[tauri::command]
+fn open_maker(app: tauri::AppHandle) -> Result<(), UiError> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_url("https://clearcraftlabs.com/?ref=fuselane-app", None::<&str>)
+        .map_err(|e| ui_error("open-failed", format!("Couldn't open the website: {e}")))
+}
+
 #[tauri::command]
 fn open_release_notes(app: tauri::AppHandle) -> Result<(), UiError> {
     use tauri_plugin_opener::OpenerExt;
@@ -2136,6 +2145,7 @@ fn main() {
             diagnostics,
             check_update,
             open_release_notes,
+            open_maker,
             install_update,
             cancel_update,
             nearby_pick,

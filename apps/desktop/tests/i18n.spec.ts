@@ -25,7 +25,7 @@ async function englishLeft(page: Page, root: string): Promise<string[]> {
   return page.locator(root).evaluateAll((els) => {
     // Brand names, standards and units stay as they are (docs/07-design/I18N.md).
     const keep =
-      /Fuselane|Fuse Send|LocalSend|AriaNg|aria2|yt-dlp|ffmpeg|BitTorrent|GitHub|Wi-Fi|Ethernet|VPN|USB|DNS|SHA-256|RSS|Metalink|QR|MB\/s|Mbps|[KMGT]i?B|Esc|Ctrl/g
+      /Fuselane|ClearCraft Labs|Fuse Send|LocalSend|AriaNg|aria2|yt-dlp|ffmpeg|BitTorrent|GitHub|Wi-Fi|Ethernet|VPN|USB|DNS|SHA-256|RSS|Metalink|QR|MB\/s|Mbps|[KMGT]i?B|Esc|Ctrl/g
     const out: string[] = []
     for (const el of els) {
       const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
