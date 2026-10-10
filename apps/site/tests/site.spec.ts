@@ -721,3 +721,23 @@ test.describe('the Fuse Send link page', () => {
     ).toBeLessThanOrEqual(0)
   })
 })
+
+test('the landing pages load, are in the sitemap and are linked from the footer', async ({
+  page,
+}) => {
+  for (const [path, heading] of [
+    ['/idm-alternative/', 'A free IDM alternative'],
+    ['/combine-internet/', 'Combine Wi-Fi and mobile data'],
+    ['/send-large-files/', 'Send large files free'],
+  ]) {
+    await page.goto(path)
+    await expect(page.getByRole('heading', { level: 1 })).toContainText(heading)
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+      'href',
+      `https://fuselane.app${path}`,
+    )
+    await expect(page.locator(`footer a[href$="${path.slice(1)}"]`)).toHaveCount(1)
+  }
+  const sitemap = await (await page.request.get('/sitemap.xml')).text()
+  expect(sitemap).toContain('https://fuselane.app/idm-alternative/')
+})

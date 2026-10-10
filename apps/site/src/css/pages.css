@@ -1021,3 +1021,79 @@
 .legal li {
   color: var(--body);
 }
+
+/* ---------- Landing pages (IDM alternative, combining, sending) ---------- */
+
+.hero-cta {
+  margin-top: 20px;
+}
+
+.landing ul,
+.landing ol:not(.doc-steps) {
+  display: grid;
+  gap: 8px;
+  padding-left: 20px;
+}
+
+.landing li {
+  color: var(--body);
+}
+
+.cmp-wrap {
+  overflow-x: auto;
+  margin-top: 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-panel);
+}
+
+.cmp {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+.cmp th,
+.cmp td {
+  padding: 12px 14px;
+  text-align: left;
+  vertical-align: top;
+  border-top: 1px solid var(--hairline);
+}
+
+.cmp thead th {
+  border-top: 0;
+  color: var(--ink);
+  font-weight: 600;
+  background: var(--surface-1);
+}
+
+.cmp tbody th {
+  color: var(--ink);
+  font-weight: 500;
+  min-width: 9rem;
+}
+
+.cmp td {
+  color: var(--body);
+}
+
+.cmp td:nth-child(2) {
+  color: var(--ink);
+  background: var(--fuse-soft);
+}
+
+@media (max-width: 560px) {
+  .cmp {
+    font-size: 14px;
+  }
+
+  .cmp th,
+  .cmp td {
+    padding: 10px;
+  }
+
+  .cmp tbody th {
+    min-width: 0;
+    width: 34%;
+  }
+}
