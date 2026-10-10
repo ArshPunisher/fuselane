@@ -13,6 +13,7 @@ mod native;
 mod nearby;
 mod opens;
 mod power;
+mod remote;
 mod reports;
 mod selftest;
 mod sends;
@@ -37,6 +38,7 @@ type State<'a> = tauri::State<'a, Arc<Service>>;
 type Tor<'a> = tauri::State<'a, Arc<torrents::Torrents>>;
 type Snd<'a> = tauri::State<'a, Arc<sends::Sends>>;
 type Near<'a> = tauri::State<'a, Arc<nearby::Nearby>>;
+type Rem<'a> = tauri::State<'a, Arc<remote::Remote>>;
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1192,6 +1194,27 @@ async fn nearby_phone_text(
     near.phone_text(text).await
 }
 
+/// Remote control for aria2 tools (8.7, ADR 0013).
+#[tauri::command]
+fn remote_state(rem: Rem<'_>) -> remote::RemoteView {
+    rem.view()
+}
+
+#[tauri::command]
+async fn remote_set(
+    rem: Rem<'_>,
+    on: bool,
+    lan: bool,
+    port: u16,
+) -> Result<remote::RemoteView, UiError> {
+    rem.set(on, lan, port).await
+}
+
+#[tauri::command]
+async fn remote_new_secret(rem: Rem<'_>) -> Result<remote::RemoteView, UiError> {
+    rem.new_secret().await
+}
+
 #[tauri::command]
 fn nearby_forget(near: Near<'_>, fingerprint: String) -> nearby::NearbyView {
     near.forget(&fingerprint)
@@ -1570,6 +1593,7 @@ fn main() {
     let snd = open_sends(&svc);
     let near = open_nearby(&svc);
     let for_text = near.clone();
+    let rem = remote::Remote::new(&svc, Arc::new(nearby::lan_addrs));
     {
         // A download handed over from another Fuselane continues here (B9.9).
         let weak = Arc::downgrade(&svc);
@@ -1658,6 +1682,7 @@ fn main() {
         .manage(tor.clone())
         .manage(snd.clone())
         .manage(near.clone())
+        .manage(rem.clone())
         .setup(move |app| {
             {
                 // Text from another computer (B10.2): from a trusted one it goes straight
@@ -1754,6 +1779,9 @@ fn main() {
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 }
             });
+            // Remote control (ADR 0013), when it was left on.
+            let rem = rem.clone();
+            tauri::async_runtime::spawn(async move { rem.apply().await });
             // Nearby: re-announce while visible, drop stale devices, refresh progress.
             let near = near.clone();
             tauri::async_runtime::spawn(async move {
@@ -1848,6 +1876,9 @@ fn main() {
             nearby_phone,
             nearby_phone_offer,
             nearby_phone_text,
+            remote_state,
+            remote_set,
+            remote_new_secret,
             nearby_cancel,
             nearby_clear,
             nearby_reveal,

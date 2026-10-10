@@ -224,7 +224,7 @@ The owner asked for more built-in features that cost nothing to run (no paid tie
 - [x] 8.5 Categories and auto-folders, search, sort (sort by type into folders; search and filters)
 - [x] 8.6 Per-job speed limit (live, kept with the job)
 - [x] 8.10 IDM parity, small things: Download later, export/import the list, catch copied links (opt-in), logins in links (HTTP Basic), redirects followed (up to 5, credentials never cross sites)
-- [ ] 8.7 Remote control: local web UI + aria2-compatible JSON-RPC (with auth)
+- [ ] 8.7 Remote control: local web UI + aria2-compatible JSON-RPC (with auth) (done: aria2-compatible JSON-RPC over HTTP with a secret, ADR 0013, Settings → Other apps; to do: WebSocket, local web UI)
 - [ ] 8.8 i18n framework + Hindi
 - [ ] 8.9 Bring-your-own S3 bucket for uploads (keychain credentials)
 

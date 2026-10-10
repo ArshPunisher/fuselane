@@ -10,6 +10,7 @@ import { createDemoTorrents } from './demoTorrents'
 import { createDemoSends } from './demoSends'
 import { createDemoNearby } from './demoNearby'
 import type {
+  RemoteView,
   AllowanceView,
   Automation,
   AutomationView,
@@ -430,6 +431,15 @@ export function createDemoBackend(params: URLSearchParams): Backend {
 
   let maxRunning = 3
   let findSums = true
+  let remote = { on: false, lan: false, port: 6800, secret: '9f2c41d07be35a68c1e4f0d2a7b96e13' }
+  const remoteView = (): RemoteView => ({
+    ...remote,
+    urls: [
+      `http://127.0.0.1:${remote.port}/jsonrpc`,
+      ...(remote.lan ? [`http://192.168.1.24:${remote.port}/jsonrpc`] : []),
+    ],
+    problem: null,
+  })
   const netCheck: NetCheckView = {
     running: false,
     phase: null,
@@ -1022,6 +1032,21 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         }
       })
       return { days, labels: { en0: 'Wi-Fi', en7: 'iPhone USB', en5: 'Ethernet' } }
+    },
+    remoteState: async () => remoteView(),
+    remoteSet: async (on: boolean, lan: boolean, port: number) => {
+      if (!Number.isInteger(port) || port < 1024 || port > 65535)
+        throw err(
+          'bad-value',
+          'Pick a port from 1024 to 65535.',
+          '6800 is what aria2 tools expect.',
+        )
+      remote = { ...remote, on, lan, port }
+      return remoteView()
+    },
+    remoteNewSecret: async () => {
+      remote = { ...remote, secret: remote.secret.split('').reverse().join('') }
+      return remoteView()
     },
     netCheckState: async () => structuredClone(netCheck),
     netCheckStart: async () => {

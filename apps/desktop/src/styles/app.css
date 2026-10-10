@@ -1921,6 +1921,68 @@ kbd {
   justify-self: start;
 }
 
+/* Remote control for aria2 apps */
+.remote {
+  display: grid;
+  gap: 12px;
+}
+
+.remote-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 6px 16px;
+  margin: 0;
+}
+
+.remote-facts dt {
+  grid-column: 1;
+  color: var(--mute);
+  font-size: 13px;
+}
+
+.remote-facts dd {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+}
+
+.remote-facts dd .num {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.remote .check .field-help {
+  display: block;
+}
+
+.remote-port {
+  display: grid;
+  grid-template-columns: minmax(0, 200px) auto;
+  align-items: start;
+  gap: 12px 16px;
+}
+
+.remote-port .btn {
+  margin-top: 22px;
+  justify-self: start;
+}
+
+@media (max-width: 640px) {
+  .remote-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .remote-facts dt,
+  .remote-facts dd {
+    grid-column: 1;
+  }
+}
+
 @media (max-width: 640px) {
   .share-limits {
     grid-template-columns: minmax(0, 1fr);

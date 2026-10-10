@@ -2,6 +2,7 @@
 // plain browser (pnpm dev, Playwright) it uses the demo engine in ./demo.ts,
 // and the UI says so.
 import type {
+  RemoteView,
   UsageHistory,
   HaveView,
   MediaInfo,
@@ -120,6 +121,9 @@ export interface Backend {
   diagnostics(): Promise<string>
   /** Bytes per network per day, for the Data used chart. */
   usageHistory(): Promise<UsageHistory>
+  remoteState(): Promise<RemoteView>
+  remoteSet(on: boolean, lan: boolean, port: number): Promise<RemoteView>
+  remoteNewSecret(): Promise<RemoteView>
   /** Network check (B10.1): results so far, start, stop, and the report. */
   netCheckState(): Promise<NetCheckView>
   netCheckStart(): Promise<NetCheckView>
@@ -307,6 +311,9 @@ async function tauriBackend(): Promise<Backend> {
     unseenCrash: () => call('unseen_crash'),
     netCheckState: () => call('netcheck_state'),
     usageHistory: () => call('usage_history'),
+    remoteState: () => call('remote_state'),
+    remoteSet: (on, lan, port) => call('remote_set', { on, lan, port }),
+    remoteNewSecret: () => call('remote_new_secret'),
     netCheckStart: () => call('netcheck_start'),
     netCheckCancel: () => call('netcheck_cancel'),
     netCheckReport: () => call('netcheck_report'),

@@ -4,6 +4,7 @@ import { toUiError } from '../lib/backend'
 import type { SeedSettings, UiError } from '../lib/types'
 import { LimitField } from './LimitField'
 import { SlowToggle } from './SlowMode'
+import { RemoteSetting } from './RemoteSetting'
 import {
   DownloadsAtOnceSetting,
   KeepAwakeSetting,
@@ -638,6 +639,9 @@ export function SettingsView() {
         <Group title="Torrents and lookups">
           <SharingSetting />
           <LookupSetting />
+        </Group>
+        <Group title="Other apps">
+          <RemoteSetting />
         </Group>
         <Group title="About">
           <UpdateSetting />

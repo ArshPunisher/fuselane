@@ -1819,3 +1819,33 @@ test.describe('Nearby', () => {
     await expect(page.locator('.radar')).toHaveAttribute('data-searching', 'true')
   })
 })
+
+test('remote control for aria2 apps: on, address, secret, network and port', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Settings' }).first().click()
+  const toggle = page.getByRole('switch', { name: 'Remote control for aria2 apps' })
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-checked', 'true')
+  await expect(page.locator('.remote-facts')).toContainText('http://127.0.0.1:6800/jsonrpc')
+  // The secret stays hidden until asked for; a new one replaces it.
+  await expect(page.locator('.remote-facts')).not.toContainText('9f2c41d0')
+  await page.getByRole('button', { name: 'Show the secret' }).click()
+  await expect(page.locator('.remote-facts')).toContainText('9f2c41d07be35a68c1e4f0d2a7b96e13')
+  await page.getByRole('button', { name: 'New secret' }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'New secret made.' })).toBeVisible()
+  await expect(page.locator('.remote-facts')).not.toContainText('9f2c41d07be35a68')
+  // Devices on the network get their own address.
+  await page.getByRole('checkbox', { name: /Allow phones and computers/ }).check()
+  await expect(page.locator('.remote-facts')).toContainText('http://192.168.1.24:6800/jsonrpc')
+  // A port below 1024 is refused with the reason, a good one is saved.
+  const port = page.getByRole('spinbutton', { name: 'Port' })
+  await port.fill('80')
+  await page.getByRole('button', { name: 'Save' }).last().click()
+  await expect(page.locator('#remote-port-err')).toContainText('1024 to 65535')
+  await port.fill('6801')
+  await page.getByRole('button', { name: 'Save' }).last().click()
+  await expect(page.locator('.remote-facts')).toContainText('http://127.0.0.1:6801/jsonrpc')
+  await toggle.click()
+  await expect(page.locator('.remote-facts')).toHaveCount(0)
+})

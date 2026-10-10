@@ -520,6 +520,19 @@ export interface MediaTools {
 }
 
 /** Bytes per network per day (B10.5). */
+/** Remote control for aria2 tools (8.7, ADR 0013). */
+export interface RemoteView {
+  on: boolean
+  /** Devices on the local network may connect too. */
+  lan: boolean
+  port: number
+  secret: string
+  /** Addresses to give an aria2 tool, this computer's first. */
+  urls: string[]
+  /** Why it isn't running although it's on. */
+  problem: string | null
+}
+
 export interface UsageHistory {
   days: { day: string; nets: Record<string, number> }[]
   labels: Record<string, string>
