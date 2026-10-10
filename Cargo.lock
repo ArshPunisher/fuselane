@@ -1881,6 +1881,7 @@ dependencies = [
  "librqbit",
  "minisign-verify",
  "qrcode",
+ "rusqlite",
  "semver",
  "serde",
  "serde_json",

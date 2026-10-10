@@ -52,6 +52,9 @@ fuselane-storage.workspace = true
 fuselane-send.workspace = true
 fuselane-nearby.workspace = true
 fuselane-rpc.workspace = true
+# Reads the SQLite error code when the list can't be opened (src/startup.rs);
+# the same crate and version as fuselane-core, so nothing new is built.
+rusqlite = { version = "0.37", features = ["bundled"] }
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 
 # XDG portals in a Flatpak (src/portal.rs): both are already in the build through

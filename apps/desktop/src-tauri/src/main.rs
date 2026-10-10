@@ -22,6 +22,7 @@ mod reports;
 mod selftest;
 mod sends;
 mod service;
+mod startup;
 mod stream;
 mod torrents;
 mod unpack;
@@ -640,6 +641,36 @@ async fn check_update(app: tauri::AppHandle) -> Result<Option<UpdateInfo>, UiErr
 /// built-in key), after pausing downloads so their progress is saved, then restarts.
 #[tauri::command]
 async fn install_update(app: tauri::AppHandle, svc: State<'_>) -> Result<(), UiError> {
+    let svc = svc.inner().clone();
+    let send: ProgressSink = {
+        let svc = svc.clone();
+        Arc::new(move |progress| svc.send(UiEvent::Update { progress }))
+    };
+    install_with(&app, send, || async move {
+        svc.pause_all();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while svc.running() > 0 && std::time::Instant::now() < deadline {
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    })
+    .await
+}
+
+/// Where update progress goes: the event channel in the app, a per-call
+/// channel in the startup-problem window (startup.rs).
+type ProgressSink = Arc<dyn Fn(update::UpdateProgress) + Send + Sync>;
+
+/// Checks, downloads, verifies and installs the update, then restarts into it.
+/// `before_download` runs once an update is found (the app pauses downloads).
+async fn install_with<F, Fut>(
+    app: &tauri::AppHandle,
+    send: ProgressSink,
+    before_download: F,
+) -> Result<(), UiError>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
     use tauri_plugin_updater::UpdaterExt;
     // The app's files are read-only in a Flatpak, and the feed offers the AppImage.
     if let Some(e) = flatpak::updates_error(flatpak::id()) {
@@ -658,20 +689,14 @@ async fn install_update(app: tauri::AppHandle, svc: State<'_>) -> Result<(), UiE
         .await
         .map_err(|e| fail(&e))?
         .ok_or_else(|| ui_error("no-update", "There's no update to install.".into()))?;
-    svc.pause_all();
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    while svc.running() > 0 && std::time::Instant::now() < deadline {
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-    }
-    let bytes = download_update(&app, &svc, &update).await?;
-    svc.send(UiEvent::Update {
-        progress: update::UpdateProgress {
-            phase: "installing",
-            done: bytes.len() as u64,
-            total: Some(bytes.len() as u64),
-            rate: 0,
-            networks: 0,
-        },
+    before_download().await;
+    let bytes = download_update(app, &send, &update).await?;
+    send(update::UpdateProgress {
+        phase: "installing",
+        done: bytes.len() as u64,
+        total: Some(bytes.len() as u64),
+        rate: 0,
+        networks: 0,
     });
     update.install(bytes).map_err(|e| fail(&e))?;
     app.restart();
@@ -697,7 +722,7 @@ fn cancel_update() {
 /// updater's own single-connection download (which verifies too) is the fallback.
 async fn download_update(
     app: &tauri::AppHandle,
-    svc: &Arc<Service>,
+    send: &ProgressSink,
     update: &tauri_plugin_updater::Update,
 ) -> Result<Vec<u8>, UiError> {
     use fuselane_core::runner::{RunOptions, fetch};
@@ -719,16 +744,14 @@ async fn download_update(
         .map(str::to_string)
         .ok_or_else(|| failed("this build has no update key".into()))?;
     let send_progress = {
-        let svc = svc.clone();
+        let send = send.clone();
         move |done: u64, total: Option<u64>, rate: u64, networks: u32| {
-            svc.send(UiEvent::Update {
-                progress: update::UpdateProgress {
-                    phase: "downloading",
-                    done,
-                    total,
-                    rate,
-                    networks,
-                },
+            send(update::UpdateProgress {
+                phase: "downloading",
+                done,
+                total,
+                rate,
+                networks,
             });
         }
     };
@@ -1544,19 +1567,19 @@ fn watch_for_shell(app: tauri::AppHandle, svc: &Arc<Service>) {
     }));
 }
 
-fn open_service() -> Result<Arc<Service>, String> {
-    let store = fuselane_core::open_default().map_err(|e| e.to_string())?;
+fn open_service() -> Result<Arc<Service>, startup::Failure> {
+    let store = fuselane_core::open_default().map_err(startup::Failure::Open)?;
     if let Some(aside) = &store.recovered_from {
         eprintln!(
             "fuselane: the download list was damaged, so a fresh one was started. The old file is kept at {}.",
             aside.display()
         );
     }
-    let home = fuselane_core::home::home()?;
     let downloads = dirs::download_dir()
         .or_else(dirs::home_dir)
-        .unwrap_or_else(|| home.clone());
-    Service::new(store, downloads).map_err(|e| e.message)
+        .or_else(|| fuselane_core::home::home().ok())
+        .unwrap_or_else(std::env::temp_dir);
+    Service::new(store, downloads).map_err(startup::Failure::Service)
 }
 
 fn open_sends(svc: &Arc<Service>) -> Arc<sends::Sends> {
@@ -1693,11 +1716,20 @@ fn main() {
         println!("fuselane-desktop {}", env!("CARGO_PKG_VERSION"));
         return;
     }
+    // Made once: the macro embeds the bundle's Info.plist, which can't be done twice.
+    let context = tauri::generate_context!();
     let svc = match open_service() {
         Ok(s) => s,
-        Err(e) => {
-            eprintln!("fuselane: {e}");
-            std::process::exit(1);
+        Err(failure) => {
+            // Launched from Finder or the Start menu nobody sees stderr: open a
+            // window that explains it (and can update) instead of exiting.
+            eprintln!("fuselane: {failure}");
+            reports::log(&format!("couldn't start: {failure}"));
+            startup::run(
+                startup::classify(&failure, fuselane_core::home::home().ok()),
+                context,
+            );
+            return;
         }
     };
     let on_exit = svc.clone();
@@ -1975,6 +2007,7 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            startup::startup_problem,
             app_info,
             list_jobs,
             list_networks,
@@ -2103,7 +2136,7 @@ fn main() {
             reveal_received,
             subscribe
         ])
-        .build(tauri::generate_context!());
+        .build(context);
     match result {
         Ok(app) => app.run(move |app, event| {
             // macOS delivers "Open with" and magnet links as URLs.
