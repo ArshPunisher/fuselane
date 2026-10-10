@@ -1246,8 +1246,10 @@ async fn feeds_add(
     exclude: String,
     every: u32,
     latest: bool,
+    start_torrents: bool,
 ) -> Result<Vec<feeds::FeedView>, UiError> {
-    fds.add(&url, &include, &exclude, every, latest).await
+    fds.add(&url, &include, &exclude, every, latest, start_torrents)
+        .await
 }
 
 #[tauri::command]
@@ -1257,8 +1259,9 @@ fn feeds_update(
     include: String,
     exclude: String,
     every: u32,
+    start_torrents: bool,
 ) -> Result<Vec<feeds::FeedView>, UiError> {
-    fds.update(id, &include, &exclude, every)
+    fds.update(id, &include, &exclude, every, start_torrents)
 }
 
 #[tauri::command]
@@ -1671,7 +1674,11 @@ fn main() {
     let near = open_nearby(&svc);
     let for_text = near.clone();
     let rem = remote::Remote::new(&svc, Arc::new(nearby::lan_addrs));
-    let fds = feeds::Feeds::new(&svc, feeds::real_fetch());
+    let fds = feeds::Feeds::new(
+        &svc,
+        feeds::real_fetch(),
+        feeds::real_torrents(Arc::downgrade(&tor)),
+    );
     let wat = watch::Watch::new(&svc, watch::real_torrents(Arc::downgrade(&tor)));
     {
         // A download handed over from another Fuselane continues here (B9.9).
