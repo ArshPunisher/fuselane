@@ -25,6 +25,12 @@ export function startStory() {
     if (!reduced && changed)
       slot.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 280, easing: 'ease-out' })
   }
+  // Phones: no long scroll through empty space. The card plays the three
+  // steps by itself while it's on screen, with tabs to pick one.
+  if (matchMedia('(max-width: 959px)').matches) {
+    playOnPhones(visual, steps, show, reduced)
+    return
+  }
   // Start from the first step when the section is still below the fold.
   show(visual.getBoundingClientRect().top > innerHeight ? '1' : (visual.dataset.step ?? '1'))
   const io = new IntersectionObserver(
@@ -37,6 +43,63 @@ export function startStory() {
   steps.forEach((s) => io.observe(s))
   // The falling parts only move while the picture is on screen.
   watch(visual, (v) => visual.toggleAttribute('data-play', v))
+}
+
+/** Seconds each step shows before the next, on phones. */
+const STEP_MS = 3600
+
+function playOnPhones(
+  visual: HTMLElement,
+  steps: HTMLElement[],
+  show: (n: string) => void,
+  reduced: boolean,
+) {
+  visual.closest('.story')?.setAttribute('data-autoplay', '')
+  const tabs = document.createElement('div')
+  tabs.className = 'sv-tabs'
+  tabs.setAttribute('role', 'tablist')
+  tabs.setAttribute('aria-label', 'Steps')
+  const buttons = steps.map((step) => {
+    const b = document.createElement('button')
+    b.type = 'button'
+    b.setAttribute('role', 'tab')
+    b.dataset.step = step.dataset.step ?? '1'
+    const name = document.createElement('span')
+    name.textContent = step.querySelector('h3')?.textContent ?? ''
+    const bar = document.createElement('i')
+    bar.setAttribute('aria-hidden', 'true')
+    b.append(name, bar)
+    tabs.append(b)
+    return b
+  })
+  visual.after(tabs)
+  let at = 0
+  let timer = 0
+  let onScreen = false
+  const go = (i: number) => {
+    at = (i + steps.length) % steps.length
+    const n = steps[at]!.dataset.step ?? '1'
+    show(n)
+    buttons.forEach((b, k) => {
+      b.setAttribute('aria-selected', String(k === at))
+      // Restart the fill on the current tab.
+      b.classList.remove('run')
+    })
+    if (!reduced && onScreen) {
+      void buttons[at]!.offsetWidth
+      buttons[at]!.classList.add('run')
+    }
+    clearTimeout(timer)
+    if (!reduced && onScreen) timer = window.setTimeout(() => go(at + 1), STEP_MS)
+  }
+  buttons.forEach((b, k) => b.addEventListener('click', () => go(k)))
+  watch(visual, (v) => {
+    onScreen = v
+    visual.toggleAttribute('data-play', v)
+    if (v) go(at)
+    else clearTimeout(timer)
+  })
+  go(0)
 }
 
 /** The measured numbers count up once, the first time they're seen. */

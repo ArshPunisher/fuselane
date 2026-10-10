@@ -466,6 +466,24 @@ kbd {
   backdrop-filter: blur(16px) saturate(150%);
 }
 
+/* Phones draw the page behind the status bar: cover what scrolls up there,
+   so text doesn't show above the bar once the page has moved. */
+.nav::before {
+  content: '';
+  position: absolute;
+  inset: auto 0 100% 0;
+  height: 200px;
+  background: var(--canvas);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-slow);
+}
+
+.nav[data-scrolled]::before,
+.nav[data-open]::before {
+  opacity: 1;
+}
+
 @media (prefers-reduced-transparency: reduce) {
   .nav[data-scrolled],
   .nav[data-open] {

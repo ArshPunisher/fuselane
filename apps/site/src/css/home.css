@@ -605,17 +605,82 @@
 }
 
 @media (max-width: 959px) {
-  .js .story-visual {
-    position: sticky;
-    top: max(calc(var(--nav-h) + 12px), calc(50dvh - 230px));
-  }
   .js .sv-text {
     display: grid;
   }
-  .js .story-step {
-    min-height: 55vh;
-    opacity: 0;
-    pointer-events: none;
+  /* The card plays the steps itself; the steps stay for screen readers. */
+  .js .story[data-autoplay] .story-visual {
+    top: 0;
+    box-shadow: none;
+  }
+  .js .story[data-autoplay] .story-steps {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+.sv-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  order: 1;
+}
+
+.sv-tabs button {
+  display: grid;
+  gap: 8px;
+  padding: 10px 4px 0;
+  border: 0;
+  background: none;
+  color: var(--mute);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sv-tabs button[aria-selected='true'] {
+  color: var(--ink);
+}
+
+.sv-tabs i {
+  position: relative;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--hairline-strong);
+}
+
+.sv-tabs i::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--fuse);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+.sv-tabs button[aria-selected='true'] i::after {
+  transform: scaleX(1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sv-tabs button.run i::after {
+    animation: sv-fill 3600ms linear both;
+  }
+}
+
+@keyframes sv-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
   }
 }
 
