@@ -9,6 +9,7 @@ echo "== rustfmt";  cargo fmt --all --check
 echo "== clippy";   cargo clippy --workspace --all-targets --locked -q -- -D warnings
 echo "== tests";    cargo nextest run --workspace --locked --no-fail-fast --status-level fail --final-status-level fail
 echo "== deny";     cargo deny check -s 2>/dev/null || cargo deny check
+echo "== shellcheck"; shellcheck tools/*.sh packaging/macos/*.sh packaging/homebrew/*.sh packaging/flatpak/*.sh packaging/winget/*.sh
 echo "== prettier"; pnpm -s format:check
 echo "== tsc";      pnpm -s typecheck >/dev/null
 echo "== capture";  pnpm -s --filter @fuselane/capture test >/dev/null
