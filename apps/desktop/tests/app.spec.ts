@@ -177,7 +177,11 @@ test('networks page lists usable networks and explains skipped ones', async ({ p
   await page.goto('/')
   await page.getByRole('button', { name: 'Networks' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Networks' })).toBeVisible()
-  await expect(page.locator('.page .netlist').first()).toContainText('iPhone USB')
+  await expect(page.locator('.net-cards')).toContainText('iPhone USB')
+  // The live picture shows each network flowing into Fuselane.
+  await expect(page.getByRole('region', { name: 'Your networks, joined' })).toContainText(
+    '3 networks',
+  )
   await page.getByText('Not used (1)').click()
   await expect(page.getByText(/Tunnels are skipped/)).toBeVisible()
 })
@@ -463,14 +467,14 @@ test('an overall speed limit is validated, saved and can be removed', async ({ p
   await expect(page.getByRole('status').filter({ hasText: 'Limit removed' })).toBeVisible()
 })
 
-test('per-network limits save together and survive moving between pages', async ({ page }) => {
+test("a network's limit saves on its own and survives moving between pages", async ({ page }) => {
   await page.goto('/?empty=1')
   await page.getByRole('button', { name: 'Networks' }).click()
   const phone = page.getByLabel('iPhone USB speed limit', { exact: true })
   await phone.fill('512')
   await page.getByLabel('iPhone USB speed limit unit').selectOption('KB')
-  await page.getByRole('button', { name: 'Save limits' }).click()
-  await expect(page.getByRole('status').filter({ hasText: 'follow these now' })).toBeVisible()
+  await page.getByRole('button', { name: 'Save the speed limit for iPhone USB' }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'follow it now' })).toBeVisible()
   await page.getByRole('button', { name: 'Downloads' }).click()
   await page.getByRole('button', { name: 'Networks' }).click()
   await expect(page.getByLabel('iPhone USB speed limit', { exact: true })).toHaveValue('512')
@@ -571,7 +575,7 @@ test('a network can be renamed and recoloured, and the name shows everywhere', a
   await name.fill('Home Wi-Fi')
   await page.getByRole('radio', { name: 'rose' }).check()
   await page.locator('.net-editor').getByRole('button', { name: 'Save' }).click()
-  await expect(page.locator('.page .netlist .net-name').first()).toHaveText('Home Wi-Fi')
+  await expect(page.locator('.net-card .net-name').first()).toHaveText('Home Wi-Fi')
   // The running download's network table uses the new name too.
   await page.getByRole('button', { name: 'Downloads' }).click()
   await expect(page.getByRole('table', { name: 'Networks in this download' })).toContainText(
@@ -582,7 +586,7 @@ test('a network can be renamed and recoloured, and the name shows everywhere', a
   await page.getByRole('button', { name: 'Networks' }).click()
   await page.getByRole('button', { name: 'Rename or recolour Home Wi-Fi' }).click()
   await page.locator('.net-editor').getByRole('button', { name: 'Reset' }).click()
-  await expect(page.locator('.page .netlist .net-name').first()).toHaveText('Wi-Fi')
+  await expect(page.locator('.net-card .net-name').first()).toHaveText('Wi-Fi')
 })
 
 test('slow mode switches on and off and its speed can be changed', async ({ page }) => {
@@ -707,7 +711,7 @@ test('a network behind a sign-in page says so and offers the page', async ({ pag
   await expect(note).toContainText('wants you to sign in')
   await expect(note.getByRole('button', { name: 'Open sign-in page' })).toBeVisible()
   // Only that network: the others read normally.
-  await expect(page.getByRole('main').getByText('Sign in needed')).toHaveCount(1)
+  await expect(page.locator('.net-cards').getByText('Sign in needed')).toHaveCount(1)
 })
 
 for (const [w, h] of [
@@ -1255,7 +1259,7 @@ test('a network can be used only at certain hours', async ({ page }) => {
     .getByRole('navigation', { name: 'Main' })
     .getByRole('button', { name: 'Networks' })
     .click()
-  const row = page.locator('.use-list li', { hasText: 'iPhone USB' })
+  const row = page.getByRole('article', { name: 'iPhone USB' })
   const from = row.getByLabel('iPhone USB from')
   await expect(from).toBeDisabled()
   await row.getByRole('checkbox', { name: 'Only from' }).check()
@@ -2049,9 +2053,7 @@ test.describe('Proxy per network', () => {
     await expect(edit).toHaveCount(0)
     await expect(row.getByRole('button', { name: 'Edit the proxy for Wi-Fi' })).toBeFocused()
     // Torrents are told apart.
-    await expect(page.locator('.net-proxy')).toContainText(
-      "Torrents don't use these proxies: they connect to peers directly",
-    )
+    await expect(page.locator('.net-notes')).toContainText("Torrents don't use these proxies")
     // Removing it goes back to direct.
     await row.getByRole('button', { name: 'Edit the proxy for Wi-Fi' }).click()
     await page

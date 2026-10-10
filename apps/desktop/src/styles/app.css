@@ -6590,3 +6590,379 @@ html[data-hidden] .orb b {
     min-height: 40px;
   }
 }
+
+/* ---------- Networks → Setup: live flow and a card per network ---------- */
+
+/* Networks flowing into Fuselane: each lane's dashes run faster the more it
+   carries; the core breathes while anything moves. */
+.flow {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 180px;
+  column-gap: 16px;
+  align-items: center;
+  gap: 0;
+  padding: 22px 24px;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  background: var(--surface-1);
+}
+
+.flow::before {
+  content: '';
+  position: absolute;
+  inset: -40%;
+  z-index: -1;
+  background:
+    radial-gradient(
+      closest-side at 20% 50%,
+      color-mix(in oklch, var(--lane-tide) 16%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      closest-side at 85% 50%,
+      color-mix(in oklch, var(--fuse) 16%, transparent),
+      transparent
+    );
+  pointer-events: none;
+}
+
+.flow-nets {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.flow-nets li {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-content: center;
+  column-gap: 10px;
+  height: 64px;
+}
+
+.flow-icon {
+  grid-row: 1 / 3;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: color-mix(in oklch, var(--lane) 16%, transparent);
+  color: var(--lane);
+  box-shadow: 0 0 0 0 color-mix(in oklch, var(--lane) 40%, transparent);
+}
+
+.flow-name {
+  overflow: hidden;
+  color: var(--ink);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-rate {
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.flow-nets li[data-on] .flow-rate {
+  color: var(--ink);
+}
+
+.flow-nets li[data-reach='portal'] .flow-rate {
+  color: var(--warning);
+}
+
+.flow-lines {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.flow-base,
+.flow-dash {
+  fill: none;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.flow-base {
+  stroke-width: 6;
+  opacity: 0.16;
+}
+
+.flow-dash {
+  stroke-width: 3;
+  stroke-dasharray: 2 18;
+  opacity: 0.45;
+}
+
+.flow-lines g[data-on] .flow-dash {
+  stroke-width: 4;
+  opacity: 1;
+}
+
+.flow-core {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  width: 168px;
+  height: 168px;
+  justify-self: end;
+  border-radius: 50%;
+  background: var(--surface-1);
+  box-shadow: var(--shadow-float);
+  text-align: center;
+}
+
+.flow-core-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--lane-mint),
+    var(--lane-sky),
+    var(--lane-iris),
+    var(--lane-rose),
+    var(--fuse),
+    var(--lane-mint)
+  );
+  mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+  opacity: 0.55;
+}
+
+.flow-core[data-on] .flow-core-ring {
+  opacity: 1;
+}
+
+.flow-core-label,
+.flow-core-count {
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.flow-core-rate {
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 600;
+}
+
+/* One card per network */
+.net-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
+  gap: 16px;
+}
+
+.net-card {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: 16px 18px 18px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  background: var(--surface-1);
+  box-shadow: inset 0 3px 0 var(--lane);
+  transition: border-color var(--dur-base) var(--ease-out);
+}
+
+.net-card[data-on] {
+  border-color: color-mix(in oklch, var(--lane) 45%, var(--hairline));
+}
+
+.net-card-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.net-card-title {
+  display: grid;
+  min-width: 0;
+}
+
+.net-card-title .net-name {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.net-card-rate {
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in oklch, var(--lane) 14%, transparent);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.net-card-rate[data-reach='portal'] {
+  background: color-mix(in oklch, var(--warning) 22%, transparent);
+  color: var(--ink);
+}
+
+.net-card-body {
+  display: grid;
+}
+
+.net-card-row {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.net-card-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding-top: 6px;
+  color: var(--body);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.net-card-label svg {
+  color: var(--lane);
+}
+
+.net-card-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.net-card-field > .segmented {
+  justify-self: start;
+}
+
+.net-limit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.net-limit .limit-field {
+  flex: 0 1 220px;
+}
+
+.net-limit-status {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.net-limit-status:empty {
+  display: none;
+}
+
+.net-card-allow {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+}
+
+.net-card .allowance-list,
+.net-card .proxy-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.net-card .allowance {
+  padding: 0;
+  border: 0;
+}
+
+.net-card .allowance-head .net-name {
+  display: none;
+}
+
+.net-card .proxy-row {
+  padding: 0;
+  border: 0;
+}
+
+.net-card .proxy-head .net-name {
+  display: none;
+}
+
+.allow-ring {
+  width: 40px;
+  height: 40px;
+  rotate: -90deg;
+}
+
+.allow-ring circle {
+  fill: none;
+  stroke-width: 5;
+}
+
+.allow-ring-track {
+  stroke: var(--surface-3);
+}
+
+.allow-ring-fill {
+  stroke: var(--lane);
+  stroke-linecap: round;
+  transition: stroke-dashoffset var(--dur-slow) var(--ease-out);
+}
+
+.net-notes {
+  max-width: 90ch;
+}
+
+@media (max-width: 760px) {
+  .flow {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 16px;
+    padding: 18px;
+  }
+  .flow-lines {
+    display: none;
+  }
+  .flow-core {
+    width: 124px;
+    height: 124px;
+  }
+  .net-card-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+  .net-card-label {
+    padding-top: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .flow-dash {
+    animation: flow-run var(--flow-dur, 4s) linear infinite;
+  }
+  .flow-core[data-on] .flow-core-ring {
+    animation: spin 6s linear infinite;
+  }
+  .flow-nets li[data-on] .flow-icon {
+    animation: use-breathe 1.8s var(--ease-in-out) infinite;
+  }
+  .flow::before {
+    animation: speed-drift 12s var(--ease-in-out) infinite alternate;
+  }
+}
+
+@keyframes flow-run {
+  to {
+    stroke-dashoffset: -200;
+  }
+}

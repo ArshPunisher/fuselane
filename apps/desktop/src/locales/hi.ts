@@ -824,22 +824,13 @@ export const hi: Readonly<Record<string, string>> = {
   Always: 'हमेशा',
   'Long downloads': 'लंबे डाउनलोड',
   Never: 'कभी नहीं',
-  'When each network helps': 'कौन-सा नेटवर्क कब काम आए',
-  'A phone on a data plan can wait for the downloads where it makes a real difference.':
-    'डेटा प्लान वाला फ़ोन सिर्फ़ उन डाउनलोड में जुड़ सकता है जहां उससे सच में फ़र्क पड़े।',
   'A long download takes more than': 'लंबा डाउनलोड यानी उनके बिना',
   'minutes without them.': 'मिनट से ज़्यादा।',
   "Downloads start without them; once a download's speed shows it's long, they join in and it carries on where it was.":
     'डाउनलोड उनके बिना शुरू होते हैं; स्पीड से पता चलते ही कि डाउनलोड लंबा है, वे भी जुड़ जाते हैं और डाउनलोड वहीं से आगे चलता है।',
 
   // NetworksView: speed limits and monthly allowances
-  'Saved. Running downloads follow these now.':
-    'सेव हो गया। चल रहे डाउनलोड अब इन्हीं के हिसाब से चलेंगे।',
-  'Speed limit per network': 'हर नेटवर्क की स्पीड लिमिट',
-  'Useful for a phone on a data plan: cap it, and the other networks carry the rest.':
-    'डेटा प्लान वाले फ़ोन के लिए काम का: उसकी लिमिट तय करें, बाकी काम दूसरे नेटवर्क करेंगे।',
   '{name} speed limit': '{name} की स्पीड लिमिट',
-  'Save limits': 'लिमिट सेव करें',
   '{used} of {allowance}, resets {date}': '{allowance} में से {used}, {date} को रीसेट',
   '{used} used, resets {date}': '{used} इस्तेमाल हुआ, {date} को रीसेट',
   "Allowance reached: Fuselane won't use this network until {date}.":
@@ -848,17 +839,12 @@ export const hi: Readonly<Record<string, string>> = {
   '{name} allowance unit': '{name} की लिमिट की इकाई',
   'Resets on day': 'रीसेट की तारीख',
   '{name} reset day': '{name} के रीसेट की तारीख',
-  'Monthly data allowance': 'मासिक डेटा लिमिट',
-  'For a phone on a data plan: when a network reaches its allowance, Fuselane stops using it until the reset day.':
-    'डेटा प्लान वाले फ़ोन के लिए: किसी नेटवर्क की लिमिट पूरी होते ही Fuselane रीसेट की तारीख तक उसका इस्तेमाल बंद कर देता है।',
 
   // NetworksView: the page, its tabs and networks not used
   Setup: 'सेटअप',
   Usage: 'इस्तेमाल',
   'Networks view': 'नेटवर्क टैब',
   Refresh: 'रीफ़्रेश करें',
-  'Every network here can carry part of each download. Plug in a phone or join another network and it joins in.':
-    'यहां का हर नेटवर्क हर डाउनलोड का एक हिस्सा ला सकता है। फ़ोन लगाएं या किसी और नेटवर्क से जुड़ें, वह भी साथ जुड़ जाएगा।',
   'Not used ({n})': 'इस्तेमाल में नहीं ({n})',
   'Tunnels are skipped so traffic stays where you expect.':
     'टनल छोड़ दिए जाते हैं, ताकि ट्रैफ़िक वहीं रहे जहां आप चाहते हैं।',
@@ -885,6 +871,17 @@ export const hi: Readonly<Record<string, string>> = {
   '{name}: no internet {n} times this week, {m} min in total.':
     '{name}: इस हफ़्ते {n} बार इंटरनेट गया, कुल {m} मिनट।',
   Speedtest: 'स्पीडटेस्ट',
+  'Save the speed limit for {name}': '{name} की स्पीड सीमा सेव करें',
+  'Your networks, joined': 'आपके नेटवर्क, एक साथ',
+  Together: 'एक साथ',
+  '1 network': '1 नेटवर्क',
+  'Helps with': 'कब मदद करे',
+  'Monthly data': 'महीने का डेटा',
+  Proxy: 'प्रॉक्सी',
+  'Helps with: a phone on a data plan can wait for the downloads where it makes a real difference. Speed limit: cap a network and the others carry the rest. Monthly data: when a network reaches its allowance, Fuselane stops using it until the reset day.':
+    'कब मदद करे: डेटा प्लान वाला फ़ोन उन डाउनलोड का इंतज़ार कर सकता है जहां उससे सच में फ़र्क पड़ता है। स्पीड सीमा: किसी नेटवर्क की सीमा तय करें, बाकी नेटवर्क बाकी काम करते हैं। महीने का डेटा: जब कोई नेटवर्क अपनी सीमा तक पहुंच जाता है, तो Fuselane रीसेट के दिन तक उसका इस्तेमाल नहीं करता।',
+  "Proxy: for a network that only reaches the internet through one; https stays encrypted end to end. Torrents don't use these proxies, and proxy settings from your system aren't used, only the ones set here.":
+    'प्रॉक्सी: ऐसे नेटवर्क के लिए जो सिर्फ़ प्रॉक्सी से इंटरनेट तक पहुंचता है; https शुरू से आखिर तक एन्क्रिप्टेड रहता है। टोरेंट इन प्रॉक्सी का इस्तेमाल नहीं करते, और आपके सिस्टम की प्रॉक्सी सेटिंग नहीं, सिर्फ़ यहां सेट की गई इस्तेमाल होती हैं।',
   'Loading…': 'लोड हो रहा है…',
   'Nothing counted yet': 'अभी कुछ गिना नहीं गया',
   'Everything Fuselane downloads is counted here, per network and day by day, so you can see how much the phone carried. Start a download and watch it fill in.':
@@ -1067,11 +1064,6 @@ export const hi: Readonly<Record<string, string>> = {
   'Watching. Nothing has been put in it yet.': 'नज़र रखी जा रही है। अभी तक इसमें कुछ नहीं रखा गया।',
 
   // NetworkProxy: a proxy per network
-  'Proxy per network': 'हर नेटवर्क का प्रॉक्सी',
-  'For a network that only reaches the internet through a proxy. Downloads on it go through the proxy, and https stays encrypted end to end: the proxy sees which site, not what you download.':
-    'उस नेटवर्क के लिए जो सिर्फ़ प्रॉक्सी से इंटरनेट तक पहुंचता है। उस पर डाउनलोड प्रॉक्सी से होकर जाते हैं, और https शुरू से आखिर तक एन्क्रिप्टेड रहता है: प्रॉक्सी को साइट दिखती है, यह नहीं कि आप क्या डाउनलोड कर रहे हैं।',
-  "Torrents don't use these proxies: they connect to peers directly on each network. Proxy settings from your system aren't used either, only the ones set here.":
-    'टोरेंट इन प्रॉक्सी का इस्तेमाल नहीं करते: वे हर नेटवर्क पर सीधे पीयर से जुड़ते हैं। आपके सिस्टम की प्रॉक्सी सेटिंग्स भी इस्तेमाल नहीं होतीं, सिर्फ़ यहां सेट की गई।',
   'Direct, no proxy': 'सीधे, बिना प्रॉक्सी',
   '{proxy}, as {user}': '{proxy}, यूज़र {user}',
   'Check the proxy for {network}': '{network} का प्रॉक्सी जांचें',

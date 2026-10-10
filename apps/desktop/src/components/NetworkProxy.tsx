@@ -274,7 +274,7 @@ function ProxyForm({
   )
 }
 
-function ProxyRow({ net, pref }: { net: NetView; pref: NetPref | undefined }) {
+export function ProxyRow({ net, pref }: { net: NetView; pref: NetPref | undefined }) {
   const backend = useApp((s) => s.backend)
   const [editing, setEditing] = useState(false)
   const [check, setCheck] = useState<Check | null>(null)
@@ -358,37 +358,5 @@ function ProxyRow({ net, pref }: { net: NetView; pref: NetPref | undefined }) {
         )}
       </div>
     </li>
-  )
-}
-
-/**
- * A proxy per network (STEPS 8.4): for a network that only reaches the internet
- * through one, or a site that only answers some addresses.
- */
-export function NetworkProxy() {
-  const networks = useApp((s) => s.networks).filter((n) => n.usable)
-  const prefs = useApp((s) => s.netPrefs)
-  if (!networks.length) return null
-  return (
-    <section className="net-limits net-proxy" aria-labelledby="proxy-title">
-      <h2 id="proxy-title" className="section-title">
-        {t('Proxy per network')}
-      </h2>
-      <p className="muted">
-        {t(
-          'For a network that only reaches the internet through a proxy. Downloads on it go through the proxy, and https stays encrypted end to end: the proxy sees which site, not what you download.',
-        )}
-      </p>
-      <ul className="proxy-list">
-        {networks.map((n) => (
-          <ProxyRow key={n.name} net={n} pref={prefs.find((p) => p.name === n.name)} />
-        ))}
-      </ul>
-      <p className="field-help">
-        {t(
-          "Torrents don't use these proxies: they connect to peers directly on each network. Proxy settings from your system aren't used either, only the ones set here.",
-        )}
-      </p>
-    </section>
   )
 }

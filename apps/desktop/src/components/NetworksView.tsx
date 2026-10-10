@@ -1,5 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { ArrowClockwise, PencilSimple } from '@phosphor-icons/react'
+import {
+  ArrowClockwise,
+  ChartPieSlice,
+  Gauge,
+  Lightning,
+  PencilSimple,
+  ShieldCheck,
+} from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { assignLanes, kindLabel, LANES, netTitle, type Lane } from '../lib/lanes'
 import type { AllowanceView, NetUse, NetView } from '../lib/types'
@@ -8,7 +15,7 @@ import { NetIcon } from './NetIcon'
 import { Orb } from './Orb'
 import { LimitField } from './LimitField'
 import { DataUsed } from './DataUsed'
-import { NetworkProxy } from './NetworkProxy'
+import { ProxyRow } from './NetworkProxy'
 import { intlLocale, mark, t, tr } from '../lib/i18n'
 
 /** Live speed per network, summed over running downloads. */
@@ -251,115 +258,6 @@ const USES: { value: NetUse; label: string }[] = [
   { value: 'never', label: mark('Never') },
 ]
 
-/**
- * When each network helps (B9.5): a phone on a data plan can wait for downloads
- * where it makes a real difference.
- */
-function NetworkUse() {
-  const networks = useApp((s) => s.networks).filter((n) => n.usable)
-  const prefs = useApp((s) => s.netPrefs)
-  const save = useApp((s) => s.saveNetPref)
-  const backend = useApp((s) => s.backend)
-  const act = useApp((s) => s.act)
-  const [minutes, setMinutes] = useState<number | null>(null)
-  const [draft, setDraft] = useState('')
-  useEffect(() => {
-    void backend?.longMinutes().then((m) => {
-      setMinutes(m)
-      setDraft(String(m))
-    })
-  }, [backend])
-  if (!networks.length) return null
-  const anyLong = networks.some((n) => prefs.find((p) => p.name === n.name)?.useFor === 'long')
-  return (
-    <section className="net-limits net-use" aria-labelledby="use-title">
-      <h2 id="use-title" className="section-title">
-        {t('When each network helps')}
-      </h2>
-      <p className="muted">
-        {t('A phone on a data plan can wait for the downloads where it makes a real difference.')}
-      </p>
-      <ul className="use-list">
-        {networks.map((n) => {
-          const p = prefs.find((x) => x.name === n.name)
-          const value = p?.useFor ?? 'always'
-          const id = `use-${n.name}`
-          return (
-            <li key={n.name}>
-              <span className="net-name" id={id} translate="no">
-                {netTitle(n)}
-              </span>
-              <div className="segmented" role="radiogroup" aria-labelledby={id}>
-                {USES.map((u) => (
-                  <button
-                    key={u.value}
-                    type="button"
-                    role="radio"
-                    aria-checked={value === u.value}
-                    onClick={() =>
-                      void save({
-                        name: n.name,
-                        label: p?.label ?? null,
-                        lane: p?.lane ?? null,
-                        useFor: u.value,
-                        hours: p?.hours ?? null,
-                      })
-                    }
-                  >
-                    {t(u.label)}
-                  </button>
-                ))}
-              </div>
-              <Hours
-                name={netTitle(n)}
-                hours={p?.hours ?? null}
-                onChange={(hours) =>
-                  void save({
-                    name: n.name,
-                    label: p?.label ?? null,
-                    lane: p?.lane ?? null,
-                    useFor: value,
-                    hours,
-                  })
-                }
-              />
-            </li>
-          )
-        })}
-      </ul>
-      {anyLong && minutes !== null && (
-        <form
-          className="long-minutes"
-          onSubmit={(e) => {
-            e.preventDefault()
-            const m = Number(draft)
-            void act(async (b) => setMinutes(await b.setLongMinutes(m)))
-          }}
-        >
-          <label htmlFor="long-min">{t('A long download takes more than')}</label>
-          <input
-            id="long-min"
-            className="num"
-            inputMode="numeric"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value.replace(/\D/g, '').slice(0, 3))}
-            aria-describedby="long-help"
-          />
-          <span>{t('minutes without them.')}</span>
-          <button type="submit" className="btn" disabled={draft === String(minutes) || !draft}>
-            {t('Save')}
-          </button>
-          <p id="long-help" className="field-help">
-            {t(
-              "Downloads start without them; once a download's speed shows it's long, they join in and it carries on where it was.",
-            )}
-          </p>
-        </form>
-      )}
-    </section>
-  )
-}
-
 export function NetworkList({ compact = false }: { compact?: boolean }) {
   const networks = useApp((s) => s.networks)
   useApp((s) => s.netPrefs) // re-render when names or colours change
@@ -419,70 +317,6 @@ export function NetworkList({ compact = false }: { compact?: boolean }) {
         )
       })}
     </ul>
-  )
-}
-
-/** One limit per usable network, saved together. */
-function NetworkLimits() {
-  const networks = useApp((s) => s.networks).filter((n) => n.usable)
-  const limits = useApp((s) => s.limits)
-  const save = useApp((s) => s.saveLimits)
-  const current = (name: string) => limits.networks.find((l) => l.name === name)?.rate ?? 0
-  const [draft, setDraft] = useState<Record<string, number | null>>({})
-  const [status, setStatus] = useState('')
-  const value = (name: string) => (name in draft ? draft[name] : current(name))
-  const invalid = networks.some((n) => value(n.name) === null)
-  const changed = networks.some((n) => value(n.name) !== current(n.name))
-  if (!networks.length) return null
-  return (
-    <form
-      className="net-limits"
-      aria-labelledby="limits-title"
-      onSubmit={async (e) => {
-        e.preventDefault()
-        if (invalid) return
-        setStatus('')
-        const next = networks
-          .map((n) => ({ name: n.name, rate: value(n.name) ?? 0 }))
-          .filter((n) => n.rate > 0)
-        // Keep limits for networks that aren't connected right now.
-        const others = limits.networks.filter((l) => !networks.some((n) => n.name === l.name))
-        if (await save({ ...limits, networks: [...others, ...next] })) {
-          setDraft({})
-          setStatus(t('Saved. Running downloads follow these now.'))
-        }
-      }}
-    >
-      <h2 id="limits-title" className="section-title">
-        {t('Speed limit per network')}
-      </h2>
-      <p className="muted">
-        {t('Useful for a phone on a data plan: cap it, and the other networks carry the rest.')}
-      </p>
-      <ul className="limit-list">
-        {networks.map((n) => (
-          <li key={n.name}>
-            <span className="net-name" translate="no">
-              {netTitle(n)}
-            </span>
-            <LimitField
-              label={t('{name} speed limit', { name: netTitle(n) })}
-              hideLabel
-              rate={current(n.name)}
-              onChange={(r) => setDraft((d) => ({ ...d, [n.name]: r }))}
-            />
-          </li>
-        ))}
-      </ul>
-      <div className="net-limits-foot">
-        <p className="muted" role="status">
-          {status}
-        </p>
-        <button type="submit" className="btn" disabled={invalid || !changed}>
-          {t('Save limits')}
-        </button>
-      </div>
-    </form>
   )
 }
 
@@ -608,7 +442,132 @@ function AllowanceRow({
   )
 }
 
-function Allowances() {
+/**
+ * The long-download threshold (B9.5), shown once any network waits for long
+ * downloads.
+ */
+function LongMinutes() {
+  const backend = useApp((s) => s.backend)
+  const act = useApp((s) => s.act)
+  const [minutes, setMinutes] = useState<number | null>(null)
+  const [draft, setDraft] = useState('')
+  useEffect(() => {
+    void backend?.longMinutes().then((m) => {
+      setMinutes(m)
+      setDraft(String(m))
+    })
+  }, [backend])
+  if (minutes === null) return null
+  return (
+    <form
+      className="long-minutes"
+      onSubmit={(e) => {
+        e.preventDefault()
+        const m = Number(draft)
+        void act(async (b) => setMinutes(await b.setLongMinutes(m)))
+      }}
+    >
+      <label htmlFor="long-min">{t('A long download takes more than')}</label>
+      <input
+        id="long-min"
+        className="num"
+        inputMode="numeric"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value.replace(/\D/g, '').slice(0, 3))}
+        aria-describedby="long-help"
+      />
+      <span>{t('minutes without them.')}</span>
+      <button type="submit" className="btn" disabled={draft === String(minutes) || !draft}>
+        {t('Save')}
+      </button>
+      <p id="long-help" className="field-help">
+        {t(
+          "Downloads start without them; once a download's speed shows it's long, they join in and it carries on where it was.",
+        )}
+      </p>
+    </form>
+  )
+}
+
+/** When this network helps (B9.5), and the hours it may be used (B10.6). */
+function UseChoice({ net }: { net: NetView }) {
+  const prefs = useApp((s) => s.netPrefs)
+  const save = useApp((s) => s.saveNetPref)
+  const p = prefs.find((x) => x.name === net.name)
+  const value = p?.useFor ?? 'always'
+  const id = `use-${net.name}`
+  const put = (useFor: NetUse, hours: { start: number; stop: number } | null) =>
+    void save({ name: net.name, label: p?.label ?? null, lane: p?.lane ?? null, useFor, hours })
+  return (
+    <>
+      <span className="sr-only" id={id}>
+        {netTitle(net)}
+      </span>
+      <div className="segmented" role="radiogroup" aria-labelledby={id}>
+        {USES.map((u) => (
+          <button
+            key={u.value}
+            type="button"
+            role="radio"
+            aria-checked={value === u.value}
+            onClick={() => put(u.value, p?.hours ?? null)}
+          >
+            {t(u.label)}
+          </button>
+        ))}
+      </div>
+      <Hours name={netTitle(net)} hours={p?.hours ?? null} onChange={(h) => put(value, h)} />
+    </>
+  )
+}
+
+/** This network's speed limit, saved on its own (other networks' limits kept). */
+function NetLimit({ net }: { net: NetView }) {
+  const limits = useApp((s) => s.limits)
+  const save = useApp((s) => s.saveLimits)
+  const current = limits.networks.find((l) => l.name === net.name)?.rate ?? 0
+  const [draft, setDraft] = useState<number | null | undefined>(undefined)
+  const [status, setStatus] = useState('')
+  const value = draft === undefined ? current : draft
+  const title = netTitle(net)
+  return (
+    <form
+      className="net-limit"
+      onSubmit={async (e) => {
+        e.preventDefault()
+        if (value === null) return
+        setStatus('')
+        const others = limits.networks.filter((l) => l.name !== net.name)
+        const next = value > 0 ? [...others, { name: net.name, rate: value }] : others
+        if (await save({ ...limits, networks: next })) {
+          setDraft(undefined)
+          setStatus(value > 0 ? t('Saved. Running downloads follow it now.') : t('Limit removed.'))
+        }
+      }}
+    >
+      <LimitField
+        label={t('{name} speed limit', { name: title })}
+        hideLabel
+        rate={current}
+        onChange={(r) => setDraft(r)}
+      />
+      <button
+        type="submit"
+        className="btn btn-sm"
+        disabled={value === null || value === current}
+        aria-label={t('Save the speed limit for {name}', { name: title })}
+      >
+        {t('Save')}
+      </button>
+      <p className="field-help net-limit-status" role="status">
+        {status}
+      </p>
+    </form>
+  )
+}
+
+/** Allowances for every network, kept fresh. */
+function useAllowances(): [AllowanceView[], (v: AllowanceView[]) => void] {
   const backend = useApp((s) => s.backend)
   const [views, setViews] = useState<AllowanceView[]>([])
   useEffect(() => {
@@ -626,27 +585,254 @@ function Allowances() {
       clearInterval(timer)
     }
   }, [backend])
-  if (!views.length) return null
+  return [views, setViews]
+}
+
+/** A ring that fills with the share of an allowance used. */
+function Ring({ share }: { share: number }) {
+  const r = 15
+  const c = 2 * Math.PI * r
   return (
-    <section className="net-limits" aria-labelledby="allow-title">
-      <h2 id="allow-title" className="section-title">
-        {t('Monthly data allowance')}
-      </h2>
-      <p className="muted">
-        {t(
-          'For a phone on a data plan: when a network reaches its allowance, Fuselane stops using it until the reset day.',
+    <svg className="allow-ring" viewBox="0 0 40 40" aria-hidden>
+      <circle cx="20" cy="20" r={r} className="allow-ring-track" />
+      <circle
+        cx="20"
+        cy="20"
+        r={r}
+        className="allow-ring-fill"
+        strokeDasharray={c}
+        strokeDashoffset={c * (1 - Math.min(1, share))}
+      />
+    </svg>
+  )
+}
+
+/**
+ * The live picture at the top: every network as a lane flowing into Fuselane,
+ * the flow quicker the more it carries, the total in the core.
+ */
+function FlowHero({
+  nets,
+  lanes,
+  rates,
+}: {
+  nets: NetView[]
+  lanes: Lane[]
+  rates: Record<string, number>
+}) {
+  const total = nets.reduce((a, n) => a + (rates[n.name] ?? 0), 0)
+  const max = Math.max(1, ...nets.map((n) => rates[n.name] ?? 0))
+  const row = 64
+  const h = Math.max(1, nets.length) * row
+  return (
+    <section className="flow" aria-label={t('Your networks, joined')}>
+      <ul className="flow-nets">
+        {nets.map((n, i) => {
+          const r = rates[n.name] ?? 0
+          return (
+            <li
+              key={n.name}
+              style={{ '--lane': `var(--lane-${lanes[i] ?? 'steel'})` } as React.CSSProperties}
+              data-on={r > 0 || undefined}
+              data-reach={n.reach ?? undefined}
+            >
+              <span className="flow-icon" aria-hidden>
+                <NetIcon kind={n.kind} />
+              </span>
+              <span className="flow-name" translate="no">
+                {netTitle(n)}
+              </span>
+              <span className="flow-rate num">
+                {n.reach === 'portal' ? t('Sign in needed') : r > 0 ? rateText(r) : t('Ready')}
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+      <svg
+        className="flow-lines"
+        viewBox={`0 0 400 ${h}`}
+        preserveAspectRatio="none"
+        style={{ height: h }}
+        aria-hidden
+      >
+        {nets.map((n, i) => {
+          const y = i * row + row / 2
+          const d = `M14 ${y} C 200 ${y}, 200 ${h / 2}, 400 ${h / 2}`
+          const r = rates[n.name] ?? 0
+          const lane = `var(--lane-${lanes[i] ?? 'steel'})`
+          return (
+            <g key={n.name} data-on={r > 0 || undefined}>
+              <path d={d} className="flow-base" style={{ stroke: lane }} />
+              <path
+                d={d}
+                className="flow-dash"
+                style={
+                  {
+                    stroke: lane,
+                    '--flow-dur': `${r > 0 ? 2.6 - 1.9 * (r / max) : 6}s`,
+                  } as React.CSSProperties
+                }
+              />
+            </g>
+          )
+        })}
+      </svg>
+      <div className="flow-core" data-on={total > 0 || undefined}>
+        <span className="flow-core-ring" aria-hidden />
+        <span className="flow-core-label">{t('Together')}</span>
+        <span className="flow-core-rate num">{total > 0 ? rateText(total) : t('Idle')}</span>
+        <span className="flow-core-count">
+          {nets.length === 1 ? t('1 network') : t('{n} networks', { n: nets.length })}
+        </span>
+      </div>
+    </section>
+  )
+}
+
+/** Everything about one network in one place. */
+function NetworkCard({
+  net,
+  lane,
+  rate,
+  max,
+  allowance,
+  onAllowance,
+}: {
+  net: NetView
+  lane: Lane
+  rate: number
+  max: number
+  allowance: AllowanceView | undefined
+  onAllowance: (v: AllowanceView[]) => void
+}) {
+  const prefs = useApp((s) => s.netPrefs)
+  const [editing, setEditing] = useState(false)
+  const title = netTitle(net)
+  const share = allowance?.allowance ? allowance.used / allowance.allowance : null
+  return (
+    <article
+      className="net-card"
+      style={{ '--lane': `var(--lane-${lane})` } as React.CSSProperties}
+      data-on={rate > 0 || undefined}
+      aria-labelledby={`card-${net.name}`}
+    >
+      <header className="net-card-head">
+        <Orb lane={lane} speed={rate / max} state={rate > 0 ? 'live' : 'idle'} />
+        <span className="net-card-title">
+          <span className="net-name" id={`card-${net.name}`} translate="no">
+            {title}
+          </span>
+          <span className="net-kind">
+            {kindLabel(net.kind)}, <span translate="no">{net.name}</span>
+          </span>
+        </span>
+        <span className="net-card-rate num" data-reach={net.reach ?? undefined}>
+          {net.reach === 'portal' ? t('Sign in needed') : rate > 0 ? rateText(rate) : t('Ready')}
+        </span>
+        <button
+          className="icon-btn"
+          aria-label={t('Rename or recolour {name}', { name: title })}
+          title={t('Rename or recolour')}
+          aria-expanded={editing}
+          onClick={() => setEditing((e) => !e)}
+        >
+          <PencilSimple size={16} aria-hidden />
+        </button>
+      </header>
+      {net.reach === 'portal' && <SignIn net={net} />}
+      {editing && <NetEditor net={net} lane={lane} onDone={() => setEditing(false)} />}
+      <div className="net-card-body">
+        <div className="net-card-row">
+          <span className="net-card-label">
+            <Lightning size={15} aria-hidden /> {t('Helps with')}
+          </span>
+          <div className="net-card-field">
+            <UseChoice net={net} />
+          </div>
+        </div>
+        <div className="net-card-row">
+          <span className="net-card-label">
+            <Gauge size={15} aria-hidden /> {t('Speed limit')}
+          </span>
+          <div className="net-card-field">
+            <NetLimit net={net} />
+          </div>
+        </div>
+        {allowance && (
+          <div className="net-card-row">
+            <span className="net-card-label">
+              <ChartPieSlice size={15} aria-hidden /> {t('Monthly data')}
+            </span>
+            <div className="net-card-field net-card-allow">
+              {share !== null && <Ring share={share} />}
+              <ul className="allowance-list">
+                <AllowanceRow
+                  key={`${allowance.name}-${allowance.allowance}-${allowance.resetDay}`}
+                  view={allowance}
+                  onSaved={onAllowance}
+                />
+              </ul>
+            </div>
+          </div>
         )}
+        <div className="net-card-row">
+          <span className="net-card-label">
+            <ShieldCheck size={15} aria-hidden /> {t('Proxy')}
+          </span>
+          <div className="net-card-field">
+            <ul className="proxy-list">
+              <ProxyRow net={net} pref={prefs.find((p) => p.name === net.name)} />
+            </ul>
+          </div>
+        </div>
+      </div>
+    </article>
+  )
+}
+
+/** Networks → Setup: the live flow, then one card per network. */
+function NetworkSetup() {
+  const networks = useApp((s) => s.networks)
+  const prefs = useApp((s) => s.netPrefs)
+  const rates = useLiveRates()
+  const [allowances, setAllowances] = useAllowances()
+  const usable = networks.filter((n) => n.usable)
+  const lanes = assignLanes(usable)
+  const max = Math.max(1, ...Object.values(rates))
+  const anyLong = usable.some((n) => prefs.find((p) => p.name === n.name)?.useFor === 'long')
+  if (!usable.length)
+    return (
+      <p className="muted net-none">
+        {t('No networks found. Join Wi-Fi, plug in Ethernet, or tether a phone over USB.')}
       </p>
-      <ul className="allowance-list">
-        {views.map((v) => (
-          <AllowanceRow
-            key={`${v.name}-${v.allowance}-${v.resetDay}`}
-            view={v}
-            onSaved={setViews}
+    )
+  return (
+    <>
+      <FlowHero nets={usable} lanes={lanes} rates={rates} />
+      <div className="net-cards">
+        {usable.map((n, i) => (
+          <NetworkCard
+            key={n.name}
+            net={n}
+            lane={lanes[i] ?? 'steel'}
+            rate={rates[n.name] ?? 0}
+            max={max}
+            allowance={allowances.find((a) => a.name === n.name)}
+            onAllowance={setAllowances}
           />
         ))}
-      </ul>
-    </section>
+      </div>
+      {anyLong && <LongMinutes />}
+      <p className="field-help net-notes">
+        {t(
+          'Helps with: a phone on a data plan can wait for the downloads where it makes a real difference. Speed limit: cap a network and the others carry the rest. Monthly data: when a network reaches its allowance, Fuselane stops using it until the reset day.',
+        )}{' '}
+        {t(
+          "Proxy: for a network that only reaches the internet through one; https stays encrypted end to end. Torrents don't use these proxies, and proxy settings from your system aren't used, only the ones set here.",
+        )}
+      </p>
+    </>
   )
 }
 
@@ -725,22 +911,7 @@ export function NetworksView() {
       {tab === 'usage' && <DataUsed />}
       {tab === 'setup' && (
         <>
-          <p className="page-lead">
-            {t(
-              'Every network here can carry part of each download. Plug in a phone or join another network and it joins in.',
-            )}
-          </p>
-          <div className="nets-grid">
-            <NetworkList />
-            <div className="nets-side">
-              <NetworkLimits />
-              <NetworkUse />
-              <NetworkProxy />
-            </div>
-            <div className="nets-wide">
-              <Allowances />
-            </div>
-          </div>
+          <NetworkSetup />
           {other.length > 0 && (
             <details className="other-nets">
               <summary>{t('Not used ({n})', { n: other.length })}</summary>
