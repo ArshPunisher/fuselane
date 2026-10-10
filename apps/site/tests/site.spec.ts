@@ -281,6 +281,30 @@ test('the race works out both times from the measured speeds', async ({ page }) 
   await expect(page.locator('#race-clock')).toHaveText('56:59', { timeout: 8000 })
 })
 
+test('built-in tools: one group at a time, by click or arrow keys', async ({ page }) => {
+  await stub(page)
+  await page.goto('/')
+  const tabs = page.getByRole('tablist', { name: /built in/ })
+  const get = tabs.getByRole('tab', { name: /Get any file/ })
+  const nets = tabs.getByRole('tab', { name: /Know your networks/ })
+  await expect(get).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('#tool-get')).toBeVisible()
+  await expect(page.locator('#tool-nets')).toBeHidden()
+  await nets.click()
+  await expect(page.locator('#tool-nets')).toBeVisible()
+  await expect(page.locator('#tool-get')).toBeHidden()
+  await expect(page.locator('#tool-nets')).toContainText('Network check')
+  await nets.press('ArrowRight')
+  await expect(tabs.getByRole('tab', { name: /Stay in control/ })).toBeFocused()
+  await expect(page.locator('#tool-control')).toBeVisible()
+  await page.keyboard.press('Home')
+  await expect(get).toHaveAttribute('aria-selected', 'true')
+  // Every screen is the real app, in the visitor's theme.
+  const img = page.locator('#tool-get img')
+  await expect(img).toHaveAttribute('src', /shots\/feeds-dark\.webp$/)
+  await expect(page.locator('#tool-get source')).toHaveAttribute('srcset', /feeds-light\.webp/)
+})
+
 test('the nav marks the current page and every page links to privacy', async ({ page }) => {
   await stub(page)
   for (const [path, name] of [
@@ -402,6 +426,10 @@ test('SEO: each page has its own title, description and canonical; shared files 
     'apple-touch-icon.png',
     'shots/app.png',
     'shots/torrent.png',
+    'shots/feeds-dark.webp',
+    'shots/send-light.webp',
+    'shots/check-dark.webp',
+    'shots/control-light.webp',
   ]) {
     const r = await request.get(`/${path}`)
     expect(r.status(), path).toBe(200)

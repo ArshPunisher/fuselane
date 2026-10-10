@@ -344,95 +344,432 @@
         </div>
       </section>
 
-      <section class="section wrap" id="features" aria-labelledby="features-title">
-        <div class="section-head reveal">
-          <h2 id="features-title">Everything a download manager should do. Over every network.</h2>
+      <section class="section features" id="features" aria-labelledby="features-title">
+        <div class="wrap">
+          <div class="section-head reveal">
+            <h2 id="features-title">Built in, so you need fewer apps</h2>
+            <p>
+              Things that usually take a separate app or a subscription. Free, and on your computer
+              only.
+            </p>
+          </div>
+          <div class="tools reveal">
+            <div class="tools-tabs" role="tablist" aria-label="What&rsquo;s built in">
+              <button
+                role="tab"
+                type="button"
+                id="tab-get"
+                aria-controls="tool-get"
+                aria-selected="true"
+              >
+                <span class="tool-ic"><i data-icon="tray"></i></span>
+                <span class="tool-tab-text"
+                  ><strong>Get any file</strong><small>Links, torrents, videos, feeds</small></span
+                >
+              </button>
+              <button
+                role="tab"
+                type="button"
+                id="tab-send"
+                aria-controls="tool-send"
+                aria-selected="false"
+                tabindex="-1"
+              >
+                <span class="tool-ic"><i data-icon="devices"></i></span>
+                <span class="tool-tab-text"
+                  ><strong>Between your devices</strong
+                  ><small>Links, nearby, text, folders</small></span
+                >
+              </button>
+              <button
+                role="tab"
+                type="button"
+                id="tab-nets"
+                aria-controls="tool-nets"
+                aria-selected="false"
+                tabindex="-1"
+              >
+                <span class="tool-ic"><i data-icon="gauge"></i></span>
+                <span class="tool-tab-text"
+                  ><strong>Know your networks</strong
+                  ><small>Checks, usage, hours, limits</small></span
+                >
+              </button>
+              <button
+                role="tab"
+                type="button"
+                id="tab-control"
+                aria-controls="tool-control"
+                aria-selected="false"
+                tabindex="-1"
+              >
+                <span class="tool-ic"><i data-icon="sliders"></i></span>
+                <span class="tool-tab-text"
+                  ><strong>Stay in control</strong
+                  ><small>Priorities, deadlines, checks</small></span
+                >
+              </button>
+            </div>
+            <section class="tool-panel" id="tool-get" role="tabpanel" aria-labelledby="tab-get">
+              <h3 class="tool-title">Get any file</h3>
+              <ul class="tool-list">
+                <li style="--i: 0">
+                  <span class="tool-item-ic"><i data-icon="list"></i></span>
+                  <span
+                    ><strong>Links, lists and patterns</strong
+                    ><span
+                      >Paste one link or many. <code>part[01-20].rar</code> becomes 20
+                      downloads.</span
+                    ></span
+                  >
+                </li>
+                <li style="--i: 1">
+                  <span class="tool-item-ic"><i data-icon="magnet"></i></span>
+                  <span
+                    ><strong>Torrents</strong
+                    ><span
+                      >Magnets and .torrent files, with peers spread across your networks. Pick the
+                      files first.</span
+                    ></span
+                  >
+                </li>
+                <li style="--i: 2">
+                  <span class="tool-item-ic"><i data-icon="film"></i></span>
+                  <span
+                    ><strong>Videos from pages</strong
+                    ><span
+                      >YouTube and 1,000+ sites, in the quality you pick, with your own copy of
+                      yt-dlp.</span
+                    ></span
+                  >
+                </li>
+                <li style="--i: 3">
+                  <span class="tool-item-ic"><i data-icon="rss"></i></span>
+                  <span
+                    ><strong>Feeds</strong
+                    ><span
+                      >Follow a podcast or a project&rsquo;s releases. New files download by
+                      themselves.</span
+                    ></span
+                  >
+                </li>
+                <li style="--i: 4">
+                  <span class="tool-item-ic"><i data-icon="stack"></i></span>
+                  <span
+                    ><strong>Whole pages, as a group</strong
+                    ><span
+                      >Pick a downloads page&rsquo;s files by type and get them as one group.</span
+                    ></span
+                  >
+                </li>
+                <li style="--i: 5">
+                  <span class="tool-item-ic"><i data-icon="globe"></i></span>
+                  <span
+                    ><strong>Mirrors and Metalink</strong
+                    ><span>Every mirror at once, each checked to be the very same file.</span></span
+                  >
+                </li>
+                <li style="--i: 6">
+                  <span class="tool-item-ic"><i data-icon="folder"></i></span>
+                  <span
+                    ><strong>A watch folder</strong
+                    ><span
+                      >Put a .torrent, a Metalink or a list of links in a folder and it
+                      starts.</span
+                    ></span
+                  >
+                </li>
+                <li style="--i: 7">
+                  <span class="tool-item-ic"><i data-icon="puzzle"></i></span>
+                  <span
+                    ><strong>From your browser</strong
+                    ><span
+                      >The extension hands big downloads to Fuselane; the rest stay in the
+                      browser.</span
+                    ></span
+                  >
+                </li>
+              </ul>
+              <figure class="tool-shot">
+                <picture>
+                  <source srcset="shots/feeds-light.webp" media="(prefers-color-scheme: light)" />
+                  <img
+                    src="shots/feeds-dark.webp"
+                    width="1280"
+                    height="1096"
+                    loading="lazy"
+                    decoding="async"
+                    alt="Fuselane following a podcast feed: new episodes download by themselves, a trailer is skipped by the words you chose, and a torrent waits to be opened."
+                  />
+                </picture>
+                <figcaption>The real app, with demo data.</figcaption>
+              </figure>
+            </section>
+            <section
+              class="tool-panel"
+              id="tool-send"
+              role="tabpanel"
+              aria-labelledby="tab-send"
+              data-later
+            >
+              <h3 class="tool-title">Between your devices</h3>
+              <ul class="tool-list">
+                <li style="--i: 0">
+                  <span class="tool-item-ic"><i data-icon="link"></i></span>
+                  <span
+                    ><strong>Fuse Send links</strong
+                    ><span
+                      >A file of any size, straight from your computer, encrypted end to end.</span
+                    ></span
+                  >
+                </li>
+                <li style="--i: 1">
+                  <span class="tool-item-ic"><i data-icon="share"></i></span>
+                  <span
+                    ><strong>Nearby</strong
+                    ><span
+                      >Computers and phones on your network appear by themselves. Works with
+                      LocalSend.</span
+                    ></span
+                  >
+                </li>
+                <li style="--i: 2">
+                  <span class="tool-item-ic"><i data-icon="text"></i></span>
+                  <span
+                    ><strong>Text between computers</strong
+                    ><span
+                      >Copy on one, paste on the other. Phones can send text from their
+                      browser.</span
+                    ></span
+                  >
+                </li>
+                <li style="--i: 3">
+                  <span class="tool-item-ic"><i data-icon="folders"></i></span>
+                  <span
+                    ><strong>Folders kept in sync</strong
+                    ><span
+                      >New and changed files go to your other computer whenever both are on your
+                      network. No cloud.</span
+                    ></span
+                  >
+                </li>
+                <li style="--i: 4">
+                  <span class="tool-item-ic"><i data-icon="refresh"></i></span>
+                  <span
+                    ><strong>Continue on another computer</strong
+                    ><span
+                      >Hand over a paused download, with everything downloaded so far.</span
+                    ></span
+                  >
+                </li>
+                <li style="--i: 5">
+                  <span class="tool-item-ic"><i data-icon="qr"></i></span>
+                  <span
+                    ><strong>Phones without the app</strong
+                    ><span
+                      >Scan a code to send or receive in the phone&rsquo;s browser, on the same
+                      Wi-Fi.</span
+                    ></span
+                  >
+                </li>
+              </ul>
+              <figure class="tool-shot">
+                <picture>
+                  <source srcset="shots/send-light.webp" media="(prefers-color-scheme: light)" />
+                  <img
+                    src="shots/send-dark.webp"
+                    width="1376"
+                    height="860"
+                    loading="lazy"
+                    decoding="async"
+                    alt="The Send page in Fuselane: this computer in the middle and the computers and phones nearby around it, ready to receive."
+                  />
+                </picture>
+                <figcaption>The real app, with demo data.</figcaption>
+              </figure>
+            </section>
+            <section
+              class="tool-panel"
+              id="tool-nets"
+              role="tabpanel"
+              aria-labelledby="tab-nets"
+              data-later
+            >
+              <h3 class="tool-title">Know your networks</h3>
+              <ul class="tool-list">
+                <li style="--i: 0">
+                  <span class="tool-item-ic"><i data-icon="gauge"></i></span>
+                  <span
+                    ><strong>Network check</strong
+                    ><span
+                      >Speed, delay, jitter and how each network copes when busy, graded A+ to
+                      F.</span
+                    ></span
+                  >
+                </li>
+                <li style="--i: 1">
+                  <span class="tool-item-ic"><i data-icon="notes"></i></span>
+                  <span
+                    ><strong>A report for your provider</strong
+                    ><span
+                      >Outages are noted as they happen, in a dated report you can send.</span
+                    ></span
+                  >
+                </li>
+                <li style="--i: 2">
+                  <span class="tool-item-ic"><i data-icon="chart"></i></span>
+                  <span
+                    ><strong>Data used</strong
+                    ><span>What each network carried this month, day by day.</span></span
+                  >
+                </li>
+                <li style="--i: 3">
+                  <span class="tool-item-ic"><i data-icon="moon"></i></span>
+                  <span
+                    ><strong>Hours per network</strong
+                    ><span
+                      >Use the phone only on its night plan; downloads move over by
+                      themselves.</span
+                    ></span
+                  >
+                </li>
+                <li style="--i: 4">
+                  <span class="tool-item-ic"><i data-icon="pie"></i></span>
+                  <span
+                    ><strong>Limits and allowances</strong
+                    ><span
+                      >Cap a network&rsquo;s speed or its monthly data, and it&rsquo;s never
+                      passed.</span
+                    ></span
+                  >
+                </li>
+                <li style="--i: 5">
+                  <span class="tool-item-ic"><i data-icon="phone"></i></span>
+                  <span
+                    ><strong>The phone for long downloads</strong
+                    ><span>Short downloads leave your phone&rsquo;s data alone.</span></span
+                  >
+                </li>
+              </ul>
+              <figure class="tool-shot">
+                <picture>
+                  <source srcset="shots/check-light.webp" media="(prefers-color-scheme: light)" />
+                  <img
+                    src="shots/check-dark.webp"
+                    width="1360"
+                    height="1040"
+                    loading="lazy"
+                    decoding="async"
+                    alt="A network check in Fuselane: download speed, delay, jitter, lag under load with a grade, and name lookups for Wi-Fi, iPhone USB and Ethernet, then all of them together."
+                  />
+                </picture>
+                <figcaption>The real app, with demo data.</figcaption>
+              </figure>
+            </section>
+            <section
+              class="tool-panel"
+              id="tool-control"
+              role="tabpanel"
+              aria-labelledby="tab-control"
+              data-later
+            >
+              <h3 class="tool-title">Stay in control</h3>
+              <ul class="tool-list">
+                <li style="--i: 0">
+                  <span class="tool-item-ic"><i data-icon="lightning"></i></span>
+                  <span
+                    ><strong>Do this now</strong
+                    ><span>One download gets every network; the others wait their turn.</span></span
+                  >
+                </li>
+                <li style="--i: 1">
+                  <span class="tool-item-ic"><i data-icon="timer"></i></span>
+                  <span
+                    ><strong>Ready by</strong
+                    ><span
+                      >Give a download a time to be done. It goes first and says if it&rsquo;s on
+                      track.</span
+                    ></span
+                  >
+                </li>
+                <li style="--i: 2">
+                  <span class="tool-item-ic"><i data-icon="calendar"></i></span>
+                  <span
+                    ><strong>Schedules</strong
+                    ><span
+                      >Download only between set hours, then sleep or shut down when it&rsquo;s
+                      done.</span
+                    ></span
+                  >
+                </li>
+                <li style="--i: 3">
+                  <span class="tool-item-ic"><i data-icon="seal"></i></span>
+                  <span
+                    ><strong>Checked by itself</strong
+                    ><span
+                      >When a site publishes a SHA-256, Fuselane finds it and verifies the
+                      file.</span
+                    ></span
+                  >
+                </li>
+                <li style="--i: 4">
+                  <span class="tool-item-ic"><i data-icon="refresh"></i></span>
+                  <span
+                    ><strong>Picks up where it stopped</strong
+                    ><span
+                      >A dropped network, sleep or a crash: it carries on without starting
+                      over.</span
+                    ></span
+                  >
+                </li>
+                <li style="--i: 5">
+                  <span class="tool-item-ic"><i data-icon="plug"></i></span>
+                  <span
+                    ><strong>Works with aria2 apps</strong
+                    ><span
+                      >AriaNg and phone remote apps can add and watch downloads, once you turn it
+                      on.</span
+                    ></span
+                  >
+                </li>
+              </ul>
+              <figure class="tool-shot">
+                <picture>
+                  <source srcset="shots/control-light.webp" media="(prefers-color-scheme: light)" />
+                  <img
+                    src="shots/control-dark.webp"
+                    width="1576"
+                    height="880"
+                    loading="lazy"
+                    decoding="async"
+                    alt="A download in Fuselane with each network&rsquo;s share and speed, a speed limit for this download, and a Ready by time."
+                  />
+                </picture>
+                <figcaption>The real app, with demo data.</figcaption>
+              </figure>
+            </section>
+          </div>
         </div>
-        <div class="bento">
-          <article class="panel cell cell-a spot reveal">
-            <h3>Files and torrents, one queue</h3>
-            <p>
-              Paste a link, a magnet or a .torrent. Pick the files you want; every network brings
-              its share, and you see who carried what.
-            </p>
-            <div class="art shot-crop">
-              <img
-                src="shots/torrent.png"
-                width="1656"
-                height="1048"
-                loading="lazy"
-                alt="Fuselane downloading a torrent over Wi-Fi, iPhone USB and Ethernet, with each network's share."
-              />
+        <div class="extras" aria-labelledby="extras-title">
+          <h3 class="wrap extras-title" id="extras-title">And the small things you&rsquo;d miss</h3>
+          <div class="marquee">
+            <div class="marquee-track">
+              <ul class="marquee-list">
+                <li><i data-icon="later"></i>Download later</li>
+                <li><i data-icon="gauge"></i>A limit per download</li>
+                <li><i data-icon="clip"></i>Copied links offered</li>
+                <li><i data-icon="export"></i>Export and import</li>
+                <li><i data-icon="search"></i>Search and filters</li>
+                <li><i data-icon="stack"></i>Up to eight at once</li>
+                <li><i data-icon="folders"></i>Sorted by type</li>
+                <li><i data-icon="power"></i>Start at login</li>
+                <li><i data-icon="units"></i>MB/s or Mbps</li>
+                <li><i data-icon="walk"></i>Slow mode for calls</li>
+                <li><i data-icon="keys"></i>Keyboard first</li>
+                <li><i data-icon="shield"></i>Signed updates</li>
+              </ul>
             </div>
-          </article>
-          <article class="panel cell cell-b spot reveal" style="--i: 1">
-            <div class="icon-row">
-              <span class="icon-tile"><i data-icon="puzzle"></i></span
-              ><span class="icon-tile"><i data-icon="magnet"></i></span>
-            </div>
-            <h3>Hands off from your browser</h3>
-            <p>
-              The extension sends big downloads to Fuselane and leaves the rest in the browser.
-              Files behind a sign-in work too, if you allow it.
-            </p>
-          </article>
-          <article class="panel cell spot reveal" style="--i: 2">
-            <div class="icon-row">
-              <span class="icon-tile"><i data-icon="calendar"></i></span
-              ><span class="icon-tile"><i data-icon="moon"></i></span>
-            </div>
-            <h3>Overnight, then sleep</h3>
-            <p>Only download between set hours, then sleep or shut down when it's done.</p>
-          </article>
-          <article class="panel cell spot reveal" style="--i: 3">
-            <h3>Limits per network</h3>
-            <p>Cap the phone, keep the cable free. Monthly data allowances too.</p>
-            <div class="art mini-meter" aria-hidden="true">
-              <div style="--c: var(--tide); --w: 82%">
-                <span>Wi-Fi</span><span class="bar"><span></span></span
-                ><span class="num">no cap</span>
-              </div>
-              <div style="--c: var(--volt); --w: 34%">
-                <span>Phone</span><span class="bar"><span></span></span
-                ><span class="num">8 MB/s</span>
-              </div>
-            </div>
-          </article>
-          <article class="panel cell cell-e spot reveal" style="--i: 1">
-            <div class="icon-row">
-              <span class="icon-tile"><i data-icon="list"></i></span>
-            </div>
-            <h3>Many links at once</h3>
-            <p>Paste a list, or a pattern, and each becomes its own download.</p>
-            <p class="art code-art" translate="no">
-              https://example.com/part<b>[01-20]</b>.rar
-              <span style="color: var(--mute)">→ 20 downloads</span>
-            </p>
-          </article>
-          <article class="panel cell spot reveal" style="--i: 2">
-            <div class="icon-row">
-              <span class="icon-tile"><i data-icon="refresh"></i></span>
-            </div>
-            <h3>Picks up where it stopped</h3>
-            <p>A dropped network, sleep, a crash: it carries on without starting over.</p>
-          </article>
-          <article class="panel cell spot reveal" style="--i: 3">
-            <div class="icon-row">
-              <span class="icon-tile"><i data-icon="shield"></i></span>
-            </div>
-            <h3>Checked, not guessed</h3>
-            <p>Parts only join if they come from the same file. Paste a SHA-256 to be sure.</p>
-          </article>
-          <article class="panel cell cell-h spot reveal">
-            <h3>Private by design</h3>
-            <ul class="assurances">
-              <li>No account</li>
-              <li>No ads</li>
-              <li>No tracking</li>
-              <li>Signed updates</li>
-              <li>Open source</li>
-            </ul>
-          </article>
+          </div>
         </div>
       </section>
 
@@ -496,128 +833,6 @@
             <span class="send-copy-btn">Copy link</span>
           </div>
         </div>
-      </section>
-
-      <section class="section wrap" id="built-in" aria-labelledby="built-title">
-        <div class="section-head reveal">
-          <h2 id="built-title">Built in, so you need fewer apps</h2>
-          <p class="section-lead">
-            Things that usually take a separate app, or a subscription. Free, and on your computer
-            only.
-          </p>
-        </div>
-        <ul class="smalls">
-          <li style="--i: 0">
-            <span class="small-ic"><i data-icon="film"></i></span><strong>Videos from pages</strong
-            ><span>YouTube and 1,000+ sites, in the quality you pick, over every network.</span>
-          </li>
-          <li style="--i: 1">
-            <span class="small-ic"><i data-icon="gauge"></i></span><strong>Network check</strong
-            ><span
-              >Speed, delay and lag under load per network, plus a report for your provider.</span
-            >
-          </li>
-          <li style="--i: 2">
-            <span class="small-ic"><i data-icon="lightning"></i></span><strong>Do this now</strong
-            ><span>One download gets every network; the rest wait their turn.</span>
-          </li>
-          <li style="--i: 3">
-            <span class="small-ic"><i data-icon="calendar"></i></span><strong>Ready by</strong
-            ><span>Set a time it should be done. Fuselane says if it's on track.</span>
-          </li>
-          <li style="--i: 0">
-            <span class="small-ic"><i data-icon="stack"></i></span
-            ><strong>Groups and whole pages</strong
-            ><span>Grab every file on a downloads page as one group.</span>
-          </li>
-          <li style="--i: 1">
-            <span class="small-ic"><i data-icon="check"></i></span
-            ><strong>Verified by itself</strong
-            ><span>Published checksums are found and checked for you.</span>
-          </li>
-          <li style="--i: 2">
-            <span class="small-ic"><i data-icon="copy"></i></span
-            ><strong>Text between computers</strong
-            ><span>Copy on one, paste on the other, phones too. Over your own network.</span>
-          </li>
-          <li style="--i: 3">
-            <span class="small-ic"><i data-icon="folders"></i></span><strong>Folders in sync</strong
-            ><span>Keep a folder mirrored on your other computer. No cloud.</span>
-          </li>
-          <li style="--i: 0">
-            <span class="small-ic"><i data-icon="rss"></i></span><strong>Feeds</strong
-            ><span>New podcast episodes and releases download by themselves.</span>
-          </li>
-          <li style="--i: 1">
-            <span class="small-ic"><i data-icon="chart"></i></span><strong>Data used</strong
-            ><span>What each network carried, day by day, for two months.</span>
-          </li>
-          <li style="--i: 2">
-            <span class="small-ic"><i data-icon="moon"></i></span><strong>Hours per network</strong
-            ><span>Use the phone only on its night plan; downloads move over.</span>
-          </li>
-          <li style="--i: 3">
-            <span class="small-ic"><i data-icon="plug"></i></span
-            ><strong>Works with aria2 apps</strong
-            ><span>AriaNg and the Aria2 extensions can add downloads here.</span>
-          </li>
-        </ul>
-      </section>
-
-      <section class="section wrap" id="small" aria-labelledby="small-title">
-        <div class="section-head reveal">
-          <h2 id="small-title">And the small things you'd miss</h2>
-        </div>
-        <ul class="smalls">
-          <li style="--i: 0">
-            <span class="small-ic"><i data-icon="later"></i></span><strong>Download later</strong
-            ><span>Add now, start when you're ready.</span>
-          </li>
-          <li style="--i: 1">
-            <span class="small-ic"><i data-icon="gauge"></i></span
-            ><strong>A limit per download</strong><span>Slow one file, leave the rest.</span>
-          </li>
-          <li style="--i: 2">
-            <span class="small-ic"><i data-icon="clip"></i></span><strong>Copied links</strong
-            ><span>Copy a file link and Fuselane offers it, if you want.</span>
-          </li>
-          <li style="--i: 3">
-            <span class="small-ic"><i data-icon="export"></i></span
-            ><strong>Export and import</strong><span>Your list as a plain text file.</span>
-          </li>
-          <li style="--i: 0">
-            <span class="small-ic"><i data-icon="search"></i></span
-            ><strong>Search and filters</strong><span>Find any download in a long list.</span>
-          </li>
-          <li style="--i: 1">
-            <span class="small-ic"><i data-icon="stack"></i></span><strong>Downloads at once</strong
-            ><span>Run one, or up to eight side by side.</span>
-          </li>
-          <li style="--i: 2">
-            <span class="small-ic"><i data-icon="folders"></i></span><strong>Sorted by type</strong
-            ><span>Videos, music, archives, each to its folder.</span>
-          </li>
-          <li style="--i: 3">
-            <span class="small-ic"><i data-icon="power"></i></span><strong>Start at login</strong
-            ><span>Waits in the tray for the schedule.</span>
-          </li>
-          <li style="--i: 0">
-            <span class="small-ic"><i data-icon="units"></i></span><strong>MB/s or Mbps</strong
-            ><span>Match your files, or your internet plan.</span>
-          </li>
-          <li style="--i: 1">
-            <span class="small-ic"><i data-icon="walk"></i></span><strong>Slow mode</strong
-            ><span>One switch to leave room for calls.</span>
-          </li>
-          <li style="--i: 2">
-            <span class="small-ic"><i data-icon="pie"></i></span><strong>Data allowances</strong
-            ><span>A monthly cap per network, never passed.</span>
-          </li>
-          <li style="--i: 3">
-            <span class="small-ic"><i data-icon="keys"></i></span><strong>Keyboard first</strong
-            ><span>Shortcuts for adding, pausing, moving.</span>
-          </li>
-        </ul>
       </section>
 
       <section class="section wrap showcase" aria-labelledby="app-title">

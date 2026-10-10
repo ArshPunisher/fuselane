@@ -988,3 +988,345 @@
     text-align: left;
   }
 }
+
+/* ---------- Built in: four groups of tools, each with a real screen ---------- */
+
+.tools {
+  display: grid;
+  gap: 20px;
+}
+
+.tools-tabs {
+  display: flex;
+  gap: 8px;
+  margin-inline: calc(var(--gutter) * -1);
+  padding: 2px var(--gutter) 6px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.tools-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tools-tabs [role='tab'] {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  min-height: 56px;
+  padding: 10px 16px 10px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-panel);
+  background: var(--surface-1);
+  color: var(--body);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  scroll-snap-align: start;
+  touch-action: manipulation;
+  transition:
+    border-color var(--dur-base),
+    background-color var(--dur-base),
+    transform var(--dur-quick) var(--ease-out);
+}
+
+.tools-tabs [role='tab']:hover {
+  border-color: var(--hairline-strong);
+}
+
+.tools-tabs [role='tab']:active {
+  transform: scale(0.985);
+}
+
+.tools-tabs [role='tab'][aria-selected='true'] {
+  border-color: color-mix(in oklch, var(--fuse) 50%, transparent);
+  background: color-mix(in oklch, var(--fuse) 7%, var(--surface-1));
+}
+
+.tool-ic {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r-control);
+  background: var(--surface-2);
+  color: var(--ink);
+  transition:
+    background-color var(--dur-base),
+    color var(--dur-base);
+}
+
+.tool-ic svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+[aria-selected='true'] .tool-ic {
+  background: var(--fuse);
+  color: var(--fuse-ink);
+}
+
+.tool-tab-text {
+  display: grid;
+  line-height: 1.3;
+}
+
+.tool-tab-text strong {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tool-tab-text small {
+  display: none;
+  color: var(--mute);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.tool-panel {
+  display: grid;
+  gap: 24px;
+  align-items: start;
+}
+
+/* With script, one group at a time; without, every group shows with its own heading. */
+.js .tool-panel[hidden] {
+  display: none;
+}
+
+.js .tool-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.tool-title {
+  font-size: 1.4rem;
+}
+
+.tool-list {
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+
+.tool-list li {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+  padding: 12px 10px;
+  border-radius: var(--r-control);
+  transition: background-color var(--dur-quick);
+}
+
+.tool-list li:hover {
+  background: var(--surface-1);
+}
+
+.tool-list strong {
+  display: block;
+  color: var(--ink);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.tool-list li > span:last-child > span {
+  display: block;
+  color: var(--body);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.tool-list code {
+  color: var(--ink);
+}
+
+.tool-item-ic {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-control);
+  color: var(--mute);
+  transition:
+    color var(--dur-base),
+    border-color var(--dur-base),
+    transform var(--dur-base) var(--ease-out);
+}
+
+.tool-item-ic svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.tool-list li:hover .tool-item-ic {
+  border-color: color-mix(in oklch, var(--fuse) 45%, transparent);
+  color: var(--fuse);
+  transform: rotate(-6deg) scale(1.06);
+}
+
+.tool-shot {
+  order: -1;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.tool-shot picture {
+  display: block;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-panel);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-soft);
+}
+
+.tool-shot img {
+  width: 100%;
+}
+
+.tool-shot figcaption {
+  color: var(--mute);
+  font-size: 13px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .js .tool-panel:not([hidden]) .tool-shot {
+    animation: shot-in 0.7s var(--ease-out) both;
+  }
+  .js .tool-panel:not([hidden]) .tool-list li {
+    animation: rise 0.6s var(--ease-out) both;
+    animation-delay: calc(var(--i) * 40ms);
+  }
+}
+
+@keyframes shot-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+}
+
+@media (min-width: 900px) {
+  .tools-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+  }
+  .tools-tabs [role='tab'] {
+    min-height: 72px;
+    padding: 14px 16px 14px 14px;
+  }
+  .tool-tab-text small {
+    display: block;
+  }
+  .tool-panel {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    gap: 40px;
+    padding-top: 16px;
+  }
+  .tool-shot {
+    order: 0;
+    position: sticky;
+    top: calc(var(--nav-h) + 24px);
+  }
+  .tool-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- The small things: one slow marquee ---------- */
+
+.extras {
+  display: grid;
+  gap: 18px;
+  margin-top: clamp(56px, 7vw, 96px);
+}
+
+.extras-title {
+  color: var(--ink);
+  font-size: 1.2rem;
+}
+
+.marquee {
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+}
+
+.marquee-track {
+  display: flex;
+  width: max-content;
+}
+
+.marquee-list {
+  list-style: none;
+  display: flex;
+  gap: 10px;
+  padding-right: 10px;
+}
+
+.marquee-list li {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 18px 0 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--surface-1);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.marquee-list svg {
+  width: 18px;
+  height: 18px;
+  fill: var(--fuse);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .marquee[data-play] .marquee-track {
+    animation: marquee 48s linear infinite;
+  }
+  .marquee:hover .marquee-track,
+  .marquee:focus-within .marquee-track {
+    animation-play-state: paused;
+  }
+}
+
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* Under reduced motion (or without script) the chips simply wrap. */
+.marquee:not([data-play]) {
+  mask-image: none;
+}
+
+.marquee:not([data-play]) .marquee-track {
+  width: min(var(--max), 100% - var(--gutter) * 2);
+  margin-inline: auto;
+}
+
+.marquee:not([data-play]) .marquee-list {
+  flex-wrap: wrap;
+}

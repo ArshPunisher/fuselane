@@ -375,6 +375,7 @@ export function fileUrl(version: string, suffix: string, cli = false) {
   return `${REPO}/releases/download/v${version}/${name}`
 }
 
+document.documentElement.classList.add('js')
 icons()
 navbar()
 reveal()
