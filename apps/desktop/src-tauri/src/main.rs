@@ -14,6 +14,8 @@ mod media;
 mod native;
 mod nearby;
 mod opens;
+#[cfg(target_os = "linux")]
+mod portal;
 mod power;
 mod remote;
 mod reports;
@@ -265,7 +267,13 @@ struct WindowPrefs {
 fn window_prefs(app: tauri::AppHandle, svc: State<'_>) -> WindowPrefs {
     use tauri_plugin_autostart::ManagerExt;
     WindowPrefs {
-        start_at_login: app.autolaunch().is_enabled().unwrap_or(false),
+        // In a Flatpak the portal keeps the entry on the host, out of sight: what
+        // it last granted is remembered instead.
+        start_at_login: if flatpak::active() {
+            svc.portal_autostart()
+        } else {
+            app.autolaunch().is_enabled().unwrap_or(false)
+        },
         close_to_tray: svc.close_to_tray(),
         watch_clipboard: svc.watch_clipboard(),
     }
@@ -323,8 +331,26 @@ fn watch_clipboard(app: tauri::AppHandle, svc: Arc<Service>) {
 }
 
 #[tauri::command]
-fn set_start_at_login(app: tauri::AppHandle, on: bool) -> Result<bool, UiError> {
+async fn set_start_at_login(
+    app: tauri::AppHandle,
+    #[cfg_attr(not(target_os = "linux"), allow(unused_variables))] svc: State<'_>,
+    on: bool,
+) -> Result<bool, UiError> {
     use tauri_plugin_autostart::ManagerExt;
+    // A Flatpak's own autostart entry would be written inside the sandbox, where the
+    // desktop never looks; the Background portal writes it on the host.
+    #[cfg(target_os = "linux")]
+    if flatpak::active() {
+        let on = portal::set_autostart(on).await.map_err(|e| {
+            UiError::new_public(
+                "autostart",
+                format!("Your system didn't accept the change ({e})."),
+                Some("Allow Fuselane to run in the background in your system settings, then try again."),
+            )
+        })?;
+        svc.set_portal_autostart(on)?;
+        return Ok(on);
+    }
     let a = app.autolaunch();
     let r = if on { a.enable() } else { a.disable() };
     r.map_err(|e| {

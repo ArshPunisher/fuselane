@@ -2031,6 +2031,24 @@ impl Service {
         Ok(on)
     }
 
+    /// Start at login as the Background portal last granted it (Flatpak only). The
+    /// portal keeps the autostart entry on the host, where the app can't look.
+    pub fn portal_autostart(&self) -> bool {
+        self.store
+            .setting("portal_autostart")
+            .ok()
+            .flatten()
+            .as_deref()
+            == Some("true")
+    }
+
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    pub fn set_portal_autostart(&self, on: bool) -> Result<(), UiError> {
+        self.store
+            .set_setting("portal_autostart", if on { "true" } else { "false" })
+            .map_err(store_error)
+    }
+
     pub fn watch_clipboard(&self) -> bool {
         self.watch_clipboard
             .load(std::sync::atomic::Ordering::Relaxed)

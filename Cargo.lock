@@ -1875,6 +1875,7 @@ dependencies = [
  "fuselane-storage",
  "fuselane-testkit",
  "fuselane-transport",
+ "futures-lite",
  "getrandom 0.3.4",
  "keyring",
  "librqbit",
@@ -1901,6 +1902,7 @@ dependencies = [
  "trash",
  "url",
  "windows-sys 0.61.2",
+ "zbus",
  "zip 2.4.2",
 ]
 

@@ -2,7 +2,8 @@
 //! or shut down once everything has finished (automation::WhenDone).
 //!
 //! Each OS's own tool: `caffeinate` on macOS, `SetThreadExecutionState` on Windows,
-//! `systemd-inhibit` on Linux. No admin rights are needed for any of them.
+//! `systemd-inhibit` on Linux, or the Inhibit portal inside a Flatpak (which has no
+//! `systemd-inhibit`). No admin rights are needed for any of them.
 
 use std::io;
 
@@ -10,7 +11,10 @@ use std::io;
 #[derive(Debug)]
 pub struct KeepAwake {
     #[cfg(not(windows))]
-    child: std::process::Child,
+    child: Option<std::process::Child>,
+    /// Inside a Flatpak: the portal's inhibition, held only to be lifted on drop.
+    #[cfg(target_os = "linux")]
+    _portal: Option<crate::portal::Inhibit>,
     #[cfg(windows)]
     stop: std::sync::mpsc::Sender<()>,
 }
@@ -28,10 +32,28 @@ impl KeepAwake {
                 .stderr(std::process::Stdio::null())
                 .spawn()
                 .ok()?;
-            Some(KeepAwake { child })
+            Some(KeepAwake { child: Some(child) })
         }
         #[cfg(all(unix, not(target_os = "macos")))]
         {
+            #[cfg(target_os = "linux")]
+            if crate::flatpak::active() {
+                return match crate::portal::Inhibit::start() {
+                    Ok(inhibit) => Some(KeepAwake {
+                        child: None,
+                        _portal: Some(inhibit),
+                    }),
+                    Err(e) => {
+                        // Asked again on every change, so said once, not every time.
+                        static SAID: std::sync::atomic::AtomicBool =
+                            std::sync::atomic::AtomicBool::new(false);
+                        if !SAID.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                            eprintln!("fuselane: couldn't keep the computer awake: {e}");
+                        }
+                        None
+                    }
+                };
+            }
             let child = std::process::Command::new("systemd-inhibit")
                 .args([
                     "--what=idle:sleep",
@@ -46,7 +68,11 @@ impl KeepAwake {
                 .stderr(std::process::Stdio::null())
                 .spawn()
                 .ok()?;
-            Some(KeepAwake { child })
+            Some(KeepAwake {
+                child: Some(child),
+                #[cfg(target_os = "linux")]
+                _portal: None,
+            })
         }
         #[cfg(windows)]
         {
@@ -73,10 +99,11 @@ impl KeepAwake {
 impl Drop for KeepAwake {
     fn drop(&mut self) {
         #[cfg(not(windows))]
-        {
-            let _ = self.child.kill();
-            let _ = self.child.wait();
+        if let Some(child) = self.child.as_mut() {
+            let _ = child.kill();
+            let _ = child.wait();
         }
+        // The portal's inhibition is lifted by its own Drop.
         #[cfg(windows)]
         {
             let _ = self.stop.send(());
@@ -85,6 +112,11 @@ impl Drop for KeepAwake {
 }
 
 fn run(program: &str, args: &[&str]) -> io::Result<()> {
+    // The sandbox has no systemctl and no portal for this; the settings refuse
+    // these actions in a Flatpak, so this only catches one saved before.
+    if crate::flatpak::active() {
+        return Err(io::Error::other("not available in the Flatpak version"));
+    }
     let status = std::process::Command::new(program).args(args).status()?;
     if status.success() {
         Ok(())
