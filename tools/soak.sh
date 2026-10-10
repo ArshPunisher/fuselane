@@ -156,8 +156,9 @@ case $fault in
   *) bad_input "there's no fault mode called \"$fault\". Pick none, drops, resets, stalls, busy, slow, lies or mixed." ;;
 esac
 case $every in '' | *[!0-9]*) every=x ;; esac
-[ "$every" != x ] && [ "$every" -ge 2 ] && [ "$every" -le 1000000 ] ||
+if [ "$every" = x ] || [ "$every" -lt 2 ] || [ "$every" -gt 1000000 ]; then
   bad_input "--every needs a whole number from 2 to 1000000."
+fi
 
 decimal='^[0-9]+([.][0-9]+)?$'
 [[ $pause =~ $decimal ]] || bad_input "--pause needs a number of seconds, like 2 or 0.5."
