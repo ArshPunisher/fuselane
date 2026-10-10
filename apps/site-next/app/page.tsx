@@ -57,6 +57,26 @@ const LD: object[] = [
     license: 'https://www.apache.org/licenses/LICENSE-2.0',
     codeRepository: 'https://github.com/ArshPunisher/fuselane',
     isAccessibleForFree: true,
+    author: {
+      '@type': 'Organization',
+      name: 'ClearCraft Labs',
+      url: 'https://clearcraftlabs.com/',
+      sameAs: [
+        'https://x.com/ClearCraftLabs',
+        'https://www.instagram.com/clearcraftlabs/',
+        'https://github.com/ArshPunisher',
+      ],
+    },
+    publisher: {
+      '@type': 'Organization',
+      name: 'ClearCraft Labs',
+      url: 'https://clearcraftlabs.com/',
+      sameAs: [
+        'https://x.com/ClearCraftLabs',
+        'https://www.instagram.com/clearcraftlabs/',
+        'https://github.com/ArshPunisher',
+      ],
+    },
   },
   {
     '@context': 'https://schema.org',
@@ -65,10 +85,13 @@ const LD: object[] = [
     url: 'https://fuselane.app/',
     publisher: {
       '@type': 'Organization',
-      name: 'Fuselane',
-      url: 'https://fuselane.app/',
-      logo: 'https://fuselane.app/icon-512.png',
-      sameAs: ['https://github.com/ArshPunisher/fuselane'],
+      name: 'ClearCraft Labs',
+      url: 'https://clearcraftlabs.com/',
+      sameAs: [
+        'https://x.com/ClearCraftLabs',
+        'https://www.instagram.com/clearcraftlabs/',
+        'https://github.com/ArshPunisher',
+      ],
     },
   },
 ]

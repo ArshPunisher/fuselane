@@ -643,8 +643,8 @@ export function FooterMarkup() {
           <div className="foot-base">
             {' '}
             <span>
-              Free software under Apache-2.0. Made by{' '}
-              <a href="https://github.com/ArshPunisher">Arsh Ramgarhia</a>.
+              Free software under Apache-2.0. A{' '}
+              <a href="https://clearcraftlabs.com/?ref=fuselane-site">ClearCraft Labs</a> product.
             </span>{' '}
             <span className="foot-end">
               {' '}
