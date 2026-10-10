@@ -4,7 +4,7 @@
 
 ## Now
 
-- **Phase:** **P4 beta**: 0.1.0-beta.10 is ready on main and waits for the owner to tag it (PENDING.md). Remaining before 1.0: the real-hardware checklist (needs a phone and other computers), two weeks of 24 h soaks, Windows signing, store listings.
+- **Phase:** **P4 beta**: **`v0.1.0-beta.10` published 2026-10-10** (verified: checksums, universal binary, self-test incl. Nearby, update feed for 4 platforms, Homebrew cask; site redeployed to fuselane.app; Search Console verified with the sitemap submitted; extension 0.2.0 submitted to the Chrome Web Store). Remaining before 1.0: the real-hardware checklist (needs a phone and other computers), two weeks of 24 h soaks, Windows signing, store listings.
 - **P3 done (tested, committed):**
   - Engine snapshots for the UI (per-network bytes, rates, streams; 180 ring ticks with fill, owner, in-flight).
   - `core::runner`: one job runner shared by the CLI and the desktop app (link checks, network choice, Happy Eyeballs connects, store bookkeeping, plain-language errors). `core::home`: one shared download list.
