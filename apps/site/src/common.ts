@@ -4,6 +4,8 @@ import './site.css'
 import star from '@phosphor-icons/core/assets/regular/star.svg?raw'
 import lightning from '@phosphor-icons/core/assets/regular/lightning.svg?raw'
 import film from '@phosphor-icons/core/assets/regular/film-strip.svg?raw'
+import rss from '@phosphor-icons/core/assets/regular/rss.svg?raw'
+import chart from '@phosphor-icons/core/assets/regular/chart-bar.svg?raw'
 import github from '@phosphor-icons/core/assets/regular/github-logo.svg?raw'
 import download from '@phosphor-icons/core/assets/regular/download-simple.svg?raw'
 import arrowUpRight from '@phosphor-icons/core/assets/regular/arrow-up-right.svg?raw'
@@ -50,6 +52,8 @@ const ICONS: Record<string, string> = {
   star,
   lightning,
   film,
+  rss,
+  chart,
   github,
   download,
   'arrow-up-right': arrowUpRight,
