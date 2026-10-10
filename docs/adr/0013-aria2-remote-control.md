@@ -1,6 +1,6 @@
 # ADR 0013: Remote control speaks aria2's JSON-RPC
 
-- Status: proposed (2026-10-10, built while the owner was away; needs the owner's review before release)
+- Status: accepted (2026-10-10, owner approved in chat)
 
 ## Context
 
