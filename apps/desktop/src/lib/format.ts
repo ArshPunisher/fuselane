@@ -91,6 +91,21 @@ function weekday(unix: number): string {
   return new Date(unix * 1000).toLocaleDateString(intlLocale(), { weekday: 'short' })
 }
 
+/** "4 minutes ago", "yesterday": the browser's own words for it, in the app's language. */
+export function ago(unix: number, now = Date.now()): string {
+  const secs = Math.round(unix - now / 1000)
+  const rtf = new Intl.RelativeTimeFormat(intlLocale(), { numeric: 'auto' })
+  const steps: [Intl.RelativeTimeFormatUnit, number][] = [
+    ['day', 86_400],
+    ['hour', 3_600],
+    ['minute', 60],
+  ]
+  for (const [unit, size] of steps) {
+    if (Math.abs(secs) >= size) return rtf.format(Math.round(secs / size), unit)
+  }
+  return rtf.format(0, 'minute')
+}
+
 /** "at 02:00", "tomorrow at 02:00", "Mon at 02:00". */
 export function when(unix: number, now = Date.now()): string {
   const days = daysAway(unix, now)

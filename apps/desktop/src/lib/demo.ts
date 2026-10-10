@@ -34,6 +34,8 @@ import type {
   ReportView,
   UiError,
   UiEvent,
+  BrowserView,
+  HandoffView,
 } from './types'
 
 const MB = 1024 * 1024
@@ -549,6 +551,48 @@ export function createDemoBackend(params: URLSearchParams): Backend {
 
   let maxRunning = 3
   let findSums = true
+  const nowSecs = Math.floor(Date.now() / 1000)
+  // Browser extension page: ?browsers=none | missing | all (default: one of each state).
+  const which = params.get('browsers')
+  const demoBrowser = (
+    id: string,
+    name: string,
+    store: BrowserView['store'],
+    state: BrowserView['extension'],
+    seenAgo: number | null,
+    version: string | null,
+  ): BrowserView => ({
+    id,
+    name,
+    extension: state,
+    connected: state === 'on' && seenAgo !== null && seenAgo < 30 * 86400,
+    lastSeen: seenAgo === null ? null : nowSecs - seenAgo,
+    version,
+    store,
+  })
+  let browsers: BrowserView[] =
+    which === 'none'
+      ? []
+      : which === 'missing'
+        ? [
+            demoBrowser('chrome', 'Chrome', 'chrome', 'missing', null, null),
+            demoBrowser('edge', 'Microsoft Edge', 'edge', 'missing', null, null),
+          ]
+        : which === 'all'
+          ? [
+              demoBrowser('chrome', 'Chrome', 'chrome', 'on', 240, '0.3.0'),
+              demoBrowser('edge', 'Microsoft Edge', 'edge', 'on', 3600, '0.3.0'),
+              demoBrowser('firefox', 'Firefox', 'firefox', 'on', 7200, '0.3.0'),
+            ]
+          : [
+              demoBrowser('chrome', 'Chrome', 'chrome', 'on', 240, '0.3.0'),
+              demoBrowser('edge', 'Microsoft Edge', 'edge', 'missing', null, null),
+              demoBrowser('firefox', 'Firefox', 'firefox', 'off', 9 * 86400, '0.2.0'),
+            ]
+  let handoff: HandoffView = { enabled: true, minBytes: 1024 * 1024 }
+  /** What the demo "opened", for tests (the real app starts the browser). */
+  const opened: string[] = []
+  ;(window as unknown as { __demoBrowserOpens?: string[] }).__demoBrowserOpens = opened
   let watch: WatchView = { on: false, path: '', problem: null, recent: [] }
   let feeds: FeedView[] = [
     {
@@ -1149,6 +1193,22 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     getLimits: async () => structuredClone(limits),
     perNetworkDns: async () => perNetDns,
     findChecksums: async () => findSums,
+    extensionBrowsers: async () => structuredClone(browsers),
+    extensionOpen: async (browser, page) => {
+      if (!browsers.some((b) => b.id === browser)) throw err('invalid', 'Unknown browser.', null)
+      opened.push(`${browser}:${page}`)
+      // The demo pretends the person added it right away.
+      if (page === 'store')
+        browsers = browsers.map((b) =>
+          b.id === browser ? { ...b, extension: 'on', connected: true, lastSeen: nowSecs } : b,
+        )
+    },
+    handoff: async () => ({ ...handoff }),
+    setHandoff: async (h) => {
+      if (!Number.isInteger(h.minBytes) || h.minBytes < 0 || h.minBytes > 2 ** 40)
+        throw err('invalid', 'That size is too big.', 'Pick a size up to 1 TB.')
+      return (handoff = { ...h })
+    },
     longMinutes: async () => longMinutes,
     setLongMinutes: async (m) => {
       if (!Number.isInteger(m) || m < 1 || m > 600)

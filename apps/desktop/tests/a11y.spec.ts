@@ -72,6 +72,16 @@ for (const scheme of ['light', 'dark'] as const) {
       await audit(page, 'settings')
     })
 
+    test('browser extension page and the Downloads banner', async ({ page }) => {
+      await page.goto('/?browsers=missing&freeze=3')
+      await expect(page.getByTestId('extension-nudge')).toBeVisible()
+      await audit(page, 'extension banner')
+      await page.goto('/?freeze=3')
+      await page.getByRole('button', { name: 'Extension' }).first().click()
+      await expect(page.getByRole('list', { name: 'Your browsers' })).toBeVisible()
+      await audit(page, 'browser extension')
+    })
+
     test('a network behind a sign-in page', async ({ page }) => {
       await page.goto('/?portal=en0')
       await page.getByRole('button', { name: 'Networks' }).first().click()

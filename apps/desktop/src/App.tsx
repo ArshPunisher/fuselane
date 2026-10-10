@@ -5,6 +5,7 @@ import {
   Gear,
   PaperPlaneTilt,
   Plus,
+  PuzzlePiece,
   ShareNetwork,
 } from '@phosphor-icons/react'
 import { useApp, type View } from './lib/store'
@@ -15,6 +16,7 @@ import { NewDownload } from './components/NewDownload'
 import { NetworkList, NetworksTotal, NetworksView } from './components/NetworksView'
 import { NearbyRequestDialog } from './components/NearbyPanel'
 import { SettingsView } from './components/SettingsView'
+import { BrowsersView, ExtensionNudge } from './components/BrowsersView'
 import { SendView } from './components/SendView'
 import { SpeedtestView } from './components/SpeedtestView'
 import { isSendLink } from './lib/sendLink'
@@ -46,6 +48,7 @@ const NAV: { id: View; label: string; Icon: typeof DownloadSimple }[] = [
   { id: 'send', label: mark('Send'), Icon: PaperPlaneTilt },
   { id: 'speedtest', label: mark('Speedtest'), Icon: Gauge },
   { id: 'networks', label: mark('Networks'), Icon: ShareNetwork },
+  { id: 'browsers', label: mark('Extension'), Icon: PuzzlePiece },
   { id: 'settings', label: mark('Settings'), Icon: Gear },
 ]
 
@@ -298,6 +301,8 @@ export function App() {
     <div className="page" aria-busy="true" aria-label={t('Starting Fuselane')} />
   ) : view === 'networks' ? (
     <NetworksView />
+  ) : view === 'browsers' ? (
+    <BrowsersView />
   ) : view === 'settings' ? (
     <SettingsView />
   ) : view === 'send' ? (
@@ -343,6 +348,7 @@ export function App() {
           <WhenDoneBanner />
           <UpdateBanner />
           <CrashBanner />
+          {connected && view === 'transfers' && <ExtensionNudge />}
           {page}
         </main>
         {layout === 'compact' && <Nav kind="tabs" />}

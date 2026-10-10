@@ -3,10 +3,11 @@ import { ArrowRight, Clipboard, FolderSimple, Gauge, PuzzlePiece } from '@phosph
 import { useApp } from '../lib/store'
 import type { CheckRun } from '../lib/types'
 import { NetIcon } from './NetIcon'
+import { BrowserList } from './BrowsersView'
 import { t, tb, tr } from '../lib/i18n'
 
-type Step = 'networks' | 'check' | 'ready'
-const STEPS: Step[] = ['networks', 'check', 'ready']
+type Step = 'networks' | 'check' | 'browser' | 'ready'
+const ALL_STEPS: Step[] = ['networks', 'check', 'browser', 'ready']
 
 const OS = /Mac/i.test(navigator.platform)
   ? 'mac'
@@ -139,6 +140,8 @@ export function Welcome() {
 
   const usable = networks.filter((n) => n.usable)
   const run = check?.running ? check.current : started ? (check?.history[0] ?? null) : null
+  // The Flatpak can't talk to the extension yet, so it skips that step.
+  const STEPS = info?.flatpak ? ALL_STEPS.filter((s) => s !== 'browser') : ALL_STEPS
   const index = STEPS.indexOf(step)
   const next = () => setStep(STEPS[Math.min(index + 1, STEPS.length - 1)]!)
 
@@ -254,6 +257,21 @@ export function Welcome() {
             </section>
           )}
 
+          {step === 'browser' && (
+            <section className="welcome-step" key="browser">
+              <h2 id="welcome-title">{t('Add Fuselane to your browser')}</h2>
+              <p className="welcome-lead">
+                {t(
+                  'With the extension, downloads you start in your browser come here by themselves. It opens your browser at its store page; add it there.',
+                )}
+              </p>
+              <BrowserList compact />
+              <p className="welcome-hint">
+                {t('You can do this later from Extension in the sidebar.')}
+              </p>
+            </section>
+          )}
+
           {step === 'ready' && (
             <section className="welcome-step" key="ready">
               <h2 id="welcome-title">{t('Ready when you are')}</h2>
@@ -278,10 +296,9 @@ export function Welcome() {
                       ? t(
                           "The browser extension can't talk to the Flatpak version yet; use the .deb or AppImage for it.",
                         )
-                      : tr(
-                          '{extension} hands big downloads to Fuselane by itself. Get it from fuselane.app.',
-                          { extension: <b>{t('The browser extension')}</b> },
-                        )}
+                      : tr('{extension} hands big downloads to Fuselane by itself.', {
+                          extension: <b>{t('The browser extension')}</b>,
+                        })}
                   </span>
                 </li>
                 <li>

@@ -666,4 +666,14 @@ export const hiBackend: Readonly<Record<string, string>> = {
     'सिस्टम सेटिंग्स में Fuselane को बैकग्राउंड में चलने दें, फिर से कोशिश करें।',
   'Start Fuselane when you sign in, so scheduled downloads run.':
     'साइन इन करने पर Fuselane शुरू करें, ताकि तय किए गए डाउनलोड चल सकें।',
+
+  // ==== Browser extension page ====
+  'Unknown browser.': 'अनजान ब्राउज़र।',
+  'Unknown page.': 'अनजान पेज।',
+  "Couldn't look at your browsers.": 'आपके ब्राउज़र देखे नहीं जा सके।',
+  "{browser} couldn't be started.": '{browser} शुरू नहीं हो सका।',
+  'Open the browser yourself and search its store for Fuselane.':
+    'ब्राउज़र खुद खोलें और उसके स्टोर में Fuselane खोजें।',
+  'That size is too big.': 'यह साइज़ बहुत बड़ा है।',
+  'Pick a size up to 1 TB.': '1 TB तक का साइज़ चुनें।',
 }

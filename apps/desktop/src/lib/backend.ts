@@ -17,6 +17,8 @@ import type {
   AllowanceRequest,
   AllowanceView,
   AppInfo,
+  BrowserView,
+  HandoffView,
   WindowPrefs,
   Automation,
   AutomationView,
@@ -116,6 +118,13 @@ export interface Backend {
   longMinutes(): Promise<number>
   setLongMinutes(minutes: number): Promise<number>
   findChecksums(): Promise<boolean>
+  /** Browsers on this computer and Fuselane's extension in each. */
+  extensionBrowsers(): Promise<BrowserView[]>
+  /** Opens that browser at Fuselane's store page, or its own extensions page. */
+  extensionOpen(browser: string, page: 'store' | 'extensions'): Promise<void>
+  /** Where the browser's downloads go (the extension follows it). */
+  handoff(): Promise<HandoffView>
+  setHandoff(h: HandoffView): Promise<HandoffView>
   setFindChecksums(on: boolean): Promise<boolean>
   setPerNetworkDns(on: boolean): Promise<boolean>
   allowances(): Promise<AllowanceView[]>
@@ -335,6 +344,10 @@ async function tauriBackend(): Promise<Backend> {
     getLimits: () => call('get_limits'),
     perNetworkDns: () => call('per_network_dns'),
     findChecksums: () => call('find_checksums'),
+    extensionBrowsers: () => call('extension_browsers'),
+    extensionOpen: (browser, page) => call('extension_open', { browser, page }),
+    handoff: () => call('handoff_get'),
+    setHandoff: (h) => call('handoff_set', { enabled: h.enabled, minBytes: h.minBytes }),
     longMinutes: () => call('long_minutes'),
     setLongMinutes: (minutes) => call('set_long_minutes', { minutes }),
     setFindChecksums: (on) => call('set_find_checksums', { on }),

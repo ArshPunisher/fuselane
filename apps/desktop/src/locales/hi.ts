@@ -774,8 +774,13 @@ export const hi: Readonly<Record<string, string>> = {
   'Ready when you are': 'सब तैयार है',
   '{paste} in the window, or press {keys}.': 'विंडो में {paste}, या {keys} दबाएं।',
   'Paste a link anywhere': 'कहीं भी लिंक पेस्ट करें',
-  '{extension} hands big downloads to Fuselane by itself. Get it from fuselane.app.':
-    '{extension} बड़े डाउनलोड अपने आप Fuselane को सौंप देता है। इसे fuselane.app से पाएं।',
+  '{extension} hands big downloads to Fuselane by itself.':
+    '{extension} बड़े डाउनलोड अपने आप Fuselane को सौंप देता है।',
+  'Add Fuselane to your browser': 'Fuselane को अपने ब्राउज़र में जोड़ें',
+  'With the extension, downloads you start in your browser come here by themselves. It opens your browser at its store page; add it there.':
+    'एक्सटेंशन से, ब्राउज़र में शुरू किए गए डाउनलोड अपने आप यहां आते हैं। बटन आपके ब्राउज़र में उसका स्टोर पेज खोलता है; वहां इसे जोड़ें।',
+  'You can do this later from Extension in the sidebar.':
+    'आप यह बाद में साइडबार के एक्सटेंशन से भी कर सकते हैं।',
   'The browser extension': 'ब्राउज़र एक्सटेंशन',
   '{label} {folder}. Change it for any download.':
     '{label} {folder}। किसी भी डाउनलोड के लिए इसे बदल सकते हैं।',
@@ -1095,4 +1100,38 @@ export const hi: Readonly<Record<string, string>> = {
   "{network} is fast again ({rate}), so it's helping again.":
     '{network} फिर से तेज़ है ({rate}), इसलिए यह फिर से मदद कर रहा है।',
   "{network} can't connect.": '{network} कनेक्ट नहीं हो पा रहा।',
+
+  // Browser extension page
+  Extension: 'एक्सटेंशन',
+  'Turned off': 'बंद है',
+  Connected: 'जुड़ा हुआ',
+  'Add it so downloads you start in {browser} come to Fuselane.':
+    'इसे जोड़ें, ताकि {browser} में शुरू किए गए डाउनलोड Fuselane में आएं।',
+  'It is installed but turned off. Turn it on in {browser}’s extensions page.':
+    'यह इंस्टॉल है, पर बंद है। इसे {browser} के एक्सटेंशन पेज पर चालू करें।',
+  'Checked in {when}, version {version}': 'आखिरी बार {when} जुड़ा, वर्शन {version}',
+  'Checked in {when}': 'आखिरी बार {when} जुड़ा',
+  'Open {browser} once so it can check in.': '{browser} एक बार खोलें, ताकि यह जुड़ सके।',
+  'Add to {browser}': '{browser} में जोड़ें',
+  'Turn on': 'चालू करें',
+  'Add the extension and downloads from your browser come here by themselves.':
+    'एक्सटेंशन जोड़ें, फिर ब्राउज़र के डाउनलोड अपने आप यहां आएंगे।',
+  'Turn on in {browser}': '{browser} में चालू करें',
+  'Not now': 'अभी नहीं',
+  'Looking at your browsers': 'आपके ब्राउज़र देखे जा रहे हैं',
+  'No supported browser found. Fuselane works with Chrome, Edge, Brave, Vivaldi and Firefox.':
+    'कोई समर्थित ब्राउज़र नहीं मिला। Fuselane Chrome, Edge, Brave, Vivaldi और Firefox के साथ चलता है।',
+  'Your browsers': 'आपके ब्राउज़र',
+  'Everything to Fuselane': 'सब कुछ Fuselane में',
+  'Every download from the browser comes here.': 'ब्राउज़र का हर डाउनलोड यहां आता है।',
+  'Small files stay in the browser': 'छोटी फ़ाइलें ब्राउज़र में रहें',
+  'Files up to the size below stay in the browser; bigger ones come here.':
+    'नीचे दिए साइज़ तक की फ़ाइलें ब्राउज़र में रहती हैं; बड़ी फ़ाइलें यहां आती हैं।',
+  'Keep downloads in the browser': 'डाउनलोड ब्राउज़र में ही रखें',
+  'The extension stays quiet. Right-click a link to send one to Fuselane.':
+    'एक्सटेंशन कुछ नहीं करेगा। किसी लिंक को Fuselane में भेजने के लिए उस पर राइट-क्लिक करें।',
+  'Where browser downloads go': 'ब्राउज़र के डाउनलोड कहां जाएं',
+  'Stay in the browser up to': 'इतने साइज़ तक ब्राउज़र में रहें',
+  'With the extension, downloads you start in your browser come to Fuselane by themselves and use every network.':
+    'एक्सटेंशन से, ब्राउज़र में शुरू किए गए डाउनलोड अपने आप Fuselane में आते हैं और हर नेटवर्क का इस्तेमाल करते हैं।',
 }

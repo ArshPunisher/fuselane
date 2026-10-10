@@ -322,6 +322,26 @@ export interface AppInfo {
   flatpak: boolean
 }
 
+/** One browser on the Browser extension page. */
+export interface BrowserView {
+  id: string
+  name: string
+  /** missing: not added; off: added but turned off in the browser; on: added. */
+  extension: 'missing' | 'off' | 'on'
+  /** It has talked to Fuselane in the last 30 days. */
+  connected: boolean
+  /** Unix seconds of its last check-in. */
+  lastSeen: number | null
+  version: string | null
+  store: 'chrome' | 'edge' | 'firefox'
+}
+
+/** Where the browser's downloads go: off, or everything from minBytes up (0 = all). */
+export interface HandoffView {
+  enabled: boolean
+  minBytes: number
+}
+
 export interface PreviewView {
   filename: string
   total: number | null

@@ -1934,6 +1934,10 @@ test('welcome: networks, an optional check with a verdict, then tips', async ({ 
   await expect(step2.getByRole('status')).toContainText(/times .* alone/, { timeout: 15000 })
   await expect(step2.getByRole('list', { name: 'Check results' })).toContainText('Mbps')
   await step2.getByRole('button', { name: 'Next' }).click()
+  const browsers = page.getByRole('dialog', { name: 'Add Fuselane to your browser' })
+  await expect(browsers.getByRole('list', { name: 'Your browsers' })).toContainText('Chrome')
+  await expect(browsers).toContainText('Extension in the sidebar')
+  await browsers.getByRole('button', { name: 'Next' }).click()
   const step3 = page.getByRole('dialog', { name: 'Ready when you are' })
   await expect(step3).toContainText('Paste a link anywhere')
   await step3.getByRole('button', { name: 'Start downloading' }).click()
@@ -1945,7 +1949,9 @@ test('welcome: Skip closes it; Settings shows it again; not shown otherwise', as
   await expect(page.getByRole('button', { name: 'Feeds', exact: true })).toBeVisible()
   await expect(page.getByRole('dialog', { name: 'Welcome to Fuselane' })).toHaveCount(0)
   await page.getByRole('button', { name: 'Settings' }).first().click()
-  await page.getByRole('button', { name: 'Show it again' }).click()
+  // Pressed with the keyboard: settings that load their values a moment later can
+  // shift the page under a mouse click aimed at the button.
+  await page.getByRole('button', { name: 'Show it again' }).press('Enter')
   const welcome = page.getByRole('dialog', { name: 'Welcome to Fuselane' })
   await expect(welcome).toBeVisible()
   await welcome.getByRole('button', { name: 'Skip' }).click()

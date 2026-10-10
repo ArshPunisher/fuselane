@@ -344,7 +344,8 @@ h2 {
 
 .nav-tabs {
   justify-content: space-around;
-  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  /* Six tabs at 375 px: keep the side padding small so "Downloads" fits. */
+  padding: 6px 2px calc(6px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--hairline);
   background: var(--surface-1);
 }
@@ -388,9 +389,10 @@ h2 {
   gap: 2px;
   min-height: 48px;
   min-width: 0;
-  padding: 0 2px;
+  padding: 0 1px;
   justify-content: center;
   font-size: 11px;
+  letter-spacing: -0.01em;
 }
 
 .nav-tabs .nav-label {
@@ -7093,4 +7095,196 @@ html[data-hidden] .orb b {
   flex-wrap: nowrap;
   align-items: center;
   gap: 14px;
+}
+
+/* ---------- Browser extension page ---------- */
+
+.ext-browsers {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  background: var(--surface-1);
+}
+
+.ext-browsers[aria-busy='true'] {
+  min-height: 132px;
+  background: linear-gradient(90deg, var(--surface-1), var(--surface-2), var(--surface-1));
+  background-size: 200% 100%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ext-browsers[aria-busy='true'] {
+    animation: ext-shimmer 1.4s var(--ease-in-out) infinite;
+  }
+}
+
+@keyframes ext-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.ext-browser {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.ext-browser + .ext-browser {
+  border-top: 1px solid var(--hairline);
+}
+
+.ext-browser-ic {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.ext-browser[data-state='connected'] .ext-browser-ic {
+  background: var(--fuse-soft);
+  color: var(--fuse-text);
+}
+
+.ext-browser-name {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.ext-browser-text .muted {
+  font-size: 13px;
+}
+
+.ext-chip {
+  gap: 4px;
+  padding: 2px 9px;
+}
+
+.ext-chip[data-state='connected'] {
+  border-color: color-mix(in oklch, var(--success) 45%, transparent);
+  color: var(--success);
+}
+
+.ext-chip[data-state='off'] {
+  border-color: color-mix(in oklch, var(--warning) 55%, transparent);
+  color: var(--warning);
+}
+
+.ext-browser-action:empty {
+  display: none;
+}
+
+.ext-browsers.compact .ext-browser {
+  padding: 10px 12px;
+}
+
+.ext-empty {
+  padding: 16px 0;
+}
+
+.ext-handoff {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.ext-handoff legend {
+  margin-bottom: 8px;
+  padding: 0;
+}
+
+.ext-options {
+  display: grid;
+  gap: 8px;
+}
+
+.ext-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 12px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-quick) var(--ease-out),
+    background var(--dur-quick) var(--ease-out);
+}
+
+.ext-option:hover {
+  border-color: var(--hairline-strong);
+}
+
+.ext-option:has(input:focus-visible) {
+  outline: 2px solid var(--fuse);
+  outline-offset: 2px;
+}
+
+.ext-option[data-checked='true'] {
+  border-color: color-mix(in oklch, var(--fuse) 60%, transparent);
+  background: var(--fuse-soft);
+}
+
+.ext-option input {
+  margin: 3px 0 0;
+  accent-color: var(--fuse);
+}
+
+.ext-option > span {
+  display: grid;
+  gap: 2px;
+}
+
+.ext-option-name {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.ext-option .muted {
+  font-size: 13px;
+}
+
+.ext-size {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.ext-size select {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--ink);
+  font: inherit;
+  font-family: var(--font-mono);
+}
+
+.ext-size select:focus-visible {
+  outline: 2px solid var(--fuse);
+  outline-offset: 2px;
+}
+
+@media (max-width: 639px) {
+  .ext-browser {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .ext-browser-action {
+    grid-column: 2 / -1;
+  }
 }

@@ -32,7 +32,7 @@ export interface History {
 }
 const HISTORY = 300
 
-export type View = 'transfers' | 'send' | 'speedtest' | 'networks' | 'settings'
+export type View = 'transfers' | 'send' | 'speedtest' | 'networks' | 'browsers' | 'settings'
 export type Theme = 'system' | 'light' | 'dark'
 
 interface State {
