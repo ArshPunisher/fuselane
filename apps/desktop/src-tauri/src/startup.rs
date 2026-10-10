@@ -208,7 +208,7 @@ fn startup_get_fuselane(app: tauri::AppHandle) -> Result<(), UiError> {
         })
 }
 
-/// The site's download page (apps/site/download).
+/// The site's download page (fuselane.app/download).
 pub const DOWNLOAD_PAGE: &str = "https://fuselane.app/download/";
 
 #[tauri::command]
