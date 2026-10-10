@@ -134,16 +134,16 @@ $made
 PackageIdentifier: $id
 PackageVersion: $version
 PackageLocale: en-US
-Publisher: ArshPunisher
-PublisherUrl: https://github.com/ArshPunisher
+Publisher: ClearCraft Labs
+PublisherUrl: https://clearcraftlabs.com
 PublisherSupportUrl: https://github.com/ArshPunisher/fuselane/issues
 PrivacyUrl: https://github.com/ArshPunisher/fuselane/blob/main/docs/PRIVACY.md
-Author: The Fuselane Authors
+Author: ClearCraft Labs
 PackageName: Fuselane
 PackageUrl: https://fuselane.app
 License: Apache-2.0
 LicenseUrl: https://github.com/ArshPunisher/fuselane/blob/main/LICENSE
-Copyright: Copyright 2026 The Fuselane Authors
+Copyright: Copyright 2026 ClearCraft Labs
 ShortDescription: Downloads over every network at once
 Description: |-
   Fuselane spreads one download across every internet connection the computer has: home Wi-Fi, a phone tethered over USB, Ethernet, a second ISP. You get their combined speed, with no VPN, relay server or admin rights.
