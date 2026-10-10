@@ -469,7 +469,7 @@ test('the FAQ is grouped by topic and the topic list jumps to each', async ({ pa
     'aria-current',
     'true',
   )
-  await expect(page.locator('.qa details')).toHaveCount(17)
+  await expect(page.locator('.qa details')).toHaveCount(18)
 })
 
 test('the guide explains each part and is honest about limits', async ({ page }) => {
