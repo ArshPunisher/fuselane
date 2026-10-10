@@ -130,7 +130,8 @@ export function RemoteSetting() {
             </dd>
           </dl>
           <p className="field-help">
-            In AriaNg: AriaNg Settings, then RPC. Pick HTTP, enter the address and the secret.
+            In AriaNg: AriaNg Settings, then RPC. Enter the address (WebSocket or HTTP both work)
+            and the secret.
           </p>
           <label className="check">
             <input
