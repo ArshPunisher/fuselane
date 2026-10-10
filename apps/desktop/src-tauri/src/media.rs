@@ -51,6 +51,8 @@ pub struct Plan {
     /// The joined (or single) file's extension.
     pub out_ext: String,
     pub label: String,
+    /// Converted to MP3 by ffmpeg once downloaded.
+    pub mp3: bool,
 }
 
 /// Headers the engine may pass on (yt-dlp asks for a few it doesn't need).
@@ -231,6 +233,7 @@ pub fn plans_from(
                     audio: Some(a),
                     out_ext,
                     label: label.clone(),
+                    mp3: false,
                 }
             }
             (_, _, _, Some(c)) => {
@@ -240,6 +243,7 @@ pub fn plans_from(
                     video: c,
                     audio: None,
                     label: label.clone(),
+                    mp3: false,
                 }
             }
             _ => {
@@ -269,6 +273,24 @@ pub fn plans_from(
             detail: format!("{}{}", a.ext.to_uppercase(), about(size)),
             size,
         });
+        if ffmpeg {
+            options.push(MediaOption {
+                id: "mp3".into(),
+                label: "Audio (MP3)".into(),
+                detail: format!("MP3, plays everywhere{}", about(size)),
+                size,
+            });
+            plans.insert(
+                "mp3".into(),
+                Plan {
+                    out_ext: "mp3".into(),
+                    video: a.clone(),
+                    audio: None,
+                    label: "audio".into(),
+                    mp3: true,
+                },
+            );
+        }
         plans.insert(
             "a".into(),
             Plan {
@@ -276,6 +298,7 @@ pub fn plans_from(
                 video: a,
                 audio: None,
                 label: "audio".into(),
+                mp3: false,
             },
         );
     }
@@ -340,6 +363,22 @@ pub fn join(ffmpeg: &Path, video: &Path, audio: &Path, out: &Path) -> Result<(),
     }
 }
 
+/// Turns any audio (or a video's sound) into an MP3 at good quality.
+pub fn to_mp3(ffmpeg: &Path, input: &Path, out: &Path) -> Result<(), String> {
+    let status = std::process::Command::new(ffmpeg)
+        .args(["-hide_banner", "-loglevel", "error", "-y", "-i"])
+        .arg(input)
+        .args(["-vn", "-codec:a", "libmp3lame", "-q:a", "2"])
+        .arg(out)
+        .status()
+        .map_err(|e| format!("ffmpeg couldn't start ({e})"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err("ffmpeg couldn't make an MP3 (its MP3 encoder may be missing)".into())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -371,7 +410,8 @@ mod tests {
     fn with_ffmpeg_hd_joins_mp4_video_and_m4a_audio() {
         let (info, plans) = plans_from(&page(), true).unwrap();
         let labels: Vec<_> = info.options.iter().map(|o| o.label.as_str()).collect();
-        assert_eq!(labels, ["1080p", "360p", "Audio only"]);
+        assert_eq!(labels, ["1080p", "360p", "Audio only", "Audio (MP3)"]);
+        assert!(plans["mp3"].mp3);
         let hd = &plans["v1080"];
         assert_eq!(
             hd.video.url, "https://v.example/137",

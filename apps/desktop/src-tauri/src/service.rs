@@ -3780,6 +3780,7 @@ mod tests {
                         audio: Some(stream("/a.m4a", "m4a")),
                         out_ext: "mp4".into(),
                         label: "90p".into(),
+                        mp3: false,
                     },
                 )]),
             ),
@@ -3822,6 +3823,87 @@ mod tests {
             "{kinds}"
         );
         assert_eq!(h.job(ids[0]).group_id, None, "a single file now");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn audio_can_come_out_as_an_mp3() {
+        let Some(ffmpeg) = crate::media::find("ffmpeg") else {
+            eprintln!("skipped: ffmpeg isn't installed");
+            return;
+        };
+        let has_lame = std::process::Command::new(&ffmpeg)
+            .args(["-hide_banner", "-encoders"])
+            .output()
+            .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).contains("libmp3lame"));
+        if !has_lame {
+            eprintln!("skipped: this ffmpeg has no MP3 encoder");
+            return;
+        }
+        let work = tempfile::tempdir().unwrap();
+        let src = work.path().join("a.m4a");
+        assert!(
+            std::process::Command::new(&ffmpeg)
+                .args([
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-y",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "sine=frequency=330",
+                    "-t",
+                    "1",
+                    "-c:a",
+                    "aac"
+                ])
+                .arg(&src)
+                .status()
+                .unwrap()
+                .success()
+        );
+        let server = RangeServer::start(Content::new(1024, 2)).await.unwrap();
+        server.serve_file("/a.m4a", std::fs::read(&src).unwrap());
+        let h = harness(3);
+        lock(&h.svc.media_probes).insert(
+            "https://music.example/track".into(),
+            (
+                Instant::now(),
+                "A song".into(),
+                HashMap::from([(
+                    "mp3".to_string(),
+                    crate::media::Plan {
+                        video: crate::media::Stream {
+                            url: format!("http://{}/a.m4a", server.addr()),
+                            ext: "m4a".into(),
+                            headers: vec![],
+                            size: None,
+                        },
+                        audio: None,
+                        out_ext: "mp3".into(),
+                        label: "audio".into(),
+                        mp3: true,
+                    },
+                )]),
+            ),
+        );
+        let ids = h
+            .svc
+            .media_add("https://music.example/track", "mp3", None)
+            .unwrap();
+        h.wait("converted", |h| {
+            h.job(ids[0])
+                .final_path
+                .as_deref()
+                .is_some_and(|p| p.ends_with("A song.mp3"))
+        })
+        .await;
+        let mp3 = PathBuf::from(h.job(ids[0]).final_path.unwrap());
+        assert!(std::fs::metadata(&mp3).unwrap().len() > 1000);
+        assert!(
+            !mp3.with_extension("m4a").exists(),
+            "the original is cleaned up"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

@@ -741,13 +741,20 @@ export function createDemoBackend(params: URLSearchParams): Backend {
           { id: 'v720', label: '720p', detail: 'MP4, about 81 MB', size: 85 * MB },
           { id: 'v360', label: '360p', detail: 'MP4, about 29 MB', size: 30 * MB },
           { id: 'a', label: 'Audio only', detail: 'M4A, about 10 MB', size: 10 * MB },
+          {
+            id: 'mp3',
+            label: 'Audio (MP3)',
+            detail: 'MP3, plays everywhere, about 10 MB',
+            size: 10 * MB,
+          },
         ],
       }
     },
     mediaAdd: async (url, option, dir) => {
-      const label = option === 'a' ? 'audio' : option.slice(1) + 'p'
+      const label = option === 'a' || option === 'mp3' ? 'audio' : option.slice(1) + 'p'
+      const ext = option === 'mp3' ? 'mp3' : option === 'a' ? 'm4a' : 'mp4'
       const id = await backend.add(url, dir, {
-        name: `Big Buck Bunny (${label}).${option === 'a' ? 'm4a' : 'mp4'}`,
+        name: `Big Buck Bunny (${label}).${ext}`,
         allowDuplicate: true,
       })
       return [id]

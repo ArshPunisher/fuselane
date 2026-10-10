@@ -30,6 +30,9 @@ pub struct Join {
     pub video: i64,
     pub audio: i64,
     pub name: String,
+    /// Not a join: `video` becomes an MP3 (then `audio` is the same id).
+    #[serde(default)]
+    pub mp3: bool,
 }
 
 pub(super) type Probes = HashMap<String, (Instant, String, HashMap<String, Plan>)>;
@@ -118,6 +121,18 @@ impl Service {
             )
         };
         let Some(audio) = &plan.audio else {
+            if plan.mp3 {
+                let id = add(&plan.video, format!("{base}.{}", plan.video.ext))?;
+                let mut joins = self.joins();
+                joins.push(Join {
+                    video: id,
+                    audio: id,
+                    name: format!("{base}.mp3"),
+                    mp3: true,
+                });
+                self.save_joins(&joins);
+                return Ok(vec![id]);
+            }
             let suffix = if plan.label == "audio" {
                 String::new()
             } else {
@@ -144,6 +159,7 @@ impl Service {
             video: v,
             audio: a,
             name: format!("{base} ({}).{}", plan.label, plan.out_ext),
+            mp3: false,
         });
         self.save_joins(&joins);
         self.publish_jobs();
@@ -200,13 +216,20 @@ impl Service {
                     .map(std::path::Path::to_path_buf)
                     .unwrap_or_default();
                 let out = super::free_name(&dir, &j.name);
-                match media::join(&ffmpeg, &vp, &ap, &out) {
+                let made = if j.mp3 {
+                    media::to_mp3(&ffmpeg, &vp, &out)
+                } else {
+                    media::join(&ffmpeg, &vp, &ap, &out)
+                };
+                match made {
                     Ok(()) => {
                         let size = std::fs::metadata(&out).map_or(0, |m| m.len());
                         let _ = me.store.set_finished(j.video, &out, size);
                         let _ = std::fs::remove_file(&vp);
-                        let _ = std::fs::remove_file(&ap);
-                        let _ = me.store.delete(j.audio);
+                        if !j.mp3 {
+                            let _ = std::fs::remove_file(&ap);
+                            let _ = me.store.delete(j.audio);
+                        }
                         if let Some(g) = v.group_id {
                             let _ = me.store.ungroup(g);
                         }
