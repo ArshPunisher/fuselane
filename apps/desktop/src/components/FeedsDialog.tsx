@@ -3,21 +3,22 @@ import { ArrowClockwise, Rss, Trash, X } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { toUiError } from '../lib/backend'
 import type { FeedView, UiError } from '../lib/types'
+import { mark, t } from '../lib/i18n'
 
 const EVERY: { mins: number; label: string }[] = [
-  { mins: 15, label: 'Every 15 minutes' },
-  { mins: 60, label: 'Every hour' },
-  { mins: 360, label: 'Every 6 hours' },
-  { mins: 1440, label: 'Once a day' },
+  { mins: 15, label: mark('Every 15 minutes') },
+  { mins: 60, label: mark('Every hour') },
+  { mins: 360, label: mark('Every 6 hours') },
+  { mins: 1440, label: mark('Once a day') },
 ]
 
 const STATE_WORD: Record<FeedView['recent'][number]['state'], string> = {
-  added: 'Downloading',
-  filtered: 'Skipped by your words',
-  'no-file': 'No file in it',
-  torrent: 'Torrent',
-  'torrent-started': 'Torrent started',
-  failed: "Couldn't add",
+  added: mark('Downloading'),
+  filtered: mark('Skipped by your words'),
+  'no-file': mark('No file in it'),
+  torrent: mark('Torrent'),
+  'torrent-started': mark('Torrent started'),
+  failed: mark("Couldn't add"),
 }
 
 /** A magnet or a .torrent file: something New download can open. */
@@ -26,12 +27,14 @@ function isTorrentLink(url: string): boolean {
 }
 
 function ago(unix: number | null): string {
-  if (unix === null) return 'Not checked yet'
+  if (unix === null) return t('Not checked yet')
   const mins = Math.max(0, Math.round((Date.now() / 1000 - unix) / 60))
-  if (mins < 1) return 'Checked just now'
-  if (mins < 60) return `Checked ${mins} min ago`
+  if (mins < 1) return t('Checked just now')
+  if (mins < 60) return t('Checked {n} min ago', { n: mins })
   const hours = Math.round(mins / 60)
-  return hours < 48 ? `Checked ${hours} h ago` : `Checked ${Math.round(hours / 24)} days ago`
+  return hours < 48
+    ? t('Checked {n} h ago', { n: hours })
+    : t('Checked {n} days ago', { n: Math.round(hours / 24) })
 }
 
 function FeedCard({
@@ -69,7 +72,16 @@ function FeedCard({
     }
   }
 
-  const every_label = EVERY.find((e) => e.mins === feed.every)?.label.toLowerCase() ?? ''
+  const everyLabel = EVERY.find((e) => e.mins === feed.every)?.label
+  // "every hour" in a sentence; Hindi has no capitals, so this leaves it as it is.
+  const everyText = everyLabel ? t(everyLabel).toLowerCase() : ''
+  const details = [
+    t('{n} downloaded', { n: feed.added }),
+    feed.include ? t('only with “{words}”', { words: feed.include }) : '',
+    feed.exclude ? t('skipping “{words}”', { words: feed.exclude }) : '',
+  ]
+    .filter(Boolean)
+    .join(', ')
   return (
     <li className="feed">
       <div className="feed-head">
@@ -81,17 +93,19 @@ function FeedCard({
             {feed.title}
           </p>
           <p className="muted feed-meta">
-            {ago(feed.lastCheck)}, {every_label}. {feed.added} downloaded
-            {feed.include ? `, only with “${feed.include}”` : ''}
-            {feed.exclude ? `, skipping “${feed.exclude}”` : ''}.
-            {feed.startTorrents ? ' Torrents start by themselves.' : ''}
+            {t('{checked}, {every}. {details}.', {
+              checked: ago(feed.lastCheck),
+              every: everyText,
+              details,
+            })}
+            {feed.startTorrents && <> {t('Torrents start by themselves.')}</>}
           </p>
         </div>
         <div className="feed-actions">
           <button
             type="button"
             className="icon-btn"
-            aria-label={`Check ${feed.title} now`}
+            aria-label={t('Check {name} now', { name: feed.title })}
             disabled={busy}
             onClick={() => void run(() => backend!.feedsCheck(feed.id))}
           >
@@ -103,12 +117,12 @@ function FeedCard({
             aria-expanded={editing}
             onClick={() => setEditing(!editing)}
           >
-            Filters
+            {t('Filters')}
           </button>
           <button
             type="button"
             className="icon-btn"
-            aria-label={`Stop following ${feed.title}`}
+            aria-label={t('Stop following {name}', { name: feed.title })}
             disabled={busy}
             onClick={() => void run(() => backend!.feedsRemove(feed.id))}
           >
@@ -118,7 +132,7 @@ function FeedCard({
       </div>
       {feed.problem && (
         <p className="field-error" role="alert">
-          Last check: {feed.problem}
+          {t('Last check: {problem}', { problem: feed.problem })}
         </p>
       )}
       {error && (
@@ -147,19 +161,19 @@ function FeedCard({
           />
           <TorrentsCheck checked={startTorrents} onChange={setStartTorrents} />
           <button type="submit" className="btn" disabled={busy}>
-            Save
+            {t('Save')}
           </button>
         </form>
       )}
       {feed.recent.length > 0 && (
-        <ul className="feed-recent" aria-label={`Latest in ${feed.title}`}>
+        <ul className="feed-recent" aria-label={t('Latest in {name}', { name: feed.title })}>
           {feed.recent.slice(0, 4).map((r, i) => (
             <li key={`${r.url}-${i}`}>
               <span className="feed-item" translate="no">
                 {r.title || r.url}
               </span>
               <span className="chip" data-state={r.state}>
-                {r.note ?? STATE_WORD[r.state]}
+                {r.note ?? t(STATE_WORD[r.state])}
               </span>
               {(r.state === 'torrent' || (r.state === 'failed' && isTorrentLink(r.url))) && (
                 <button
@@ -170,7 +184,7 @@ function FeedCard({
                     setAdding(true, r.url)
                   }}
                 >
-                  Open
+                  {t('Open')}
                 </button>
               )}
             </li>
@@ -193,33 +207,33 @@ function FilterFields(p: {
   return (
     <>
       <div className="field">
-        <label htmlFor={`${p.idBase}-inc`}>Only titles with</label>
+        <label htmlFor={`${p.idBase}-inc`}>{t('Only titles with')}</label>
         <input
           id={`${p.idBase}-inc`}
           name="include"
           type="text"
           autoComplete="off"
           spellCheck={false}
-          placeholder="e.g. 1080p"
+          placeholder={t('e.g. 1080p')}
           value={p.include}
           onChange={(e) => p.setInclude(e.target.value)}
         />
       </div>
       <div className="field">
-        <label htmlFor={`${p.idBase}-exc`}>Skip titles with</label>
+        <label htmlFor={`${p.idBase}-exc`}>{t('Skip titles with')}</label>
         <input
           id={`${p.idBase}-exc`}
           name="exclude"
           type="text"
           autoComplete="off"
           spellCheck={false}
-          placeholder="e.g. trailer"
+          placeholder={t('e.g. trailer')}
           value={p.exclude}
           onChange={(e) => p.setExclude(e.target.value)}
         />
       </div>
       <div className="field">
-        <label htmlFor={`${p.idBase}-every`}>Check</label>
+        <label htmlFor={`${p.idBase}-every`}>{t('Check')}</label>
         <select
           id={`${p.idBase}-every`}
           name="every"
@@ -228,7 +242,7 @@ function FilterFields(p: {
         >
           {EVERY.map((e) => (
             <option key={e.mins} value={e.mins}>
-              {e.label}
+              {t(e.label)}
             </option>
           ))}
         </select>
@@ -253,7 +267,7 @@ function TorrentsCheck({
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
       />
-      <span>Start torrents by themselves</span>
+      <span>{t('Start torrents by themselves')}</span>
     </label>
   )
 }
@@ -301,10 +315,11 @@ export function FeedsDialog({ open, onClose }: { open: boolean; onClose: () => v
     setStatus('')
     try {
       setFeeds(await backend.feedsAdd(url, include, exclude, every, latest, startTorrents))
+      // Kept in English and translated when shown, so it follows a language change.
       setStatus(
         latest
-          ? 'Following. The latest file is downloading; new ones follow by themselves.'
-          : 'Following. New files download by themselves.',
+          ? mark('Following. The latest file is downloading; new ones follow by themselves.')
+          : mark('Following. New files download by themselves.'),
       )
       setUrl('')
       setInclude('')
@@ -333,15 +348,15 @@ export function FeedsDialog({ open, onClose }: { open: boolean; onClose: () => v
       {open && (
         <div className="feeds">
           <header className="dialog-head">
-            <h2 id="feeds-title">Feeds</h2>
-            <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}>
+            <h2 id="feeds-title">{t('Feeds')}</h2>
+            <button type="button" className="icon-btn" aria-label={t('Close')} onClick={onClose}>
               <X size={16} aria-hidden />
             </button>
           </header>
           <p className="dialog-text">
-            Follow a podcast, a project&apos;s releases or any RSS or Atom feed. New files in it
-            download by themselves, over every network. Torrents wait for you to open them, unless
-            you let them start by themselves.
+            {t(
+              "Follow a podcast, a project's releases or any RSS or Atom feed. New files in it download by themselves, over every network. Torrents wait for you to open them, unless you let them start by themselves.",
+            )}
           </p>
           <form
             className="feed-add"
@@ -352,7 +367,7 @@ export function FeedsDialog({ open, onClose }: { open: boolean; onClose: () => v
             }}
           >
             <div className="field feed-url">
-              <label htmlFor="feed-url">Feed address</label>
+              <label htmlFor="feed-url">{t('Feed address')}</label>
               <input
                 id="feed-url"
                 name="feed"
@@ -360,6 +375,7 @@ export function FeedsDialog({ open, onClose }: { open: boolean; onClose: () => v
                 inputMode="url"
                 autoComplete="off"
                 spellCheck={false}
+                // i18n-ignore: an example address
                 placeholder="https://example.com/feed.xml"
                 value={url}
                 aria-invalid={error ? true : undefined}
@@ -389,26 +405,26 @@ export function FeedsDialog({ open, onClose }: { open: boolean; onClose: () => v
                   checked={latest}
                   onChange={(e) => setLatest(e.target.checked)}
                 />
-                <span>Download the latest one now</span>
+                <span>{t('Download the latest one now')}</span>
               </label>
               <TorrentsCheck checked={startTorrents} onChange={setStartTorrents} />
             </div>
             <button type="submit" className="btn btn-primary" disabled={busy || !url.trim()}>
-              <Rss size={16} aria-hidden /> {busy ? 'Reading the feed…' : 'Follow'}
+              <Rss size={16} aria-hidden /> {busy ? t('Reading the feed…') : t('Follow')}
             </button>
           </form>
           <p className="muted" role="status">
-            {status}
+            {status && t(status)}
           </p>
           {feeds && feeds.length > 0 && (
-            <ul className="feed-list" aria-label="Feeds you follow">
+            <ul className="feed-list" aria-label={t('Feeds you follow')}>
               {feeds.map((f) => (
                 <FeedCard key={f.id} feed={f} onChange={setFeeds} onLeave={onClose} />
               ))}
             </ul>
           )}
           {feeds && feeds.length === 0 && (
-            <p className="muted">No feeds yet. Paste one above to start.</p>
+            <p className="muted">{t('No feeds yet. Paste one above to start.')}</p>
           )}
         </div>
       )}

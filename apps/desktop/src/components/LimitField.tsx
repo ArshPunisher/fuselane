@@ -1,5 +1,6 @@
 // A speed limit input: a number plus KB/s or MB/s. Empty means no limit.
 import { useEffect, useId, useState } from 'react'
+import { t } from '../lib/i18n'
 
 const UNITS = { KB: 1024, MB: 1024 * 1024 } as const
 type Unit = keyof typeof UNITS
@@ -13,10 +14,10 @@ function split(rate: number): { text: string; unit: Unit } {
 
 /** Parses what was typed: a rate in bytes/s, 0 for empty, or null if it isn't a speed. */
 export function parseLimit(text: string, unit: Unit): number | null {
-  const t = text.trim().replace(',', '.')
-  if (!t) return 0
-  if (!/^\d+(\.\d+)?$/.test(t)) return null
-  const v = Number(t)
+  const s = text.trim().replace(',', '.')
+  if (!s) return 0
+  if (!/^\d+(\.\d+)?$/.test(s)) return null
+  const v = Number(s)
   return Number.isFinite(v) ? Math.round(v * UNITS[unit]) : null
 }
 
@@ -50,7 +51,7 @@ export function LimitField({
           id={id}
           inputMode="decimal"
           autoComplete="off"
-          placeholder="No limit"
+          placeholder={t('No limit')}
           value={state.text}
           aria-invalid={parsed === null ? true : undefined}
           aria-describedby={parsed === null ? `${id}-err` : undefined}
@@ -61,7 +62,7 @@ export function LimitField({
           }}
         />
         <select
-          aria-label={`${label} unit`}
+          aria-label={t('{label} unit', { label })}
           value={state.unit}
           onChange={(e) => {
             const next = { ...state, unit: e.target.value as Unit }
@@ -75,7 +76,7 @@ export function LimitField({
       </div>
       {parsed === null && (
         <p id={`${id}-err`} className="field-error" aria-live="polite">
-          Enter a number, like 5 or 2.5.
+          {t('Enter a number, like 5 or 2.5.')}
         </p>
       )}
     </div>

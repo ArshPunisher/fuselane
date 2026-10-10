@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
-import { fileType, TYPE_LABEL, type FileType } from '../lib/categories'
+import { fileType, typeLabel, type FileType } from '../lib/categories'
 import type { PageFiles } from '../lib/types'
+import { t, tr } from '../lib/i18n'
 
 /**
  * The files a web page links to (B9.3), picked by type or one by one. Nothing
@@ -18,8 +19,8 @@ export function PagePicker({
   const byType = useMemo(() => {
     const m = new Map<FileType, string[]>()
     for (const f of page.files) {
-      const t = fileType(f.name)
-      m.set(t, [...(m.get(t) ?? []), f.url])
+      const type = fileType(f.name)
+      m.set(type, [...(m.get(type) ?? []), f.url])
     }
     return m
   }, [page])
@@ -34,7 +35,7 @@ export function PagePicker({
   }
   return (
     <div className="page-picker">
-      <div className="page-types" role="group" aria-label="Pick by type">
+      <div className="page-types" role="group" aria-label={t('Pick by type')}>
         <button
           type="button"
           className="filter"
@@ -46,24 +47,24 @@ export function PagePicker({
             )
           }
         >
-          All <span className="num">{page.files.length}</span>
+          {tr('All {n}', { n: <span className="num">{page.files.length}</span> })}
         </button>
-        {[...byType].map(([t, urls]) => {
+        {[...byType].map(([type, urls]) => {
           const on = urls.every((u) => chosen.has(u))
           return (
             <button
-              key={t}
+              key={type}
               type="button"
               className="filter"
               aria-pressed={on}
               onClick={() => toggle(urls, !on)}
             >
-              {TYPE_LABEL[t]} <span className="num">{urls.length}</span>
+              {typeLabel(type)} <span className="num">{urls.length}</span>
             </button>
           )
         })}
       </div>
-      <ul className="page-files" aria-label="Files on the page">
+      <ul className="page-files" aria-label={t('Files on the page')}>
         {page.files.map((f) => (
           <li key={f.url}>
             <label className="check">
@@ -75,7 +76,7 @@ export function PagePicker({
               <span className="page-file-name" translate="no" title={f.url}>
                 {f.name}
               </span>
-              <span className="muted page-file-type">{TYPE_LABEL[fileType(f.name)]}</span>
+              <span className="muted page-file-type">{typeLabel(fileType(f.name))}</span>
             </label>
           </li>
         ))}

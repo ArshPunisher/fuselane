@@ -14,7 +14,8 @@ import type {
 import { FilePicker } from './FilePicker'
 import { PagePicker } from './PagePicker'
 import { REVEAL_LABEL } from './TransferDetail'
-import { bytes, clockTime, nextAt, startsAt } from '../lib/format'
+import { bytes, clockTime, nextAt, when } from '../lib/format'
+import { intlLocale, t, tn, tr } from '../lib/i18n'
 
 /** Quick local check so obvious mistakes show before a round trip; the backend decides. */
 function looksLikeLink(s: string): boolean {
@@ -36,11 +37,11 @@ function batchInfo(s: string): { count: number; pattern: boolean } {
 
 /** A magnet with a real info hash, shown as a card instead of a long string (B8.3). */
 export function magnetCard(s: string): { name: string; hash: string } | null {
-  const t = s.trim()
-  if (!isMagnet(t) || /\s/.test(t)) return null
-  const m = /[?&]xt=urn:bt(?:ih|mh):([0-9a-z]{32,68})/i.exec(t)
+  const link = s.trim()
+  if (!isMagnet(link) || /\s/.test(link)) return null
+  const m = /[?&]xt=urn:bt(?:ih|mh):([0-9a-z]{32,68})/i.exec(link)
   if (!m || !m[1]) return null
-  const dn = /[?&]dn=([^&]*)/i.exec(t)?.[1]
+  const dn = /[?&]dn=([^&]*)/i.exec(link)?.[1]
   let name = ''
   try {
     name = dn ? decodeURIComponent(dn.replace(/\+/g, ' ')).trim() : ''
@@ -48,16 +49,16 @@ export function magnetCard(s: string): { name: string; hash: string } | null {
     name = dn ?? ''
   }
   const hash = m[1].slice(0, 8).toLowerCase()
-  return { name: name || `Torrent ${hash}`, hash }
+  return { name: name || t('Torrent {hash}', { hash }), hash }
 }
 
 /** A long single link split so the end (the file name) always shows. */
 export function middleCut(s: string): { head: string; tail: string } | null {
-  const t = s.trim()
-  if (t.length < 48 || !looksLikeLink(t)) return null
-  const slash = t.lastIndexOf('/', t.length - 2)
-  const tail = slash > 8 && t.length - slash < 60 ? t.slice(slash) : t.slice(-28)
-  return { head: t.slice(0, t.length - tail.length), tail }
+  const link = s.trim()
+  if (link.length < 48 || !looksLikeLink(link)) return null
+  const slash = link.lastIndexOf('/', link.length - 2)
+  const tail = slash > 8 && link.length - slash < 60 ? link.slice(slash) : link.slice(-28)
+  return { head: link.slice(0, link.length - tail.length), tail }
 }
 
 /** A dropped or opened file path (not a link). */
@@ -151,7 +152,7 @@ export function NewDownload() {
     }
     let live = true
     setPreview({ state: 'loading' })
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       backend
         .preview(url.trim())
         .then((data) => live && setPreview({ state: 'ok', data }))
@@ -159,7 +160,7 @@ export function NewDownload() {
     }, 450)
     return () => {
       live = false
-      clearTimeout(t)
+      clearTimeout(timer)
     }
   }, [url, open, backend, listing])
 
@@ -176,8 +177,8 @@ export function NewDownload() {
         // Offer a link already on the clipboard (only when the user opened the dialog).
         navigator.clipboard
           ?.readText?.()
-          .then((t) => {
-            if (looksLikeLink(t) || isMagnet(t)) setUrl((u) => u || t.trim())
+          .then((text) => {
+            if (looksLikeLink(text) || isMagnet(text)) setUrl((u) => u || text.trim())
           })
           .catch(() => {})
       }
@@ -218,7 +219,7 @@ export function NewDownload() {
       return
     }
     let live = true
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       backend
         .nameTaken(dir.trim() || null, wantedName)
         .then((v) => live && setTaken(v))
@@ -226,7 +227,7 @@ export function NewDownload() {
     }, 200)
     return () => {
       live = false
-      clearTimeout(t)
+      clearTimeout(timer)
     }
   }, [open, backend, nameRule, wantedName, dir])
 
@@ -444,11 +445,11 @@ export function NewDownload() {
           noValidate
         >
           <header className="dialog-head">
-            <h2 id="nd-title">Get the video</h2>
+            <h2 id="nd-title">{t('Get the video')}</h2>
             <button
               type="button"
               className="icon-btn"
-              aria-label="Close"
+              aria-label={t('Close')}
               onClick={() => setAdding(false)}
             >
               <X size={18} aria-hidden />
@@ -459,15 +460,16 @@ export function NewDownload() {
               {media.title}
             </p>
             <p className="field-help page-help">
-              {media.site}
               {media.duration
-                ? `, ${Math.floor(media.duration / 60)}:${String(Math.round(media.duration % 60)).padStart(2, '0')}`
-                : ''}
-              . Downloads over every network at once.
+                ? t('{site}, {duration}. Downloads over every network at once.', {
+                    site: media.site,
+                    duration: `${Math.floor(media.duration / 60)}:${String(Math.round(media.duration % 60)).padStart(2, '0')}`,
+                  })
+                : t('{site}. Downloads over every network at once.', { site: media.site })}
             </p>
           </div>
           <fieldset className="quality-list">
-            <legend className="sr-only">Quality</legend>
+            <legend className="sr-only">{t('Quality')}</legend>
             {media.options.map((o) => (
               <label key={o.id} className="quality">
                 <input
@@ -484,8 +486,9 @@ export function NewDownload() {
           </fieldset>
           {media.hdNeedsFfmpeg && (
             <p className="field-help">
-              Higher qualities need the free ffmpeg tool to join video and sound. Install it and
-              look the page up again.
+              {t(
+                'Higher qualities need the free ffmpeg tool to join video and sound. Install it and look the page up again.',
+              )}
             </p>
           )}
           {error && (
@@ -502,10 +505,10 @@ export function NewDownload() {
                 setError(null)
               }}
             >
-              <ArrowLeft size={16} aria-hidden /> Back
+              <ArrowLeft size={16} aria-hidden /> {t('Back')}
             </button>
             <button type="submit" className="btn btn-primary" disabled={busy || !quality}>
-              {busy ? 'Adding…' : 'Download'}
+              {busy ? t('Adding…') : t('Download')}
             </button>
           </footer>
         </form>
@@ -535,11 +538,11 @@ export function NewDownload() {
           noValidate
         >
           <header className="dialog-head">
-            <h2 id="nd-title">Files on the page</h2>
+            <h2 id="nd-title">{t('Files on the page')}</h2>
             <button
               type="button"
               className="icon-btn"
-              aria-label="Close"
+              aria-label={t('Close')}
               onClick={() => setAdding(false)}
             >
               <X size={18} aria-hidden />
@@ -550,8 +553,11 @@ export function NewDownload() {
               {page.title ?? url}
             </p>
             <p className="field-help page-help">
-              {page.files.length} {page.files.length === 1 ? 'file' : 'files'}. Pick what to
-              download; more than one stay together as a group.
+              {tn(
+                page.files.length,
+                '{n} file. Pick what to download; more than one stay together as a group.',
+                '{n} files. Pick what to download; more than one stay together as a group.',
+              )}
             </p>
           </div>
           <PagePicker page={page} chosen={picked} onChange={setPicked} />
@@ -569,21 +575,25 @@ export function NewDownload() {
                 setError(null)
               }}
             >
-              <ArrowLeft size={16} aria-hidden /> Back
+              <ArrowLeft size={16} aria-hidden /> {t('Back')}
             </button>
             <button type="submit" className="btn btn-primary" disabled={busy || picked.size === 0}>
-              {busy ? 'Adding…' : picked.size ? `Download ${picked.size}` : 'Download'}
+              {busy
+                ? t('Adding…')
+                : picked.size
+                  ? t('Download {n}', { n: picked.size })
+                  : t('Download')}
             </button>
           </footer>
         </form>
       ) : listing ? (
         <form onSubmit={startTorrent} noValidate>
           <header className="dialog-head">
-            <h2 id="nd-title">Choose files</h2>
+            <h2 id="nd-title">{t('Choose files')}</h2>
             <button
               type="button"
               className="icon-btn"
-              aria-label="Close"
+              aria-label={t('Close')}
               onClick={() => setAdding(false)}
             >
               <X size={18} aria-hidden />
@@ -593,8 +603,8 @@ export function NewDownload() {
             <p className="pick-name" translate="no" title={listing.name}>
               {listing.name}
             </p>
-            <p className="field-help" translate="no" title={listing.folder}>
-              Saves to {listing.folder}
+            <p className="field-help" title={listing.folder}>
+              {tr('Saves to {folder}', { folder: <span translate="no">{listing.folder}</span> })}
             </p>
           </div>
           <FilePicker
@@ -617,28 +627,28 @@ export function NewDownload() {
                 setError(null)
               }}
             >
-              <ArrowLeft size={16} aria-hidden /> Back
+              <ArrowLeft size={16} aria-hidden /> {t('Back')}
             </button>
             <button type="submit" className="btn btn-primary" disabled={busy || chosen.size === 0}>
-              {busy ? 'Starting…' : 'Download'}
+              {busy ? t('Starting…') : t('Download')}
             </button>
           </footer>
         </form>
       ) : (
         <form onSubmit={submit} noValidate>
           <header className="dialog-head">
-            <h2 id="nd-title">New download</h2>
+            <h2 id="nd-title">{t('New download')}</h2>
             <button
               type="button"
               className="icon-btn"
-              aria-label="Close"
+              aria-label={t('Close')}
               onClick={() => setAdding(false)}
             >
               <X size={18} aria-hidden />
             </button>
           </header>
           <div className="field">
-            <label htmlFor="nd-url">{batch ? 'Links' : 'Link'}</label>
+            <label htmlFor="nd-url">{t(batch ? 'Links' : 'Link')}</label>
             {card ? (
               <div className="link-card">
                 <span className="link-card-ic" aria-hidden>
@@ -648,18 +658,20 @@ export function NewDownload() {
                   <span className="link-card-name" translate="no" title={card.name}>
                     {card.name}
                   </span>
-                  <span className="link-card-meta num">Magnet link, {card.hash}</span>
+                  <span className="link-card-meta num">
+                    {t('Magnet link, {hash}', { hash: card.hash })}
+                  </span>
                 </span>
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm"
-                  aria-label="Change the link"
+                  aria-label={t('Change the link')}
                   onClick={() => {
                     setEditing(true)
                     requestAnimationFrame(() => linkInput.current?.focus())
                   }}
                 >
-                  Change
+                  {t('Change')}
                 </button>
               </div>
             ) : (
@@ -678,7 +690,7 @@ export function NewDownload() {
                   wrap={multi ? 'soft' : 'off'}
                   className="link-input"
                   data-multi={multi ? '' : undefined}
-                  placeholder="https://example.com/file.iso or magnet:?…"
+                  placeholder={t('https://example.com/file.iso or magnet:?…')}
                   aria-invalid={urlError ? true : undefined}
                   aria-describedby={urlError ? 'nd-url-err' : 'nd-url-help'}
                   onFocus={() => setFocused(true)}
@@ -718,35 +730,55 @@ export function NewDownload() {
                 aria-live="polite"
                 data-preview={preview.state}
               >
-                {preview.state === 'loading' && 'Looking up the file…'}
+                {preview.state === 'loading' && t('Looking up the file…')}
                 {preview.state === 'ok' && (
                   <>
-                    <span className="preview-name" translate="no">
-                      {preview.data.filename}
-                    </span>
                     {preview.data.total !== null
-                      ? `, ${bytes(preview.data.total)}`
-                      : ', size unknown'}
-                    .{' '}
+                      ? tr('{name}, {size}.', {
+                          name: (
+                            <span className="preview-name" translate="no">
+                              {preview.data.filename}
+                            </span>
+                          ),
+                          size: bytes(preview.data.total),
+                        })
+                      : tr('{name}, size unknown.', {
+                          name: (
+                            <span className="preview-name" translate="no">
+                              {preview.data.filename}
+                            </span>
+                          ),
+                        })}{' '}
                     {preview.data.splittable
-                      ? 'Splits across all your networks.'
-                      : "This server won't split the file, so one network will carry it."}
+                      ? t('Splits across all your networks.')
+                      : t("This server won't split the file, so one network will carry it.")}
                   </>
                 )}
                 {preview.state === 'error' && preview.message}
                 {batch &&
                   (pattern
-                    ? `${count} ${count === 1 ? 'link' : 'links'} with a pattern. Each [01-20] becomes one download per number.`
-                    : `${count} links. Each becomes its own download; ones already in your list are skipped.`)}
+                    ? tn(
+                        count,
+                        '{n} link with a pattern. Each [01-20] becomes one download per number.',
+                        '{n} links with a pattern. Each [01-20] becomes one download per number.',
+                      )
+                    : t(
+                        '{n} links. Each becomes its own download; ones already in your list are skipped.',
+                        { n: count },
+                      ))}
                 {!batch &&
                   preview.state === 'idle' &&
                   (metalink
-                    ? 'A Metalink: Fuselane downloads the files it lists, each from all its mirrors, and checks them.'
+                    ? t(
+                        'A Metalink: Fuselane downloads the files it lists, each from all its mirrors, and checks them.',
+                      )
                     : finding
-                      ? "Finding the torrent's files. This can take a minute when few people share it."
+                      ? t(
+                          "Finding the torrent's files. This can take a minute when few people share it.",
+                        )
                       : isMagnet(url)
-                        ? 'A magnet link. Next you pick which of its files to download.'
-                        : 'Fuselane uses every network that can reach the server.')}
+                        ? t('A magnet link. Next you pick which of its files to download.')
+                        : t('Fuselane uses every network that can reach the server.'))}
               </p>
             )}
             {!batch && !metalink && !isMagnet(url) && /^https?:\/\/\S+$/i.test(url.trim()) && (
@@ -769,7 +801,7 @@ export function NewDownload() {
                   }
                 }}
               >
-                {pageBusy ? 'Reading the page…' : 'Find files on this page'}
+                {pageBusy ? t('Reading the page…') : t('Find files on this page')}
               </button>
             )}
             {!batch && !metalink && !isMagnet(url) && /^https?:\/\/\S+$/i.test(url.trim()) && (
@@ -779,7 +811,7 @@ export function NewDownload() {
                 disabled={mediaBusy}
                 onClick={() => void getVideo(url.trim())}
               >
-                {mediaBusy ? 'Looking for the video…' : 'Get the video from this page'}
+                {mediaBusy ? t('Looking for the video…') : t('Get the video from this page')}
               </button>
             )}
           </div>
@@ -792,18 +824,18 @@ export function NewDownload() {
                   onChange={(e) => setTogether(e.target.checked)}
                 />
                 <span>
-                  Keep them together as a group
+                  {t('Keep them together as a group')}
                   <span className="field-help">
-                    One row in your list with one progress, and one notice when all are done.
+                    {t('One row in your list with one progress, and one notice when all are done.')}
                   </span>
                 </span>
               </label>
               {together && (
                 <input
-                  aria-label="Group name"
+                  aria-label={t('Group name')}
                   className="group-name"
                   maxLength={80}
-                  placeholder="Name (optional)"
+                  placeholder={t('Name (optional)')}
                   value={groupDraft}
                   onChange={(e) => setGroupDraft(e.target.value)}
                 />
@@ -816,10 +848,14 @@ export function NewDownload() {
                 <Warning size={16} weight="fill" aria-hidden />
                 <span id="nd-dup">
                   {have
-                    ? `You already downloaded this (${bytes(have.size)}, ${new Date(
-                        have.finishedAt * 1000,
-                      ).toLocaleDateString()}). It's still in this folder.`
-                    : `A file named ${wantedName} is already in this folder.`}
+                    ? t(
+                        "You already downloaded this ({size}, {date}). It's still in this folder.",
+                        {
+                          size: bytes(have.size),
+                          date: new Date(have.finishedAt * 1000).toLocaleDateString(intlLocale()),
+                        },
+                      )
+                    : t('A file named {name} is already in this folder.', { name: wantedName })}
                 </span>
               </div>
               <div className="dup-row">
@@ -830,7 +866,7 @@ export function NewDownload() {
                     aria-checked={!replace}
                     onClick={() => setReplace(false)}
                   >
-                    Keep both
+                    {t('Keep both')}
                   </button>
                   <button
                     type="button"
@@ -838,7 +874,7 @@ export function NewDownload() {
                     aria-checked={replace}
                     onClick={() => setReplace(true)}
                   >
-                    Replace
+                    {t('Replace')}
                   </button>
                 </div>
                 <button
@@ -849,7 +885,7 @@ export function NewDownload() {
                     setAdding(false)
                   }}
                 >
-                  Don&apos;t download
+                  {t("Don't download")}
                 </button>
                 {have && (
                   <button
@@ -857,14 +893,14 @@ export function NewDownload() {
                     className="btn btn-ghost btn-sm"
                     onClick={() => void act((b) => b.reveal(have.id))}
                   >
-                    {REVEAL_LABEL}
+                    {t(REVEAL_LABEL)}
                   </button>
                 )}
               </div>
             </div>
           )}
           <div className="field">
-            <label htmlFor="nd-dir">Save to</label>
+            <label htmlFor="nd-dir">{t('Save to')}</label>
             <div className="field-row">
               <input
                 id="nd-dir"
@@ -873,7 +909,7 @@ export function NewDownload() {
                 spellCheck={false}
                 value={dir}
                 ref={dirInput}
-                placeholder={`${info?.defaultDir ?? 'Downloads'}…`}
+                placeholder={`${info?.defaultDir ?? t('Downloads')}…`}
                 aria-invalid={dirError ? true : undefined}
                 aria-describedby={dirError ? 'nd-dir-err' : 'nd-dir-help'}
                 onChange={(e) => {
@@ -892,7 +928,7 @@ export function NewDownload() {
                   }
                 }}
               >
-                Choose…
+                {t('Choose…')}
               </button>
             </div>
             {dirError ? (
@@ -901,7 +937,9 @@ export function NewDownload() {
               </p>
             ) : (
               <p id="nd-dir-help" className="field-help">
-                Leave empty to use {info?.defaultDir ?? 'your Downloads folder'}.
+                {info?.defaultDir
+                  ? t('Leave empty to use {folder}.', { folder: info.defaultDir })
+                  : t('Leave empty to use your Downloads folder.')}
               </p>
             )}
           </div>
@@ -911,9 +949,9 @@ export function NewDownload() {
               open={more}
               onToggle={(e) => setMore(e.currentTarget.open)}
             >
-              <summary>More options</summary>
+              <summary>{t('More options')}</summary>
               <div className="field">
-                <label htmlFor="nd-name">Save as</label>
+                <label htmlFor="nd-name">{t('Save as')}</label>
                 <input
                   id="nd-name"
                   name="filename"
@@ -921,7 +959,7 @@ export function NewDownload() {
                   spellCheck={false}
                   value={name}
                   placeholder={
-                    preview.state === 'ok' ? `${preview.data.filename}…` : "The server's name…"
+                    preview.state === 'ok' ? `${preview.data.filename}…` : t("The server's name…")
                   }
                   aria-invalid={nameError ? true : undefined}
                   aria-describedby="nd-name-help"
@@ -933,11 +971,11 @@ export function NewDownload() {
                 <p id="nd-name-help" className={nameError ? 'field-error' : 'field-help'}>
                   {nameError
                     ? `${nameError.message} ${nameError.hint ?? ''}`
-                    : 'Leave empty to keep the name the server gives it.'}
+                    : t('Leave empty to keep the name the server gives it.')}
                 </p>
               </div>
               <div className="field">
-                <label htmlFor="nd-sha">SHA-256 to check</label>
+                <label htmlFor="nd-sha">{t('SHA-256 to check')}</label>
                 <input
                   id="nd-sha"
                   name="sha256"
@@ -945,7 +983,7 @@ export function NewDownload() {
                   spellCheck={false}
                   className="num"
                   value={sha256}
-                  placeholder="64 letters and digits from the download page…"
+                  placeholder={t('64 letters and digits from the download page…')}
                   aria-invalid={shaError ? true : undefined}
                   aria-describedby="nd-sha-help"
                   onChange={(e) => {
@@ -956,12 +994,14 @@ export function NewDownload() {
                 <p id="nd-sha-help" className={shaError ? 'field-error' : 'field-help'}>
                   {shaError
                     ? `${shaError.message} ${shaError.hint ?? ''}`
-                    : "Fuselane checks the finished file and won't save it under its name if it differs."}
+                    : t(
+                        "Fuselane checks the finished file and won't save it under its name if it differs.",
+                      )}
                 </p>
               </div>
               <div className="field">
                 <span className="label" id="nd-mirrors-label">
-                  Mirrors
+                  {t('Mirrors')}
                 </span>
                 <div className="mirrors" role="group" aria-labelledby="nd-mirrors-label">
                   {mirrors.map((m, i) => (
@@ -970,7 +1010,8 @@ export function NewDownload() {
                         autoComplete="off"
                         spellCheck={false}
                         inputMode="url"
-                        aria-label={`Mirror ${i + 1}`}
+                        aria-label={t('Mirror {n}', { n: i + 1 })}
+                        // i18n-ignore: an example address
                         placeholder="https://mirror.example.org/same-file.iso…"
                         value={m}
                         aria-invalid={mirrorError ? true : undefined}
@@ -984,7 +1025,7 @@ export function NewDownload() {
                       <button
                         type="button"
                         className="icon-btn"
-                        aria-label={`Remove mirror ${i + 1}`}
+                        aria-label={t('Remove mirror {n}', { n: i + 1 })}
                         onClick={() => setMirrors(mirrors.filter((_, j) => j !== i))}
                       >
                         <X size={16} aria-hidden />
@@ -997,19 +1038,21 @@ export function NewDownload() {
                       className="btn btn-ghost btn-sm add-mirror"
                       onClick={() => setMirrors([...mirrors, ''])}
                     >
-                      <Plus size={16} aria-hidden /> Add a mirror
+                      <Plus size={16} aria-hidden /> {t('Add a mirror')}
                     </button>
                   )}
                 </div>
                 <p className={mirrorError ? 'field-error' : 'field-help'}>
                   {mirrorError
                     ? `${mirrorError.message} ${mirrorError.hint ?? ''}`
-                    : 'The same file on other servers. Each is checked first, then every network fetches from all of them.'}
+                    : t(
+                        'The same file on other servers. Each is checked first, then every network fetches from all of them.',
+                      )}
                 </p>
               </div>
               <div className="field">
                 <span className="label" id="nd-start-label">
-                  Start
+                  {t('Start')}
                 </span>
                 <div className="inline-row">
                   <div className="segmented" role="radiogroup" aria-labelledby="nd-start-label">
@@ -1019,7 +1062,7 @@ export function NewDownload() {
                       aria-checked={!startLater}
                       onClick={() => setStartLater(false)}
                     >
-                      Now
+                      {t('Now')}
                     </button>
                     <button
                       type="button"
@@ -1027,7 +1070,7 @@ export function NewDownload() {
                       aria-checked={startLater}
                       onClick={() => setStartLater(true)}
                     >
-                      At a time
+                      {t('At a time')}
                     </button>
                   </div>
                   {startLater && (
@@ -1035,21 +1078,19 @@ export function NewDownload() {
                       <input
                         type="time"
                         className="num time-in"
-                        aria-label="Start time"
+                        aria-label={t('Start time')}
                         value={startTime}
                         aria-invalid={badTime || undefined}
                         onChange={(e) => setStartTime(e.target.value)}
                       />
-                      {scheduled !== null && (
-                        <span className="muted">{startsAt(scheduled).replace('Starts ', '')}</span>
-                      )}
+                      {scheduled !== null && <span className="muted">{when(scheduled)}</span>}
                     </>
                   )}
                 </div>
                 <p className="field-help">
                   {startLater
-                    ? 'It waits in your list and starts by itself, even with the window closed.'
-                    : 'Starts as soon as there is room in the queue.'}
+                    ? t('It waits in your list and starts by itself, even with the window closed.')
+                    : t('Starts as soon as there is room in the queue.')}
                 </p>
               </div>
             </details>
@@ -1057,16 +1098,22 @@ export function NewDownload() {
           {have && !duplicate && !(taken && !batch) && (
             <div className="inline-note have-note" role="status">
               <p>
-                You already downloaded this: <strong translate="no">{have.name}</strong>,{' '}
-                {bytes(have.size)}, on {new Date(have.finishedAt * 1000).toLocaleDateString()}. It's
-                still in <span translate="no">{folderOf(have.path)}</span>.
+                {tr(
+                  "You already downloaded this: {name}, {size}, on {date}. It's still in {folder}.",
+                  {
+                    name: <strong translate="no">{have.name}</strong>,
+                    size: bytes(have.size),
+                    date: new Date(have.finishedAt * 1000).toLocaleDateString(intlLocale()),
+                    folder: <span translate="no">{folderOf(have.path)}</span>,
+                  },
+                )}
               </p>
               <button
                 type="button"
                 className="btn"
                 onClick={() => void act((b) => b.reveal(have.id))}
               >
-                {REVEAL_LABEL}
+                {t(REVEAL_LABEL)}
               </button>
             </div>
           )}
@@ -1079,15 +1126,18 @@ export function NewDownload() {
                 onClick={() => void submit(null, true)}
                 disabled={busy}
               >
-                Download again
+                {t('Download again')}
               </button>
             </div>
           )}
           {skipped.length > 0 && (
             <div className="field-error" role="alert">
               <p>
-                {skipped.length === 1 ? 'One link was' : `${skipped.length} links were`} not added.
-                The rest started. They're left in the box above:
+                {tn(
+                  skipped.length,
+                  "One link was not added. The rest started. They're left in the box above:",
+                  "{n} links were not added. The rest started. They're left in the box above:",
+                )}
               </p>
               <ul className="skipped">
                 {skipped.slice(0, 5).map((s) => (
@@ -1098,7 +1148,7 @@ export function NewDownload() {
                     : {s.reason}
                   </li>
                 ))}
-                {skipped.length > 5 && <li>and {skipped.length - 5} more.</li>}
+                {skipped.length > 5 && <li>{t('and {n} more.', { n: skipped.length - 5 })}</li>}
               </ul>
             </div>
           )}
@@ -1114,7 +1164,7 @@ export function NewDownload() {
               onClick={() => void openTorrentFile()}
               disabled={finding}
             >
-              <FileArrowUp size={16} aria-hidden /> Open .torrent…
+              <FileArrowUp size={16} aria-hidden /> {t('Open .torrent…')}
             </button>
             <button
               type="button"
@@ -1126,7 +1176,7 @@ export function NewDownload() {
                 } else setAdding(false)
               }}
             >
-              Cancel
+              {t('Cancel')}
             </button>
             {!isMagnet(url) && scheduled === null && (
               <button
@@ -1134,9 +1184,9 @@ export function NewDownload() {
                 className="btn"
                 onClick={() => void submit(null, false, true)}
                 disabled={busy || finding}
-                title="Add it to the list without starting it"
+                title={t('Add it to the list without starting it')}
               >
-                Download later
+                {t('Download later')}
               </button>
             )}
             <button
@@ -1146,16 +1196,18 @@ export function NewDownload() {
               onClick={() => (later.current = false)}
             >
               {finding
-                ? 'Finding files…'
+                ? t('Finding files…')
                 : busy
-                  ? 'Starting…'
+                  ? t('Starting…')
                   : isMagnet(url)
-                    ? 'Next'
+                    ? t('Next')
                     : batch
-                      ? `Download ${count > 1 && !pattern ? count : 'all'}`
+                      ? count > 1 && !pattern
+                        ? t('Download {n}', { n: count })
+                        : t('Download all')
                       : scheduled !== null
-                        ? `Download at ${clockTime(scheduled)}`
-                        : 'Download'}
+                        ? t('Download at {time}', { time: clockTime(scheduled) })
+                        : t('Download')}
             </button>
           </footer>
         </form>

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { bytes } from '../lib/format'
+import { t } from '../lib/i18n'
 import type { TorrentFileView } from '../lib/types'
 
 /** The torrent's files with a checkbox each; folders are shown dimmed before the name. */
@@ -22,7 +23,7 @@ export function FilePicker({
   const size = files.filter((f) => chosen.has(f.index)).reduce((a, f) => a + f.size, 0)
   return (
     <fieldset className="pick">
-      <legend className="sr-only">Files to download</legend>
+      <legend className="sr-only">{t('Files to download')}</legend>
       <label className="pick-all">
         <input
           ref={all}
@@ -32,9 +33,13 @@ export function FilePicker({
             onChange(e.target.checked ? new Set(files.map((f) => f.index)) : new Set())
           }
         />
-        <span>All files</span>
+        <span>{t('All files')}</span>
         <span className="pick-sum num" aria-live="polite">
-          {chosen.size} of {files.length}, {bytes(size)}
+          {t('{chosen} of {total}, {size}', {
+            chosen: chosen.size,
+            total: files.length,
+            size: bytes(size),
+          })}
         </span>
       </label>
       <ul className="pick-list">
