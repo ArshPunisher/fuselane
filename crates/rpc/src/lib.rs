@@ -24,6 +24,9 @@ use serde_json::{Value, json};
 
 /// The aria2 version this endpoint behaves like, for clients that check it.
 pub const ARIA2_VERSION: &str = "1.37.0";
+/// The remote page (8.7): downloads at a glance from a phone's browser.
+const PAGE: &str = include_str!("page.html");
+
 /// Largest request accepted.
 pub const MAX_BODY: usize = 1024 * 1024;
 /// aria2's own default port.
@@ -690,6 +693,29 @@ async fn serve<H: Host>(rpc: Arc<Rpc<H>>, req: Request<Incoming>) -> Response<Bo
             StatusCode::FORBIDDEN,
             "Use this computer's address (127.0.0.1 or its IP), not a name.",
         );
+    }
+    if req.uri().path() == "/" && req.method() == hyper::Method::GET {
+        // The remote page for phones: it asks for the secret, or reads it from
+        // the link's #fragment (never sent to the server), and calls /jsonrpc.
+        let mut r = reply(
+            StatusCode::OK,
+            PAGE.as_bytes().to_vec(),
+            "text/html; charset=utf-8",
+        );
+        let h = r.headers_mut();
+        h.insert(
+            hyper::header::CONTENT_SECURITY_POLICY,
+            hyper::header::HeaderValue::from_static(
+                "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; \
+                 connect-src 'self'; form-action 'none'; frame-ancestors 'none'; base-uri 'none'",
+            ),
+        );
+        h.insert(
+            hyper::header::HeaderName::from_static("referrer-policy"),
+            hyper::header::HeaderValue::from_static("no-referrer"),
+        );
+        h.remove(hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN);
+        return r;
     }
     if req.uri().path() != "/jsonrpc" {
         return text(

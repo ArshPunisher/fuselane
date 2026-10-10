@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Fuselane remote</title>
+    <style>
+      :root {
+        --bg: #f8f9fb;
+        --card: #fff;
+        --ink: #1b1f27;
+        --body: #454b57;
+        --mute: #6a7180;
+        --line: #e2e5eb;
+        --fuse: #c4501a;
+        --fuse-ink: #fff;
+        --ok: #1f8a4c;
+        --bad: #c2372b;
+        color-scheme: light dark;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0d0f13;
+          --card: #15181e;
+          --ink: #eef0f4;
+          --body: #c9cdd5;
+          --mute: #9aa2b1;
+          --line: #262a33;
+          --fuse: #f2894a;
+          --fuse-ink: #0d0f13;
+          --ok: #5fd08d;
+          --bad: #ff7a6b;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--body);
+        font:
+          15px/1.5 system-ui,
+          -apple-system,
+          'Segoe UI',
+          sans-serif;
+      }
+      main {
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 20px 16px 40px;
+        display: grid;
+        gap: 16px;
+      }
+      #app {
+        display: grid;
+        gap: 16px;
+      }
+      h1 {
+        margin: 0;
+        color: var(--ink);
+        font-size: 20px;
+      }
+      p {
+        margin: 0;
+      }
+      .mute {
+        color: var(--mute);
+        font-size: 13px;
+      }
+      .card {
+        display: grid;
+        gap: 10px;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--card);
+      }
+      input {
+        width: 100%;
+        min-height: 44px;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--bg);
+        color: var(--ink);
+        font:
+          15px ui-monospace,
+          Menlo,
+          monospace;
+      }
+      button {
+        min-height: 44px;
+        padding: 0 16px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--card);
+        color: var(--ink);
+        font:
+          600 15px system-ui,
+          sans-serif;
+      }
+      button.primary {
+        border: 0;
+        background: var(--fuse);
+        color: var(--fuse-ink);
+      }
+      .row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: center;
+      }
+      .head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .speed {
+        color: var(--ink);
+        font:
+          600 15px ui-monospace,
+          Menlo,
+          monospace;
+      }
+      ul {
+        display: grid;
+        gap: 12px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      li {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 4px 10px;
+        align-items: center;
+      }
+      .name {
+        overflow: hidden;
+        color: var(--ink);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .bar {
+        grid-column: 1/-1;
+        height: 4px;
+        border-radius: 2px;
+        background: var(--line);
+        overflow: hidden;
+      }
+      .bar > span {
+        display: block;
+        height: 100%;
+        background: var(--fuse);
+      }
+      li[data-s='complete'] .bar > span {
+        background: var(--ok);
+      }
+      li[data-s='error'] .bar > span {
+        background: var(--bad);
+      }
+      li button {
+        min-height: 36px;
+        padding: 0 12px;
+        font-size: 13px;
+      }
+      .err {
+        color: var(--bad);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="head">
+        <h1>Fuselane</h1>
+        <span class="speed" id="speed"></span>
+      </div>
+      <form id="login" class="card" hidden>
+        <p>Enter the secret shown in Fuselane, in Settings → Other apps.</p>
+        <label class="mute" for="secret">Secret</label>
+        <input id="secret" autocomplete="off" autocapitalize="off" spellcheck="false" />
+        <button class="primary" type="submit">Connect</button>
+        <p class="err" id="loginerr" role="alert"></p>
+      </form>
+      <div id="app" hidden>
+        <form id="add" class="card">
+          <label class="mute" for="link">Add a download</label>
+          <div class="row">
+            <input
+              id="link"
+              type="url"
+              inputmode="url"
+              placeholder="https://…"
+              autocomplete="off"
+              autocapitalize="off"
+              spellcheck="false"
+            /><button class="primary" type="submit">Add</button>
+          </div>
+          <p class="mute" id="addmsg" role="status"></p>
+        </form>
+        <section class="card">
+          <p class="mute">Downloading</p>
+          <ul id="active"></ul>
+        </section>
+        <section class="card">
+          <p class="mute">Waiting and paused</p>
+          <ul id="waiting"></ul>
+        </section>
+        <section class="card">
+          <p class="mute">Finished</p>
+          <ul id="stopped"></ul>
+        </section>
+      </div>
+      <p class="mute">This page comes from Fuselane on your computer, over your own network.</p>
+    </main>
+    <script>
+      const keys = [
+        'gid',
+        'status',
+        'totalLength',
+        'completedLength',
+        'downloadSpeed',
+        'files',
+        'errorMessage',
+      ]
+      let secret = ''
+      try {
+        secret = sessionStorage.getItem('fuselane-secret') || ''
+      } catch {}
+      const m = /secret=([^&]+)/.exec(location.hash)
+      if (m) {
+        secret = decodeURIComponent(m[1])
+        history.replaceState(null, '', location.pathname)
+      }
+      let next = 1
+      async function call(method, ...params) {
+        const r = await fetch('jsonrpc', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: next++,
+            method,
+            params: ['token:' + secret, ...params],
+          }),
+        })
+        const j = await r.json()
+        if (j.error) throw new Error(j.error.message)
+        return j.result
+      }
+      function size(n) {
+        n = Number(n)
+        const u = ['B', 'KB', 'MB', 'GB', 'TB']
+        let i = 0
+        while (n >= 1024 && i < 4) {
+          n /= 1024
+          i++
+        }
+        return (i ? n.toFixed(1) : n) + ' ' + u[i]
+      }
+      function nameOf(d) {
+        const p = (d.files && d.files[0] && d.files[0].path) || ''
+        return p.split(/[\\/]/).pop() || d.gid
+      }
+      function row(d) {
+        const li = document.createElement('li')
+        li.dataset.s = d.status
+        const t = document.createElement('div')
+        const n = document.createElement('div')
+        n.className = 'name'
+        n.textContent = nameOf(d)
+        const s = document.createElement('div')
+        s.className = 'mute'
+        const total = Number(d.totalLength),
+          done = Number(d.completedLength)
+        s.textContent =
+          d.status === 'error'
+            ? d.errorMessage || 'Stopped'
+            : (total ? size(done) + ' of ' + size(total) : size(done)) +
+              (d.status === 'active'
+                ? ', ' + size(d.downloadSpeed) + '/s'
+                : d.status === 'paused'
+                  ? ', paused'
+                  : '')
+        t.append(n, s)
+        li.append(t)
+        const b = document.createElement('button')
+        if (d.status === 'active' || d.status === 'waiting') {
+          b.textContent = 'Pause'
+          b.onclick = () => act('aria2.pause', d.gid)
+        } else if (d.status === 'paused') {
+          b.textContent = 'Resume'
+          b.onclick = () => act('aria2.unpause', d.gid)
+        } else {
+          b.hidden = true
+        }
+        li.append(b)
+        const bar = document.createElement('div')
+        bar.className = 'bar'
+        const f = document.createElement('span')
+        f.style.width = (total ? Math.min(100, (done / total) * 100) : 0) + '%'
+        bar.append(f)
+        li.append(bar)
+        return li
+      }
+      function fill(id, list) {
+        const ul = document.getElementById(id)
+        if (!list.length) {
+          const p = document.createElement('li')
+          p.className = 'mute'
+          p.textContent = 'Nothing here.'
+          ul.replaceChildren(p)
+          return
+        }
+        ul.replaceChildren(...list.map(row))
+      }
+      async function act(method, gid) {
+        try {
+          await call(method, gid)
+        } catch (e) {
+          document.getElementById('addmsg').textContent = e.message
+        }
+        refresh()
+      }
+      async function refresh() {
+        if (!secret) return show(false)
+        try {
+          const [a, w, s, g] = await Promise.all([
+            call('aria2.tellActive', keys),
+            call('aria2.tellWaiting', 0, 100, keys),
+            call('aria2.tellStopped', -1, 20, keys),
+            call('aria2.getGlobalStat'),
+          ])
+          fill('active', a)
+          fill('waiting', w)
+          fill('stopped', s)
+          document.getElementById('speed').textContent = size(g.downloadSpeed) + '/s'
+          show(true)
+        } catch (e) {
+          if (/Unauthorized/.test(e.message)) {
+            secret = ''
+            document.getElementById('loginerr').textContent =
+              'That secret didn’t work. Check it in Settings.'
+            show(false)
+          }
+        }
+      }
+      function show(on) {
+        document.getElementById('app').hidden = !on
+        document.getElementById('login').hidden = on
+        try {
+          on
+            ? sessionStorage.setItem('fuselane-secret', secret)
+            : sessionStorage.removeItem('fuselane-secret')
+        } catch {}
+      }
+      document.getElementById('login').addEventListener('submit', (e) => {
+        e.preventDefault()
+        secret = document.getElementById('secret').value.trim()
+        refresh()
+      })
+      document.getElementById('add').addEventListener('submit', async (e) => {
+        e.preventDefault()
+        const box = document.getElementById('link'),
+          msg = document.getElementById('addmsg')
+        if (!box.value.trim()) return
+        try {
+          await call('aria2.addUri', [box.value.trim()])
+          msg.textContent = 'Added. It uses every network the computer has.'
+          box.value = ''
+        } catch (err) {
+          msg.textContent = err.message
+        }
+        refresh()
+      })
+      refresh()
+      setInterval(refresh, 2000)
+    </script>
+  </body>
+</html>

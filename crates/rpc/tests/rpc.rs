@@ -336,8 +336,17 @@ async fn over_http_with_rebinding_and_size_guards() {
     // Preflight for web front ends, wrong path, wrong method, too big.
     let pre = "OPTIONS /jsonrpc HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: http://ariang.example\r\nConnection: close\r\n\r\n".to_string();
     assert_eq!(http(addr, pre).await.0, 204);
-    let wrong = "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n".to_string();
+    let wrong = "GET /nope HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n".to_string();
     assert_eq!(http(addr, wrong).await.0, 404);
+    // The remote page for phones, locked down: no outside resources.
+    let page = "GET / HTTP/1.1\r\nHost: 192.168.1.24:6800\r\nConnection: close\r\n\r\n".to_string();
+    let (code, html) = http(addr, page).await;
+    assert_eq!(code, 200);
+    assert!(html.contains("Fuselane remote") && html.contains("jsonrpc"));
+    assert!(
+        !html.contains("https://cdn"),
+        "nothing loaded from elsewhere"
+    );
     let get = "GET /jsonrpc HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n".to_string();
     assert_eq!(http(addr, get).await.0, 405);
     let big = format!(

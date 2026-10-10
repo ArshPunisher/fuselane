@@ -17,6 +17,7 @@ Add a `fuselane-rpc` crate that speaks the aria2 JSON-RPC methods that make sens
 - CORS is open (`*`), because web front ends run on other origins; the secret is what guards it.
 - HTTP POST and WebSocket (AriaNg's default) on the same `/jsonrpc`; no push notifications yet, since front ends poll. Stopping the server (off, or a new secret) closes open WebSockets.
 - Requests are capped at 1 MB.
+- A small remote page at `/` for phones (list, add, pause, resume), with no outside resources and a strict CSP. Settings shows its link as a QR code only on request; the secret rides in the link's `#fragment`, which browsers never send to the server, and the page removes it from the address bar after reading it.
 
 ## Consequences
 
