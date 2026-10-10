@@ -520,6 +520,27 @@ export interface MediaTools {
 }
 
 /** Bytes per network per day (B10.5). */
+/** A feed followed (B10.8). */
+export interface FeedView {
+  id: number
+  url: string
+  title: string
+  /** Words a title must have, and words it must not. */
+  include: string
+  exclude: string
+  /** Minutes between checks: 15, 60, 360 or 1440. */
+  every: number
+  lastCheck: number | null
+  problem: string | null
+  added: number
+  recent: {
+    title: string
+    url: string
+    state: 'added' | 'filtered' | 'no-file' | 'torrent' | 'failed'
+    note: string | null
+  }[]
+}
+
 /** Remote control for aria2 tools (8.7, ADR 0013). */
 export interface RemoteView {
   on: boolean

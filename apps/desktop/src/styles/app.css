@@ -2181,6 +2181,172 @@ kbd {
   padding: 12px 12px 4px;
 }
 
+.list-tools-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Feeds (B10.8) */
+.feeds-dialog {
+  width: min(640px, calc(100vw - 32px));
+}
+
+.feeds {
+  display: grid;
+  gap: 14px;
+  max-height: min(80vh, 760px);
+  overflow-y: auto;
+  padding: 18px 20px 20px;
+}
+
+.dialog .feeds form.feed-add,
+.dialog .feeds form.feed-filters {
+  padding: 0;
+}
+
+.feed-add,
+.feed-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 12px;
+}
+
+.feed-add .feed-url {
+  grid-column: 1 / -1;
+}
+
+.feed-add .feed-latest {
+  grid-column: 1 / 3;
+  align-self: center;
+}
+
+.feed-add .btn-primary {
+  justify-self: end;
+}
+
+.feed-filters .btn {
+  justify-self: start;
+}
+
+.field select {
+  min-height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.feed-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.feed {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  background: var(--surface-2);
+}
+
+.feed-head {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+}
+
+.feed-ic {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--surface-3);
+  color: var(--fuse);
+}
+
+.feed-text {
+  min-width: 0;
+}
+
+.feed-meta {
+  font-size: 12px;
+}
+
+.feed-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.feed-recent {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--hairline);
+  list-style: none;
+}
+
+.feed-recent li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.feed-item {
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip[data-state='added'] {
+  border-color: color-mix(in oklch, var(--fuse) 45%, transparent);
+  color: var(--fuse);
+}
+
+@media (max-width: 640px) {
+  .feed-add,
+  .feed-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .feed-add .feed-latest {
+    grid-column: 1;
+  }
+
+  .feed-add .btn-primary {
+    justify-self: stretch;
+  }
+
+  .feed-head {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+
+  .feed-actions {
+    grid-column: 2;
+  }
+}
+
 .search {
   display: flex;
   align-items: center;

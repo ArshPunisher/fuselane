@@ -8,6 +8,7 @@
 mod api_bridge;
 mod automation;
 mod battery;
+mod feeds;
 mod media;
 mod native;
 mod nearby;
@@ -39,6 +40,7 @@ type Tor<'a> = tauri::State<'a, Arc<torrents::Torrents>>;
 type Snd<'a> = tauri::State<'a, Arc<sends::Sends>>;
 type Near<'a> = tauri::State<'a, Arc<nearby::Nearby>>;
 type Rem<'a> = tauri::State<'a, Arc<remote::Remote>>;
+type Fds<'a> = tauri::State<'a, Arc<feeds::Feeds>>;
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1194,6 +1196,45 @@ async fn nearby_phone_text(
     near.phone_text(text).await
 }
 
+/// Feeds followed (B10.8).
+#[tauri::command]
+fn feeds_list(fds: Fds<'_>) -> Vec<feeds::FeedView> {
+    fds.views()
+}
+
+#[tauri::command]
+async fn feeds_add(
+    fds: Fds<'_>,
+    url: String,
+    include: String,
+    exclude: String,
+    every: u32,
+    latest: bool,
+) -> Result<Vec<feeds::FeedView>, UiError> {
+    fds.add(&url, &include, &exclude, every, latest).await
+}
+
+#[tauri::command]
+fn feeds_update(
+    fds: Fds<'_>,
+    id: u64,
+    include: String,
+    exclude: String,
+    every: u32,
+) -> Result<Vec<feeds::FeedView>, UiError> {
+    fds.update(id, &include, &exclude, every)
+}
+
+#[tauri::command]
+fn feeds_remove(fds: Fds<'_>, id: u64) -> Result<Vec<feeds::FeedView>, UiError> {
+    fds.remove(id)
+}
+
+#[tauri::command]
+async fn feeds_check(fds: Fds<'_>, id: u64) -> Result<Vec<feeds::FeedView>, UiError> {
+    fds.check_now(id).await
+}
+
 /// Remote control for aria2 tools (8.7, ADR 0013).
 #[tauri::command]
 fn remote_state(rem: Rem<'_>) -> remote::RemoteView {
@@ -1594,6 +1635,7 @@ fn main() {
     let near = open_nearby(&svc);
     let for_text = near.clone();
     let rem = remote::Remote::new(&svc, Arc::new(nearby::lan_addrs));
+    let fds = feeds::Feeds::new(&svc, feeds::real_fetch());
     {
         // A download handed over from another Fuselane continues here (B9.9).
         let weak = Arc::downgrade(&svc);
@@ -1683,6 +1725,7 @@ fn main() {
         .manage(snd.clone())
         .manage(near.clone())
         .manage(rem.clone())
+        .manage(fds.clone())
         .setup(move |app| {
             {
                 // Text from another computer (B10.2): from a trusted one it goes straight
@@ -1777,6 +1820,14 @@ fn main() {
                 loop {
                     tor.tick().await;
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                }
+            });
+            // Feeds (B10.8): checks the ones that are due, every minute.
+            let fds = fds.clone();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    fds.tick().await;
+                    tokio::time::sleep(std::time::Duration::from_secs(60)).await;
                 }
             });
             // Remote control (ADR 0013), when it was left on.
@@ -1877,6 +1928,11 @@ fn main() {
             nearby_phone_offer,
             nearby_phone_text,
             remote_state,
+            feeds_list,
+            feeds_add,
+            feeds_update,
+            feeds_remove,
+            feeds_check,
             remote_set,
             remote_new_secret,
             nearby_cancel,

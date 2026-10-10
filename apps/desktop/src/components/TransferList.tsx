@@ -11,6 +11,7 @@ import {
   HourglassMedium,
   Magnet,
   Plus,
+  Rss,
   Stack,
   CaretRight,
   UploadSimple,
@@ -21,6 +22,7 @@ import { bytes, percent, rateText, readyBy, startsAt } from '../lib/format'
 import { assignLanes } from '../lib/lanes'
 import type { JobView, Live, TorrentView } from '../lib/types'
 import { STATUS_WORD } from './status'
+import { FeedsDialog } from './FeedsDialog'
 import { TORRENT_WORD, torrentNets } from './TorrentDetail'
 
 function StatusIcon({ job }: { job: JobView }) {
@@ -381,6 +383,8 @@ export function TransferList() {
   const [type, setType] = useState<FileType | 'all'>('all')
   const ready = useApp((s) => s.ready)
   const setAdding = useApp((s) => s.setAdding)
+  const [feedsOpen, setFeedsOpen] = useState(false)
+  const feedsDialog = <FeedsDialog open={feedsOpen} onClose={() => setFeedsOpen(false)} />
   if (!ready) {
     return (
       <ul className="list" aria-busy="true" aria-label="Loading downloads">
@@ -404,9 +408,15 @@ export function TransferList() {
           Paste a link or a magnet, or drop a .torrent file. Fuselane spreads it across every
           network you have, then fuses the parts into one file.
         </p>
-        <button className="btn btn-primary" onClick={() => setAdding(true)}>
-          <Plus size={16} aria-hidden /> New download
-        </button>
+        <div className="empty-actions">
+          <button className="btn btn-primary" onClick={() => setAdding(true)}>
+            <Plus size={16} aria-hidden /> New download
+          </button>
+          <button className="btn" onClick={() => setFeedsOpen(true)}>
+            <Rss size={16} aria-hidden /> Follow a feed
+          </button>
+        </div>
+        {feedsDialog}
       </div>
     )
   }
@@ -451,26 +461,37 @@ export function TransferList() {
   const nothing = !jobs.length && !torrents.length
   return (
     <div className="list-wrap">
+      {feedsDialog}
       <div className="list-tools">
-        <label className="search">
-          <MagnifyingGlass size={16} aria-hidden />
-          <input
-            type="search"
-            name="search"
-            autoComplete="off"
-            spellCheck={false}
-            placeholder="Search downloads…"
-            aria-label="Search downloads"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape' && query) {
-                e.stopPropagation()
-                setQuery('')
-              }
-            }}
-          />
-        </label>
+        <div className="list-tools-row">
+          <label className="search">
+            <MagnifyingGlass size={16} aria-hidden />
+            <input
+              type="search"
+              name="search"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="Search downloads…"
+              aria-label="Search downloads"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape' && query) {
+                  e.stopPropagation()
+                  setQuery('')
+                }
+              }}
+            />
+          </label>
+          <button
+            type="button"
+            className="btn btn-sm"
+            title="Follow podcasts, releases and other feeds: new files download by themselves"
+            onClick={() => setFeedsOpen(true)}
+          >
+            <Rss size={16} aria-hidden /> Feeds
+          </button>
+        </div>
         <div className="filters" role="radiogroup" aria-label="Show">
           {FILTERS.map((f) => (
             <button

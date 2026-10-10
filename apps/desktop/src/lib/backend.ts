@@ -2,6 +2,7 @@
 // plain browser (pnpm dev, Playwright) it uses the demo engine in ./demo.ts,
 // and the UI says so.
 import type {
+  FeedView,
   RemoteView,
   UsageHistory,
   HaveView,
@@ -121,6 +122,17 @@ export interface Backend {
   diagnostics(): Promise<string>
   /** Bytes per network per day, for the Data used chart. */
   usageHistory(): Promise<UsageHistory>
+  feedsList(): Promise<FeedView[]>
+  feedsAdd(
+    url: string,
+    include: string,
+    exclude: string,
+    every: number,
+    latest: boolean,
+  ): Promise<FeedView[]>
+  feedsUpdate(id: number, include: string, exclude: string, every: number): Promise<FeedView[]>
+  feedsRemove(id: number): Promise<FeedView[]>
+  feedsCheck(id: number): Promise<FeedView[]>
   remoteState(): Promise<RemoteView>
   remoteSet(on: boolean, lan: boolean, port: number): Promise<RemoteView>
   remoteNewSecret(): Promise<RemoteView>
@@ -311,6 +323,13 @@ async function tauriBackend(): Promise<Backend> {
     unseenCrash: () => call('unseen_crash'),
     netCheckState: () => call('netcheck_state'),
     usageHistory: () => call('usage_history'),
+    feedsList: () => call('feeds_list'),
+    feedsAdd: (url, include, exclude, every, latest) =>
+      call('feeds_add', { url, include, exclude, every, latest }),
+    feedsUpdate: (id, include, exclude, every) =>
+      call('feeds_update', { id, include, exclude, every }),
+    feedsRemove: (id) => call('feeds_remove', { id }),
+    feedsCheck: (id) => call('feeds_check', { id }),
     remoteState: () => call('remote_state'),
     remoteSet: (on, lan, port) => call('remote_set', { on, lan, port }),
     remoteNewSecret: () => call('remote_new_secret'),

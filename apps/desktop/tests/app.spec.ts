@@ -1849,3 +1849,41 @@ test('remote control for aria2 apps: on, address, secret, network and port', asy
   await toggle.click()
   await expect(page.locator('.remote-facts')).toHaveCount(0)
 })
+
+test('feeds: follow one, filter words, check, open a torrent item, stop following', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Feeds', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Feeds' })
+  const list = dialog.getByRole('list', { name: 'Feeds you follow' })
+  await expect(list).toContainText('Tech & Talk')
+  await expect(list).toContainText('12 downloaded')
+  await expect(dialog.getByRole('list', { name: 'Latest in Tech & Talk' })).toContainText(
+    'Skipped by your words',
+  )
+  // A web page instead of a feed: said plainly, with what to do.
+  await dialog.getByLabel('Feed address').fill('https://example.com/not-a-feed')
+  await dialog.getByRole('button', { name: 'Follow', exact: true }).click()
+  await expect(dialog.locator('#feed-url-err')).toContainText("it's not RSS or Atom")
+  await dialog.getByLabel('Feed address').fill('https://builds.example/atom')
+  await dialog.getByLabel('Only titles with').first().fill('linux x64')
+  await dialog.getByRole('button', { name: 'Follow', exact: true }).click()
+  await expect(dialog.getByRole('status')).toContainText('The latest file is downloading')
+  await expect(list).toContainText('Nightly builds')
+  await expect(list).toContainText('only with “linux x64”')
+  // Filters can change later.
+  const first = list.locator('.feed').first()
+  await first.getByRole('button', { name: 'Filters' }).click()
+  await first.getByLabel('Skip titles with').fill('trailer teaser')
+  await first.getByRole('button', { name: 'Save' }).click()
+  await expect(list.locator('.feed').first()).toContainText('skipping “trailer teaser”')
+  await list.getByRole('button', { name: 'Check Tech & Talk now' }).click()
+  await expect(list.locator('.feed').first()).toContainText('Checked just now')
+  await list.getByRole('button', { name: 'Stop following Nightly builds' }).click()
+  await expect(list.locator('.feed')).toHaveCount(1)
+  // A torrent in a feed waits; Open hands it to New download.
+  await first.getByRole('button', { name: 'Open' }).click()
+  await expect(page.getByRole('dialog', { name: 'New download' })).toBeVisible()
+  await expect(dialog).toBeHidden()
+})

@@ -10,6 +10,7 @@ import { createDemoTorrents } from './demoTorrents'
 import { createDemoSends } from './demoSends'
 import { createDemoNearby } from './demoNearby'
 import type {
+  FeedView,
   RemoteView,
   AllowanceView,
   Automation,
@@ -431,6 +432,45 @@ export function createDemoBackend(params: URLSearchParams): Backend {
 
   let maxRunning = 3
   let findSums = true
+  let feeds: FeedView[] = [
+    {
+      id: 1,
+      url: 'https://feeds.example/tech-talk.rss',
+      title: 'Tech & Talk',
+      include: '',
+      exclude: 'trailer',
+      every: 60,
+      lastCheck: Math.floor(Date.now() / 1000) - 600,
+      problem: null,
+      added: 12,
+      recent: [
+        {
+          title: 'Episode 43: Wi-Fi 7, honestly',
+          url: 'https://cdn.example/ep43.mp3',
+          state: 'added',
+          note: null,
+        },
+        {
+          title: 'Episode 43 (trailer)',
+          url: 'https://cdn.example/t43.mp3',
+          state: 'filtered',
+          note: null,
+        },
+        {
+          title: 'Episode 42: Bonding networks',
+          url: 'https://cdn.example/ep42.mp3',
+          state: 'added',
+          note: null,
+        },
+        {
+          title: 'Episode 41 (torrent)',
+          url: 'magnet:?xt=urn:btih:c9e15763f722f23e98a29decdfae341b98d53056&dn=ep41',
+          state: 'torrent',
+          note: null,
+        },
+      ],
+    },
+  ]
   let remote = { on: false, lan: false, port: 6800, secret: '9f2c41d07be35a68c1e4f0d2a7b96e13' }
   const remoteView = (): RemoteView => ({
     ...remote,
@@ -1032,6 +1072,65 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         }
       })
       return { days, labels: { en0: 'Wi-Fi', en7: 'iPhone USB', en5: 'Ethernet' } }
+    },
+    feedsList: async () => structuredClone(feeds),
+    feedsAdd: async (
+      url: string,
+      include: string,
+      exclude: string,
+      every: number,
+      latest: boolean,
+    ) => {
+      if (!/^https?:\/\//.test(url.trim()))
+        throw err(
+          'bad-link',
+          "Paste the feed's address.",
+          'Feed addresses start with http:// or https:// and often end in /feed, .rss or .xml.',
+        )
+      if (feeds.some((f) => f.url === url.trim()))
+        throw err('feed-duplicate', 'You already follow this feed.', null)
+      if (url.includes('not-a-feed'))
+        throw err(
+          'feed-unreadable',
+          "This isn't a feed: it's not RSS or Atom.",
+          'Check the address: it should open as a feed (RSS or Atom), not a web page.',
+        )
+      feeds.push({
+        id: feeds.length + 1,
+        url: url.trim(),
+        title: 'Nightly builds',
+        include,
+        exclude,
+        every,
+        lastCheck: Math.floor(Date.now() / 1000),
+        problem: null,
+        added: latest ? 1 : 0,
+        recent: latest
+          ? [
+              {
+                title: 'Build 1042',
+                url: 'https://builds.example/1042.tar.xz',
+                state: 'added',
+                note: null,
+              },
+            ]
+          : [],
+      })
+      return structuredClone(feeds)
+    },
+    feedsUpdate: async (id: number, include: string, exclude: string, every: number) => {
+      const f = feeds.find((x) => x.id === id)
+      if (f) Object.assign(f, { include, exclude, every })
+      return structuredClone(feeds)
+    },
+    feedsRemove: async (id: number) => {
+      feeds = feeds.filter((x) => x.id !== id)
+      return structuredClone(feeds)
+    },
+    feedsCheck: async (id: number) => {
+      const f = feeds.find((x) => x.id === id)
+      if (f) f.lastCheck = Math.floor(Date.now() / 1000)
+      return structuredClone(feeds)
     },
     remoteState: async () => remoteView(),
     remoteSet: async (on: boolean, lan: boolean, port: number) => {
