@@ -124,7 +124,7 @@ Every step is small enough for **one focused commit, or a short PR of a few comm
 - [x] 4.1 Release workflow: tag → native per-OS builds → package content check — L-73, L-74
 - [ ] 4.2 macOS ad-hoc signing + install script (`install.sh`) + Homebrew tap + illustrated Open Anyway guide — L-72, ADR 0009 (done: ad-hoc signing, tested install script, tap repo + cask generator; to do: illustrated guide)
 - [ ] 4.3 Windows signing of binaries and installer via SignPath (unsigned fallback + SmartScreen guide until approved) — L-72
-- [ ] 4.4 Linux AppImage/deb/rpm + checksums; Flatpak manifest (submission can wait until 1.0) (done: AppImage x64, deb/rpm x64 + arm64, SHA256SUMS; to do: Flatpak manifest)
+- [ ] 4.4 Linux AppImage/deb/rpm + checksums; Flatpak manifest (submission can wait until 1.0) (done: AppImage x64, deb/rpm x64 + arm64, SHA256SUMS; Flatpak manifest `packaging/flatpak` (app id `app.fuselane.Fuselane`, GNOME 51) built from the release .deb, filled from SHA256SUMS by `update-manifest.sh`, checked against flatpak-builder-lint's schema and xmllint on macOS; to do: a test build and run with flatpak-builder on Linux)
 - [x] 4.5 Tauri updater: minisign key (backed up offline), our own `latest.json` feed, real semver tests — L-76, L-77, L-78
 - [x] 4.6 Packaged smoke (`--self-test`) on signed artifacts per OS — L-75
 - [x] 4.7 Updater e2e: install N-1, update to N, data intact (2026-10-08: real beta.1 → beta.2 on macOS; a 31% download resumed in beta.2, byte-exact)
@@ -232,9 +232,9 @@ The owner asked for more built-in features that cost nothing to run (no paid tie
 
 ## P9 1.0 launch
 
-- [ ] 9.1 Weekly 24 h soak clean for 2 weeks; performance pass
+- [ ] 9.1 Weekly 24 h soak clean for 2 weeks; performance pass (done: soak tooling, `tools/soak.sh` + TESTING.md §7, 3-minute runs clean; to do: the weekly 24 h soaks, the performance pass, and the probe-retry bug its `resets` mode found)
 - [ ] 9.2 User docs site; FAQ honest about limits
-- [ ] 9.3 winget, Homebrew cask, Flathub
+- [ ] 9.3 winget, Homebrew cask, Flathub (done: Homebrew cask generator; winget manifests `packaging/winget` (generator + v0.1.0-beta.9 example, checked against winget's 1.10.0 schemas); Flatpak manifest (4.4); to do after 1.0: the winget-pkgs and Flathub pull requests)
 - [ ] 9.4 Launch plan (Product Hunt, Reddit, HN, YouTube/Instagram demos, Indian tech communities) (plan written: [LAUNCH.md](LAUNCH.md); carried out at 1.0)
 - [ ] 9.5 Tag `v1.0.0`
 
