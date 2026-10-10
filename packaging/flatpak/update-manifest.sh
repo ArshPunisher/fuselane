@@ -27,8 +27,9 @@ tag=$1
   die "\"$tag\" isn't a release tag. Use vX.Y.Z or vX.Y.Z-beta.N, for example v0.1.0-beta.9."
 version=${tag#v}
 command -v curl >/dev/null || die "curl isn't installed. Install it and run this again."
-[ -f "$manifest" ] && [ -f "$metainfo" ] ||
+if [ ! -f "$manifest" ] || [ ! -f "$metainfo" ]; then
   die "app.fuselane.Fuselane.yml or app.fuselane.Fuselane.metainfo.xml is missing from $here. Restore them from git and run this again."
+fi
 
 base="https://github.com/$repo/releases/download/$tag"
 sums=$(curl -fsSL --retry 3 "$base/SHA256SUMS") ||
