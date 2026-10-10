@@ -8,6 +8,7 @@
 mod api_bridge;
 mod automation;
 mod battery;
+mod browser_open;
 mod feeds;
 mod flatpak;
 mod media;
@@ -567,6 +568,64 @@ fn find_checksums(svc: State<'_>) -> bool {
 #[tauri::command]
 fn set_find_checksums(svc: State<'_>, on: bool) -> Result<bool, UiError> {
     svc.set_find_checksums(on)
+}
+
+/// The Browser extension page: each browser here and the extension's state in it.
+#[tauri::command]
+async fn extension_browsers(
+    svc: State<'_>,
+) -> Result<Vec<service::browser_ext::BrowserView>, UiError> {
+    // Reading browsers' profile files is disk work; keep it off the UI thread.
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || svc.extension_browsers())
+        .await
+        .map_err(|_| UiError::new_public("internal", "Couldn't look at your browsers.", None))
+}
+
+/// Opens a browser at Fuselane's store page ("store") or its extensions page
+/// ("extensions", to turn the extension back on).
+#[tauri::command]
+fn extension_open(browser: String, page: String) -> Result<(), UiError> {
+    let known = fuselane_api::browsers::known(&browser)
+        .ok_or_else(|| UiError::new_public("invalid", "Unknown browser.", None))?;
+    let url = match page.as_str() {
+        "store" => known.store.url(),
+        "extensions" => known.extensions_page,
+        _ => return Err(UiError::new_public("invalid", "Unknown page.", None)),
+    };
+    browser_open::open(known, url).map_err(|e| {
+        UiError::new_public(
+            "browser",
+            e,
+            Some("Open the browser yourself and search its store for Fuselane."),
+        )
+    })
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HandoffView {
+    enabled: bool,
+    min_bytes: u64,
+}
+
+/// Where the browser's downloads go: off, or everything from this size up.
+#[tauri::command]
+fn handoff_get(svc: State<'_>) -> HandoffView {
+    let h = svc.handoff();
+    HandoffView {
+        enabled: h.enabled,
+        min_bytes: h.min_bytes,
+    }
+}
+
+#[tauri::command]
+fn handoff_set(svc: State<'_>, enabled: bool, min_bytes: u64) -> Result<HandoffView, UiError> {
+    let h = svc.set_handoff(fuselane_api::server::Handoff { enabled, min_bytes })?;
+    Ok(HandoffView {
+        enabled: h.enabled,
+        min_bytes: h.min_bytes,
+    })
 }
 
 #[tauri::command]
@@ -2061,6 +2120,10 @@ fn main() {
             set_per_network_dns,
             find_checksums,
             set_find_checksums,
+            extension_browsers,
+            extension_open,
+            handoff_get,
+            handoff_set,
             long_minutes,
             set_long_minutes,
             allowances,

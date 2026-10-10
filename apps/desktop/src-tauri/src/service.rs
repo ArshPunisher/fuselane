@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 mod already;
+pub mod browser_ext;
 mod checksum;
 mod daily;
 mod deadline;

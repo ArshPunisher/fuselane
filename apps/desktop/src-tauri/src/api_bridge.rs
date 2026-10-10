@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use fuselane_api::offer::Offer;
-use fuselane_api::server::{BoxFuture, Decline, Handler};
+use fuselane_api::server::{BoxFuture, Decline, Handler, Handoff, Seen};
 
 use crate::service::Service;
 
@@ -78,6 +78,18 @@ impl Handler for ApiBridge {
 
     fn version(&self) -> String {
         env!("CARGO_PKG_VERSION").into()
+    }
+
+    fn extension_seen(&self, seen: Seen) {
+        self.svc.extension_seen(seen);
+    }
+
+    fn handoff(&self) -> Option<Handoff> {
+        Some(self.svc.handoff())
+    }
+
+    fn set_handoff(&self, handoff: Handoff) -> Option<Handoff> {
+        self.svc.set_handoff(handoff).ok()
     }
 }
 
