@@ -1264,6 +1264,20 @@ test('without yt-dlp a video page says what to install', async ({ page }) => {
   await expect(dialog.getByRole('alert')).toContainText('brew install yt-dlp')
 })
 
+test('Networks shows the data each network used this month and per day', async ({ page }) => {
+  await page.goto('/?drop=0')
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('button', { name: 'Networks' })
+    .click()
+  const used = page.getByRole('region', { name: 'Data used' })
+  await expect(used.getByRole('listitem')).toHaveCount(3)
+  await expect(used.getByRole('listitem').filter({ hasText: 'iPhone USB' })).toContainText(/GB|MB/)
+  await expect(
+    used.getByRole('img', { name: /Data used per day for the last 30 days/ }),
+  ).toBeVisible()
+})
+
 test('Download later adds it paused, ready to start', async ({ page }) => {
   await page.goto('/?empty=1')
   const dialog = await openDialog(page)

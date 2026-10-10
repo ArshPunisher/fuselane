@@ -4586,3 +4586,65 @@ html[data-hidden] .orb b {
 .sync-help {
   font-size: 12px;
 }
+
+/* ---------- Data used (B10.5) ---------- */
+
+.du-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.du-totals li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--body);
+}
+
+.du-totals .num {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.du-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--lane);
+}
+
+.du-chart {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  align-items: end;
+  gap: 3px;
+  height: 120px;
+  padding-top: 6px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.du-day {
+  display: flex;
+  align-items: flex-end;
+  height: 100%;
+}
+
+.du-stack {
+  display: flex;
+  flex-direction: column-reverse;
+  width: 100%;
+  min-height: 2px;
+  overflow: hidden;
+  border-radius: 3px 3px 0 0;
+}
+
+.du-stack span {
+  display: block;
+  min-height: 1px;
+  flex-basis: 0;
+}

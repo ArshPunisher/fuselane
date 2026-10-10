@@ -86,6 +86,12 @@ async fn media_add(
     svc.media_add(&url, &option, dir.as_deref())
 }
 
+/// Bytes per network per day, for the Data used chart (B10.5).
+#[tauri::command]
+fn usage_history(svc: State<'_>) -> service::UsageHistory {
+    svc.usage_history()
+}
+
 #[tauri::command]
 fn netcheck_state(svc: State<'_>) -> service::netcheck::NetCheckView {
     svc.netcheck_view()
@@ -1771,6 +1777,7 @@ fn main() {
             already_have,
             unseen_crash,
             netcheck_state,
+            usage_history,
             media_tools,
             media_info,
             media_add,

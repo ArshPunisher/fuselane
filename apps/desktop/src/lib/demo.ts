@@ -995,6 +995,24 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         prefs.push({ name: pref.name, label, lane: pref.lane, useFor })
       return structuredClone(prefs)
     },
+    usageHistory: async () => {
+      // Thirty days of made-up but believable use: home Wi-Fi most days, the phone
+      // on weekends and a busy week.
+      const days = Array.from({ length: 30 }, (_, i) => {
+        const d = new Date(Date.now() - (29 - i) * 86400_000)
+        const weekend = d.getDay() === 0 || d.getDay() === 6
+        const wave = Math.sin(i * 1.3) * 0.5 + 1
+        return {
+          day: d.toISOString().slice(0, 10),
+          nets: {
+            en0: Math.round((weekend ? 1.2 : 3.1) * wave * 1024 * MB),
+            en7: Math.round((weekend ? 0.9 : 0.15) * wave * 1024 * MB),
+            en5: Math.round((weekend ? 0.2 : 2.4) * wave * 1024 * MB),
+          },
+        }
+      })
+      return { days, labels: { en0: 'Wi-Fi', en7: 'iPhone USB', en5: 'Ethernet' } }
+    },
     netCheckState: async () => structuredClone(netCheck),
     netCheckStart: async () => {
       if (netCheck.running) return structuredClone(netCheck)

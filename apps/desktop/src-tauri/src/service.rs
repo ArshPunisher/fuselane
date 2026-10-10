@@ -16,6 +16,7 @@ use std::time::Duration;
 
 mod already;
 mod checksum;
+mod daily;
 mod deadline;
 mod focus;
 mod grab;
@@ -23,6 +24,7 @@ mod groups;
 pub mod handoff;
 pub mod media_jobs;
 pub mod netcheck;
+pub use daily::UsageHistory;
 
 pub use grab::PageFiles;
 mod power_aware;
@@ -630,6 +632,8 @@ pub struct Service {
     outages: Mutex<Vec<netcheck::Outage>>,
     /// Pages looked up with yt-dlp, and their choices, for a few minutes (B10.4).
     media_probes: Mutex<media_jobs::Probes>,
+    /// Bytes per network per day, for the last two months (B10.5).
+    daily: Mutex<Vec<daily::DayUse>>,
 }
 
 /// Opens a file with the system's default app.
@@ -870,6 +874,7 @@ impl Service {
         let store_flag = store.setting("per_network_dns").ok().flatten().as_deref() == Some("true");
         let find_checksums =
             store.setting("find_checksums").ok().flatten().as_deref() != Some("false");
+        let daily_saved = Service::load_daily(&store);
         let saved_outages: Vec<netcheck::Outage> = store
             .setting("outages")
             .ok()
@@ -966,6 +971,7 @@ impl Service {
             battery_paused: Mutex::default(),
             netcheck: Mutex::default(),
             media_probes: Mutex::default(),
+            daily: Mutex::new(daily_saved),
             outages: Mutex::new(saved_outages),
             retries: Mutex::new(HashMap::new()),
             limiter,
@@ -2148,6 +2154,7 @@ impl Service {
     /// network is past its allowance, running downloads pause with a reason.
     pub fn tick_usage(self: &Arc<Self>, today: Date) {
         let drained = self.limiter.drain_usage();
+        self.note_daily(&date_text(today), &drained);
         let saved = lock(&self.allowances).clone();
         let reset_of = |name: &str| {
             saved

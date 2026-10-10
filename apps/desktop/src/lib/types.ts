@@ -514,3 +514,9 @@ export interface MediaTools {
   ytDlp: string | null
   ffmpeg: string | null
 }
+
+/** Bytes per network per day (B10.5). */
+export interface UsageHistory {
+  days: { day: string; nets: Record<string, number> }[]
+  labels: Record<string, string>
+}

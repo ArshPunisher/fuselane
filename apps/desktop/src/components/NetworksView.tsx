@@ -8,6 +8,7 @@ import { NetIcon } from './NetIcon'
 import { Orb } from './Orb'
 import { LimitField } from './LimitField'
 import { NetCheck } from './NetCheck'
+import { DataUsed } from './DataUsed'
 
 /** Live speed per network, summed over running downloads. */
 export function useLiveRates(): Record<string, number> {
@@ -558,6 +559,7 @@ export function NetworksView() {
         </div>
         <div className="nets-wide">
           <NetCheck />
+          <DataUsed />
           <Allowances />
         </div>
       </div>
