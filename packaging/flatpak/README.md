@@ -95,7 +95,7 @@ App changes that make the Flatpak a first-class build (none made here):
 2. Use the Flatpak id as the single-instance D-Bus name (`tauri_plugin_single_instance::Builder::new().dbus_id(...)` when `FLATPAK_ID` is set), then drop `--own-name=app.fuselane.SingleInstance` from the manifest.
 3. Start at login through the Background portal, and keep awake through the Inhibit portal.
 4. Screenshots of the app on Linux, at URLs pinned to a release tag rather than `main` (the current two are from macOS: "Show in Finder").
-5. Keep the desktop entries in step: this one offers magnet links (the app handles them on Linux, and registers them on macOS and Windows), but the `.deb`'s own entry, from `tauri.linux.conf.json`, lists only `.torrent` files and `fuselane://`.
+5. Keep the desktop entries in step: this one and the `.deb`'s own (from `tauri.linux.conf.json`) both offer `.torrent` files, magnet links and `fuselane://`.
 
 ## Submit to Flathub (after 1.0)
 

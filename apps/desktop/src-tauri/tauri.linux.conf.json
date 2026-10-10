@@ -14,7 +14,7 @@
   "plugins": {
     "deep-link": {
       "desktop": {
-        "schemes": ["fuselane"]
+        "schemes": ["fuselane", "magnet"]
       }
     }
   }
