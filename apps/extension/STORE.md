@@ -9,6 +9,10 @@ workspace files, the lockfile and `SOURCE-README.md`. Rebuilt from it in an empt
 `build:firefox` gives exactly the uploaded Firefox zip (checked for 0.2.0). Don't upload WXT's
 own `-sources.zip`: it leaves out the shared package and the lockfile.
 
+**Firefox Add-ons:** listed as https://addons.mozilla.org/firefox/addon/fuselane/ (gecko id `fuselane@fuselane.app`). 0.2.0 submitted 2026-10-10 with the source package, five screenshots with captions, the 128 px icon and an extension-only privacy policy; awaiting review.
+
+**Edge Add-ons:** the Partner Center account isn't enrolled yet (needs the owner's address, phone and agreement). After the first upload, add the Edge store id to the native host's allowed origins.
+
 **Chrome Web Store:** item `nggljghjikdkigiekdciocigdnnhponl`, **approved and live** (0.1.0, 2026-10-10): https://chromewebstore.google.com/detail/fuselane/nggljghjikdkigiekdciocigdnnhponl. Next upload: 0.2.0 (page list, signed-in downloads) with the images below.
 
 ## Name and summary
