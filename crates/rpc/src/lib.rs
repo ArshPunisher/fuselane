@@ -9,7 +9,9 @@
 //! page from reaching it through DNS rebinding.
 //!
 //! The protocol lives here; [`Host`] is what the app provides. Over HTTP POST
-//! only (no WebSocket yet): AriaNg works with its "HTTP" setting.
+//! or a WebSocket (AriaNg's default), at `/jsonrpc`.
+
+mod ws;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -185,6 +187,9 @@ pub struct Rpc<H> {
     host: Arc<H>,
     secret: String,
     session: String,
+    /// Turns true when the server stops, which ends open WebSockets.
+    stopped: tokio::sync::watch::Receiver<bool>,
+    stop: tokio::sync::watch::Sender<bool>,
 }
 
 impl<H> std::fmt::Debug for Rpc<H> {
@@ -195,10 +200,13 @@ impl<H> std::fmt::Debug for Rpc<H> {
 
 impl<H: Host> Rpc<H> {
     pub fn new(host: Arc<H>, secret: String) -> Self {
+        let (stop, stopped) = tokio::sync::watch::channel(false);
         Rpc {
             host,
             secret,
             session: new_secret(),
+            stopped,
+            stop,
         }
     }
 
@@ -689,6 +697,41 @@ async fn serve<H: Host>(rpc: Arc<Rpc<H>>, req: Request<Incoming>) -> Response<Bo
             "Fuselane's remote control is at /jsonrpc.",
         );
     }
+    let upgrade = req
+        .headers()
+        .get(hyper::header::UPGRADE)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.eq_ignore_ascii_case("websocket"));
+    if upgrade && req.method() == hyper::Method::GET {
+        let Some(key) = req
+            .headers()
+            .get("sec-websocket-key")
+            .and_then(|v| v.to_str().ok())
+            .map(ws::accept_key)
+        else {
+            return text(StatusCode::BAD_REQUEST, "The WebSocket key is missing.");
+        };
+        let rpc = rpc.clone();
+        tokio::spawn(async move {
+            if let Ok(up) = hyper::upgrade::on(req).await {
+                ws::serve(rpc, hyper_util::rt::TokioIo::new(up)).await;
+            }
+        });
+        let mut r = reply(StatusCode::SWITCHING_PROTOCOLS, vec![], "text/plain");
+        let h = r.headers_mut();
+        h.insert(
+            hyper::header::UPGRADE,
+            hyper::header::HeaderValue::from_static("websocket"),
+        );
+        h.insert(
+            hyper::header::CONNECTION,
+            hyper::header::HeaderValue::from_static("Upgrade"),
+        );
+        if let Ok(v) = hyper::header::HeaderValue::from_str(&key) {
+            h.insert("sec-websocket-accept", v);
+        }
+        return r;
+    }
     match req.method().as_str() {
         "OPTIONS" => reply(StatusCode::NO_CONTENT, vec![], "text/plain"),
         "POST" => {
@@ -734,7 +777,7 @@ async fn serve<H: Host>(rpc: Arc<Rpc<H>>, req: Request<Incoming>) -> Response<Bo
         }
         _ => text(
             StatusCode::METHOD_NOT_ALLOWED,
-            "Send JSON-RPC calls with POST (WebSocket isn't supported yet).",
+            "Send JSON-RPC calls with POST, or open a WebSocket.",
         ),
     }
 }
@@ -743,6 +786,7 @@ async fn serve<H: Host>(rpc: Arc<Rpc<H>>, req: Request<Incoming>) -> Response<Bo
 pub struct Server {
     pub addr: SocketAddr,
     task: Option<tokio::task::JoinHandle<()>>,
+    stop: tokio::sync::watch::Sender<bool>,
 }
 
 impl std::fmt::Debug for Server {
@@ -755,6 +799,7 @@ impl std::fmt::Debug for Server {
 
 impl Drop for Server {
     fn drop(&mut self) {
+        let _ = self.stop.send(true);
         if let Some(task) = &self.task {
             task.abort();
         }
@@ -764,6 +809,7 @@ impl Drop for Server {
 impl Server {
     /// Stops and waits until the port is free again.
     pub async fn stop(mut self) {
+        let _ = self.stop.send(true);
         if let Some(task) = self.task.take() {
             task.abort();
             let _ = task.await;
@@ -786,6 +832,7 @@ impl Server {
         let listener = tokio::net::TcpListener::bind(bind).await?;
         let addr = listener.local_addr()?;
         let rpc = Arc::new(Rpc::new(host, secret));
+        let stop = rpc.stop.clone();
         let task = tokio::spawn(async move {
             // Connections live in here, so stopping ends them too: one kept
             // open can't go on using a secret that has since been replaced.
@@ -800,6 +847,7 @@ impl Server {
                     });
                     let _ = hyper::server::conn::http1::Builder::new()
                         .serve_connection(hyper_util::rt::TokioIo::new(tcp), svc)
+                        .with_upgrades()
                         .await;
                 });
             }
@@ -807,6 +855,7 @@ impl Server {
         Ok(Server {
             addr,
             task: Some(task),
+            stop,
         })
     }
 }

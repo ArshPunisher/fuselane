@@ -393,3 +393,83 @@ async fn stopping_ends_connections_kept_open() {
     assert_eq!(n, 0, "closed");
     tokio::net::TcpListener::bind(addr).await.unwrap();
 }
+
+/// A client frame: masked, as browsers send them.
+fn ws_frame(opcode: u8, data: &[u8]) -> Vec<u8> {
+    let mut f = vec![0x80 | opcode];
+    let mask = [0x12u8, 0x34, 0x56, 0x78];
+    match data.len() {
+        n if n < 126 => f.push(0x80 | n as u8),
+        n => {
+            f.push(0x80 | 126);
+            f.extend_from_slice(&(n as u16).to_be_bytes());
+        }
+    }
+    f.extend_from_slice(&mask);
+    f.extend(data.iter().enumerate().map(|(i, b)| b ^ mask[i % 4]));
+    f
+}
+
+async fn ws_read(s: &mut tokio::net::TcpStream) -> (u8, Vec<u8>) {
+    let mut h = [0u8; 2];
+    s.read_exact(&mut h).await.unwrap();
+    let mut len = usize::from(h[1] & 0x7f);
+    if len == 126 {
+        let mut b = [0u8; 2];
+        s.read_exact(&mut b).await.unwrap();
+        len = usize::from(u16::from_be_bytes(b));
+    }
+    let mut data = vec![0u8; len];
+    s.read_exact(&mut data).await.unwrap();
+    (h[0] & 0x0f, data)
+}
+
+#[tokio::test]
+async fn websocket_like_ariang_and_closed_when_stopped() {
+    let server = Server::start(
+        Arc::new(Fake::default()),
+        "127.0.0.1:0".parse().unwrap(),
+        SECRET.into(),
+    )
+    .await
+    .unwrap();
+    let mut s = tokio::net::TcpStream::connect(server.addr).await.unwrap();
+    s.write_all(
+        b"GET /jsonrpc HTTP/1.1\r\nHost: 127.0.0.1:6800\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nOrigin: http://ariang.example\r\n\r\n",
+    )
+    .await
+    .unwrap();
+    // Read the handshake reply up to its blank line.
+    let mut head = Vec::new();
+    while !head.ends_with(b"\r\n\r\n") {
+        let mut b = [0u8; 1];
+        s.read_exact(&mut b).await.unwrap();
+        head.push(b[0]);
+    }
+    let head = String::from_utf8(head).unwrap().to_ascii_lowercase();
+    assert!(head.starts_with("http/1.1 101"), "{head}");
+    assert!(head.contains("sec-websocket-accept: s3pplmbitxaq9kygzzhzrbk+xoo="));
+
+    let call = json!({"jsonrpc": "2.0", "id": "a1", "method": "aria2.getVersion",
+                      "params": [format!("token:{SECRET}")]})
+    .to_string();
+    s.write_all(&ws_frame(0x1, call.as_bytes())).await.unwrap();
+    let (op, data) = ws_read(&mut s).await;
+    assert_eq!(op, 0x1);
+    let v: Value = serde_json::from_slice(&data).unwrap();
+    assert_eq!(
+        (v["id"].as_str(), v["result"]["version"].as_str()),
+        (Some("a1"), Some("1.37.0"))
+    );
+
+    // Pings get pongs.
+    s.write_all(&ws_frame(0x9, b"hi")).await.unwrap();
+    assert_eq!(ws_read(&mut s).await, (0xA, b"hi".to_vec()));
+
+    // Stopping (as after a new secret) closes the socket: "going away".
+    server.stop().await;
+    let (op, data) = tokio::time::timeout(std::time::Duration::from_secs(2), ws_read(&mut s))
+        .await
+        .unwrap();
+    assert_eq!((op, data), (0x8, 1001u16.to_be_bytes().to_vec()));
+}

@@ -15,7 +15,7 @@ Add a `fuselane-rpc` crate that speaks the aria2 JSON-RPC methods that make sens
 - **This computer only** (127.0.0.1) unless the person allows devices on the local network.
 - **DNS rebinding blocked:** the Host header must be `localhost` or an IP address.
 - CORS is open (`*`), because web front ends run on other origins; the secret is what guards it.
-- HTTP POST only for now (no WebSocket); AriaNg works with its HTTP setting.
+- HTTP POST and WebSocket (AriaNg's default) on the same `/jsonrpc`; no push notifications yet, since front ends poll. Stopping the server (off, or a new secret) closes open WebSockets.
 - Requests are capped at 1 MB.
 
 ## Consequences

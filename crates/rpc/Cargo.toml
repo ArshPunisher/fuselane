@@ -10,13 +10,14 @@ publish.workspace = true
 
 [dependencies]
 serde_json = "1"
-tokio = { version = "1", features = ["rt", "macros", "time", "net", "sync"] }
+tokio = { version = "1", features = ["rt", "macros", "time", "net", "sync", "io-util"] }
 hyper = { version = "1", features = ["server", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 http-body-util = "0.1"
 bytes = "1"
 getrandom = "0.3"
 base64 = "0.22"
+sha1 = "0.11"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
