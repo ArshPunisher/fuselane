@@ -412,6 +412,26 @@ for (const [width, height] of [
   })
 }
 
+test('narrowing a wide window switches how it works to playing by itself, and back', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await stub(page)
+  await page.goto('/')
+  await expect(page.getByRole('tablist', { name: 'Steps' })).toHaveCount(0)
+  await page.setViewportSize({ width: 375, height: 812 })
+  const visual = page.locator('.story-visual')
+  await visual.scrollIntoViewIfNeeded()
+  await expect(page.getByRole('tablist', { name: 'Steps' })).toBeVisible()
+  await expect(visual).toHaveAttribute('data-step', '2', { timeout: 6000 })
+  // The steps' own text doesn't show under the card on a phone.
+  // (Kept only for screen readers: a 1 px box.)
+  expect((await page.locator('.story-steps').boundingBox())!.height).toBeLessThanOrEqual(1)
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await expect(page.getByRole('tablist', { name: 'Steps' })).toHaveCount(0)
+  await expect(page.locator('.story-step').first()).toBeVisible()
+})
+
 test('with reduced motion the steps wait for a tap', async ({ browser }) => {
   const ctx = await browser.newContext({
     viewport: { width: 375, height: 812 },

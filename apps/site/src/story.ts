@@ -1,7 +1,7 @@
-// How it works: as each step crosses the middle of the screen, the picture
-// beside it shows that step (split, spread, fuse). Scrolling back shows it
-// again. Under reduced motion the picture still changes, without moving.
-import { prefersReduced, watch, whenSeen } from './motion'
+// How it works: on wide screens, as each step crosses the middle of the screen, the picture
+// beside it shows that step (split, spread, fuse); on phones the card plays the steps by
+// itself. Under reduced motion the picture still changes, without moving.
+import { prefersReduced, whenSeen } from './motion'
 
 export function startStory() {
   const visual = document.querySelector<HTMLElement>('.story-visual')
@@ -25,12 +25,26 @@ export function startStory() {
     if (!reduced && changed)
       slot.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 280, easing: 'ease-out' })
   }
-  // Phones: no long scroll through empty space. The card plays the three
-  // steps by itself while it's on screen, with tabs to pick one.
-  if (matchMedia('(max-width: 959px)').matches) {
-    playOnPhones(visual, steps, show, reduced)
-    return
+  // Phones play the steps by themselves; wider screens follow the scroll. The
+  // mode follows the width, so turning a tablet or resizing the window works.
+  const phone = matchMedia('(max-width: 959px)')
+  let stop = () => {}
+  const start = () => {
+    stop()
+    stop = phone.matches
+      ? playOnPhones(visual, steps, show, reduced)
+      : followScroll(visual, steps, show)
   }
+  phone.addEventListener('change', start)
+  start()
+}
+
+/** Wide screens: as each step crosses the middle, the card shows it. */
+function followScroll(
+  visual: HTMLElement,
+  steps: HTMLElement[],
+  show: (n: string) => void,
+): () => void {
   // Start from the first step when the section is still below the fold.
   show(visual.getBoundingClientRect().top > innerHeight ? '1' : (visual.dataset.step ?? '1'))
   const io = new IntersectionObserver(
@@ -42,19 +56,31 @@ export function startStory() {
   )
   steps.forEach((s) => io.observe(s))
   // The falling parts only move while the picture is on screen.
-  watch(visual, (v) => visual.toggleAttribute('data-play', v))
+  const seen = new IntersectionObserver((e) =>
+    visual.toggleAttribute(
+      'data-play',
+      e.some((x) => x.isIntersecting),
+    ),
+  )
+  seen.observe(visual)
+  return () => {
+    io.disconnect()
+    seen.disconnect()
+  }
 }
 
 /** Seconds each step shows before the next, on phones. */
 const STEP_MS = 3600
 
+/** Phones: the card plays the three steps while on screen, with tabs to pick one. */
 function playOnPhones(
   visual: HTMLElement,
   steps: HTMLElement[],
   show: (n: string) => void,
   reduced: boolean,
-) {
-  visual.closest('.story')?.setAttribute('data-autoplay', '')
+): () => void {
+  const story = visual.closest('.story')
+  story?.setAttribute('data-autoplay', '')
   const tabs = document.createElement('div')
   tabs.className = 'sv-tabs'
   tabs.setAttribute('role', 'tablist')
@@ -78,8 +104,7 @@ function playOnPhones(
   let onScreen = false
   const go = (i: number) => {
     at = (i + steps.length) % steps.length
-    const n = steps[at]!.dataset.step ?? '1'
-    show(n)
+    show(steps[at]!.dataset.step ?? '1')
     buttons.forEach((b, k) => {
       b.setAttribute('aria-selected', String(k === at))
       // Restart the fill on the current tab.
@@ -93,13 +118,23 @@ function playOnPhones(
     if (!reduced && onScreen) timer = window.setTimeout(() => go(at + 1), STEP_MS)
   }
   buttons.forEach((b, k) => b.addEventListener('click', () => go(k)))
-  watch(visual, (v) => {
+  // Plays while any of the card is on screen.
+  const seen = new IntersectionObserver((entries) => {
+    const v = entries.some((e) => e.isIntersecting)
+    if (v === onScreen) return
     onScreen = v
     visual.toggleAttribute('data-play', v)
     if (v) go(at)
     else clearTimeout(timer)
   })
+  seen.observe(visual)
   go(0)
+  return () => {
+    seen.disconnect()
+    clearTimeout(timer)
+    tabs.remove()
+    story?.removeAttribute('data-autoplay')
+  }
 }
 
 /** The measured numbers count up once, the first time they're seen. */
