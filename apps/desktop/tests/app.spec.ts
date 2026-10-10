@@ -1729,6 +1729,19 @@ test.describe('Nearby', () => {
     await expect(card.getByRole('button', { name: 'Send what I copied' })).toBeVisible()
   })
 
+  test('a folder can be kept in sync with a trusted computer', async ({ page }) => {
+    await openNearby(page)
+    const card = page.getByRole('region', { name: 'Folders kept in sync' })
+    await card.getByLabel('Keep in sync with').selectOption({ label: 'STUDIO-PC' })
+    await card.getByRole('button', { name: 'Add a folder' }).click()
+    await expect(card.getByRole('listitem')).toContainText('Movies → STUDIO-PC')
+    await expect(card.getByRole('listitem')).toContainText('Up to date, 128 files', {
+      timeout: 5000,
+    })
+    await card.getByRole('button', { name: 'Stop syncing Movies' }).click()
+    await expect(card.getByRole('listitem')).toHaveCount(0)
+  })
+
   test('a phone without the app gets a code, offered files, and Stop', async ({ page }) => {
     await openNearby(page)
     await page.getByRole('button', { name: 'Show a code to scan' }).click()

@@ -175,6 +175,19 @@ export interface NearbyView {
   request: NearbyRequest | null
   problem: string | null
   phone: PhoneView | null
+  /** Folders kept in sync with trusted computers (B10.3). */
+  syncs: SyncView[]
+}
+
+export interface SyncView {
+  id: number
+  folder: string
+  name: string
+  device: string
+  state: 'up-to-date' | 'sending' | 'waiting' | 'problem'
+  files: number
+  pending: number
+  note: string | null
 }
 
 /** A file this computer is sending with Fuse Send. */

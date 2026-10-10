@@ -2,6 +2,8 @@
 //! network, who may see this computer, trusted devices, asking before files
 //! arrive, and sending. The protocol itself is in `fuselane-nearby`.
 
+pub mod folders;
+pub mod sync;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
@@ -115,6 +117,8 @@ pub struct NearbyView {
     /// Why Nearby isn't working, when it isn't.
     pub problem: Option<String>,
     pub phone: Option<PhoneView>,
+    /// Folders kept in sync with trusted computers (B10.3).
+    pub syncs: Vec<sync::SyncView>,
 }
 
 struct Seen {
@@ -170,6 +174,11 @@ pub struct Nearby {
     /// message now arriving came from a verified, trusted computer.
     on_text: Mutex<Option<OnText>>,
     auto_copy: std::sync::atomic::AtomicBool,
+    /// Folders kept in sync (B10.3), how each is doing, and the round's pacing.
+    syncs: Mutex<Vec<sync::SyncJob>>,
+    sync_status: Mutex<HashMap<u64, sync::Status>>,
+    sync_busy: AtomicBool,
+    sync_last: Mutex<Option<Instant>>,
 }
 
 /// Called with a received text message: who from, the text, and whether it may
@@ -249,7 +258,7 @@ impl Nearby {
             .flatten()
             .and_then(|v| serde_json::from_str(&v).ok())
             .unwrap_or_default();
-        Arc::new(Nearby {
+        let n = Arc::new(Nearby {
             state_dir,
             inbox,
             store,
@@ -276,7 +285,13 @@ impl Nearby {
             on_received: Mutex::new(None),
             on_text: Mutex::new(None),
             auto_copy: std::sync::atomic::AtomicBool::new(false),
-        })
+            syncs: Mutex::new(Vec::new()),
+            sync_status: Mutex::new(HashMap::new()),
+            sync_busy: AtomicBool::new(false),
+            sync_last: Mutex::new(None),
+        });
+        n.load_syncs();
+        n
     }
 
     fn fingerprint(&self) -> String {
@@ -430,6 +445,10 @@ impl Nearby {
             o.view.done = o.sent.load(Ordering::Relaxed).min(o.view.size);
         }
         self.publish();
+        if !lock(&self.syncs).is_empty() {
+            let me = self.clone();
+            tokio::spawn(async move { me.sync_round(false).await });
+        }
     }
 
     pub fn view(&self) -> NearbyView {
@@ -477,6 +496,7 @@ impl Nearby {
                     .collect();
                 p
             }),
+            syncs: self.sync_views(),
         }
     }
 
@@ -645,11 +665,16 @@ impl Nearby {
                 )
             })?;
             if meta.is_dir() {
-                return Err(err(
-                    "send-folder",
-                    "Only files can be sent for now.",
-                    Some("Zip the folder and send the zip."),
-                ));
+                // A folder goes as a folder: every file inside, named by its path.
+                for e in folders::walk(&path) {
+                    files.push(Outgoing {
+                        path: e.path,
+                        name: e.rel,
+                        size: e.size,
+                        mime: "application/octet-stream".into(),
+                    });
+                }
+                continue;
             }
             let name = path
                 .file_name()
@@ -1327,6 +1352,85 @@ mod tests {
             b.n.send_text(&fa, "  ").await.unwrap_err().code,
             "nothing-to-send"
         );
+    }
+
+    /// `from` sends `to` one file and `to` accepts and trusts it.
+    async fn trust(from: &Side, to: &Side) {
+        let ft = to.n.fingerprint();
+        until("listed", || {
+            from.n.view().devices.iter().any(|d| d.fingerprint == ft)
+        })
+        .await;
+        to.n.set_everyone(true).await;
+        let dir = tempfile::tempdir().unwrap();
+        let f = dir.path().join("hello.txt");
+        std::fs::write(&f, "hi").unwrap();
+        from.n
+            .send(&ft, vec![f.display().to_string()])
+            .await
+            .unwrap();
+        until("asked", || to.n.view().request.is_some()).await;
+        let id = to.n.view().request.unwrap().id;
+        to.n.answer(id, true, true).unwrap();
+        until("trusted and arrived", || {
+            !to.n.view().trusted.is_empty()
+                && to.n.view().transfers.iter().any(|t| t.state == "done")
+        })
+        .await;
+        to.n.set_everyone(false).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_folder_kept_in_sync_arrives_and_follows_changes() {
+        let a = side("Maya's MacBook Air").await;
+        let b = side("STUDIO-PC").await;
+        introduce(&a, &b).await;
+        introduce(&b, &a).await;
+        trust(&b, &a).await; // a trusts b (b may send to a)
+        trust(&a, &b).await; // b trusts a (b may sync to a)
+        let src = tempfile::tempdir().unwrap();
+        let notes = src.path().join("Notes");
+        std::fs::create_dir_all(notes.join("2026")).unwrap();
+        std::fs::write(notes.join("todo.md"), "one").unwrap();
+        std::fs::write(notes.join("2026/plan.md"), "two").unwrap();
+        let fa = a.n.fingerprint();
+        // Only trusted computers.
+        assert_eq!(
+            b.n.add_sync(&notes.display().to_string(), "not-a-device")
+                .unwrap_err()
+                .code,
+            "sync-trust"
+        );
+        b.n.add_sync(&notes.display().to_string(), &fa).unwrap();
+        let got = a.inbox.path().join("Notes");
+        until("the folder", || {
+            got.join("2026/plan.md").exists() && got.join("todo.md").exists()
+        })
+        .await;
+        until("up to date", || {
+            b.n.view()
+                .syncs
+                .first()
+                .is_some_and(|s| s.state == "up-to-date")
+        })
+        .await;
+        assert_eq!(b.n.view().syncs[0].files, 2);
+        // An edit goes across; unchanged files aren't sent again.
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        std::fs::write(notes.join("todo.md"), "one, done").unwrap();
+        b.n.sync_round(true).await;
+        until("the edit", || {
+            std::fs::read_to_string(got.join("todo.md")).unwrap_or_default() == "one, done"
+        })
+        .await;
+        assert_eq!(
+            std::fs::read_dir(&got).unwrap().count(),
+            2,
+            "replaced, not numbered"
+        );
+        let id = b.n.view().syncs[0].id;
+        b.n.remove_sync(id);
+        assert!(b.n.view().syncs.is_empty());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

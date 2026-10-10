@@ -4531,3 +4531,58 @@ html[data-hidden] .orb b {
   color: var(--ink);
   font-weight: 600;
 }
+
+/* ---------- Folders kept in sync (B10.3) ---------- */
+
+.sync-card {
+  display: grid;
+  gap: 8px;
+}
+
+.sync-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  background: var(--surface-1);
+}
+
+.sync-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 10px 14px;
+}
+
+.sync-list li + li {
+  border-top: 1px solid var(--hairline);
+}
+
+.sync-text {
+  display: grid;
+  gap: 2px;
+  font-size: 13px;
+}
+
+.sync-name {
+  overflow: hidden;
+  color: var(--ink);
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sync-list li[data-state='up-to-date'] .muted {
+  color: var(--success);
+}
+
+.sync-list li[data-state='problem'] .muted {
+  color: var(--warning);
+}
+
+.sync-help {
+  font-size: 12px;
+}

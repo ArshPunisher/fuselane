@@ -70,6 +70,7 @@ export function createDemoNearby(params: URLSearchParams, emit: () => (e: UiEven
     request: null,
     problem: null,
     phone: null,
+    syncs: [],
   }
   const drops = new Set<(e: FileDrop) => void>()
   let everyoneUntil = 0
@@ -174,6 +175,39 @@ export function createDemoNearby(params: URLSearchParams, emit: () => (e: UiEven
         },
         d.trusted ? 300 : 1200,
       )
+      return clone()
+    },
+    nearbySyncAdd: async (folder: string, fingerprint: string) => {
+      const t = view.trusted.find((x) => x.fingerprint === fingerprint)
+      if (!t)
+        throw err(
+          'sync-trust',
+          'Folders are kept in sync only with trusted computers.',
+          'Send that computer a file and tick Trust when it asks, then try again.',
+        )
+      const id = next++
+      const name = folder.split('/').pop() ?? folder
+      view.syncs.push({
+        id,
+        folder,
+        name,
+        device: t.alias,
+        state: 'sending',
+        files: 128,
+        pending: 128,
+        note: null,
+      })
+      send()
+      setTimeout(() => {
+        const s = view.syncs.find((x) => x.id === id)
+        if (s) Object.assign(s, { state: 'up-to-date', pending: 0 })
+        send()
+      }, 1500)
+      return clone()
+    },
+    nearbySyncRemove: async (id: number) => {
+      view.syncs = view.syncs.filter((s) => s.id !== id)
+      send()
       return clone()
     },
     nearbySendText: async (fingerprint: string, text: string | null) => {

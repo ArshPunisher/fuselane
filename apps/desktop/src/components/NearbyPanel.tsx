@@ -17,7 +17,14 @@ import {
 } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { bytes } from '../lib/format'
-import type { DeviceView, NearbyRequest, NearbyTransfer, PhoneView } from '../lib/types'
+import type {
+  DeviceView,
+  NearbyRequest,
+  NearbyTransfer,
+  PhoneView,
+  SyncView,
+  TrustedDevice,
+} from '../lib/types'
 
 /** "Mac", "Windows", "Linux", or what a LocalSend device says it is. */
 function deviceSub(d: Pick<DeviceView, 'model' | 'fuselane' | 'kind'>): string {
@@ -418,6 +425,88 @@ function TextCard({ devices }: { devices: DeviceView[] }) {
   )
 }
 
+const SYNC_WORD = {
+  'up-to-date': 'Up to date',
+  sending: 'Sending changes',
+  waiting: 'Waiting',
+  problem: 'Problem',
+} as const
+
+/**
+ * Folders kept in sync with your own trusted computers (B10.3): new and
+ * changed files go across whenever both are on the network. One way, and
+ * nothing is deleted on the other side.
+ */
+function SyncCard({ syncs, trusted }: { syncs: SyncView[]; trusted: TrustedDevice[] }) {
+  const act = useApp((s) => s.act)
+  const backend = useApp((s) => s.backend)
+  const [to, setTo] = useState('')
+  if (!trusted.length && !syncs.length) return null
+  const target = trusted.find((t) => t.fingerprint === to) ?? trusted[0]
+  return (
+    <section className="sync-card" aria-labelledby="sync-title">
+      <h2 className="group" id="sync-title">
+        Folders kept in sync
+      </h2>
+      {syncs.length > 0 && (
+        <ul className="sync-list">
+          {syncs.map((s) => (
+            <li key={s.id} data-state={s.state}>
+              <span className="sync-text">
+                <span className="sync-name" translate="no" title={s.folder}>
+                  {s.name} → {s.device}
+                </span>
+                <span className="muted">
+                  {SYNC_WORD[s.state]}
+                  {s.state === 'sending' && s.pending ? `, ${s.pending} to go` : ''}
+                  {s.state === 'up-to-date' ? `, ${s.files} files` : ''}
+                  {s.note ? `. ${s.note}` : ''}
+                </span>
+              </span>
+              <button
+                className="icon-btn"
+                aria-label={`Stop syncing ${s.name}`}
+                onClick={() => void act((b) => b.nearbySyncRemove(s.id))}
+              >
+                <X size={16} aria-hidden />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {trusted.length > 0 && (
+        <div className="text-card-row">
+          <select
+            aria-label="Keep in sync with"
+            value={target?.fingerprint ?? ''}
+            onChange={(e) => setTo(e.target.value)}
+          >
+            {trusted.map((t) => (
+              <option key={t.fingerprint} value={t.fingerprint}>
+                {t.alias}
+              </option>
+            ))}
+          </select>
+          <button
+            className="btn"
+            onClick={async () => {
+              if (!backend || !target) return
+              const folder = await backend.pickFolder()
+              if (folder) void act((b) => b.nearbySyncAdd(folder, target.fingerprint))
+            }}
+          >
+            <FolderOpen size={16} aria-hidden /> Add a folder
+          </button>
+        </div>
+      )}
+      <p className="muted sync-help">
+        New and changed files go to that computer&apos;s downloads folder whenever both are on this
+        network. Nothing is deleted there.
+      </p>
+    </section>
+  )
+}
+
 /** A phone without an app: show a code; it opens a page from this computer (B8.12). */
 function PhoneCard({ phone }: { phone: PhoneView | null }) {
   const act = useApp((s) => s.act)
@@ -573,6 +662,7 @@ export function NearbyPanel() {
           )}
         </section>
         <TextCard devices={nearby.devices} />
+        <SyncCard syncs={nearby.syncs} trusted={nearby.trusted} />
         <PhoneCard phone={nearby.phone} />
         {nearby.trusted.length > 0 && (
           <section aria-labelledby="near-trusted">

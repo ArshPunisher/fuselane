@@ -1077,6 +1077,23 @@ async fn nearby_set_everyone(near: Near<'_>, on: bool) -> Result<nearby::NearbyV
     Ok(near.inner().set_everyone(on).await)
 }
 
+/// Keeps a folder in sync with a trusted computer (B10.3).
+#[tauri::command]
+fn nearby_sync_add(
+    near: Near<'_>,
+    folder: String,
+    fingerprint: String,
+) -> Result<nearby::NearbyView, UiError> {
+    near.inner().add_sync(&folder, &fingerprint)?;
+    Ok(near.inner().view())
+}
+
+#[tauri::command]
+fn nearby_sync_remove(near: Near<'_>, id: u64) -> nearby::NearbyView {
+    near.inner().remove_sync(id);
+    near.inner().view()
+}
+
 /// Sends text to a device (B10.2): `text`, or what's on the clipboard.
 #[tauri::command]
 async fn nearby_send_text(
@@ -1763,6 +1780,8 @@ fn main() {
             report_problem,
             nearby_handoff,
             nearby_send_text,
+            nearby_sync_add,
+            nearby_sync_remove,
             set_ready_by,
             rename_group,
             files_on_page,
