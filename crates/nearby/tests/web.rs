@@ -132,3 +132,72 @@ async fn the_page_needs_its_token_and_files_go_both_ways() {
         404
     );
 }
+
+#[derive(Default)]
+struct Texts(Mutex<Vec<String>>);
+
+impl PageHost for Texts {
+    fn receiving(&self, _: &str, _: &str, _: u64) {}
+    fn progress(&self, _: &str, _: u64) {}
+    fn received(&self, _: &str, _: Result<PathBuf, String>) {}
+    fn text(&self, text: &str) {
+        self.0.lock().unwrap().push(text.to_string());
+    }
+}
+
+fn post(path: &str, len: usize) -> String {
+    format!("POST {path} HTTP/1.1\r\nHost: x\r\nContent-Length: {len}\r\nConnection: close\r\n\r\n")
+}
+
+#[tokio::test]
+async fn text_goes_both_ways_and_stays_small() {
+    let inbox = tempfile::tempdir().unwrap();
+    let texts = Arc::new(Texts::default());
+    let page = PhonePage::start(texts.clone(), inbox.path().to_path_buf(), "Mac".into())
+        .await
+        .unwrap();
+    let base = format!("/p/{}", page.token);
+
+    // Phone to computer.
+    let msg = "https://example.com/a?b=1 ✓";
+    let (code, _) = http(
+        &page,
+        &post(&format!("{base}/text"), msg.len()),
+        msg.as_bytes(),
+    )
+    .await;
+    assert_eq!(code, 200);
+    assert_eq!(texts.0.lock().unwrap().as_slice(), [msg.to_string()]);
+
+    // Blank, not UTF-8, too long, or without the token: refused, with a reason.
+    assert_eq!(
+        http(&page, &post(&format!("{base}/text"), 3), b"  \n")
+            .await
+            .0,
+        400
+    );
+    assert_eq!(
+        http(&page, &post(&format!("{base}/text"), 2), &[0xff, 0xfe])
+            .await
+            .0,
+        400
+    );
+    let big = vec![b'a'; 64 * 1024 + 1];
+    let (code, why) = http(&page, &post(&format!("{base}/text"), big.len()), &big).await;
+    assert_eq!(code, 413);
+    assert!(String::from_utf8(why).unwrap().contains("64 KB"));
+    assert_eq!(http(&page, &post("/p/wrong/text", 2), b"hi").await.0, 404);
+    assert_eq!(texts.0.lock().unwrap().len(), 1);
+
+    // Computer to phone: the number changes with each offer.
+    let read = |b: Vec<u8>| serde_json::from_slice::<serde_json::Value>(&b).unwrap();
+    let first = read(http(&page, &get(&format!("{base}/text")), b"").await.1);
+    assert_eq!(first["text"], serde_json::Value::Null);
+    page.offer_text(Some("wifi password: hunter2".into()));
+    let second = read(http(&page, &get(&format!("{base}/text")), b"").await.1);
+    assert_eq!(second["text"], "wifi password: hunter2");
+    assert_ne!(first["n"], second["n"]);
+    page.offer_text(None);
+    let third = read(http(&page, &get(&format!("{base}/text")), b"").await.1);
+    assert_eq!(third["text"], serde_json::Value::Null);
+}

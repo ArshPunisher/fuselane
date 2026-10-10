@@ -23,6 +23,8 @@ pub trait PageHost: Send + Sync + 'static {
     fn progress(&self, id: &str, written: u64);
     /// It arrived (saved at `path`) or didn't (`Err` says why).
     fn received(&self, id: &str, result: Result<PathBuf, String>);
+    /// Text typed or pasted on the phone (B10.7).
+    fn text(&self, _text: &str) {}
 }
 
 /// A file offered to the phone.
@@ -39,6 +41,8 @@ struct Shared<H> {
     inbox: PathBuf,
     computer: String,
     offers: Mutex<Vec<Offer>>,
+    /// Text offered to the phone, with a number that changes with it.
+    note: Mutex<(u64, Option<String>)>,
     host: Arc<H>,
 }
 
@@ -47,6 +51,7 @@ pub struct PhonePage {
     pub addr: SocketAddr,
     pub token: String,
     offers: Arc<dyn Fn(Vec<Offer>) + Send + Sync>,
+    note: Arc<dyn Fn(Option<String>) + Send + Sync>,
     task: tokio::task::JoinHandle<()>,
 }
 
@@ -163,6 +168,19 @@ impl<H: PageHost> Shared<H> {
             }
             ("GET", r) if r.starts_with("/file/") => self.download(&r["/file/".len()..]).await,
             ("POST", "/upload") => self.upload(req).await,
+            ("GET", "/text") => {
+                let (n, text) = self
+                    .note
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .clone();
+                with_type(
+                    serde_json::to_vec(&serde_json::json!({"n": n, "text": text}))
+                        .unwrap_or_default(),
+                    "application/json",
+                )
+            }
+            ("POST", "/text") => self.take_text(req).await,
             _ => plain(StatusCode::NOT_FOUND, "Not found"),
         }
     }
@@ -218,6 +236,42 @@ impl<H: PageHost> Shared<H> {
             h.insert(hyper::header::CONTENT_DISPOSITION, v);
         }
         r
+    }
+
+    /// Text from the phone: up to [`crate::proto::MAX_TEXT`], as plain UTF-8.
+    async fn take_text(&self, req: Request<Incoming>) -> Response<Body> {
+        let too_big = || {
+            plain(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "Text up to 64 KB can be sent this way. Send longer text as a file.",
+            )
+        };
+        let said = req
+            .headers()
+            .get(hyper::header::CONTENT_LENGTH)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<usize>().ok());
+        if said.is_some_and(|n| n > crate::proto::MAX_TEXT) {
+            // Read it first (as uploads do), so the phone sees why, not a reset.
+            let _ = http_body_util::Limited::new(req.into_body(), 1 << 20)
+                .collect()
+                .await;
+            return too_big();
+        }
+        let Ok(body) = http_body_util::Limited::new(req.into_body(), crate::proto::MAX_TEXT)
+            .collect()
+            .await
+        else {
+            return too_big();
+        };
+        let Ok(text) = String::from_utf8(body.to_bytes().to_vec()) else {
+            return plain(StatusCode::BAD_REQUEST, "That isn't text.");
+        };
+        if text.trim().is_empty() {
+            return plain(StatusCode::BAD_REQUEST, "There's no text to send.");
+        }
+        self.host.text(&text);
+        plain(StatusCode::OK, "Sent")
     }
 
     async fn upload(&self, req: Request<Incoming>) -> Response<Body> {
@@ -367,8 +421,19 @@ impl PhonePage {
             inbox,
             computer,
             offers: Mutex::new(Vec::new()),
+            note: Mutex::new((0, None)),
             host,
         });
+        let note = {
+            let shared = shared.clone();
+            Arc::new(move |t: Option<String>| {
+                let mut n = shared
+                    .note
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                *n = (n.0 + 1, t);
+            }) as Arc<dyn Fn(Option<String>) + Send + Sync>
+        };
         let setter = {
             let shared = shared.clone();
             Arc::new(move |o: Vec<Offer>| {
@@ -396,6 +461,7 @@ impl PhonePage {
             addr,
             token,
             offers: setter,
+            note,
             task,
         })
     }
@@ -408,6 +474,11 @@ impl PhonePage {
     /// Replaces the files offered to the phone.
     pub fn offer(&self, offers: Vec<Offer>) {
         (self.offers)(offers);
+    }
+
+    /// Offers text to the phone (`None` takes it away).
+    pub fn offer_text(&self, text: Option<String>) {
+        (self.note)(text);
     }
 }
 
@@ -428,7 +499,9 @@ h1{margin:0 0 4px;color:var(--ink);font-size:22px;line-height:1.2}p{margin:0}.mu
 .card{display:grid;gap:12px;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
 .big{display:flex;align-items:center;justify-content:center;gap:8px;min-height:50px;width:100%;border:0;border-radius:10px;background:var(--fuse);color:var(--fuse-ink);font:600 16px system-ui,sans-serif}
 .item{display:flex;align-items:center;gap:12px;justify-content:space-between}.item+.item{padding-top:12px;border-top:1px solid var(--line)}
-.name{color:var(--ink);overflow-wrap:anywhere}a.save{flex:none;padding:7px 12px;border:1px solid var(--line);border-radius:8px;color:var(--ink);text-decoration:none}
+.name{color:var(--ink);overflow-wrap:anywhere}
+textarea{width:100%;min-height:84px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,sans-serif;resize:vertical}
+.row{display:flex;gap:8px;align-items:center;justify-content:space-between}.btn{padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:600 14px system-ui,sans-serif}a.save{flex:none;padding:7px 12px;border:1px solid var(--line);border-radius:8px;color:var(--ink);text-decoration:none}
 progress{width:100%;height:6px;accent-color:var(--fuse)}
 </style>
 </head>
@@ -438,6 +511,8 @@ progress{width:100%;height:6px;accent-color:var(--fuse)}
 <label class="big" for="pick">Send photos or files to the computer</label>
 <input id="pick" type="file" multiple hidden>
 <div id="status" class="card" hidden aria-live="polite"></div>
+<section class="card"><label class="mute" for="say">Text or a link for the computer</label><textarea id="say" maxlength="65536" placeholder="Paste here; it lands on the computer's clipboard"></textarea><div class="row"><span id="said" class="mute" aria-live="polite"></span><button id="send" class="btn" type="button">Send text</button></div></section>
+<section id="note" class="card" hidden><p class="mute">Text from the computer</p><textarea id="heard" readonly></textarea><div class="row"><span id="copied" class="mute" aria-live="polite"></span><button id="copy" class="btn" type="button">Copy</button></div></section>
 <section class="card"><p class="mute">Waiting for you</p><div id="files"><p class="mute">Nothing yet. Files the computer offers show up here.</p></div></section>
 <p class="mute">Works while Fuselane is open on the computer. The link stops working when sharing is turned off there.</p>
 </main>
@@ -484,7 +559,37 @@ async function refresh(){
     }))
   } catch {}
 }
-refresh(); setInterval(refresh, 3000)
+const say = document.getElementById('say'), said = document.getElementById('said')
+document.getElementById('send').addEventListener('click', async () => {
+  if (!say.value.trim()) { said.textContent = 'Type or paste something first.'; return }
+  try {
+    const r = await fetch(base + '/text', {method:'POST', headers:{'content-type':'text/plain; charset=utf-8'}, body: say.value})
+    said.textContent = r.ok ? 'Sent. It’s on the computer’s clipboard.' : await r.text()
+    if (r.ok) say.value = ''
+  } catch { said.textContent = 'The computer can’t be reached. Is Fuselane still open?' }
+})
+let seen = -1
+const heard = document.getElementById('heard')
+async function note(){
+  try {
+    const r = await fetch(base + '/text', {cache:'no-store'})
+    if (!r.ok) return
+    const t = await r.json()
+    if (t.n === seen) return
+    seen = t.n
+    document.getElementById('note').hidden = !t.text
+    heard.value = t.text || ''
+    document.getElementById('copied').textContent = ''
+  } catch {}
+}
+document.getElementById('copy').addEventListener('click', async () => {
+  const done = (m) => { document.getElementById('copied').textContent = m }
+  // The page is plain HTTP, where browsers often hide the clipboard API.
+  try { await navigator.clipboard.writeText(heard.value); return done('Copied.') } catch {}
+  heard.focus(); heard.select(); heard.setSelectionRange(0, heard.value.length)
+  done(document.execCommand('copy') ? 'Copied.' : 'Selected: press and hold to copy.')
+})
+refresh(); note(); setInterval(() => { refresh(); note() }, 3000)
 </script>
 </body>
 </html>
