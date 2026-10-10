@@ -1188,3 +1188,10 @@ html[data-hidden] *::before,
 html[data-hidden] *::after {
   animation-play-state: paused !important;
 }
+
+@media (max-width: 639px) {
+  .cmd code {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}

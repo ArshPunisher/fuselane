@@ -153,12 +153,6 @@
   gap: 16px;
 }
 
-@media (min-width: 860px) {
-  .more-grid {
-    grid-template-columns: 1.15fr 1fr;
-  }
-}
-
 .more-card {
   display: grid;
   align-content: start;
@@ -419,45 +413,436 @@
   transform: translate(2px, -2px);
 }
 
-/* First open on a Mac: three steps. */
-.first-open {
-  display: grid;
-  gap: 14px;
-  margin-top: 12px;
+/* ---------- Opening it the first time: illustrated steps ----------
+   Each step carries its own picture (clean schematics of the real dialogs,
+   not screenshots). While the guide is on screen, the steps take turns: the
+   pointer moves to the button to press and clicks it. Under reduced motion
+   every picture shows its button marked, and nothing moves. */
+
+.file-row h2 {
+  font-size: 18px;
+  letter-spacing: -0.015em;
 }
 
-.first-open .sub {
-  max-width: 44em;
+.first-open {
+  display: grid;
+  gap: 22px;
+  margin-top: 28px;
+  scroll-margin-top: calc(var(--nav-h) + 24px);
+}
+
+.first-open-head {
+  display: grid;
+  gap: 10px;
+}
+
+.first-open-head h2,
+.more h2 {
+  font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.25rem);
+  letter-spacing: -0.03em;
+}
+
+.first-open-head p {
+  max-width: 40em;
   color: var(--body);
 }
 
-.open-steps {
+.guide-steps {
   list-style: none;
   display: grid;
-  gap: 12px;
+  gap: 14px;
+  counter-reset: step;
 }
 
-.open-steps li {
+.guide-step {
   display: grid;
-  gap: 6px;
-  padding: 18px;
+  align-content: start;
+  gap: 8px;
+  padding: 12px 12px 18px;
   border: 1px solid var(--hairline);
   border-radius: var(--r-panel);
   background: var(--surface-1);
+  counter-increment: step;
+  transition:
+    border-color var(--dur-slow),
+    box-shadow var(--dur-slow);
 }
 
-.open-steps strong {
+.guide-step > strong {
+  margin-top: 6px;
+  padding-inline: 6px;
   color: var(--ink);
+  font-size: 16px;
 }
 
-.step-ic svg {
-  width: 22px;
-  height: 22px;
-  fill: var(--fuse);
+.guide-step > strong::before {
+  content: counter(step) '  ';
+  color: var(--fuse);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  white-space: pre;
+}
+
+.guide-step > span {
+  padding-inline: 6px;
+  color: var(--body);
+  font-size: 15px;
+}
+
+.guide-step b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.guide-step[data-active] {
+  border-color: color-mix(in oklch, var(--fuse) 45%, transparent);
+  box-shadow: 0 10px 30px -18px var(--fuse-glow);
 }
 
 @media (min-width: 860px) {
   .open-steps {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+}
+
+@media (min-width: 640px) {
+  .win-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.win-steps {
+  margin: 4px 0;
+  padding: 0 !important;
+}
+
+.win-steps .guide-step > span {
+  padding-top: 4px;
+}
+
+/* The pictures. */
+.ill-wrap {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  border-radius: calc(var(--r-panel) - 5px);
+}
+
+.ill {
+  display: block;
+  width: 100%;
+  height: auto;
+  font-family: var(--font-sans);
+}
+
+.ill-desk {
+  fill: var(--canvas-deep);
+}
+
+.ill-win {
+  fill: var(--surface-1);
+  stroke: var(--hairline-strong);
+  stroke-width: 1;
+}
+
+.ill-side {
+  fill: var(--surface-2);
+}
+
+.ill-icon {
+  fill: var(--canvas);
+  stroke: var(--hairline-strong);
+}
+
+.ill-line {
+  fill: var(--hairline-strong);
+}
+
+.ill-row {
+  fill: var(--surface-2);
+}
+
+.ill-field {
+  fill: var(--surface-3);
+}
+
+.ill-light {
+  fill: var(--hairline-strong);
+}
+
+.ill-dot {
+  fill: var(--hairline-strong);
+}
+
+.ill-dot.on {
+  fill: var(--fuse-ink);
+}
+
+.ill-sel {
+  fill: var(--fuse);
+}
+
+.ill-title {
+  fill: var(--ink);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.ill-title.big {
+  font-size: 13px;
+}
+
+.ill-small {
+  fill: var(--body);
+  font-size: 8.5px;
+}
+
+.ill-small.strong {
+  fill: var(--ink);
+  font-weight: 600;
+}
+
+.ill-small.on {
+  fill: var(--fuse-ink);
+  font-weight: 600;
+}
+
+.ill-link {
+  fill: var(--tide);
+  font-size: 9.5px;
+  text-decoration: underline;
+}
+
+.ill-btn {
+  fill: var(--surface-3);
+}
+
+.ill-btn-text {
+  fill: var(--ink);
+  font-size: 9.5px;
+  font-weight: 500;
+}
+
+.ill-btn-text.on {
+  fill: var(--fuse-ink);
+  font-weight: 600;
+}
+
+.ill-target {
+  fill: var(--fuse);
+  stroke: color-mix(in oklch, var(--fuse) 40%, transparent);
+  stroke-width: 6;
+  paint-order: stroke;
+}
+
+.ill-target.ring-only {
+  fill: none;
+  stroke: var(--fuse);
+  stroke-width: 1.5;
+}
+
+.ill-arrow {
+  fill: none;
+  stroke: var(--mute);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The pointer: rests on the button to press; it travels there when the step's turn comes. */
+.ill-cursor {
+  position: absolute;
+  left: var(--cx);
+  top: var(--cy);
+  width: 22px;
+  height: 22px;
+  color: var(--ink);
+  filter: drop-shadow(0 2px 3px oklch(0 0 0 / 0.35));
+  pointer-events: none;
+}
+
+.ill-cursor svg {
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+}
+
+.ill-cursor::after {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: -14px;
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--fuse);
+  border-radius: 999px;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .js .guide-steps[data-play] .guide-step .ill-cursor {
+    opacity: 0;
+    transform: translate(46px, 38px);
+    transition:
+      transform 0.9s var(--ease-in-out),
+      opacity 0.3s ease;
+  }
+  .js .guide-steps[data-play] .guide-step[data-active] .ill-cursor {
+    opacity: 1;
+    transform: none;
+  }
+  .js .guide-steps[data-play] .guide-step[data-active] .ill-cursor::after {
+    animation: click-ring 0.6s var(--ease-out) 1s both;
+  }
+  .js .guide-steps[data-play] .guide-step[data-active] .ill-target {
+    animation: press 0.4s var(--ease-out) 0.95s both;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+}
+
+@keyframes click-ring {
+  from {
+    opacity: 0.9;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.4);
+  }
+}
+
+@keyframes press {
+  50% {
+    transform: scale(0.94);
+  }
+}
+
+/* ---------- Or skip the warning ---------- */
+
+.skip-warning {
+  display: grid;
+  gap: 20px;
+  margin-top: 36px;
+  padding-top: 32px;
+  border-top: 1px solid var(--hairline);
+}
+
+.skip-copy {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.skip-copy > p:not(.label-row) {
+  max-width: 34em;
+  color: var(--body);
+}
+
+.label-row {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(1.2rem, 1rem + 0.6vw, 1.5rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.label-row.small {
+  margin-top: 8px;
+  font-size: 15px;
+  letter-spacing: 0;
+}
+
+.term {
+  display: grid;
+  align-content: start;
+  overflow: hidden;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-panel);
+  background: var(--canvas-deep);
+  box-shadow: var(--shadow-soft);
+}
+
+.term-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--mute);
+  font-size: 12.5px;
+}
+
+.term-bar span {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--hairline-strong);
+}
+
+.term-bar span:last-of-type {
+  margin-right: 8px;
+}
+
+.term .term-cmd {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.term .term-cmd code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.term-out {
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  padding: 2px 16px 18px;
+  color: var(--body);
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.term-out li:last-child {
+  color: var(--ok);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .js .term[data-play] .term-out li {
+    animation: term-line 0.4s steps(1, end) both;
+    animation-delay: calc(0.5s + var(--i) * 1.1s);
+  }
+}
+
+@keyframes term-line {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (min-width: 960px) {
+  .skip-warning {
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+    gap: 40px;
+    align-items: start;
+  }
+}
+
+.verify .cmd code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 860px) {
+  .more-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.dl-hero {
+  padding-bottom: 28px;
 }

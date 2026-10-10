@@ -129,6 +129,33 @@ test('the Mac panel shows how to open the app the first time', async ({ page }) 
   await expect(page.getByText('Or skip the warning: install with one command')).toBeVisible()
 })
 
+test('the Open Anyway guide is illustrated, step by step', async ({ page }) => {
+  await stub(page)
+  await page.goto('/download/')
+  await page.getByRole('tab', { name: /macOS/ }).click()
+  const steps = page.locator('.open-steps li')
+  // Every step has its own picture, named for screen readers.
+  await expect(steps.getByRole('img')).toHaveCount(3)
+  await expect(steps.nth(0).getByRole('img')).toHaveAccessibleName(/Not Opened.*Done/)
+  await expect(steps.nth(1).getByRole('img')).toHaveAccessibleName(/Privacy & Security/)
+  await expect(steps.nth(2).getByRole('img')).toHaveAccessibleName(/Open Anyway/)
+  // While on screen the steps take turns; pointing at one holds it.
+  await page.locator('#open-anyway').scrollIntoViewIfNeeded()
+  await expect(steps.nth(0)).toHaveAttribute('data-active', '')
+  await steps.nth(2).hover()
+  await expect(steps.nth(2)).toHaveAttribute('data-active', '')
+  await expect(steps.nth(0)).not.toHaveAttribute('data-active', '')
+  // The one-line install shows what it prints, with the current version.
+  await expect(page.locator('.term-out')).toContainText(
+    'fuselane: installed Fuselane 0.1.0-beta.1 in /Applications.',
+  )
+  // Windows: SmartScreen's two clicks, drawn too.
+  await page.getByRole('tab', { name: /Windows/ }).click()
+  await page.getByText('Windows says it protected your PC?').click()
+  await expect(page.locator('.win-steps').getByRole('img')).toHaveCount(2)
+  await expect(page.locator('.win-steps')).toContainText('Run anyway')
+})
+
 test('copy buttons copy the exact command', async ({ page, context, browserName }) => {
   test.skip(browserName !== 'chromium', 'clipboard permissions are Chromium-only in Playwright')
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])
@@ -139,6 +166,11 @@ test('copy buttons copy the exact command', async ({ page, context, browserName 
   await expect(page.locator('button[data-copy="cmd-brew"]')).toHaveText('Copied')
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
     'brew install --cask arshpunisher/tap/fuselane',
+  )
+  // The long one wraps on screen but copies as one line.
+  await page.locator('button[data-copy="cmd-script"]').click()
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    'curl -fsSL https://raw.githubusercontent.com/ArshPunisher/fuselane/main/packaging/macos/install.sh | sh',
   )
 })
 

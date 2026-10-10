@@ -2,6 +2,7 @@
 // current version (from the signed update feed), and each file's size.
 import { REPO, detectOs, fileUrl, latestVersion, type Os } from './common'
 import './css/pages.css'
+import { prefersReduced, watch, whenSeen } from './motion'
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)
 
@@ -65,6 +66,9 @@ async function links() {
   })
   if (!version) return
   $('#version-tag')!.textContent = version
+  document
+    .querySelectorAll<HTMLElement>('[data-ver-text]')
+    .forEach((el) => (el.textContent = version))
   $('[data-ver]')!.hidden = false
   $('[data-nover]')!.hidden = true
   $<HTMLAnchorElement>('#sums')!.href = `${REPO}/releases/download/v${version}/SHA256SUMS`
@@ -72,6 +76,46 @@ async function links() {
   void sizes(version)
 }
 
+/**
+ * The illustrated steps take turns while on screen: the pointer travels to the
+ * button to press and clicks it. Pointing at a step (or focusing into it)
+ * shows that one and holds the turn for a while. Still under reduced motion.
+ */
+function guides() {
+  if (prefersReduced()) return
+  document.querySelectorAll<HTMLElement>('.guide-steps').forEach((list) => {
+    const steps = [...list.querySelectorAll<HTMLElement>('.guide-step')]
+    let active = 0
+    let visible = false
+    let holdUntil = 0
+    const show = (i: number) => {
+      active = i
+      steps.forEach((s, k) => s.toggleAttribute('data-active', k === i))
+    }
+    watch(list, (v) => {
+      visible = v
+      list.toggleAttribute('data-play', v)
+      if (v && !steps.some((s) => s.hasAttribute('data-active'))) show(0)
+    })
+    window.setInterval(() => {
+      if (!visible || document.hidden || Date.now() < holdUntil) return
+      show((active + 1) % steps.length)
+    }, 3400)
+    steps.forEach((s, i) => {
+      const pick = () => {
+        holdUntil = Date.now() + 8000
+        if (active !== i) show(i)
+      }
+      s.addEventListener('pointerenter', pick)
+      s.addEventListener('focusin', pick)
+    })
+  })
+  // The install script's output appears line by line, once.
+  const term = document.querySelector<HTMLElement>('.term')
+  if (term) whenSeen(term, () => term.setAttribute('data-play', ''), 0.6)
+}
+
 const os = detectOs(navigator.userAgent, navigator.platform)
 tabs(os === 'other' ? 'mac' : os)
 void links()
+guides()
