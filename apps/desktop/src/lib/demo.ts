@@ -809,6 +809,16 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       })
       return [id]
     },
+    addMetalink: async (url, dir, later) => {
+      await new Promise((r) => setTimeout(r, 200))
+      const base = url.trim().replace(/[^/]*$/, '')
+      return backend.addBatch(
+        `${base}fedora-43-x86_64.iso ${base}fedora-43-aarch64.iso`,
+        dir,
+        later,
+        '',
+      )
+    },
     filesOnPage: async (url) => {
       await new Promise((r) => setTimeout(r, 200))
       let base: URL

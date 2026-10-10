@@ -1887,3 +1887,19 @@ test('feeds: follow one, filter words, check, open a torrent item, stop followin
   await expect(page.getByRole('dialog', { name: 'New download' })).toBeVisible()
   await expect(dialog).toBeHidden()
 })
+
+test('a Metalink link adds the files it lists, as a group', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'New download' }).first().click()
+  const dialog = page.getByRole('dialog', { name: 'New download' })
+  await dialog.getByLabel('Link').fill('https://mirrors.example/fedora/fedora-43.meta4')
+  await expect(dialog.locator('#nd-url-help')).toContainText(
+    'A Metalink: Fuselane downloads the files it lists',
+  )
+  await expect(dialog.getByRole('button', { name: 'Find files on this page' })).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Download', exact: true }).click()
+  await expect(dialog).toBeHidden()
+  await expect(page.getByRole('list', { name: '2 files from mirrors.example' })).toContainText(
+    'fedora-43-x86_64.iso',
+  )
+})

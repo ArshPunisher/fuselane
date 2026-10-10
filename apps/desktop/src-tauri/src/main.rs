@@ -353,6 +353,17 @@ async fn set_ready_by(svc: State<'_>, id: i64, at: Option<i64>) -> Result<(), Ui
 }
 
 /// The files a web page links to, to pick from (B9.3).
+/// The files a Metalink lists (8.3), as one group.
+#[tauri::command]
+async fn add_metalink(
+    svc: State<'_>,
+    url: String,
+    dir: Option<String>,
+    later: bool,
+) -> Result<service::BatchResult, UiError> {
+    svc.add_metalink(&url, dir.as_deref(), later).await
+}
+
 #[tauri::command]
 async fn files_on_page(svc: State<'_>, url: String) -> Result<service::PageFiles, UiError> {
     if url.len() > 8192 {
@@ -1927,6 +1938,7 @@ fn main() {
             nearby_phone,
             nearby_phone_offer,
             nearby_phone_text,
+            add_metalink,
             remote_state,
             feeds_list,
             feeds_add,

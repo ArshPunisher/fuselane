@@ -74,6 +74,11 @@ function folderOf(path: string): string {
   return i > 0 ? path.slice(0, i) : path
 }
 
+/** A Metalink lists files and their mirrors (8.3): Download adds those files. */
+function isMetalink(url: string): boolean {
+  return /^https?:\/\/\S+\.(meta4|metalink)(\?\S*)?$/i.test(url.trim())
+}
+
 export function NewDownload() {
   const open = useApp((s) => s.adding)
   const setAdding = useApp((s) => s.setAdding)
@@ -133,7 +138,14 @@ export function NewDownload() {
 
   // Look the link up shortly after typing stops; stale answers are dropped.
   useEffect(() => {
-    if (!open || !backend || !looksLikeLink(url) || listing || batchInfo(url).count > 1) {
+    if (
+      !open ||
+      !backend ||
+      !looksLikeLink(url) ||
+      listing ||
+      batchInfo(url).count > 1 ||
+      isMetalink(url)
+    ) {
       setPreview({ state: 'idle' })
       return
     }
@@ -335,13 +347,15 @@ export function NewDownload() {
     setError(null)
     setSkipped([])
     try {
-      if (batch) {
-        const r = await backend.addBatch(
-          url,
-          dir.trim() || null,
-          later.current,
-          together ? groupDraft : null,
-        )
+      if (batch || metalink) {
+        const r = metalink
+          ? await backend.addMetalink(url.trim(), dir.trim() || null, later.current)
+          : await backend.addBatch(
+              url,
+              dir.trim() || null,
+              later.current,
+              together ? groupDraft : null,
+            )
         if (r.skipped.length === 0) {
           reset()
           setAdding(false)
@@ -377,6 +391,7 @@ export function NewDownload() {
 
   const { count, pattern } = batchInfo(url)
   const batch = !isMagnet(url) && (count > 1 || pattern)
+  const metalink = !batch && isMetalink(url)
 
   const urlError =
     error &&
@@ -725,14 +740,16 @@ export function NewDownload() {
                     : `${count} links. Each becomes its own download; ones already in your list are skipped.`)}
                 {!batch &&
                   preview.state === 'idle' &&
-                  (finding
-                    ? "Finding the torrent's files. This can take a minute when few people share it."
-                    : isMagnet(url)
-                      ? 'A magnet link. Next you pick which of its files to download.'
-                      : 'Fuselane uses every network that can reach the server.')}
+                  (metalink
+                    ? 'A Metalink: Fuselane downloads the files it lists, each from all its mirrors, and checks them.'
+                    : finding
+                      ? "Finding the torrent's files. This can take a minute when few people share it."
+                      : isMagnet(url)
+                        ? 'A magnet link. Next you pick which of its files to download.'
+                        : 'Fuselane uses every network that can reach the server.')}
               </p>
             )}
-            {!batch && !isMagnet(url) && /^https?:\/\/\S+$/i.test(url.trim()) && (
+            {!batch && !metalink && !isMagnet(url) && /^https?:\/\/\S+$/i.test(url.trim()) && (
               <button
                 type="button"
                 className="link-btn find-files"
@@ -755,7 +772,7 @@ export function NewDownload() {
                 {pageBusy ? 'Reading the page…' : 'Find files on this page'}
               </button>
             )}
-            {!batch && !isMagnet(url) && /^https?:\/\/\S+$/i.test(url.trim()) && (
+            {!batch && !metalink && !isMagnet(url) && /^https?:\/\/\S+$/i.test(url.trim()) && (
               <button
                 type="button"
                 className="link-btn find-files"

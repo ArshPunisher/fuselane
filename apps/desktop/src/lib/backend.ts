@@ -64,6 +64,8 @@ export interface Backend {
   mediaAdd(url: string, option: string, dir: string | null): Promise<number[]>
   /** Reads a web page and lists the files it links to; nothing is downloaded. */
   filesOnPage(url: string): Promise<PageFiles>
+  /** The files a Metalink lists, each with its mirrors and checksum (8.3). */
+  addMetalink(url: string, dir: string | null, later: boolean): Promise<BatchResult>
   renameGroup(id: number, name: string): Promise<void>
   ungroup(id: number): Promise<void>
   pauseGroup(id: number): Promise<void>
@@ -278,6 +280,7 @@ async function tauriBackend(): Promise<Backend> {
     addBatch: (text, dir, later, group) =>
       call('add_batch', { text, dir, later: later ?? false, group: group ?? null }),
     filesOnPage: (url) => call('files_on_page', { url }),
+    addMetalink: (url, dir, later) => call('add_metalink', { url, dir, later }),
     mediaTools: () => call('media_tools'),
     mediaInfo: (url) => call('media_info', { url }),
     mediaAdd: (url, option, dir) => call('media_add', { url, option, dir }),

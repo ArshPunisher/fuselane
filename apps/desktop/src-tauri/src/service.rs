@@ -23,6 +23,7 @@ mod grab;
 mod groups;
 pub mod handoff;
 pub mod media_jobs;
+mod metalink;
 pub mod netcheck;
 pub use daily::UsageHistory;
 
