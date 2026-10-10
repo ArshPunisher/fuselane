@@ -206,6 +206,9 @@ export const hi: Readonly<Record<string, string>> = {
   '{rate} max': 'ज़्यादा से ज़्यादा {rate}',
   'That file is {size} MiB; a .torrent file is at most 8 MiB.':
     'यह फ़ाइल {size} MiB की है; .torrent फ़ाइल ज़्यादा से ज़्यादा 8 MiB की होती है।',
+  'Something went wrong.': 'कुछ गड़बड़ हो गई।',
+  'Try again. If it keeps happening, restart Fuselane.':
+    'फिर से कोशिश करें। अगर ऐसा बार-बार हो, तो Fuselane रीस्टार्ट करें।',
   'Drop the .torrent file, not the download itself.':
     '.torrent फ़ाइल डालें, डाउनलोड की गई फ़ाइल नहीं।',
 

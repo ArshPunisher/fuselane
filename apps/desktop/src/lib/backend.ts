@@ -38,6 +38,7 @@ import type {
   UiEvent,
   UpdateInfo,
 } from './types'
+import { t } from './i18n'
 
 /** A drag of files over the window (desktop app only). */
 export interface FileDrop {
@@ -270,11 +271,11 @@ export function toUiError(e: unknown): UiError {
       hint: typeof o.hint === 'string' ? o.hint : null,
     }
   }
-  const text = typeof e === 'string' ? e : e instanceof Error ? e.message : 'Something went wrong.'
+  const text = typeof e === 'string' ? e : e instanceof Error ? e.message : ''
   return {
     code: 'unexpected',
-    message: text || 'Something went wrong.',
-    hint: 'Try again. If it keeps happening, restart Fuselane.',
+    message: text || t('Something went wrong.'),
+    hint: t('Try again. If it keeps happening, restart Fuselane.'),
   }
 }
 
