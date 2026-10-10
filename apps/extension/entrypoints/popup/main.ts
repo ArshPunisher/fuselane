@@ -48,6 +48,22 @@ async function onThisPage() {
     return // a page the browser doesn't let extensions read
   }
   section.hidden = false
+  // A video page (YouTube and many more): the app finds the real video and its
+  // qualities, then downloads it over every network.
+  const video = document.querySelector<HTMLButtonElement>('#video')!
+  video.addEventListener('click', async () => {
+    video.disabled = true
+    const reply = (await browser.runtime
+      .sendNativeMessage('app.fuselane.host', { v: 1, type: 'page.video', url: tab.url })
+      .catch(() => null)) as { type?: string } | null
+    if (reply?.type === 'page.video.opened') {
+      window.close()
+    } else {
+      video.disabled = false
+      said.textContent =
+        "Fuselane isn't running, or this version can't get videos yet. Open it and try again."
+    }
+  })
   if (!items.length) {
     said.textContent = 'No videos or file links here.'
     return

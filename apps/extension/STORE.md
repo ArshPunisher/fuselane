@@ -26,6 +26,9 @@ When the app is running, downloads of 1 MB or more go straight to it. Anything i
 ★ Everything on the page, one click away
 Open the toolbar button to see the videos and file links on the page you're on, and send any of them to Fuselane.
 
+★ Videos from pages
+On YouTube and over 1,000 other sites, the toolbar button hands the page to Fuselane, which offers each quality and downloads the video over every network (with the free yt-dlp installed).
+
 ★ Right-click any link
 Choose "Download with Fuselane" on any link.
 
