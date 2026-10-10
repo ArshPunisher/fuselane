@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { WarningCircle, X } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
+import { t } from '../lib/i18n'
 
 export function Toast() {
   const toast = useApp((s) => s.toast)
@@ -18,7 +19,7 @@ export function Toast() {
         {toast.message}
         {toast.hint ? <span className="muted"> {toast.hint}</span> : null}
       </p>
-      <button className="icon-btn" aria-label="Dismiss" onClick={dismiss}>
+      <button className="icon-btn" aria-label={t('Dismiss')} onClick={dismiss}>
         <X size={16} aria-hidden />
       </button>
     </div>

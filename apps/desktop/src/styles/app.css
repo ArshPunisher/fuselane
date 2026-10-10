@@ -5403,3 +5403,27 @@ html[data-hidden] .orb b {
 .net-notes li[data-kind='back'] svg {
   color: var(--success);
 }
+
+/* Hindi (docs/07-design/I18N.md). Geist has no Devanagari, so name each system's own
+   Devanagari face after it (macOS, Windows, Linux) rather than leave the pick to chance. */
+:root:lang(hi) {
+  --font-sans:
+    'Geist', 'Kohinoor Devanagari', 'Devanagari Sangam MN', 'Nirmala UI', 'Noto Sans Devanagari',
+    'Lohit Devanagari', ui-sans-serif, system-ui, sans-serif;
+  --font-mono:
+    'Geist Mono Hindi', 'Kohinoor Devanagari', 'Devanagari Sangam MN', 'Nirmala UI',
+    'Noto Sans Devanagari', 'Lohit Devanagari', ui-monospace, monospace;
+}
+
+/* Digits and Latin stay in Geist Mono (tabular), but spaces come from the Devanagari face:
+   a monospace space between Hindi words ("3 मिनट बाकी") leaves a wide gap. */
+@font-face {
+  font-family: 'Geist Mono Hindi';
+  src: url('../../node_modules/geist/dist/fonts/geist-mono/GeistMono-Variable.woff2')
+    format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+  unicode-range:
+    U+0021-007E, U+00A1-00FF, U+0100-024F, U+2010-2027, U+2030-205E, U+20A0-20CF, U+2190-21FF,
+    U+2212;
+}

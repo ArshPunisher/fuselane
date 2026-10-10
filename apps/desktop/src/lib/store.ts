@@ -3,6 +3,7 @@ import { connect, toUiError, type Backend } from './backend'
 import { setNetPrefs } from './lanes'
 import { setSpeedUnit, type SpeedUnit } from './format'
 import { isSendLink } from './sendLink'
+import { t } from './i18n'
 import type {
   NearbyView,
   NetCheckView,
@@ -198,8 +199,10 @@ export const useApp = create<State>((set, get) => ({
       set({
         toast: {
           code: 'torrent-too-big',
-          message: `That file is ${Math.ceil(file.size / 1024 / 1024)} MiB; a .torrent file is at most 8 MiB.`,
-          hint: 'Drop the .torrent file, not the download itself.',
+          message: t('That file is {size} MiB; a .torrent file is at most 8 MiB.', {
+            size: Math.ceil(file.size / 1024 / 1024),
+          }),
+          hint: t('Drop the .torrent file, not the download itself.'),
           at: Date.now(),
         },
       })

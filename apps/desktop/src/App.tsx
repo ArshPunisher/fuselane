@@ -16,6 +16,7 @@ import { CrashBanner } from './components/CrashBanner'
 import { WhenDoneBanner } from './components/WhenDoneBanner'
 import { SlowToggle } from './components/SlowMode'
 import { Welcome } from './components/Welcome'
+import { mark, t, useLocale } from './lib/i18n'
 
 type Layout = 'compact' | 'regular' | 'wide'
 
@@ -32,10 +33,10 @@ function useLayout(): Layout {
 }
 
 const NAV: { id: View; label: string; Icon: typeof DownloadSimple }[] = [
-  { id: 'transfers', label: 'Downloads', Icon: DownloadSimple },
-  { id: 'send', label: 'Send', Icon: PaperPlaneTilt },
-  { id: 'networks', label: 'Networks', Icon: ShareNetwork },
-  { id: 'settings', label: 'Settings', Icon: Gear },
+  { id: 'transfers', label: mark('Downloads'), Icon: DownloadSimple },
+  { id: 'send', label: mark('Send'), Icon: PaperPlaneTilt },
+  { id: 'networks', label: mark('Networks'), Icon: ShareNetwork },
+  { id: 'settings', label: mark('Settings'), Icon: Gear },
 ]
 
 function Nav({ kind }: { kind: 'sidebar' | 'rail' | 'tabs' }) {
@@ -43,26 +44,29 @@ function Nav({ kind }: { kind: 'sidebar' | 'rail' | 'tabs' }) {
   const setView = useApp((s) => s.setView)
   const active = useApp((s) => s.jobs.filter((j) => j.status === 'running').length)
   return (
-    <nav className={`nav nav-${kind}`} aria-label="Main">
-      {NAV.map(({ id, label, Icon }) => (
-        <button
-          key={id}
-          className="nav-item"
-          aria-current={view === id ? 'page' : undefined}
-          onClick={() => setView(id)}
-          title={kind === 'rail' ? label : undefined}
-        >
-          <Icon
-            size={kind === 'tabs' ? 22 : 18}
-            aria-hidden
-            weight={view === id ? 'fill' : 'regular'}
-          />
-          <span className={kind === 'rail' ? 'sr-only' : 'nav-label'}>{label}</span>
-          {id === 'transfers' && active > 0 && kind !== 'tabs' && (
-            <span className="nav-count num">{active}</span>
-          )}
-        </button>
-      ))}
+    <nav className={`nav nav-${kind}`} aria-label={t('Main')}>
+      {NAV.map(({ id, label: en, Icon }) => {
+        const label = t(en)
+        return (
+          <button
+            key={id}
+            className="nav-item"
+            aria-current={view === id ? 'page' : undefined}
+            onClick={() => setView(id)}
+            title={kind === 'rail' ? label : undefined}
+          >
+            <Icon
+              size={kind === 'tabs' ? 22 : 18}
+              aria-hidden
+              weight={view === id ? 'fill' : 'regular'}
+            />
+            <span className={kind === 'rail' ? 'sr-only' : 'nav-label'}>{label}</span>
+            {id === 'transfers' && active > 0 && kind !== 'tabs' && (
+              <span className="nav-count num">{active}</span>
+            )}
+          </button>
+        )
+      })}
     </nav>
   )
 }
@@ -73,10 +77,10 @@ function NewButton({ iconOnly = false }: { iconOnly?: boolean }) {
     <button
       className={iconOnly ? 'icon-btn icon-btn-primary' : 'btn btn-primary'}
       onClick={() => setAdding(true)}
-      aria-label={iconOnly ? 'New download' : undefined}
+      aria-label={iconOnly ? t('New download') : undefined}
     >
       <Plus size={16} aria-hidden weight="bold" />
-      {!iconOnly && 'New download'}
+      {!iconOnly && t('New download')}
     </button>
   )
 }
@@ -97,8 +101,8 @@ function Brand() {
         Fuselane
       </span>
       {demo && (
-        <span className="chip" title="Running in a browser: these transfers are simulated.">
-          Demo data
+        <span className="chip" title={t('Running in a browser: these transfers are simulated.')}>
+          {t('Demo data')}
         </span>
       )}
     </div>
@@ -135,7 +139,7 @@ function Transfers({ layout }: { layout: Layout }) {
           ) : torrent ? (
             <TorrentDetail key={torrent.id} t={torrent} onBack={null} />
           ) : (
-            <div className="detail-empty muted">Pick a download to see it fuse.</div>
+            <div className="detail-empty muted">{t('Pick a download to see it fuse.')}</div>
           )}
         </div>
       </div>
@@ -152,6 +156,8 @@ export function App() {
   const view = useApp((s) => s.view)
   const setAdding = useApp((s) => s.setAdding)
   const layout = useLayout()
+  // Every component below re-renders when the language changes, so t() reads the new one.
+  useLocale()
 
   useEffect(() => {
     void start()
@@ -281,7 +287,7 @@ export function App() {
   // the moment where its action would silently do nothing.
   const connected = backend !== null
   const page = !connected ? (
-    <div className="page" aria-busy="true" aria-label="Starting Fuselane" />
+    <div className="page" aria-busy="true" aria-label={t('Starting Fuselane')} />
   ) : view === 'networks' ? (
     <NetworksView />
   ) : view === 'settings' ? (
@@ -295,7 +301,7 @@ export function App() {
   return (
     <div className="app" data-layout={layout}>
       <a className="skip" href="#main">
-        Skip to content
+        {t('Skip to content')}
       </a>
       {layout === 'wide' && (
         <aside className="sidebar">

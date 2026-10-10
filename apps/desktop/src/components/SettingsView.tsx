@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useApp, type Theme } from '../lib/store'
+import { mark, setLangPref, t, tn, useLang, type LangPref } from '../lib/i18n'
 import { toUiError } from '../lib/backend'
 import type { SeedSettings, UiError } from '../lib/types'
 import { LimitField } from './LimitField'
@@ -18,23 +19,32 @@ import {
   WindowSettings,
 } from './AutomationSettings'
 
-const THEMES: { id: Theme; label: string }[] = [
-  { id: 'system', label: 'System' },
-  { id: 'light', label: 'Light' },
-  { id: 'dark', label: 'Dark' },
-]
+interface Option<T extends string> {
+  id: T
+  label: string
+  /** The option's own language, when it is written in one (a language's name). */
+  lang?: string
+}
 
-export function ThemePicker() {
-  const theme = useApp((s) => s.theme)
-  const setTheme = useApp((s) => s.setTheme)
+/** A row of choices that acts as a native radio group (arrow keys move the choice). */
+function Segmented<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string
+  options: Option<T>[]
+  value: T
+  onChange(id: T): void
+}) {
   return (
     <div
       className="segmented"
       role="radiogroup"
-      aria-label="Theme"
+      aria-label={label}
       onKeyDown={(e) => {
-        // Arrow keys move the choice, as in a native radio group.
-        const i = THEMES.findIndex((t) => t.id === theme)
+        const i = options.findIndex((o) => o.id === value)
         const step =
           e.key === 'ArrowRight' || e.key === 'ArrowDown'
             ? 1
@@ -43,25 +53,70 @@ export function ThemePicker() {
               : 0
         if (!step) return
         e.preventDefault()
-        const next = THEMES[(i + step + THEMES.length) % THEMES.length]
+        const next = options[(i + step + options.length) % options.length]
         if (next) {
-          setTheme(next.id)
+          onChange(next.id)
           e.currentTarget.querySelector<HTMLButtonElement>(`[data-id="${next.id}"]`)?.focus()
         }
       }}
     >
-      {THEMES.map((t) => (
+      {options.map((o) => (
         <button
-          key={t.id}
-          data-id={t.id}
+          key={o.id}
+          data-id={o.id}
           role="radio"
-          aria-checked={theme === t.id}
-          tabIndex={theme === t.id ? 0 : -1}
-          onClick={() => setTheme(t.id)}
+          lang={o.lang}
+          aria-checked={value === o.id}
+          tabIndex={value === o.id ? 0 : -1}
+          onClick={() => onChange(o.id)}
         >
-          {t.label}
+          {o.label}
         </button>
       ))}
+    </div>
+  )
+}
+
+const THEMES: Option<Theme>[] = [
+  { id: 'system', label: mark('System') },
+  { id: 'light', label: mark('Light') },
+  { id: 'dark', label: mark('Dark') },
+]
+
+export function ThemePicker() {
+  const theme = useApp((s) => s.theme)
+  const setTheme = useApp((s) => s.setTheme)
+  return (
+    <Segmented
+      label={t('Theme')}
+      options={THEMES.map((o) => ({ ...o, label: t(o.label) }))}
+      value={theme}
+      onChange={setTheme}
+    />
+  )
+}
+
+/** Each language is named in itself, so people can find theirs whatever is showing. */
+const LANGUAGES: Option<LangPref>[] = [
+  { id: 'system', label: mark('System') },
+  { id: 'en', label: 'English', lang: 'en' },
+  { id: 'hi', label: 'हिन्दी', lang: 'hi' },
+]
+
+function LanguageSetting() {
+  const pref = useLang((s) => s.pref)
+  return (
+    <div className="setting">
+      <div>
+        <p className="setting-name">{t('Language')}</p>
+        <p className="muted">{t("System uses your computer's language.")}</p>
+      </div>
+      <Segmented
+        label={t('Language')}
+        options={LANGUAGES.map((o) => (o.lang ? o : { ...o, label: t(o.label) }))}
+        value={pref}
+        onChange={setLangPref}
+      />
     </div>
   )
 }
@@ -77,10 +132,10 @@ function SpeedUnitSetting() {
     <div className="setting">
       <div>
         <p className="setting-name" id="unit-label">
-          Speed unit
+          {t('Speed unit')}
         </p>
         <p className="muted">
-          MB/s matches file sizes. Mbps matches how internet plans are sold (8 times bigger).
+          {t('MB/s matches file sizes. Mbps matches how internet plans are sold (8 times bigger).')}
         </p>
       </div>
       <div className="segmented" role="radiogroup" aria-labelledby="unit-label">
@@ -115,31 +170,31 @@ function SpeedLimitSetting() {
   return (
     <form
       className="setting"
-      aria-label="Speed limit"
+      aria-label={t('Speed limit')}
       onSubmit={async (e) => {
         e.preventDefault()
         if (draft === null) return
         setStatus('')
         if (await save({ ...limits, global: draft }))
-          setStatus(draft ? 'Saved. Running downloads follow it now.' : 'Limit removed.')
+          setStatus(draft ? t('Saved. Running downloads follow it now.') : t('Limit removed.'))
       }}
     >
       <div>
-        <p className="setting-name">Speed limit</p>
-        <p className="muted">For all downloads and networks together.</p>
+        <p className="setting-name">{t('Speed limit')}</p>
+        <p className="muted">{t('For all downloads and networks together.')}</p>
         <p className="muted" role="status">
           {status}
         </p>
       </div>
       <div className="setting-control">
         <LimitField
-          label="Speed limit for all networks"
+          label={t('Speed limit for all networks')}
           hideLabel
           rate={limits.global}
           onChange={setDraft}
         />
         <button type="submit" className="btn" disabled={!changed}>
-          Save
+          {t('Save')}
         </button>
       </div>
     </form>
@@ -155,20 +210,21 @@ function SlowModeSetting() {
   return (
     <form
       className="setting setting-stack"
-      aria-label="Slow mode"
+      aria-label={t('Slow mode')}
       onSubmit={async (e) => {
         e.preventDefault()
         if (draft === null || draft <= 0) return
         setStatus('')
-        if (await save({ ...limits, slowRate: draft })) setStatus('Saved.')
+        if (await save({ ...limits, slowRate: draft })) setStatus(t('Saved.'))
       }}
     >
       <div className="setting-row">
         <div>
-          <p className="setting-name">Slow mode</p>
+          <p className="setting-name">{t('Slow mode')}</p>
           <p className="muted">
-            One switch for calls and streaming: caps all downloads, then puts your normal limits
-            back.
+            {t(
+              'One switch for calls and streaming: caps all downloads, then puts your normal limits back.',
+            )}
           </p>
           <p className="muted" role="status">
             {status}
@@ -177,9 +233,9 @@ function SlowModeSetting() {
         <SlowToggle labelled={false} />
       </div>
       <div className="setting-control">
-        <LimitField label="Slow mode speed" rate={limits.slowRate} onChange={setDraft} />
+        <LimitField label={t('Slow mode speed')} rate={limits.slowRate} onChange={setDraft} />
         <button type="submit" className="btn" disabled={!changed}>
-          Save
+          {t('Save')}
         </button>
       </div>
     </form>
@@ -188,19 +244,19 @@ function SlowModeSetting() {
 
 const MOD = /Mac/i.test(navigator.platform) ? '⌘' : 'Ctrl'
 const SHORTCUTS: [string[], string][] = [
-  [[MOD, 'N'], 'New download (or paste a link anywhere)'],
-  [[MOD, '1'], 'Downloads'],
-  [[MOD, '2'], 'Networks'],
-  [[MOD, '3'], 'Settings'],
-  [['↑', '↓'], 'Move through downloads'],
-  [['Space'], 'Pause or resume the selected download'],
-  [['Esc'], 'Back to the list, or close a dialog'],
+  [[MOD, 'N'], mark('New download (or paste a link anywhere)')],
+  [[MOD, '1'], mark('Downloads')],
+  [[MOD, '2'], mark('Networks')],
+  [[MOD, '3'], mark('Settings')],
+  [['↑', '↓'], mark('Move through downloads')],
+  [['Space'], mark('Pause or resume the selected download')],
+  [['Esc'], mark('Back to the list, or close a dialog')],
 ]
 
 function ShortcutsSetting() {
   return (
     <div className="setting setting-stack">
-      <p className="setting-name">Keyboard shortcuts</p>
+      <p className="setting-name">{t('Keyboard shortcuts')}</p>
       <dl className="shortcuts">
         {SHORTCUTS.map(([keys, what]) => (
           <div key={what}>
@@ -209,7 +265,7 @@ function ShortcutsSetting() {
                 <kbd key={k}>{k}</kbd>
               ))}
             </dt>
-            <dd>{what}</dd>
+            <dd>{t(what)}</dd>
           </div>
         ))}
       </dl>
@@ -245,7 +301,7 @@ function SharingSetting() {
       setSaved(s)
       setRatio(String(s.ratio))
       setMinutes(String(s.minutes))
-      setStatus(s.enabled ? 'Saved.' : 'Sharing is off. Finished torrents stop at once.')
+      setStatus(s.enabled ? t('Saved.') : t('Sharing is off. Finished torrents stop at once.'))
     } catch (e) {
       setError(toUiError(e))
     }
@@ -259,7 +315,7 @@ function SharingSetting() {
   return (
     <form
       className="setting setting-stack"
-      aria-label="Share torrents after downloading"
+      aria-label={t('Share torrents after downloading')}
       noValidate
       onSubmit={(e) => {
         e.preventDefault()
@@ -268,10 +324,11 @@ function SharingSetting() {
     >
       <div className="setting-row">
         <div>
-          <p className="setting-name">Share torrents after downloading</p>
+          <p className="setting-name">{t('Share torrents after downloading')}</p>
           <p className="muted">
-            Uploads to other people for a while, then stops. Never over a phone tether or cellular
-            while torrents are only sharing.
+            {t(
+              'Uploads to other people for a while, then stops. Never over a phone tether or cellular while torrents are only sharing.',
+            )}
           </p>
           <p className="muted" role="status">
             {status}
@@ -281,7 +338,7 @@ function SharingSetting() {
           type="button"
           role="switch"
           className="switch"
-          aria-label="Share torrents after downloading"
+          aria-label={t('Share torrents after downloading')}
           aria-checked={saved?.enabled === true}
           disabled={saved === null}
           onClick={() => saved && void save({ ...saved, enabled: !saved.enabled })}
@@ -290,7 +347,7 @@ function SharingSetting() {
       {saved?.enabled && (
         <div className="share-limits">
           <div className="field">
-            <label htmlFor="share-ratio">Stop at ratio</label>
+            <label htmlFor="share-ratio">{t('Stop at ratio')}</label>
             <input
               id="share-ratio"
               name="ratio"
@@ -310,12 +367,12 @@ function SharingSetting() {
               </p>
             ) : (
               <p id="share-ratio-help" className="field-help">
-                1 means upload as much as you downloaded.
+                {t('1 means upload as much as you downloaded.')}
               </p>
             )}
           </div>
           <div className="field">
-            <label htmlFor="share-minutes">Stop after (minutes)</label>
+            <label htmlFor="share-minutes">{t('Stop after (minutes)')}</label>
             <input
               id="share-minutes"
               name="minutes"
@@ -335,12 +392,12 @@ function SharingSetting() {
               </p>
             ) : (
               <p id="share-minutes-help" className="field-help">
-                Whichever limit comes first ends sharing.
+                {t('Whichever limit comes first ends sharing.')}
               </p>
             )}
           </div>
           <button type="submit" className="btn" disabled={!changed}>
-            Save
+            {t('Save')}
           </button>
         </div>
       )}
@@ -361,17 +418,18 @@ function ChecksumSetting() {
   return (
     <div className="setting">
       <div>
-        <p className="setting-name">Check downloads against published checksums</p>
+        <p className="setting-name">{t('Check downloads against published checksums')}</p>
         <p className="muted">
-          Many sites put a SHA-256 next to the file (a .sha256 file or SHA256SUMS). Fuselane looks
-          there before it starts and checks the finished file, so a damaged one is never saved.
+          {t(
+            'Many sites put a SHA-256 next to the file (a .sha256 file or SHA256SUMS). Fuselane looks there before it starts and checks the finished file, so a damaged one is never saved.',
+          )}
         </p>
       </div>
       <button
         type="button"
         role="switch"
         className="switch"
-        aria-label="Check downloads against published checksums"
+        aria-label={t('Check downloads against published checksums')}
         aria-checked={on === true}
         disabled={on === null}
         onClick={() => void act(async (b) => setOn(await b.setFindChecksums(!on)))}
@@ -393,18 +451,18 @@ function LookupSetting() {
   return (
     <div className="setting">
       <div>
-        <p className="setting-name">Look up servers through each network</p>
+        <p className="setting-name">{t('Look up servers through each network')}</p>
         <p className="muted">
-          Faster when your networks are from different providers: each one gets a server near it.
-          Uses Cloudflare and Google DNS, which then see the names of the sites you download from
-          (never the files).
+          {t(
+            'Faster when your networks are from different providers: each one gets a server near it. Uses Cloudflare and Google DNS, which then see the names of the sites you download from (never the files).',
+          )}
         </p>
       </div>
       <button
         type="button"
         role="switch"
         className="switch"
-        aria-label="Look up servers through each network"
+        aria-label={t('Look up servers through each network')}
         aria-checked={on === true}
         disabled={on === null}
         onClick={() => void act(async (b) => setOn(await b.setPerNetworkDns(!on)))}
@@ -421,8 +479,10 @@ function UpdateSetting() {
   return (
     <div className="setting">
       <div>
-        <p className="setting-name">Updates</p>
-        <p className="muted">Fuselane checks a signed update feed. Nothing about you is sent.</p>
+        <p className="setting-name">{t('Updates')}</p>
+        <p className="muted">
+          {t('Fuselane checks a signed update feed. Nothing about you is sent.')}
+        </p>
         <p className="muted" role="status">
           {status}
         </p>
@@ -436,12 +496,16 @@ function UpdateSetting() {
           setStatus('')
           const r = await check(false)
           setBusy(false)
-          if (r === 'current') setStatus("You're up to date.")
+          if (r === 'current') setStatus(t("You're up to date."))
           if (r === 'available')
-            setStatus(`Version ${useApp.getState().update?.version ?? ''} is ready to install.`)
+            setStatus(
+              t('Version {version} is ready to install.', {
+                version: useApp.getState().update?.version ?? '',
+              }),
+            )
         }}
       >
-        {busy ? 'Checking…' : update ? 'Check again' : 'Check for updates'}
+        {busy ? t('Checking…') : update ? t('Check again') : t('Check for updates')}
       </button>
     </div>
   )
@@ -469,10 +533,11 @@ function ListSetting() {
   return (
     <div className="setting">
       <div>
-        <p className="setting-name">Download list</p>
+        <p className="setting-name">{t('Download list')}</p>
         <p className="muted">
-          Save every link to a text file, or add links from one. Imported downloads wait until you
-          start them.
+          {t(
+            'Save every link to a text file, or add links from one. Imported downloads wait until you start them.',
+          )}
         </p>
         <p className="muted" role="status">
           {status}
@@ -486,11 +551,11 @@ function ListSetting() {
           onClick={() =>
             run(async () => {
               const n = await backend.exportLinks()
-              return n === null ? null : `Saved ${n} ${n === 1 ? 'link' : 'links'}.`
+              return n === null ? null : tn(n, 'Saved 1 link.', 'Saved {n} links.')
             })
           }
         >
-          Export…
+          {t('Export…')}
         </button>
         <button
           type="button"
@@ -500,14 +565,18 @@ function ListSetting() {
             run(async () => {
               const r = await backend.importLinks()
               if (!r) return null
-              const added = `Added ${r.added.length} ${r.added.length === 1 ? 'download' : 'downloads'}`
               return r.skipped.length
-                ? `${added}; skipped ${r.skipped.length} already in the list or not valid.`
-                : `${added}.`
+                ? tn(
+                    r.added.length,
+                    'Added 1 download; skipped {skipped} already in the list or not valid.',
+                    'Added {n} downloads; skipped {skipped} already in the list or not valid.',
+                    { skipped: r.skipped.length },
+                  )
+                : tn(r.added.length, 'Added 1 download.', 'Added {n} downloads.')
             })
           }
         >
-          Import…
+          {t('Import…')}
         </button>
       </div>
     </div>
@@ -529,12 +598,12 @@ function DiagnosticsSetting() {
       setReport(text)
       try {
         await navigator.clipboard.writeText(text)
-        setStatus('Copied. Paste it into your bug report.')
+        setStatus(t('Copied. Paste it into your bug report.'))
       } catch {
-        setStatus('Select the text below and copy it.')
+        setStatus(t('Select the text below and copy it.'))
       }
     } catch {
-      setStatus("Couldn't build the report. Try again.")
+      setStatus(t("Couldn't build the report. Try again."))
     } finally {
       setBusy(false)
     }
@@ -543,10 +612,11 @@ function DiagnosticsSetting() {
     <div className="setting setting-stack">
       <div className="setting-row">
         <div>
-          <p className="setting-name">Diagnostics</p>
+          <p className="setting-name">{t('Diagnostics')}</p>
           <p className="muted">
-            For bug reports. It never includes IP addresses, links or file names, and Fuselane sends
-            nothing by itself. Report a problem opens a GitHub issue with it filled in.
+            {t(
+              'For bug reports. It never includes IP addresses, links or file names, and Fuselane sends nothing by itself. Report a problem opens a GitHub issue with it filled in.',
+            )}
           </p>
           <p className="muted" role="status">
             {status}
@@ -554,15 +624,17 @@ function DiagnosticsSetting() {
         </div>
         <div className="setting-control">
           <button type="button" className="btn" onClick={copy} disabled={busy}>
-            {busy ? 'Collecting…' : 'Copy diagnostics'}
+            {busy ? t('Collecting…') : t('Copy diagnostics')}
           </button>
           <button
             type="button"
             className="btn"
-            title="Opens a bug report on GitHub with the diagnostics filled in; you read it before sending"
+            title={t(
+              'Opens a bug report on GitHub with the diagnostics filled in; you read it before sending',
+            )}
             onClick={() => void act((b) => b.reportProblem(null))}
           >
-            Report a problem
+            {t('Report a problem')}
           </button>
         </div>
       </div>
@@ -571,7 +643,7 @@ function DiagnosticsSetting() {
           className="report"
           readOnly
           value={report}
-          aria-label="Diagnostics report"
+          aria-label={t('Diagnostics report')}
           spellCheck={false}
           rows={10}
         />
@@ -581,8 +653,17 @@ function DiagnosticsSetting() {
 }
 
 /** A titled group of settings; groups sit side by side on wide windows. */
-function Group({ title, children }: { title: string; children: React.ReactNode }) {
-  const id = `set-${title.toLowerCase().replace(/[^a-z]+/g, '-')}`
+function Group({
+  id: name,
+  title,
+  children,
+}: {
+  id: string
+  title: string
+  children: React.ReactNode
+}) {
+  // A fixed id: one made from the (translated) title would repeat in Hindi.
+  const id = `set-${name}`
   return (
     <section className="settings-group" aria-labelledby={id}>
       <h2 className="group" id={id}>
@@ -599,30 +680,33 @@ export function SettingsView() {
   return (
     <section className="page" aria-labelledby="set-title">
       <header className="page-head">
-        <h1 id="set-title">Settings</h1>
+        <h1 id="set-title">{t('Settings')}</h1>
       </header>
       <div className="settings-groups">
-        <Group title="Look and feel">
+        <Group id="look-and-feel" title={t('Look and feel')}>
           <div className="setting">
             <div>
-              <p className="setting-name">Appearance</p>
-              <p className="muted">Follows your system unless you pick one.</p>
+              <p className="setting-name">{t('Appearance')}</p>
+              <p className="muted">{t('Follows your system unless you pick one.')}</p>
             </div>
             <ThemePicker />
           </div>
+          <LanguageSetting />
           <SpeedUnitSetting />
         </Group>
-        <Group title="Speed">
+        <Group id="speed" title={t('Speed')}>
           <SpeedLimitSetting />
           <DownloadsAtOnceSetting />
           <SlowModeSetting />
           <ScheduleSetting />
         </Group>
-        <Group title="Files">
+        <Group id="files" title={t('Files')}>
           <div className="setting">
             <div>
-              <p className="setting-name">Downloads folder</p>
-              <p className="muted num">{info?.defaultDir ?? ''}</p>
+              <p className="setting-name">{t('Downloads folder')}</p>
+              <p className="muted num" translate="no">
+                {info?.defaultDir ?? ''}
+              </p>
             </div>
           </div>
           <SortSetting />
@@ -632,26 +716,26 @@ export function SettingsView() {
           <WatchSetting />
           <ListSetting />
         </Group>
-        <Group title="This computer">
+        <Group id="this-computer" title={t('This computer')}>
           <WhenDoneSetting />
           <KeepAwakeSetting />
           <LowBatterySetting />
           <WindowSettings />
         </Group>
-        <Group title="Torrents and lookups">
+        <Group id="torrents-and-lookups" title={t('Torrents and lookups')}>
           <SharingSetting />
           <LookupSetting />
         </Group>
-        <Group title="Other apps">
+        <Group id="other-apps" title={t('Other apps')}>
           <RemoteSetting />
         </Group>
-        <Group title="About">
+        <Group id="about" title={t('About')}>
           <UpdateSetting />
           <div className="setting">
             <div>
-              <p className="setting-name">Welcome</p>
+              <p className="setting-name">{t('Welcome')}</p>
               <p className="muted">
-                The short tour from the first launch: networks, a check, tips.
+                {t('The short tour from the first launch: networks, a check, tips.')}
               </p>
             </div>
             <button
@@ -659,17 +743,18 @@ export function SettingsView() {
               className="btn"
               onClick={() => useApp.setState({ welcomeOpen: true })}
             >
-              Show it again
+              {t('Show it again')}
             </button>
           </div>
           <ShortcutsSetting />
           <DiagnosticsSetting />
           <div className="setting">
             <div>
-              <p className="setting-name">Version</p>
+              <p className="setting-name">{t('Version')}</p>
               <p className="muted num">
-                {info?.version ?? ''}
-                {demo ? ', demo data' : ''}
+                {demo
+                  ? t('{version}, demo data', { version: info?.version ?? '' })
+                  : (info?.version ?? '')}
               </p>
             </div>
           </div>

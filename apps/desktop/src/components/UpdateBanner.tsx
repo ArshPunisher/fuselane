@@ -9,6 +9,7 @@ import {
 } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { bytes, eta, rateText } from '../lib/format'
+import { t, tr } from '../lib/i18n'
 
 /** Checks quietly a little after launch, then offers the update without nagging. */
 export function UpdateBanner() {
@@ -40,8 +41,11 @@ export function UpdateBanner() {
       <div className="update-banner" role="status" data-state="installing">
         <ArrowsClockwise size={18} aria-hidden className="ic-fuse" />
         <p>
-          Installing {version}.
-          <span className="muted"> Fuselane restarts in a moment and your downloads carry on.</span>
+          {tr('Installing {version}.', { version })}
+          <span className="muted">
+            {' '}
+            {t('Fuselane restarts in a moment and your downloads carry on.')}
+          </span>
         </p>
       </div>
     )
@@ -55,9 +59,9 @@ export function UpdateBanner() {
         <ArrowCircleDown size={18} aria-hidden className="ic-fuse" />
         <div className="update-text">
           <p>
-            Downloading Fuselane {version}
+            {tr('Downloading Fuselane {version}', { version })}
             {progress.networks > 1 && (
-              <span className="muted"> over {progress.networks} networks</span>
+              <span className="muted"> {t('over {n} networks', { n: progress.networks })}</span>
             )}
           </p>
           <div className="update-progress">
@@ -65,7 +69,7 @@ export function UpdateBanner() {
               className="bar"
               data-status="running"
               role="progressbar"
-              aria-label="Update download"
+              aria-label={t('Update download')}
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={Math.round(pct)}
@@ -73,15 +77,16 @@ export function UpdateBanner() {
               <div className="bar-fill" style={{ width: `${pct}%` }} />
             </div>
             <span className="num">
-              {bytes(progress.done)}
-              {total ? ` of ${bytes(total)}` : ''}
+              {total
+                ? t('{done} of {total}', { done: bytes(progress.done), total: bytes(total) })
+                : bytes(progress.done)}
               {progress.rate > 0 && `, ${rateText(progress.rate)}`}
               {left && `, ${left}`}
             </span>
           </div>
         </div>
         <button className="btn btn-ghost" onClick={() => void cancel()}>
-          Cancel
+          {t('Cancel')}
         </button>
       </div>
     )
@@ -96,9 +101,9 @@ export function UpdateBanner() {
           {error.hint && <span className="muted"> {error.hint}</span>}
         </p>
         <button className="btn" onClick={() => void install()}>
-          Try again
+          {t('Try again')}
         </button>
-        <button className="icon-btn" aria-label="Later" title="Later" onClick={dismiss}>
+        <button className="icon-btn" aria-label={t('Later')} title={t('Later')} onClick={dismiss}>
           <X size={16} aria-hidden />
         </button>
       </div>
@@ -108,18 +113,18 @@ export function UpdateBanner() {
     <div className="update-banner" role="status" data-state="available">
       <ArrowCircleUp size={18} aria-hidden className="ic-fuse" />
       <p>
-        Fuselane {version} is ready to download
-        {update.size ? (
-          <>
-            , <span className="num">{bytes(update.size)}</span>
-          </>
-        ) : null}
-        .<span className="muted"> Downloads pause and continue after the restart.</span>
+        {update.size
+          ? tr('Fuselane {version} is ready to download, {size}.', {
+              version,
+              size: <span className="num">{bytes(update.size)}</span>,
+            })
+          : tr('Fuselane {version} is ready to download.', { version })}
+        <span className="muted"> {t('Downloads pause and continue after the restart.')}</span>
       </p>
       <button className="btn btn-primary" onClick={() => void install()}>
-        Update and restart
+        {t('Update and restart')}
       </button>
-      <button className="icon-btn" aria-label="Later" title="Later" onClick={dismiss}>
+      <button className="icon-btn" aria-label={t('Later')} title={t('Later')} onClick={dismiss}>
         <X size={16} aria-hidden />
       </button>
     </div>
@@ -136,13 +141,20 @@ export function UpdatedBanner() {
     <div className="update-banner updated" role="status">
       <CheckCircle size={18} weight="fill" aria-hidden className="ic-success" />
       <p>
-        Fuselane was updated to <span className="num">{info.version}</span>.
-        <span className="muted"> Your downloads and settings are kept.</span>
+        {tr('Fuselane was updated to {version}.', {
+          version: <span className="num">{info.version}</span>,
+        })}
+        <span className="muted"> {t('Your downloads and settings are kept.')}</span>
       </p>
       <button className="btn" onClick={() => act((b) => b.openReleaseNotes())}>
-        What&apos;s new
+        {t("What's new")}
       </button>
-      <button className="icon-btn" aria-label="Close" title="Close" onClick={() => setHidden(true)}>
+      <button
+        className="icon-btn"
+        aria-label={t('Close')}
+        title={t('Close')}
+        onClick={() => setHidden(true)}
+      >
         <X size={16} aria-hidden />
       </button>
     </div>

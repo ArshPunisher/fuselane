@@ -2,6 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+  <!-- The languages the app's screens come in. The webview tells the page the app's
+       languages (navigator.languages), so without "hi" here Settings → Language → System
+       could not pick Hindi on a Mac set to Hindi. -->
+  <key>CFBundleLocalizations</key>
+  <array>
+    <string>en</string>
+    <string>hi</string>
+  </array>
   <!-- Magnet links can open in Fuselane. macOS keeps whatever app you already
        chose for them; System Settings or a browser's prompt picks between apps. -->
   <key>CFBundleURLTypes</key>

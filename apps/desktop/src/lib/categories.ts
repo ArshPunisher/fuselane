@@ -1,5 +1,6 @@
 // File types for the list's type filter (B8.8). Same extensions as
 // automation::category in the service, which sorts finished files into folders.
+import { mark, t } from './i18n'
 
 export type FileType =
   | 'video'
@@ -13,15 +14,20 @@ export type FileType =
   | 'other'
 
 export const TYPE_LABEL: Record<FileType, string> = {
-  video: 'Video',
-  music: 'Music',
-  pictures: 'Pictures',
-  documents: 'Documents',
-  archives: 'Archives',
-  'disk-images': 'Disk images',
-  apps: 'Apps',
-  torrents: 'Torrents',
-  other: 'Other',
+  video: mark('Video'),
+  music: mark('Music'),
+  pictures: mark('Pictures'),
+  documents: mark('Documents'),
+  archives: mark('Archives'),
+  'disk-images': mark('Disk images'),
+  apps: mark('Apps'),
+  torrents: mark('Torrents'),
+  other: mark('Other'),
+}
+
+/** A type's name, in the language in use. */
+export function typeLabel(type: FileType): string {
+  return t(TYPE_LABEL[type])
 }
 
 const BY_EXT: Record<string, FileType> = {}

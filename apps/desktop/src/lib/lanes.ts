@@ -1,5 +1,6 @@
 // Network colours (DESIGN-SYSTEM.md §3): assigned by kind first, then the spares.
 import type { LiveNet, NetPref, NetView } from './types'
+import { mark, t } from './i18n'
 
 export type Lane = 'tide' | 'volt' | 'iris' | 'rose' | 'mint' | 'sky' | 'lilac' | 'steel'
 
@@ -39,18 +40,19 @@ export function assignLanes(nets: Pick<LiveNet | NetView, 'kind' | 'name'>[]): L
   })
 }
 
+const KIND_LABEL: Record<string, string> = {
+  wifi: 'Wi-Fi',
+  ethernet: 'Ethernet',
+  tether: mark('USB tether'),
+  cellular: mark('Cellular'),
+  vpn: 'VPN',
+  virtual: mark('Virtual'),
+  loopback: mark('Loopback'),
+}
+
+/** The kind of network in words, in the language in use. */
 export function kindLabel(kind: string): string {
-  return (
-    {
-      wifi: 'Wi-Fi',
-      ethernet: 'Ethernet',
-      tether: 'USB tether',
-      cellular: 'Cellular',
-      vpn: 'VPN',
-      virtual: 'Virtual',
-      loopback: 'Loopback',
-    }[kind] ?? 'Network'
-  )
+  return t(KIND_LABEL[kind] ?? mark('Network'))
 }
 
 /** The name people know: the OS's friendly label when it has one. */

@@ -165,7 +165,11 @@ test('theme choice applies and survives a reload', async ({ page }) => {
   await page.getByRole('radio', { name: 'Light' }).focus()
   await page.keyboard.press('ArrowRight')
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
-  await page.getByRole('radio', { name: 'System' }).click()
+  // Language has a System choice too.
+  await page
+    .getByRole('radiogroup', { name: 'Theme' })
+    .getByRole('radio', { name: 'System' })
+    .click()
   await expect(page.locator('html')).not.toHaveAttribute('data-theme', /.*/)
 })
 

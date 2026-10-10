@@ -1,5 +1,6 @@
 import { useApp } from '../lib/store'
 import { rateText } from '../lib/format'
+import { t } from '../lib/i18n'
 
 /** One switch that caps the overall speed, keeping the normal limits for later. */
 export function SlowToggle({ labelled = true }: { labelled?: boolean }) {
@@ -10,11 +11,13 @@ export function SlowToggle({ labelled = true }: { labelled?: boolean }) {
   return (
     <div className="slow-toggle">
       <p>
-        <span className="net-name">Slow mode</span>
+        <span className="net-name">{t('Slow mode')}</span>
         {labelled && (
           <>
             <br />
-            <span className="muted num">{rateText(limits.slowRate)} max</span>
+            <span className="muted num">
+              {t('{rate} max', { rate: rateText(limits.slowRate) })}
+            </span>
           </>
         )}
       </p>
@@ -23,7 +26,7 @@ export function SlowToggle({ labelled = true }: { labelled?: boolean }) {
         role="switch"
         className="switch"
         aria-checked={limits.slow}
-        aria-label="Slow mode"
+        aria-label={t('Slow mode')}
         disabled={!ready}
         onClick={() => void setSlow(!limits.slow)}
       />

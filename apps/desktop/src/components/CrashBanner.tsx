@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Warning, X } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
+import { t } from '../lib/i18n'
 
 /**
  * After a crash, once: say so and offer to report it. The report opens as a
@@ -21,8 +22,9 @@ export function CrashBanner() {
     <div className="update-banner crash-banner" role="status">
       <Warning size={18} weight="fill" aria-hidden />
       <span>
-        Fuselane closed unexpectedly last time. Sending a report helps fix it; you see everything it
-        says before it&apos;s sent.
+        {t(
+          "Fuselane closed unexpectedly last time. Sending a report helps fix it; you see everything it says before it's sent.",
+        )}
       </span>
       <button
         className="btn btn-sm"
@@ -33,9 +35,9 @@ export function CrashBanner() {
           })
         }
       >
-        Report it
+        {t('Report it')}
       </button>
-      <button className="icon-btn" aria-label="Dismiss" onClick={() => setCrash(null)}>
+      <button className="icon-btn" aria-label={t('Dismiss')} onClick={() => setCrash(null)}>
         <X size={16} aria-hidden />
       </button>
     </div>
