@@ -6,6 +6,7 @@ export default defineConfig({
   manifest: ({ browser }) => ({
     name: 'Fuselane',
     description: 'Hands big downloads to Fuselane, which splits them across all your networks.',
+    homepage_url: 'https://fuselane.app',
     // activeTab + scripting: the popup lists the current tab's videos and file
     // links, only when opened (no access to other tabs, nothing in the background).
     permissions: [
@@ -22,6 +23,8 @@ export default defineConfig({
     // Firefox needs a fixed id for native messaging's allowed_extensions.
     ...(browser === 'firefox'
       ? {
+          // Who makes it, shown on Firefox's add-on page.
+          developer: { name: 'ClearCraft Labs', url: 'https://clearcraftlabs.com' },
           browser_specific_settings: {
             gecko: {
               id: 'fuselane@fuselane.app',
