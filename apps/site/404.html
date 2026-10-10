@@ -3,8 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#0b0d12" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#0a0c11" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f9fafc" media="(prefers-color-scheme: light)" />
     <title>Page not found | Fuselane</title>
     <meta
       name="description"
@@ -15,12 +16,30 @@
     <!-- Served at any depth, so everything here is absolute or inline. -->
     <style>
       :root {
-        --night: oklch(0.13 0.012 262);
-        --line: oklch(0.32 0.016 262 / 0.6);
-        --ink: oklch(0.97 0.004 262);
-        --body: oklch(0.82 0.01 262);
+        color-scheme: dark;
+        --canvas: oklch(0.155 0.01 260);
+        --hairline: oklch(1 0 0 / 0.16);
+        --ink: oklch(0.965 0.004 260);
+        --body: oklch(0.82 0.008 260);
         --fuse: oklch(0.74 0.17 50);
-        --fuse-ink: oklch(0.17 0.03 50);
+        --fuse-ink: oklch(0.155 0.01 260);
+        --tide: oklch(0.78 0.12 215);
+        --volt: oklch(0.85 0.17 128);
+        --iris: oklch(0.72 0.13 280);
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          color-scheme: light;
+          --canvas: oklch(0.985 0.003 260);
+          --hairline: oklch(0.21 0.015 260 / 0.18);
+          --ink: oklch(0.21 0.015 260);
+          --body: oklch(0.36 0.015 260);
+          --fuse: oklch(0.56 0.165 42);
+          --fuse-ink: oklch(0.99 0 0);
+          --tide: oklch(0.52 0.095 222);
+          --volt: oklch(0.52 0.13 130);
+          --iris: oklch(0.52 0.16 280);
+        }
       }
       * {
         box-sizing: border-box;
@@ -31,9 +50,7 @@
         margin: 0;
         place-items: center;
         padding: 24px 16px;
-        background:
-          radial-gradient(circle at 50% 30%, oklch(0.74 0.17 50 / 0.12), transparent 50%),
-          var(--night);
+        background: var(--canvas);
         color: var(--body);
         font:
           16px/1.6 ui-sans-serif,
@@ -42,23 +59,67 @@
       }
       main {
         display: grid;
-        gap: 18px;
+        justify-items: center;
+        gap: 16px;
         max-width: 520px;
+        text-align: center;
+      }
+      svg {
+        width: 168px;
+        height: 168px;
+      }
+      .t {
+        stroke-width: 4;
+        stroke-linecap: round;
+      }
+      .tide {
+        stroke: var(--tide);
+      }
+      .iris {
+        stroke: var(--iris);
+      }
+      .volt {
+        stroke: var(--volt);
+      }
+      .gap {
+        stroke: var(--fuse);
+        stroke-width: 2.5;
+        stroke-linecap: round;
+        stroke-dasharray: 0.1 4.5;
       }
       .code {
-        color: var(--fuse);
+        fill: var(--ink);
         font:
-          600 14px ui-monospace,
+          600 30px ui-monospace,
           'SF Mono',
           monospace;
-        letter-spacing: 0.08em;
+        letter-spacing: -0.04em;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .t {
+          animation: tick 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+          animation-delay: calc(var(--i) * 22ms);
+        }
+        .gap {
+          animation: blink 1.4s ease-in-out 1.2s infinite;
+        }
+      }
+      @keyframes tick {
+        from {
+          opacity: 0;
+        }
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0.2;
+        }
       }
       h1 {
         margin: 0;
         color: var(--ink);
         font-size: clamp(28px, 6vw, 40px);
         line-height: 1.1;
-        letter-spacing: -0.02em;
+        letter-spacing: -0.03em;
       }
       p {
         margin: 0;
@@ -66,16 +127,17 @@
       nav {
         display: flex;
         flex-wrap: wrap;
+        justify-content: center;
         gap: 10px;
-        margin-top: 6px;
+        margin-top: 8px;
       }
       a {
         display: inline-flex;
         align-items: center;
         min-height: 44px;
         padding: 0 18px;
-        border: 1px solid var(--line);
-        border-radius: 999px;
+        border: 1px solid var(--hairline);
+        border-radius: 8px;
         color: var(--ink);
         text-decoration: none;
       }
@@ -93,8 +155,62 @@
   </head>
   <body>
     <main>
-      <span class="code">404</span>
-      <h1>This page isn't here</h1>
+      <svg
+        viewBox="0 0 200 200"
+        role="img"
+        aria-label="A ring of downloaded parts with one part missing"
+      >
+        <line class="t tide" style="--i: 0" x1="104.1" y1="38.1" x2="105.2" y2="20.2" />
+        <line class="t iris" style="--i: 1" x1="112.1" y1="39.2" x2="115.6" y2="21.5" />
+        <line class="t tide" style="--i: 2" x1="119.9" y1="41.3" x2="125.7" y2="24.2" />
+        <line class="t volt" style="--i: 3" x1="127.4" y1="44.4" x2="135.4" y2="28.3" />
+        <line class="t iris" style="--i: 4" x1="134.4" y1="48.4" x2="144.4" y2="33.5" />
+        <line class="t tide" style="--i: 5" x1="140.9" y1="53.4" x2="152.7" y2="39.9" />
+        <line class="t tide" style="--i: 6" x1="146.6" y1="59.1" x2="160.1" y2="47.3" />
+        <line class="t iris" style="--i: 7" x1="151.6" y1="65.6" x2="166.5" y2="55.6" />
+        <line class="t tide" style="--i: 8" x1="155.6" y1="72.6" x2="171.7" y2="64.6" />
+        <line class="t volt" style="--i: 9" x1="158.7" y1="80.1" x2="175.8" y2="74.3" />
+        <line class="t iris" style="--i: 10" x1="160.8" y1="87.9" x2="178.5" y2="84.4" />
+        <line class="t tide" style="--i: 11" x1="161.9" y1="95.9" x2="179.8" y2="94.8" />
+        <line class="t tide" style="--i: 12" x1="161.9" y1="104.1" x2="179.8" y2="105.2" />
+        <line class="t iris" style="--i: 13" x1="160.8" y1="112.1" x2="178.5" y2="115.6" />
+        <line class="t tide" style="--i: 14" x1="158.7" y1="119.9" x2="175.8" y2="125.7" />
+        <line class="t volt" style="--i: 15" x1="155.6" y1="127.4" x2="171.7" y2="135.4" />
+        <line class="t iris" style="--i: 16" x1="151.6" y1="134.4" x2="166.5" y2="144.4" />
+        <line class="t tide" style="--i: 17" x1="146.6" y1="140.9" x2="160.1" y2="152.7" />
+        <line class="t tide" style="--i: 18" x1="140.9" y1="146.6" x2="152.7" y2="160.1" />
+        <line class="t iris" style="--i: 19" x1="134.4" y1="151.6" x2="144.4" y2="166.5" />
+        <line class="t tide" style="--i: 20" x1="127.4" y1="155.6" x2="135.4" y2="171.7" />
+        <line class="t volt" style="--i: 21" x1="119.9" y1="158.7" x2="125.7" y2="175.8" />
+        <line class="t iris" style="--i: 22" x1="112.1" y1="160.8" x2="115.6" y2="178.5" />
+        <line class="t tide" style="--i: 23" x1="104.1" y1="161.9" x2="105.2" y2="179.8" />
+        <line class="t tide" style="--i: 24" x1="95.9" y1="161.9" x2="94.8" y2="179.8" />
+        <line class="t iris" style="--i: 25" x1="87.9" y1="160.8" x2="84.4" y2="178.5" />
+        <line class="t tide" style="--i: 26" x1="80.1" y1="158.7" x2="74.3" y2="175.8" />
+        <line class="t volt" style="--i: 27" x1="72.6" y1="155.6" x2="64.6" y2="171.7" />
+        <line class="t iris" style="--i: 28" x1="65.6" y1="151.6" x2="55.6" y2="166.5" />
+        <line class="t tide" style="--i: 29" x1="59.1" y1="146.6" x2="47.3" y2="160.1" />
+        <line class="t tide" style="--i: 30" x1="53.4" y1="140.9" x2="39.9" y2="152.7" />
+        <line class="t iris" style="--i: 31" x1="48.4" y1="134.4" x2="33.5" y2="144.4" />
+        <line class="t tide" style="--i: 32" x1="44.4" y1="127.4" x2="28.3" y2="135.4" />
+        <line class="gap" x1="41.3" y1="119.9" x2="24.2" y2="125.7" />
+        <line class="t iris" style="--i: 34" x1="39.2" y1="112.1" x2="21.5" y2="115.6" />
+        <line class="t tide" style="--i: 35" x1="38.1" y1="104.1" x2="20.2" y2="105.2" />
+        <line class="t tide" style="--i: 36" x1="38.1" y1="95.9" x2="20.2" y2="94.8" />
+        <line class="t iris" style="--i: 37" x1="39.2" y1="87.9" x2="21.5" y2="84.4" />
+        <line class="t tide" style="--i: 38" x1="41.3" y1="80.1" x2="24.2" y2="74.3" />
+        <line class="t volt" style="--i: 39" x1="44.4" y1="72.6" x2="28.3" y2="64.6" />
+        <line class="t iris" style="--i: 40" x1="48.4" y1="65.6" x2="33.5" y2="55.6" />
+        <line class="t tide" style="--i: 41" x1="53.4" y1="59.1" x2="39.9" y2="47.3" />
+        <line class="t tide" style="--i: 42" x1="59.1" y1="53.4" x2="47.3" y2="39.9" />
+        <line class="t iris" style="--i: 43" x1="65.6" y1="48.4" x2="55.6" y2="33.5" />
+        <line class="t tide" style="--i: 44" x1="72.6" y1="44.4" x2="64.6" y2="28.3" />
+        <line class="t volt" style="--i: 45" x1="80.1" y1="41.3" x2="74.3" y2="24.2" />
+        <line class="t iris" style="--i: 46" x1="87.9" y1="39.2" x2="84.4" y2="21.5" />
+        <line class="t tide" style="--i: 47" x1="95.9" y1="38.1" x2="94.8" y2="20.2" />
+        <text class="code" x="100" y="111" text-anchor="middle">404</text>
+      </svg>
+      <h1>This page isn&rsquo;t here</h1>
       <p>
         The address may be mistyped, or the page has moved. Everything about Fuselane is a click
         away.
@@ -102,6 +218,7 @@
       <nav aria-label="Pages">
         <a href="https://fuselane.app/">Home</a>
         <a href="https://fuselane.app/download/">Download</a>
+        <a href="https://fuselane.app/guide/">Guide</a>
         <a href="https://fuselane.app/faq/">FAQ</a>
       </nav>
     </main>
