@@ -1036,6 +1036,8 @@ h2 {
 
 .page {
   display: grid;
+  /* One track that never grows past the window, whatever is inside. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
   max-width: 720px;
   padding: 24px 28px 40px;
@@ -1399,6 +1401,7 @@ h2 {
 
 .setting-control {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: 8px;
 }
