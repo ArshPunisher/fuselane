@@ -12,7 +12,7 @@ Principle: **every risk has a test at the cheapest level that can catch it**, an
 | **L3 Network lab** | **Real multi-interface** on Linux: client and server namespaces, 2–3 veth links shaped with `tc netem` (rate, delay, loss), per-link DNS; throughput sum, failover (link down mid-transfer), address change, IP-locked link, captive-portal mimic | `tools/netlab`, sudo on GitHub runners | Every PR touching `netif/transport/engine-*`; full run nightly | < 15 min |
 | **L4 App e2e** | Real app: start a download, pause and resume, quit and relaunch, limits, selection actions, error screens; UI with mocked IPC for fast UI tests | tauri-driver (Linux, Windows), Playwright + `mockIPC`, axe | PR: smoke subset; nightly: full | smoke < 10 min |
 | **L5 Packaged smoke** | Build the installer on its native runner, install it, launch it headless (`--self-test`): version, DB opens, `Pinner::self_test`, package contents (no foreign native modules, L-73) | CI release-like job | Every PR to `main` (unsigned), every release (signed) | < 20 min |
-| **L6 Chaos and soak** | Model-based random sequences (pause, resume, network down/up, disk full, quit, crash, ETag change, stall), shrinking, seed replay; 24 h soak with leak checks (memory, handles, sockets) | proptest state machines, netlab | Nightly (50 seeds), weekly soak | – |
+| **L6 Chaos and soak** | Model-based random sequences (pause, resume, network down/up, disk full, quit, crash, ETag change, stall), shrinking, seed replay; 24 h soak with leak checks (memory, handles, sockets), §7 | proptest state machines, netlab, `tools/soak.sh` | Nightly (50 seeds), weekly soak | – |
 | **L7 Performance** | Benchmarks: throughput with 1/2/3 links in netlab, CPU per Gbit, UI push cost at 10k blocks, scheduler cost | criterion, netlab | Nightly; a regression > 10% fails | – |
 | **L8 Real hardware** | Wi-Fi + phone USB tether (iPhone and Android) + Ethernet on real macOS, Windows and Linux machines; 5G tether; HDD vs SSD | Manual checklist, scripted CLI runs | End of each phase, before each release | – |
 
@@ -100,3 +100,38 @@ All 120 edge cases in [`../01-research/plexo-forensics.md`](../01-research/plexo
 - EC-220 system proxy set while pinning
 
 Coverage is tracked in `docs/05-quality/EDGE-CASES.md`, one row per ID mapping to the test name (created in Phase 2).
+
+## 7. Soak test (L6, weekly)
+
+`tools/soak.sh` downloads files from the testkit fault server (run on its own by `crates/testkit/examples/soak_server.rs`) with the real release `fuselane` CLI, one after another, until the time is up. Loopback only: no internet needed. It builds both in release first, in the shared cargo target folder.
+
+```bash
+tools/soak.sh --duration 24h                 # the weekly soak: files 1M, 8M, 32M in turn, no faults
+tools/soak.sh --duration 3m                  # quick check that the tooling works
+tools/soak.sh --duration 2h --fault mixed    # bug hunt against a misbehaving server
+tools/soak.sh --help                         # sizes, fault modes, pause, log path, timeout, --fuselane PATH
+```
+
+- **Each run**: a fresh temporary folder in `$TMPDIR`, `fuselane get -n <loopback>`, then the checks: exit code 0, exactly one file (`file.bin`, no staging file left), the right size, the SHA-256 the test server reported for it. The file is deleted; the time (process start to exit) and peak memory (`/usr/bin/time`) are logged. A run with no result after 300 s plus 1 s per MiB counts as hung and is stopped. All runs share one fresh download list (never the real one), so it grows like a heavy user's.
+- **Leaks**: every download is a fresh process, so a memory leak shows as peak memory rising from first to last run of the same size, and a handle or socket leak as failed runs (for example "too many open files").
+- **Fault modes** (`--fault drops|resets|stalls|busy|slow|lies|mixed`: one request in 20 misbehaves, `--every N` to change it; `slow` paces every answer) are for finding bugs, not part of the gate: every failure they report is a bug to file.
+- **Log**: `<target>/soak/soak-<date>-<time>.log` (`$CARGO_TARGET_DIR`, else `./target`; `--log FILE` to choose): one line per run, then the summary, which is also printed.
+
+| Summary line | How to read it |
+|---|---|
+| Runs | downloads, how many ok and failed |
+| Data, Speed | bytes checked by SHA-256; average MB/s over the successful downloads |
+| Peak memory | the highest of any run; then per size: first / last / highest. A steady climb from first to last is a leak |
+| History | size of the shared download list; a few KB per download is normal |
+| Faults | with a fault mode: how many requests misbehaved |
+| Failures | each reason with its count (also on the run's own line) |
+| Result | `CLEAN`, `NOT CLEAN`, or `STOPPED EARLY` (exit status 0, 1, 130) |
+
+**Clean** means `Result: CLEAN` after the full 24 h with the default settings, and peak memory per size flat (last within a few MB of first). STEPS 9.1 needs a clean soak every week for two weeks running; add each one to `STATUS.md` with the date, version, machine and summary.
+
+**Running it**, on power with the lid open:
+
+- macOS: `caffeinate -i tools/soak.sh --duration 24h` keeps the Mac awake.
+- Linux: `systemd-inhibit --what=idle:sleep --why="Fuselane soak" tools/soak.sh --duration 24h`. Install GNU time (`sudo apt install time`) for memory numbers; without it the soak still runs and says memory wasn't measured. Point `TMPDIR` at a real disk if `/tmp` is in RAM.
+- Windows: not covered (the script needs bash, `mkfifo` and `/usr/bin/time`; WSL would test the Linux build).
+- It needs the largest file plus 512 MiB free in `$TMPDIR`. With the defaults (10 s between downloads) it makes about 8,500 downloads a day and writes about 5 GB an hour (about 120 GB a day) to that disk; raise `--pause` or use smaller `--size` to write less, or `--pause 0` to push harder. Ctrl-C stops it cleanly with a summary.
