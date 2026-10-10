@@ -65,3 +65,12 @@ The extension **pauses** the browser's download while it asks. When the app acce
 - e2e (Playwright, Chromium with `--load-extension`): a test page triggers downloads; assert the host or WebSocket mock receives URL, cookies and referrer; assert the browser fallback works when the app is absent.
 - Firefox: `web-ext lint` plus a scripted run with `web-ext`.
 - Manual on each store build: install from a store-like zip, check native messaging on all 3 OSes.
+
+## 7. The app's Browser extension page, and where downloads go (2026-10-11)
+
+- **Which browsers have it.** The app reads each browser's profile files, read-only (`crates/api/src/browsers.rs`): Chromium `Preferences` / `Secure Preferences` (`extensions.settings.<id>`; a non-empty `disable_reasons`, or `"state": 0` in older versions, means turned off) and Firefox `extensions.json` (`active`, `userDisabled`), over every profile. Each browser shows Connected, Added, Turned off or Not added.
+- **Connected** means the extension pinged the app in the last 30 days. Pings carry `browser` and `version`; the host adds which store's copy started it (from its launch arguments, never from the message). The extension pings when the browser starts, when it's installed, and whenever its popup or settings page opens.
+- **Adding it.** "Add to <browser>" starts that browser (not the default one) at Fuselane's store page; "Turn on" starts it at its own extensions page. Only fixed pages, no shell (`apps/desktop/src-tauri/src/browser_open.rs`). The first-run tour has a step for it, and Downloads shows a dismissible banner while no browser has it on.
+- **Where downloads go** is the app's setting: everything, files over a size (1 MB to 3 GB), or none. Each ping's reply carries it (`handoff: {enabled, minBytes}`) and the extension copies it into its rules; changing the switch or size in the extension sends `handoff.set`. Sites and file types stay the extension's own.
+- **Without the app,** the popup says so and links to fuselane.app/download; with the app closed, "Open Fuselane" opens `fuselane://open`, which every OS hands to the app.
+- **Tests:** unit (`browsers.rs`, `server.rs`, `test/status.test.ts`), UI (`apps/desktop/tests/extension.spec.ts`), and the whole chain with the real app (`apps/extension/e2e/app.spec.ts`, opt-in with `FUSELANE_DESKTOP`): ping, the setting both ways, a 3 MB download handed over and checked by SHA-256, and the negatives (a small file and hand-off off both stay in the browser).

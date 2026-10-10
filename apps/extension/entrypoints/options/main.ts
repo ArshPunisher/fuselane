@@ -1,6 +1,6 @@
 import { DEFAULT_RULES, normalizeRules } from '@fuselane/capture'
 import { readForm, toForm, type Field, type FormValues } from '../../lib/settings-form.ts'
-import { appStatus } from '../../lib/status.ts'
+import { appStatus, browserId, sendHandoff, settle } from '../../lib/status.ts'
 import { SESSION_PERMISSIONS, sessionAllowed } from '../../lib/session.ts'
 import './style.css'
 
@@ -39,16 +39,28 @@ function showErrors(errors: Partial<Record<Field, string>>) {
   }
 }
 
+const ask = (m: unknown) => browser.runtime.sendNativeMessage('app.fuselane.host', m as object)
+
 async function load() {
-  const { rules } = await browser.storage.local.get('rules')
-  fill(toForm(normalizeRules(rules)))
+  const got = await browser.storage.local.get(['rules', 'handoffPending'])
+  const rules = normalizeRules(got.rules)
+  fill(toForm(rules))
   stored = JSON.stringify(values())
   const status = $<HTMLParagraphElement>('#status')
-  const s = await appStatus((m) =>
-    browser.runtime.sendNativeMessage('app.fuselane.host', m as object),
-  )
+  const s = await appStatus(ask, {
+    browser: browserId(navigator.userAgent, 'brave' in navigator),
+    version: browser.runtime.getManifest().version,
+  })
   status.textContent = s.text
   status.dataset.state = s.state
+  // The app decides where downloads go (unless we have a change it hasn't seen):
+  // show its setting unless the person has already started editing.
+  if (!dirty()) {
+    const now = await settle(s, rules, got.handoffPending === true, ask)
+    await browser.storage.local.set({ rules: now.rules, handoffPending: now.pending })
+    fill(toForm(now.rules))
+    stored = JSON.stringify(values())
+  }
 }
 
 form.addEventListener('submit', async (e) => {
@@ -66,7 +78,10 @@ form.addEventListener('submit', async (e) => {
   save.disabled = true
   save.textContent = 'Saving…'
   try {
-    await browser.storage.local.set({ rules: r.rules })
+    // The app keeps the on/off switch and the size too; tell it, or keep the
+    // change waiting for the next time it's running.
+    const delivered = await sendHandoff(ask, r.rules)
+    await browser.storage.local.set({ rules: r.rules, handoffPending: !delivered })
     // Show what was stored, cleaned: "20mb" comes back as "20 MB".
     fill(toForm(r.rules))
     stored = JSON.stringify(values())

@@ -82,6 +82,8 @@ test('the status line tells the three app states apart', async () => {
   assert.deepEqual(await appStatus(async () => ({ type: 'pong', app: { version: '0.1.0' } })), {
     state: 'connected',
     text: 'Connected to Fuselane 0.1.0.',
+    version: '0.1.0',
+    handoff: undefined,
   })
   for (const reply of [{ type: 'pong' }, { error: 'app not running' }, undefined, 'junk'])
     assert.equal((await appStatus(async () => reply)).state, 'not-running', JSON.stringify(reply))

@@ -1,6 +1,7 @@
 import { normalizeRules, type Rules } from '@fuselane/capture'
 import { handOff, offerLink, type Item } from '../lib/handoff.ts'
 import { getSession } from '../lib/session.ts'
+import { appStatus, browserId, settle } from '../lib/status.ts'
 
 const HOST = 'app.fuselane.host'
 
@@ -34,12 +35,29 @@ function item(d: Browser.downloads.DownloadItem): Item {
   }
 }
 
+/**
+ * Says hello to the app when the browser starts, so its Browser extension page
+ * shows this browser as connected, and takes its setting for where downloads go.
+ */
+async function checkIn() {
+  const s = await appStatus(ask, {
+    browser: browserId(navigator.userAgent, 'brave' in navigator),
+    version: browser.runtime.getManifest().version,
+  })
+  const { handoffPending } = await browser.storage.local.get('handoffPending')
+  const now = await settle(s, await rules(), handoffPending === true, ask)
+  await browser.storage.local.set({ rules: now.rules, handoffPending: now.pending })
+}
+
 export default defineBackground(() => {
+  browser.runtime.onStartup.addListener(() => void checkIn())
+
   browser.downloads.onCreated.addListener(async (d) => {
     await handOff(item(d), await rules(), downloads, ask, undefined, getSession)
   })
 
   browser.runtime.onInstalled.addListener(() => {
+    void checkIn()
     browser.contextMenus.create({
       id: 'fuselane-download',
       title: 'Download with Fuselane',
