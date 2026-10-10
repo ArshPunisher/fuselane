@@ -35,7 +35,7 @@ test('a torrent shows each network credited with verified bytes', async ({ page 
     (await table.locator('thead th').allTextContents()).findIndex((h) => h.trim() === 'Share') + 1
   const shares = await table.locator(`tbody tr td:nth-child(${col})`).allTextContents()
   expect(shares.reduce((a, s) => a + parseInt(s, 10), 0)).toBeGreaterThanOrEqual(99)
-  await expect(page.locator('.torrent-head .speed')).toContainText('MB/s')
+  await expect(page.locator('[data-testid="fuse-core"] .speed')).toContainText('MB/s')
   await expect(page.getByText('2 of 5', { exact: true })).toBeVisible()
 })
 
@@ -179,7 +179,9 @@ test('a damaged or oversized dropped file gets a clear error', async ({ page }) 
 test('a finished torrent keeps its credit but offers no file choice', async ({ page }) => {
   await page.goto('/?speed=50')
   await page.getByRole('button', { name: /^Sprite Fright \(2021\) 4K/ }).click()
-  await expect(page.locator('.torrent-head .speed')).toHaveText('100%', { timeout: 15000 })
+  await expect(page.locator('[data-testid="fuse-core"] .speed')).toHaveText('100%', {
+    timeout: 15000,
+  })
   await expect(page.getByRole('region', { name: 'Files' })).toBeHidden()
   await expect(page.getByRole('tab', { name: 'Files' })).toHaveCount(0)
   const peers = await page
@@ -229,10 +231,12 @@ test('a finished torrent shares, then stops when asked', async ({ page }) => {
   await page.goto('/?share=1&speed=50')
   await page.getByRole('button', { name: /^Sprite Fright \(2021\) 4K/ }).click()
   const article = page.getByRole('article')
-  await expect(article.getByText('Sharing', { exact: true })).toBeVisible({ timeout: 15000 })
+  await expect(article.getByRole('definition').filter({ hasText: 'Sharing' })).toBeVisible({
+    timeout: 15000,
+  })
   await expect(article.getByText('Shared', { exact: true })).toBeVisible()
   await article.getByRole('button', { name: 'Stop sharing' }).click()
-  await expect(article.getByText('Done', { exact: true })).toBeVisible()
+  await expect(article.getByRole('definition').filter({ hasText: 'Done' })).toBeVisible()
   await expect(article.getByRole('button', { name: 'Stop sharing' })).toBeHidden()
 })
 
@@ -283,13 +287,14 @@ test('a torrent shows its pieces filling in and who it is talking to', async ({ 
   await expect(page.getByRole('tabpanel')).toContainText('.mkv')
 })
 
-test('the big speed is the sum of the networks under it, and the sidebar says what its total counts', async ({
+test('the big speed is the sum of the networks round the ring, and the sidebar says what its total counts', async ({
   page,
 }) => {
   await page.goto('/?freeze=3')
   await page.getByRole('button', { name: /^Sprite Fright \(2021\) 4K/ }).click()
-  const split = page.getByRole('list', { name: 'Speed by network' })
-  await expect(split).toBeVisible()
+  // The ring shows each network's speed beside it, like a download's.
+  const split = page.locator('[data-testid="fuse-core"] .core-labels')
+  await expect(split.locator('li')).toHaveCount(3)
   // Read both once the glide has settled.
   await expect
     .poll(async () => {
@@ -298,7 +303,9 @@ test('the big speed is the sum of the networks under it, and the sidebar says wh
         .evaluateAll((els) =>
           els.map((e) => parseFloat(e.firstChild?.textContent ?? '0')).reduce((a, b) => a + b, 0),
         )
-      const big = parseFloat((await page.locator('.torrent-head .speed').textContent()) ?? '0')
+      const big = parseFloat(
+        (await page.locator('[data-testid="fuse-core"] .speed').textContent()) ?? '0',
+      )
       return Math.abs(lanes - big) <= 0.15
     })
     .toBe(true)

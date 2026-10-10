@@ -16,13 +16,23 @@ import { bytes, eta, percent, rate, rateText } from '../lib/format'
 import { assignLanes, kindLabel, netTitle } from '../lib/lanes'
 import { usePoll } from '../lib/poll'
 import { LiveRate } from './LiveRate'
-import { SpeedSplit } from './SpeedSplit'
+import { FuseCore } from './FuseCore'
+import { Stream } from './Stream'
 import { BIN, RemoveDialog } from './RemoveDialog'
 import { Orb } from './Orb'
 import { PiecesMap } from './PiecesMap'
 import { REVEAL_LABEL } from './TransferDetail'
-import { mark, t, tb } from '../lib/i18n'
-import type { FilePriority, NetView, PeerView, TorrentNetView, TorrentView } from '../lib/types'
+import { mark, t, tb, tn } from '../lib/i18n'
+import type { History } from '../lib/store'
+import type {
+  FilePriority,
+  JobView,
+  Live,
+  NetView,
+  PeerView,
+  TorrentNetView,
+  TorrentView,
+} from '../lib/types'
 
 export const TORRENT_WORD: Record<TorrentView['status'], string> = {
   checking: mark('Checking'),
@@ -36,6 +46,133 @@ export const TORRENT_WORD: Record<TorrentView['status'], string> = {
 /** A torrent's state in a word, in the language in use. */
 export function torrentWord(s: TorrentView['status']): string {
   return t(TORRENT_WORD[s])
+}
+
+/** Ticks round the ring, like a download's. */
+const TICKS = 180
+
+/** Golden-ratio steps: spreads each network's share evenly round the ring. */
+const GOLDEN = 0.6180339887
+
+/**
+ * A torrent as the ring a download shows: its pieces fill the ticks, and each
+ * filled tick takes the colour of a network in proportion to the verified data
+ * that network carried (pieces don't say which one fetched them, the shares
+ * do). Pieces part-way in are in flight on the networks moving data now.
+ */
+function torrentCore(
+  tor: TorrentView,
+  nets: (TorrentNetView & { label: string; kind: string })[],
+  cells: number[] | null,
+): { job: JobView; live: Live } {
+  const status: JobView['status'] =
+    tor.status === 'downloading' || tor.status === 'checking'
+      ? 'running'
+      : tor.status === 'completed' || tor.status === 'seeding'
+        ? 'completed'
+        : tor.status === 'failed'
+          ? 'failed'
+          : 'paused'
+  const credited = nets.reduce((a, n) => a + n.credited, 0)
+  const cumulative: number[] = []
+  let run = 0
+  for (const n of nets) {
+    run += credited ? n.credited / credited : 1 / Math.max(1, nets.length)
+    cumulative.push(run)
+  }
+  const moving = nets.map((n, i) => (n.rate > 0 ? i : -1)).filter((i) => i >= 0)
+  const frac = tor.total ? tor.done / tor.total : 0
+  const ticks: number[] = []
+  for (let i = 0; i < TICKS; i++) {
+    const fill = cells?.length
+      ? (cells[Math.min(cells.length - 1, Math.floor((i * cells.length) / TICKS))] ?? 0)
+      : i < frac * TICKS
+        ? 100
+        : 0
+    const pick = (i * GOLDEN) % 1
+    const owner = fill >= 100 ? cumulative.findIndex((c) => pick < c) + 1 : 0
+    const inflight =
+      fill > 0 && fill < 100 && moving.length ? (moving[i % moving.length] ?? 0) + 1 : 0
+    ticks.push(fill, owner, inflight)
+  }
+  const job = {
+    id: -1,
+    status,
+    written: tor.done,
+    total: tor.total,
+  } as JobView
+  const live: Live = {
+    id: -1,
+    written: tor.done,
+    total: tor.total,
+    rate: tor.rate,
+    networks: nets.map((n) => ({
+      name: n.name,
+      label: n.label,
+      kind: n.kind,
+      bytes: n.credited,
+      rate: n.rate,
+      streams: n.peers,
+      dead: status === 'running' && n.peers === 0,
+    })),
+    ticks,
+    retries: 0,
+    hedges: 0,
+  }
+  return { job, live }
+}
+
+/** Five samples a second of each network's speed, for the stream graph. */
+function useRateHistory(names: string[], rates: number[]): History {
+  const latest = useRef({ names, rates })
+  latest.current = { names, rates }
+  const [h, setH] = useState<History>({ names, rates: [] })
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setH((prev) => {
+        const { names: n, rates: r } = latest.current
+        const same = prev.names.join() === n.join()
+        return { names: n, rates: [...(same ? prev.rates : []), r].slice(-300) }
+      })
+    }, 200)
+    return () => clearInterval(timer)
+  }, [])
+  return h
+}
+
+/** The middle of the ring: the speed while it downloads, otherwise how far. */
+function TorrentCenter({ tor, live, pct }: { tor: TorrentView; live: Live; pct: number }) {
+  if (tor.status === 'downloading') {
+    const moving = live.networks.filter((n) => n.rate > 0)
+    const best = moving.reduce<(typeof moving)[number] | null>(
+      (a, n) => (!a || n.rate > a.rate ? n : a),
+      null,
+    )
+    const total = moving.reduce((a, n) => a + n.rate, 0)
+    const faster = moving.length > 1 && best && best.rate > 0 ? total / best.rate : 0
+    return (
+      <>
+        <LiveRate value={total} />
+        <p className="speed-sub">
+          {faster >= 1.1 && best
+            ? t('{times}x faster than {network}', {
+                times: faster.toFixed(1),
+                network: netTitle(best),
+              })
+            : tn(Math.max(1, moving.length), '{n} network', '{n} networks')}
+        </p>
+      </>
+    )
+  }
+  return (
+    <>
+      <p className="speed num">
+        {Math.floor(pct)}
+        <span className="unit">%</span>
+      </p>
+      <p className="speed-sub">{torrentWord(tor.status)}</p>
+    </>
+  )
 }
 
 /** Torrent networks with the names and kinds the Networks page knows. */
@@ -329,6 +466,11 @@ export function TorrentDetail({ t: tor, onBack }: { t: TorrentView; onBack: (() 
     [backend, tor.id, shownTab],
   )
   const peerCount = nets.reduce((a, n) => a + n.peers, 0)
+  const core = torrentCore(tor, nets, cells)
+  const history = useRateHistory(
+    nets.map((n) => n.name),
+    nets.map((n) => n.rate),
+  )
   const tabs: [Tab, string][] = [
     ['networks', mark('Networks')],
     ['peers', mark('Peers')],
@@ -384,77 +526,55 @@ export function TorrentDetail({ t: tor, onBack }: { t: TorrentView; onBack: (() 
       )}
 
       <div className="torrent-body">
-        <div className="torrent-head">
-          {tor.status === 'downloading' ? (
-            <>
-              <LiveRate value={tor.rate} />
-              <SpeedSplit
-                parts={nets.map((n, i) => ({
-                  name: netTitle(n),
-                  lane: lanes[i] ?? 'steel',
-                  rate: n.rate,
-                }))}
-              />
-            </>
-          ) : (
-            <p className="speed num">
-              {Math.floor(pct)}
-              <span className="unit">%</span>
-            </p>
-          )}
-          <div
-            className="bar torrent-bar"
-            data-status={tor.status === 'completed' ? 'completed' : 'running'}
-          >
-            <div className="bar-fill" style={{ width: `${pct}%` }}>
-              {tor.done > 0 &&
-                nets.map((n, i) => (
-                  <span
-                    key={n.name}
-                    style={{
-                      width: `${(n.credited / tor.done) * 100}%`,
-                      background: `var(--lane-${lanes[i]})`,
-                    }}
-                  />
-                ))}
-            </div>
-          </div>
-          <dl className="facts">
-            <div>
-              <dt>{t('Saved')}</dt>
-              <dd className="num">
-                {bytes(tor.done)}
-                {tor.status !== 'completed' && (
-                  <span className="of"> {t('of {total}', { total: bytes(tor.total) })}</span>
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>{tor.status === 'downloading' ? t('Time left') : t('Status')}</dt>
-              <dd className="num">
-                {tor.status === 'downloading'
-                  ? left || t('Working it out')
-                  : torrentWord(tor.status)}
-              </dd>
-            </div>
-            {tor.uploaded > 0 && (
+        <div className="detail-body">
+          <FuseCore
+            job={core.job}
+            live={core.live}
+            center={<TorrentCenter tor={tor} live={core.live} pct={pct} />}
+          />
+          <div className="detail-side">
+            <dl className="facts">
               <div>
-                <dt>{t('Shared')}</dt>
+                <dt>{t('Saved')}</dt>
                 <dd className="num">
-                  {bytes(tor.uploaded)}
-                  {tor.total > 0 && (
-                    <span className="of"> ({(tor.uploaded / tor.total).toFixed(2)}x)</span>
+                  {bytes(tor.done)}
+                  {tor.status !== 'completed' && (
+                    <span className="of"> {t('of {total}', { total: bytes(tor.total) })}</span>
                   )}
                 </dd>
               </div>
-            )}
-            <div>
-              <dt>{t('Files')}</dt>
-              <dd className="num">
-                {t('{done} of {total}', { done: tor.selectedCount, total: tor.fileCount })}
-              </dd>
-            </div>
-          </dl>
+              <div>
+                <dt>{tor.status === 'downloading' ? t('Time left') : t('Status')}</dt>
+                <dd className="num">
+                  {tor.status === 'downloading'
+                    ? left || t('Working it out')
+                    : torrentWord(tor.status)}
+                </dd>
+              </div>
+              <div>
+                <dt>{t('Peers')}</dt>
+                <dd className="num">{peerCount}</dd>
+              </div>
+              {tor.uploaded > 0 && (
+                <div>
+                  <dt>{t('Shared')}</dt>
+                  <dd className="num">
+                    {bytes(tor.uploaded)}
+                    {tor.total > 0 && (
+                      <span className="of"> ({(tor.uploaded / tor.total).toFixed(2)}x)</span>
+                    )}
+                  </dd>
+                </div>
+              )}
+              <div>
+                <dt>{t('Files')}</dt>
+                <dd className="num">
+                  {t('{done} of {total}', { done: tor.selectedCount, total: tor.fileCount })}
+                </dd>
+              </div>
+            </dl>
+            {tor.status === 'downloading' && <Stream history={history} lanes={lanes} />}
+          </div>
         </div>
 
         {cells && cells.length > 0 && (

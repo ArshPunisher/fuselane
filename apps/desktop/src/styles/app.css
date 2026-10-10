@@ -1891,7 +1891,6 @@ kbd {
 .torrent-body {
   display: grid;
   gap: 22px;
-  max-width: 760px;
   min-width: 0;
 }
 
@@ -2957,41 +2956,6 @@ html[data-hidden] *::after {
   padding-left: 4px;
   color: var(--mute);
   font-size: 11px;
-}
-
-.speed-split {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 16px;
-  margin: 2px 0 14px;
-  padding: 0;
-  list-style: none;
-  color: var(--body);
-  font-size: 12px;
-}
-
-.speed-split li {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.speed-split i {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-pill);
-}
-
-.speed-split .num {
-  color: var(--ink);
-}
-
-.speed-split .unit,
-.speed-split .eq {
-  color: var(--mute);
-  font-size: 11px;
-  font-weight: 400;
-  letter-spacing: 0;
 }
 
 .nets tfoot td {

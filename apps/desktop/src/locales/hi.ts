@@ -428,9 +428,7 @@ export const hi: Readonly<Record<string, string>> = {
   'Each network is credited only with pieces that passed their checksum.':
     'हर नेटवर्क के नाम सिर्फ़ वे टुकड़े गिने जाते हैं जिनका चेकसम सही निकला।',
 
-  // FuseCore, SpeedSplit, Stream
-  'Speed by network': 'हर नेटवर्क की स्पीड',
-  'adds up to the speed above': 'मिलकर ऊपर वाली स्पीड बनती है',
+  // FuseCore, Stream
   '{n} s ago': '{n} सेकंड पहले',
   now: 'अभी',
 
