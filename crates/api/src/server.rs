@@ -50,6 +50,11 @@ pub trait Handler: Send + Sync + 'static {
     fn page_video(&self, _url: String) -> bool {
         false
     }
+    /// A feed the person wants to follow (the extension's "Follow this site's
+    /// feed"): the app opens Feeds with it. False when it can't.
+    fn page_feed(&self, _url: String) -> bool {
+        false
+    }
 }
 
 /// A page link from the extension: http(s) only, and not absurdly long.
@@ -107,6 +112,20 @@ pub async fn answer(handler: &dyn Handler, line: &str) -> Value {
                 Some(url) => {
                     if handler.page_video(url) {
                         json!({"v": 1, "type": "page.video.opened"})
+                    } else {
+                        declined(Decline::Unsupported)
+                    }
+                }
+                None => declined(Decline::Invalid),
+            };
+            json!({"id": id, "result": result})
+        }
+        Some("page.feed") => {
+            let params = req.get("params").cloned().unwrap_or(Value::Null);
+            let result = match page_url(&params) {
+                Some(url) => {
+                    if handler.page_feed(url) {
+                        json!({"v": 1, "type": "page.feed.opened"})
                     } else {
                         declined(Decline::Unsupported)
                     }
@@ -291,6 +310,31 @@ mod tests {
         fn page_video(&self, url: String) -> bool {
             url.contains("youtube")
         }
+        fn page_feed(&self, url: String) -> bool {
+            url.contains("feed")
+        }
+    }
+
+    #[tokio::test]
+    async fn a_feed_opens_feeds_and_bad_links_are_refused() {
+        let ok = answer(
+            &Fake,
+            r#"{"id":1,"method":"page.feed","params":{"url":"https://blog.example/feed.xml"}}"#,
+        )
+        .await;
+        assert_eq!(ok["result"]["type"], "page.feed.opened");
+        let no = answer(
+            &Fake,
+            r#"{"id":2,"method":"page.feed","params":{"url":"https://example.org/"}}"#,
+        )
+        .await;
+        assert_eq!(no["result"]["reason"], "unsupported");
+        let bad = answer(
+            &Fake,
+            r#"{"id":3,"method":"page.feed","params":{"url":"file:///etc/feed"}}"#,
+        )
+        .await;
+        assert_eq!(bad["result"]["reason"], "invalid");
     }
 
     #[tokio::test]
