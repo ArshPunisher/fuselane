@@ -27,6 +27,19 @@
 
 ## Log
 
+### 2026-10-10, later (beta.9 published; beta.10 round built, not released)
+
+- **Published:** `v0.1.0-beta.9` (verified: checksums, universal binary, self-test incl. Nearby, feed for 4 platforms, probe unchanged; Homebrew cask, homepage fuselane.app). fuselane.app live; IndexNow accepted. Chrome Web Store listing live (0.1.0); new images, captions and 0.2.0 zip ready in `apps/extension`.
+- **Built for beta.10 (tested, committed, pushed; not released):**
+  - B10.1 Network check per network (speed via Cloudflare's free endpoint, latency, jitter, bufferbloat grade, DNS), all together, outage log, provider report. Found and fixed: some networks drop the second of two DNS queries, so lookups waited 3 s.
+  - B10.2 Text and clipboard between computers (LocalSend-compatible messages; trusted computers copy straight to the clipboard).
+  - B10.3 Folders: send a folder as a folder; keep a folder in sync with a trusted computer (one way, nothing deleted). Received paths are cleaned and can't escape the save folder.
+  - B10.4 Video from pages with the person's own yt-dlp, downloaded over every network (246 MB 1080p over Wi-Fi + Ethernet in 18.6 s), ffmpeg join, Audio (MP3); the extension's popup hands the page over.
+  - B10.5 Data used per network per day, with a 30-day chart.
+  - Site: "Built in" section and two FAQ entries (deploy with beta.10).
+- **Next:** owner reviews beta.10 in the demo (localhost:5191) and says release; then publish beta.10, deploy the site (`tools/deploy-site.sh`), upload extension 0.2.0 with the new images.
+- **Waiting on the owner:** Google Search Console (Domain property, Cloudflare verification, submit the sitemap); the Chrome Web Store upload.
+
 ### 2026-10-10 (beta.9 round: Send redesign, site on fuselane.app, ten download features)
 
 - **Done (tested, committed; not released):**
