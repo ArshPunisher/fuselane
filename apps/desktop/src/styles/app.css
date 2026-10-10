@@ -1498,6 +1498,14 @@ h2 {
   .update-banner {
     flex-wrap: wrap;
   }
+
+  /* The sentence takes the row beside its icon and the buttons go below it, so a
+     long button label (in Hindi, say) never squeezes the text into a narrow column. */
+  .update-banner > p,
+  .update-banner > span,
+  .update-banner > .update-text {
+    flex: 1 1 calc(100% - 30px);
+  }
 }
 
 .netlist-row {
