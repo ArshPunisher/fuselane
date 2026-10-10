@@ -722,3 +722,269 @@
     height: 44px;
   }
 }
+
+/* ---------- The race: one network against both ---------- */
+
+.race {
+  display: grid;
+  gap: 26px;
+  padding: clamp(18px, 3vw, 36px);
+}
+
+.race-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 20px;
+}
+
+.seg {
+  display: inline-flex;
+  gap: 4px;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--canvas-deep);
+}
+
+.seg label {
+  position: relative;
+  cursor: pointer;
+}
+
+.seg input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.seg span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  color: var(--body);
+  font-size: 14px;
+  font-weight: 500;
+  transition:
+    background-color var(--dur-base),
+    color var(--dur-base);
+}
+
+.seg input:checked + span {
+  background: var(--surface-3);
+  color: var(--ink);
+}
+
+.seg input:focus-visible + span {
+  outline: 2px solid var(--fuse);
+  outline-offset: 2px;
+}
+
+.race-clock {
+  display: grid;
+  margin-left: auto;
+  text-align: right;
+}
+
+.race-clock-label {
+  color: var(--mute);
+  font-size: 12.5px;
+}
+
+.race-clock .num {
+  color: var(--ink);
+  font-size: clamp(1.6rem, 1.2rem + 1.2vw, 2.3rem);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+}
+
+#race-run svg {
+  width: 16px;
+  height: 16px;
+}
+
+.race-lanes {
+  list-style: none;
+  display: grid;
+  gap: 26px;
+}
+
+.lane {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'head head'
+    'track time';
+  align-items: center;
+  gap: 10px 18px;
+}
+
+.lane-head {
+  grid-area: head;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+}
+
+.lane-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.lane-key {
+  width: 18px;
+  height: 4px;
+  border-radius: 4px;
+}
+
+.lane-key.tide {
+  background: var(--tide);
+}
+
+.lane-key.both {
+  background: var(--fuse);
+  box-shadow:
+    0 -3px 0 -1px var(--tide),
+    0 3px 0 -1px var(--iris);
+}
+
+.lane-speed {
+  color: var(--mute);
+  font-size: 13.5px;
+}
+
+/* A ruler, not a filled track: the bar grows over hairline marks. */
+.track {
+  grid-area: track;
+  position: relative;
+  height: 30px;
+  container-type: inline-size;
+  background:
+    repeating-linear-gradient(
+        90deg,
+        var(--hairline-strong) 0 1px,
+        transparent 1px calc(10% - 0.1px)
+      )
+      bottom / 100% 7px no-repeat,
+    linear-gradient(var(--hairline-strong), var(--hairline-strong)) bottom / 100% 1px no-repeat;
+}
+
+.track .fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 4px;
+  bottom: 9px;
+  border-radius: 5px;
+  background: var(--tide);
+  transform: scaleX(var(--p, 0));
+  transform-origin: left;
+}
+
+.fused .track .fill {
+  background:
+    linear-gradient(var(--tide), var(--tide)) top / 100% 2px no-repeat,
+    linear-gradient(var(--iris), var(--iris)) bottom / 100% 2px no-repeat,
+    linear-gradient(90deg, var(--fuse-hot), var(--fuse));
+}
+
+.track .head {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin: -8.5px 0 0 -6px;
+  border-radius: 999px;
+  background: var(--ink);
+  box-shadow: 0 0 0 4px color-mix(in oklch, var(--ink) 14%, transparent);
+  transform: translateX(calc(var(--p, 0) * 100cqw));
+}
+
+.race:not([data-running]) .track .head,
+.track[data-done] .head {
+  opacity: 0;
+  transition: opacity var(--dur-base);
+}
+
+.fused .track[data-done] .fill {
+  box-shadow: 0 6px 22px -6px var(--fuse-glow);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .fused .track[data-done] .fill {
+    animation: ignite 0.9s var(--ease-out);
+  }
+}
+
+@keyframes ignite {
+  30% {
+    filter: brightness(1.35) saturate(1.2);
+  }
+}
+
+.lane-time {
+  grid-area: time;
+  min-width: 7.5em;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: right;
+  transition:
+    opacity var(--dur-base),
+    transform var(--dur-base) var(--ease-out);
+}
+
+.lane-time:empty::before {
+  content: '';
+}
+
+.race[data-running] .lane-time[data-wait] {
+  opacity: 0;
+  transform: translateX(-6px);
+}
+
+.fused .lane-time {
+  color: var(--fuse);
+}
+
+.race-result {
+  padding-top: 18px;
+  border-top: 1px solid var(--hairline);
+  color: var(--body);
+}
+
+.race-note {
+  max-width: 44em;
+  margin-top: 18px;
+  color: var(--mute);
+  font-size: 14px;
+}
+
+@media (max-width: 639px) {
+  .race-clock {
+    margin-left: 0;
+    text-align: left;
+    order: 3;
+    flex: 1;
+  }
+  .lane {
+    grid-template-areas:
+      'head head'
+      'track track'
+      'time time';
+  }
+  .lane-time {
+    text-align: left;
+  }
+}

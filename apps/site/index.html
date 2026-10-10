@@ -280,6 +280,70 @@
         </div>
       </section>
 
+      <section class="section race-sec" id="race" aria-labelledby="race-title">
+        <div class="wrap">
+          <div class="section-head reveal">
+            <h2 id="race-title">One network, or both at once</h2>
+            <p>
+              The speeds come from a real network check on one Mac: Wi-Fi 117 Mbps, Ethernet 113
+              Mbps. Pick a file size and race them.
+            </p>
+          </div>
+          <div class="race panel reveal">
+            <div class="race-top">
+              <fieldset class="seg">
+                <legend class="sr-only">File size</legend>
+                <label><input type="radio" name="race-size" value="1" /><span>1 GB</span></label>
+                <label
+                  ><input type="radio" name="race-size" value="10" checked /><span
+                    >10 GB</span
+                  ></label
+                >
+                <label><input type="radio" name="race-size" value="50" /><span>50 GB</span></label>
+              </fieldset>
+              <p class="race-clock">
+                <span class="race-clock-label">Elapsed</span>
+                <span class="num" id="race-clock">11:24</span>
+              </p>
+              <button class="btn btn-small" type="button" id="race-run">
+                <i data-icon="replay"></i>Race again
+              </button>
+            </div>
+            <ol class="race-lanes">
+              <li class="lane" data-mbps="117">
+                <div class="lane-head">
+                  <span class="lane-name"><span class="lane-key tide"></span>Wi-Fi alone</span>
+                  <span class="lane-speed num">117 Mbps</span>
+                </div>
+                <div class="track" style="--p: 1">
+                  <span class="fill"></span><span class="head"></span>
+                </div>
+                <output class="lane-time num" id="race-one">11 min 24 s</output>
+              </li>
+              <li class="lane fused" data-mbps="230">
+                <div class="lane-head">
+                  <span class="lane-name"
+                    ><span class="lane-key both"></span>Wi-Fi and Ethernet, with Fuselane</span
+                  >
+                  <span class="lane-speed num">117 + 113 Mbps</span>
+                </div>
+                <div class="track" style="--p: 1">
+                  <span class="fill"></span><span class="head"></span>
+                </div>
+                <output class="lane-time num" id="race-both">5 min 48 s</output>
+              </li>
+            </ol>
+            <p class="race-result" id="race-result" aria-live="polite">
+              Both together: 5 min 48 s, which is 5 min 36 s sooner.
+            </p>
+          </div>
+          <p class="race-note">
+            Times are worked out from those speeds. Real results depend on the server and on your
+            lines: two cables to the same router share one line, so they won't add up.
+          </p>
+        </div>
+      </section>
+
       <section class="section wrap" id="features" aria-labelledby="features-title">
         <div class="section-head reveal">
           <h2 id="features-title">Everything a download manager should do. Over every network.</h2>

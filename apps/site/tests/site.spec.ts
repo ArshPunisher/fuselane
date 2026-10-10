@@ -263,6 +263,24 @@ test('how it works follows the scroll: split, spread, fuse, and back', async ({ 
   await expect(page.locator('.proof-list')).toContainText('246 MB 1080p video')
 })
 
+test('the race works out both times from the measured speeds', async ({ page }) => {
+  await stub(page)
+  await page.goto('/')
+  const race = page.locator('.race')
+  await race.evaluate((el) => el.scrollIntoView({ block: 'center', behavior: 'instant' }))
+  // 10 GB at 117 Mbps, and at 117 + 113 Mbps.
+  await expect(page.locator('#race-one')).toHaveText('11 min 24 s')
+  await expect(page.locator('#race-both')).toHaveText('5 min 48 s')
+  await expect(race).not.toHaveAttribute('data-running', '', { timeout: 8000 })
+  await expect(page.locator('#race-clock')).toHaveText('11:24')
+  await page.getByRole('radio', { name: '50 GB' }).check()
+  await expect(page.locator('#race-one')).toHaveText('56 min 59 s')
+  await expect(page.locator('#race-result')).toHaveText(
+    'Both together: 28 min 59 s, which is 28 min sooner.',
+  )
+  await expect(page.locator('#race-clock')).toHaveText('56:59', { timeout: 8000 })
+})
+
 test('the nav marks the current page and every page links to privacy', async ({ page }) => {
   await stub(page)
   for (const [path, name] of [

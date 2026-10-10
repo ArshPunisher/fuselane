@@ -5,6 +5,7 @@ import './site.css'
 import './css/home.css'
 import { startHero } from './hero'
 import { startProof, startStory } from './story'
+import { startRace } from './race'
 
 async function primaryDownload() {
   const btn = document.querySelector<HTMLAnchorElement>('#primary-download')
@@ -22,4 +23,5 @@ async function primaryDownload() {
 startHero()
 startProof()
 startStory()
+startRace()
 void primaryDownload()
