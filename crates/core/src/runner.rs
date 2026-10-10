@@ -9,8 +9,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use fuselane_engine_http::download::{
-    BoxIo, Cancel, CheckpointFn, Connect, Headers, JobError, Network, ProgressFn, Report, Resume,
-    SnapshotFn, Source, Tuning, download_with,
+    BoxIo, Cancel, CheckpointFn, Connect, Headers, JobError, LaneEventFn, LaneTrouble, Network,
+    ProgressFn, Report, Resume, SnapshotFn, Source, Tuning, download_with,
 };
 use fuselane_netif::Interface;
 
@@ -162,26 +162,48 @@ where
         .unwrap_or_else(|_| Err(Error::new(ErrorKind::TimedOut, "connection timed out")))
 }
 
+/// One network's lane to `host:port`: pinned connections to `addrs` (Happy
+/// Eyeballs), or tunnels through the network's `proxy` when it has one (8.4),
+/// with TLS on top for https. A proxy that fails says why ([`LaneTrouble`]).
+#[allow(clippy::too_many_arguments)]
 pub fn network_for(
     id: u32,
     iface: Interface,
     addrs: Arc<Vec<SocketAddr>>,
     https: bool,
     host: Arc<str>,
+    port: u16,
     timeout: Duration,
+    proxy: Option<Arc<crate::proxy::NetProxy>>,
 ) -> Network {
     let name = iface.name.clone();
     let iface = Arc::new(iface);
     // The address that last worked on this network is tried first next time.
     let preferred: Arc<std::sync::Mutex<Option<SocketAddr>>> = Arc::default();
     let connect: Connect = Arc::new(move |_| {
-        let (iface, addrs, host, preferred) = (
+        let (iface, addrs, host, preferred, proxy) = (
             iface.clone(),
             addrs.clone(),
             host.clone(),
             preferred.clone(),
+            proxy.clone(),
         );
         Box::pin(async move {
+            if let Some(np) = proxy {
+                let tcp =
+                    fuselane_transport::proxy::connect(&np.proxy, &iface, &host, port, timeout)
+                        .await
+                        .map_err(|e| proxy_trouble(&e, &np))?;
+                // End-to-end TLS through the tunnel: the proxy sees only host:port.
+                return if https {
+                    let tls = fuselane_transport::tls(tcp, &host)
+                        .await
+                        .map_err(std::io::Error::other)?;
+                    Ok(Box::new(tls) as BoxIo)
+                } else {
+                    Ok(Box::new(tcp) as BoxIo)
+                };
+            }
             let last = *preferred
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -214,6 +236,21 @@ pub fn network_for(
         connect,
         mirror: None,
     }
+}
+
+/// A proxy failure as the engine shows it: what happened and what to do.
+fn proxy_trouble(
+    e: &fuselane_transport::proxy::ProxyError,
+    np: &crate::proxy::NetProxy,
+) -> std::io::Error {
+    let (what, todo) = crate::proxy::problem(e, &np.label, &np.proxy);
+    let lasting = e.lasting();
+    let message = if lasting {
+        format!("{what} {todo}")
+    } else {
+        format!("{what} {todo} Fuselane keeps trying.")
+    };
+    LaneTrouble { message, lasting }.into_io()
 }
 
 /// The plain-language message for each failure (ERRORS.md §2).
@@ -286,6 +323,9 @@ pub struct RunOptions {
     pub mirrors: Vec<String>,
     /// Why a mirror wasn't used, in plain words, for the download's detail.
     pub mirror_notes: Option<Arc<std::sync::Mutex<Vec<String>>>>,
+    /// Hears when a network is benched as throttled, comes back, or can't
+    /// connect for a reason worth showing (8.2, 8.4).
+    pub lane_events: Option<LaneEventFn>,
 }
 
 /// Why a job couldn't start at all (nothing in the store changed state).
@@ -402,9 +442,8 @@ pub fn remove(store: &Store, id: i64) -> Result<(), crate::StoreError> {
     store.delete(id)
 }
 
-/// Everything needed to reach the server: the request target and one `Network`
-/// per chosen interface (ids from 1, with their device names for reports).
-fn is_local_host(host: &str) -> bool {
+/// A server on this computer (never pinned, never proxied).
+pub(crate) fn is_local_host(host: &str) -> bool {
     host.eq_ignore_ascii_case("localhost")
         || host
             .trim_matches(|c| c == '[' || c == ']')
@@ -426,6 +465,9 @@ fn this_computer() -> Interface {
     }
 }
 
+/// Everything needed to reach the server: the request target and one `Network`
+/// per chosen interface (ids from 1, with their device names for reports).
+/// Networks with a proxy (8.4) tunnel through it and leave the name to it.
 async fn connect_plan(
     link: &str,
     chosen: &[String],
@@ -438,9 +480,20 @@ async fn connect_plan(
         Err(_) if chosen.is_empty() && is_local_host(&host) => vec![this_computer()],
         Err(e) => return Err(StartError::BadInput(e)),
     };
+    let table = crate::proxy::snapshot();
+    let proxies: Vec<Option<Arc<crate::proxy::NetProxy>>> = ifaces
+        .iter()
+        .map(|f| crate::proxy::for_host(&table, &f.name, &host))
+        .collect();
+    // Every network goes through a proxy: the proxies look the name up, so no
+    // lookup here tells the networks' DNS where we're going.
+    let all_proxied = proxies.iter().all(Option::is_some);
     let literal = host.parse::<std::net::IpAddr>().is_ok();
     // The computer's own resolver, and (when enabled) each network's own lookup.
     let system = async {
+        if all_proxied {
+            return Vec::new();
+        }
         tokio::time::timeout(
             Duration::from_secs(10),
             tokio::net::lookup_host((host.as_str(), port)),
@@ -456,8 +509,12 @@ async fn connect_plan(
             return vec![Vec::new(); ifaces.len()];
         }
         // All networks look up at once; each answer keeps its network's position.
+        // A network with a proxy leaves the name to the proxy.
         let mut set = tokio::task::JoinSet::new();
         for (i, f) in ifaces.iter().enumerate() {
+            if proxies[i].is_some() {
+                continue;
+            }
             let (f, host) = (f.clone(), host.clone());
             set.spawn(async move {
                 let r = fuselane_transport::dns::resolve_on(
@@ -498,6 +555,13 @@ async fn connect_plan(
         .first()
         .copied()
         .or_else(|| per_iface.iter().flatten().next().copied())
+        // Only proxies can find it: the engine's own address is never dialled then.
+        .or_else(|| {
+            proxies
+                .iter()
+                .any(Option::is_some)
+                .then(|| SocketAddr::new(std::net::Ipv4Addr::UNSPECIFIED.into(), port))
+        })
     else {
         return Err(StartError::Setup(format!(
             "couldn't find the server \"{host}\". Check the link and your connection."
@@ -512,15 +576,18 @@ async fn connect_plan(
     let networks: Vec<Network> = ifaces
         .into_iter()
         .zip(per_iface)
+        .zip(proxies)
         .enumerate()
-        .map(|(i, (f, addrs))| {
+        .map(|(i, ((f, addrs), proxy))| {
             network_for(
                 i as u32 + 1,
                 f,
                 Arc::new(addrs),
                 https,
                 host_arc.clone(),
+                port,
                 Duration::from_secs(10),
+                proxy,
             )
         })
         .collect();
@@ -872,6 +939,7 @@ pub async fn fetch(link: &str, out: PathBuf, opts: RunOptions) -> Result<Report,
         limiter: opts.limiter,
         filename: opts.filename,
         headers,
+        lane_events: opts.lane_events,
         ..defaults
     };
     download_with(source, networks, &out, tuning, None)
@@ -950,6 +1018,7 @@ pub async fn run(
         job_limit: opts.job_limit,
         filename: opts.filename,
         headers,
+        lane_events: opts.lane_events,
         ..defaults
     };
     let _ = store.apply(id, Event::Start, None);

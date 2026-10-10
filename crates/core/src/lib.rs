@@ -12,6 +12,7 @@ pub mod grab;
 pub mod job;
 pub mod metalink;
 pub mod netcheck;
+pub mod proxy;
 pub mod runner;
 pub mod store;
 
