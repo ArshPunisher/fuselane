@@ -1,0 +1,1253 @@
+/* Fuselane site, shared by every page.
+   Light and dark follow the system (DESIGN-SYSTEM §3). One accent, Fuse orange,
+   only ever means "the combined thing": the fused download and the main action.
+   The lane colours only ever mean networks: Tide is Wi-Fi, Iris is Ethernet,
+   Volt is a phone. Radius rule (§5): controls 8px, panels 14px, chips and
+   toggles full pill. Motion: transform and opacity only, still under reduced
+   motion, paused off screen and in background tabs. */
+
+@font-face {
+  font-family: 'Geist';
+  src: url('../node_modules/geist/dist/fonts/geist-sans/Geist-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('../node_modules/geist/dist/fonts/geist-mono/GeistMono-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+/* ---------- Tokens ---------- */
+
+:root {
+  color-scheme: dark;
+  --canvas: oklch(0.155 0.01 260);
+  --canvas-deep: oklch(0.13 0.01 260);
+  --surface-1: oklch(0.185 0.011 260);
+  --surface-2: oklch(0.215 0.012 260);
+  --surface-3: oklch(0.255 0.013 260);
+  --hairline: oklch(1 0 0 / 0.08);
+  --hairline-strong: oklch(1 0 0 / 0.16);
+  --ink: oklch(0.965 0.004 260);
+  --body: oklch(0.82 0.008 260);
+  --mute: oklch(0.68 0.012 260);
+  --fuse: oklch(0.74 0.17 50);
+  --fuse-hot: oklch(0.86 0.13 70);
+  --fuse-ink: oklch(0.155 0.01 260);
+  --fuse-soft: oklch(0.74 0.17 50 / 0.14);
+  --fuse-glow: oklch(0.74 0.17 50 / 0.35);
+  --tide: oklch(0.78 0.12 215);
+  --volt: oklch(0.85 0.17 128);
+  --iris: oklch(0.72 0.13 280);
+  --ok: oklch(0.79 0.15 152);
+  --warn: oklch(0.86 0.15 92);
+  --danger: oklch(0.7 0.19 18);
+  --grain: 0.045;
+  --shadow-float: 0 18px 48px oklch(0.1 0.01 260 / 0.5), inset 0 1px 0 oklch(1 0 0 / 0.06);
+  --shadow-soft: 0 10px 30px oklch(0.1 0.01 260 / 0.35);
+  --glass: oklch(0.155 0.01 260 / 0.72);
+  /* The logo's own names for the lanes. */
+  --lane-tide: var(--tide);
+  --lane-volt: var(--volt);
+  --lane-iris: var(--iris);
+
+  --r-control: 8px;
+  --r-panel: 14px;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-quick: 160ms;
+  --dur-base: 240ms;
+  --dur-slow: 380ms;
+  --font-sans: 'Geist', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', monospace;
+  --gutter: 16px;
+  --max: 1200px;
+  --nav-h: 64px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --canvas: oklch(0.985 0.003 260);
+    --canvas-deep: oklch(0.965 0.004 260);
+    --surface-1: oklch(0.995 0.002 260);
+    --surface-2: oklch(0.965 0.004 260);
+    --surface-3: oklch(0.935 0.006 260);
+    --hairline: oklch(0.21 0.015 260 / 0.1);
+    --hairline-strong: oklch(0.21 0.015 260 / 0.18);
+    --ink: oklch(0.21 0.015 260);
+    --body: oklch(0.36 0.015 260);
+    --mute: oklch(0.5 0.015 260);
+    --fuse: oklch(0.56 0.165 42);
+    --fuse-hot: oklch(0.66 0.17 52);
+    --fuse-ink: oklch(0.99 0 0);
+    --fuse-soft: oklch(0.56 0.165 42 / 0.1);
+    --fuse-glow: oklch(0.62 0.17 48 / 0.28);
+    --tide: oklch(0.52 0.095 222);
+    --volt: oklch(0.52 0.13 130);
+    --iris: oklch(0.52 0.16 280);
+    --ok: oklch(0.52 0.13 152);
+    --warn: oklch(0.54 0.115 72);
+    --danger: oklch(0.56 0.2 22);
+    --grain: 0;
+    --shadow-float: 0 18px 48px oklch(0.35 0.03 260 / 0.14), inset 0 1px 0 oklch(1 0 0 / 0.7);
+    --shadow-soft: 0 10px 30px oklch(0.35 0.03 260 / 0.1);
+    --glass: oklch(0.985 0.003 260 / 0.78);
+  }
+}
+
+@media (min-width: 640px) {
+  :root {
+    --gutter: 24px;
+  }
+}
+@media (min-width: 1024px) {
+  :root {
+    --gutter: 32px;
+    --nav-h: 68px;
+  }
+}
+@media (min-width: 1440px) {
+  :root {
+    --max: 1280px;
+  }
+}
+
+/* Cross-page fades in browsers that have them; never under reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition {
+    navigation: auto;
+  }
+}
+
+/* ---------- Base ---------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--canvas);
+  color: var(--body);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  scroll-padding-top: calc(var(--nav-h) + 24px);
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  overflow-x: clip;
+  background: var(--canvas);
+}
+
+/* Film grain on a fixed layer only, never on scrolling content. Dark theme only. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: var(--grain);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  color: var(--ink);
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+h1 {
+  font-size: clamp(2.5rem, 1.35rem + 4.6vw, 4.75rem);
+  line-height: 1;
+  letter-spacing: -0.045em;
+}
+
+h2 {
+  font-size: clamp(2rem, 1.2rem + 2.8vw, 3.25rem);
+  line-height: 1.04;
+  letter-spacing: -0.038em;
+}
+
+h3 {
+  font-size: 1.1875rem;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+}
+
+p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+}
+
+a {
+  color: var(--ink);
+  text-decoration-color: var(--hairline-strong);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: text-decoration-color var(--dur-quick);
+}
+
+a:hover {
+  text-decoration-color: var(--fuse);
+}
+
+[hidden] {
+  display: none !important;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+svg {
+  flex: none;
+}
+
+code,
+kbd {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--fuse);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: var(--fuse-soft);
+  color: var(--ink);
+}
+
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.wrap {
+  width: min(var(--max), 100% - var(--gutter) * 2);
+  margin-inline: auto;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip {
+  position: absolute;
+  left: 16px;
+  top: -80px;
+  z-index: 100;
+  padding: 10px 14px;
+  border-radius: var(--r-control);
+  background: var(--fuse);
+  color: var(--fuse-ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.skip:focus {
+  top: 12px;
+}
+
+.lead {
+  max-width: 34em;
+  color: var(--body);
+  font-size: clamp(1.0625rem, 1rem + 0.35vw, 1.25rem);
+  line-height: 1.55;
+}
+
+.label {
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+}
+
+.hot {
+  color: var(--fuse);
+}
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-control);
+  background: var(--surface-2);
+  color: var(--ink);
+  font: 500 15px/1 var(--font-sans);
+  letter-spacing: -0.005em;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  transition:
+    background-color var(--dur-quick),
+    border-color var(--dur-quick),
+    transform var(--dur-quick) var(--ease-out),
+    box-shadow var(--dur-base);
+}
+
+.btn svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.btn:hover {
+  background: var(--surface-3);
+  border-color: color-mix(in oklch, var(--hairline-strong), var(--ink) 12%);
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn-primary {
+  border-color: transparent;
+  background: var(--fuse);
+  color: var(--fuse-ink);
+  font-weight: 600;
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.28),
+    0 8px 24px -10px var(--fuse-glow);
+}
+
+.btn-primary:hover {
+  border-color: transparent;
+  background: color-mix(in oklch, var(--fuse), var(--fuse-hot) 35%);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.3),
+    0 12px 32px -10px var(--fuse-glow);
+}
+
+.btn-ghost {
+  border-color: transparent;
+  background: transparent;
+  padding-inline: 12px;
+}
+
+.btn-ghost:hover {
+  border-color: transparent;
+  background: var(--fuse-soft);
+}
+
+.btn-ghost .arrow,
+.btn .arrow {
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.btn:hover .arrow {
+  transform: translateX(3px);
+}
+
+.btn-small {
+  min-height: 36px;
+  padding: 0 13px;
+  font-size: 14px;
+}
+
+.btn-large {
+  min-height: 52px;
+  padding: 0 24px;
+  font-size: 16px;
+}
+
+/* ---------- Panels ---------- */
+
+.panel {
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-panel);
+  background: var(--surface-1);
+}
+
+/* Pointer light on panels with .spot (CSS reads --mx/--my). */
+.spot {
+  position: relative;
+  isolation: isolate;
+}
+
+.spot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: radial-gradient(
+    420px circle at var(--mx, 50%) var(--my, -40%),
+    color-mix(in oklch, var(--fuse) 9%, transparent),
+    transparent 60%
+  );
+  opacity: 0;
+  transition: opacity var(--dur-slow);
+  pointer-events: none;
+}
+
+.spot:hover::before {
+  opacity: 1;
+}
+
+/* ---------- Navbar ----------
+   A full-width bar. At the top of the page it's see-through; once the page
+   scrolls it turns to glass with a hairline, and a thin Fuse line along its
+   bottom edge grows with how far you've read. Phones get a menu button. */
+
+.nav-sentinel {
+  position: absolute;
+  top: 0;
+  height: 16px;
+  width: 1px;
+  pointer-events: none;
+}
+
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  height: var(--nav-h);
+  border-bottom: 1px solid transparent;
+  transition:
+    background-color var(--dur-slow),
+    border-color var(--dur-slow);
+  view-transition-name: nav;
+}
+
+.nav[data-scrolled],
+.nav[data-open] {
+  border-bottom-color: var(--hairline);
+  background: var(--glass);
+  backdrop-filter: blur(16px) saturate(150%);
+}
+
+/* Phones draw the page behind the status bar: cover what scrolls up there,
+   so text doesn't show above the bar once the page has moved. */
+.nav::before {
+  content: '';
+  position: absolute;
+  inset: auto 0 100% 0;
+  height: 200px;
+  background: var(--canvas);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-slow);
+}
+
+.nav[data-scrolled]::before,
+.nav[data-open]::before {
+  opacity: 1;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .nav[data-scrolled],
+  .nav[data-open] {
+    background: var(--canvas);
+    backdrop-filter: none;
+  }
+}
+
+.nav-inner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 100%;
+}
+
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: auto;
+  padding: 6px 4px;
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  text-decoration: none;
+}
+
+.mark {
+  width: 26px;
+  height: 26px;
+}
+
+.mark path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mark .lane {
+    animation: draw 0.9s var(--ease-out) both;
+  }
+  .mark .l2 {
+    animation-delay: 0.08s;
+  }
+  .mark .l3 {
+    animation-delay: 0.16s;
+  }
+  .mark .fuse {
+    animation: draw 0.6s var(--ease-out) 0.45s both;
+  }
+}
+
+@keyframes draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.nav-main {
+  display: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-track {
+  position: relative;
+}
+
+.nav-links {
+  display: flex;
+  list-style: none;
+}
+
+.nav-links a {
+  display: inline-flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 13px;
+  border-radius: var(--r-control);
+  color: var(--body);
+  font-size: 14.5px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: color var(--dur-quick);
+}
+
+.nav-links a:hover,
+.nav-links a[aria-current='page'] {
+  color: var(--ink);
+}
+
+/* The highlight glides to the link under the pointer, and rests on the page you're on. */
+.nav-glide {
+  position: absolute;
+  left: 0;
+  bottom: 2px;
+  width: 1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--fuse);
+  opacity: var(--glide-o, 0);
+  transform: translateX(calc(var(--glide-x, 0px) + 13px)) scaleX(var(--glide-s, 0));
+  transform-origin: left;
+  transition:
+    transform var(--dur-slow) var(--ease-out),
+    opacity var(--dur-base);
+  pointer-events: none;
+}
+
+.star {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 11px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-control);
+  color: var(--body);
+  font-size: 13px;
+  text-decoration: none;
+  transition:
+    color var(--dur-quick),
+    border-color var(--dur-quick);
+}
+
+.star svg {
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+}
+
+.star:hover {
+  color: var(--ink);
+  border-color: var(--hairline-strong);
+}
+
+.star .count:empty {
+  display: none;
+}
+
+.nav-cta {
+  min-height: 38px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+.nav-menu {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-right: -8px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.nav-menu svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+}
+
+/* How far down the page you are: a Fuse line along the navbar's bottom edge. */
+.nav-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.nav-progress::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, var(--tide), var(--iris) 30%, var(--fuse) 70%);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .nav-progress::before {
+      animation: progress linear both;
+      animation-timeline: scroll(root);
+    }
+  }
+}
+
+@keyframes progress {
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.nav-sheet {
+  overscroll-behavior: contain;
+  position: fixed;
+  inset: var(--nav-h) 0 auto;
+  z-index: 39;
+  max-height: calc(100dvh - var(--nav-h));
+  overflow-y: auto;
+  padding: 8px var(--gutter) 24px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--canvas);
+  box-shadow: var(--shadow-soft);
+}
+
+.nav-sheet ul {
+  list-style: none;
+  display: grid;
+}
+
+.nav-sheet li {
+  border-bottom: 1px solid var(--hairline);
+}
+
+.nav-sheet li:last-child {
+  border-bottom: 0;
+  padding-top: 16px;
+}
+
+.nav-sheet a {
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+  color: var(--ink);
+  font-size: 19px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+
+.nav-sheet a[aria-current='page'] {
+  color: var(--fuse);
+}
+
+.nav-sheet .btn {
+  width: 100%;
+  min-height: 50px;
+  font-size: 16px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .nav-sheet:not([hidden]) li {
+    animation: sheet-in var(--dur-slow) var(--ease-out) both;
+    animation-delay: calc(var(--i, 0) * 28ms);
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+@media (min-width: 960px) {
+  .nav-main {
+    display: flex;
+  }
+  .nav-menu,
+  .nav-sheet {
+    display: none;
+  }
+  .wordmark {
+    margin-right: 12px;
+  }
+  .nav-track {
+    margin-right: auto;
+  }
+  .nav-inner {
+    gap: 8px;
+  }
+  .nav-main {
+    flex: 1;
+  }
+}
+
+/* ---------- Reveal on scroll ----------
+   Only content that starts below the fold waits (script marks it pending), so
+   nothing is hidden without JavaScript, and nothing waits under reduced motion. */
+
+.reveal.pending {
+  opacity: 0;
+  transform: translateY(22px);
+}
+
+.reveal.pending.seen {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 0.9s var(--ease-out),
+    transform 0.9s var(--ease-out);
+  transition-delay: calc(var(--i, 0) * 80ms);
+}
+
+/* ---------- Sections ---------- */
+
+.section {
+  padding-block: clamp(88px, 6rem + 4vw, 168px);
+}
+
+.section-head {
+  display: grid;
+  gap: 18px;
+  max-width: 46rem;
+  margin-bottom: clamp(36px, 4vw, 64px);
+}
+
+.section-head p {
+  max-width: 36em;
+  font-size: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem);
+}
+
+/* ---------- Inner page heading ---------- */
+
+.page-hero {
+  display: grid;
+  gap: 18px;
+  padding-block: clamp(48px, 4rem + 3vw, 112px) clamp(32px, 4vw, 56px);
+}
+
+.page-hero h1 {
+  font-size: clamp(2.5rem, 1.5rem + 3.8vw, 4.25rem);
+}
+
+.page-hero p {
+  max-width: 38em;
+  font-size: clamp(1.0625rem, 1rem + 0.3vw, 1.1875rem);
+}
+
+/* ---------- Command lines ---------- */
+
+.cmd {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 10px 10px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-control);
+  background: var(--canvas-deep);
+}
+
+.cmd code {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  color: var(--ink);
+  font-size: 13.5px;
+  line-height: 1.5;
+  white-space: nowrap;
+  scrollbar-width: thin;
+}
+
+.cmd code::before {
+  content: '$ ';
+  color: var(--mute);
+}
+
+.copy {
+  flex: none;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-control);
+  background: var(--surface-2);
+  color: var(--ink);
+  font: 500 13px var(--font-sans);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color var(--dur-quick);
+}
+
+.copy:hover {
+  background: var(--surface-3);
+}
+
+/* ---------- Questions and answers ---------- */
+
+.qa {
+  display: grid;
+}
+
+.qa details {
+  border-bottom: 1px solid var(--hairline);
+}
+
+.qa details:first-child {
+  border-top: 1px solid var(--hairline);
+}
+
+.qa summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 60px;
+  padding: 14px 2px;
+  color: var(--ink);
+  font-size: 16.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  list-style: none;
+  cursor: pointer;
+}
+
+.qa summary::-webkit-details-marker {
+  display: none;
+}
+
+.qa summary::after {
+  content: '';
+  flex: none;
+  width: 12px;
+  height: 12px;
+  background:
+    linear-gradient(currentColor, currentColor) center / 12px 1.5px no-repeat,
+    linear-gradient(currentColor, currentColor) center / 1.5px 12px no-repeat;
+  color: var(--mute);
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.qa details[open] > summary::after {
+  transform: rotate(45deg);
+  color: var(--fuse);
+}
+
+.qa summary:hover {
+  color: var(--fuse);
+}
+
+.answer {
+  display: grid;
+  gap: 12px;
+  padding: 0 2px 22px;
+  max-width: 44em;
+}
+
+.answer ol,
+.answer ul {
+  padding-left: 1.3em;
+}
+
+@supports (interpolate-size: allow-keywords) {
+  @media (prefers-reduced-motion: no-preference) {
+    .qa details {
+      interpolate-size: allow-keywords;
+    }
+    .qa details::details-content {
+      block-size: 0;
+      overflow: clip;
+      transition:
+        block-size var(--dur-slow) var(--ease-out),
+        content-visibility var(--dur-slow) allow-discrete;
+    }
+    .qa details[open]::details-content {
+      block-size: auto;
+    }
+  }
+}
+
+/* ---------- Toast ---------- */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 70;
+  max-width: calc(100vw - 32px);
+  margin: 0;
+  padding: 10px 16px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: 14px;
+  box-shadow: var(--shadow-float);
+  transform: translateX(-50%);
+}
+
+.toast:empty {
+  display: none;
+}
+
+/* ---------- Footer ----------
+   It ends on the top half of the Fuse Core ring. When it comes into view the
+   ticks fill in, network by network, and a Fuse sweep marks the download done. */
+
+.foot {
+  position: relative;
+  margin-top: clamp(40px, 6vw, 96px);
+  overflow: hidden;
+  border-top: 1px solid var(--hairline);
+}
+
+.foot-horizon {
+  position: relative;
+  width: min(1200px, 100%);
+  margin: 0 auto;
+  margin-top: clamp(24px, 4vw, 56px);
+  pointer-events: none;
+}
+
+.horizon {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.horizon .orbit {
+  fill: none;
+  stroke: var(--hairline-strong);
+  stroke-width: 1;
+  stroke-dasharray: 1 7;
+}
+
+.horizon .arc {
+  fill: none;
+  stroke: var(--fuse);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+
+.horizon .t {
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.horizon .tide {
+  stroke: var(--tide);
+}
+.horizon .iris {
+  stroke: var(--iris);
+}
+.horizon .volt {
+  stroke: var(--volt);
+}
+
+.foot-horizon::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 46%;
+  aspect-ratio: 2 / 1;
+  border-radius: 999px 999px 0 0;
+  background: radial-gradient(ellipse at 50% 100%, var(--fuse-glow), transparent 62%);
+  opacity: 0.7;
+  transform: translateX(-50%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .foot.pending .horizon .t {
+    stroke: var(--hairline-strong);
+  }
+  .foot.pending .horizon .arc {
+    stroke-dashoffset: 1;
+  }
+  .foot.pending .foot-horizon::after {
+    opacity: 0;
+  }
+  .foot.pending.seen .horizon .t {
+    animation:
+      tick-in 0.5s var(--ease-out) both,
+      tick-ignite 0.9s var(--ease-out) both;
+    animation-delay: calc(var(--i) * 18ms), calc(1.5s + var(--i) * 8ms);
+  }
+  .foot.pending.seen .horizon .tide {
+    --to: var(--tide);
+  }
+  .foot.pending.seen .horizon .iris {
+    --to: var(--iris);
+  }
+  .foot.pending.seen .horizon .volt {
+    --to: var(--volt);
+  }
+  .foot.pending.seen .horizon .arc {
+    transition: stroke-dashoffset 1.2s var(--ease-in-out) 1.4s;
+    stroke-dashoffset: 0;
+  }
+  .foot.pending.seen .foot-horizon::after {
+    transition: opacity 1.2s ease 1.8s;
+    opacity: 0.7;
+  }
+}
+
+@keyframes tick-in {
+  from {
+    stroke: var(--hairline-strong);
+    opacity: 0.4;
+  }
+  to {
+    stroke: var(--to);
+    opacity: 1;
+  }
+}
+
+@keyframes tick-ignite {
+  0% {
+    stroke: var(--to);
+  }
+  35% {
+    stroke: var(--fuse-hot);
+  }
+  100% {
+    stroke: var(--to);
+  }
+}
+
+.foot-body {
+  position: relative;
+  display: grid;
+  gap: 40px;
+  padding-block: 40px 40px;
+}
+
+.foot-brand {
+  display: grid;
+  gap: 14px;
+  justify-items: start;
+  max-width: 26rem;
+}
+
+.foot-brand p {
+  color: var(--mute);
+  font-size: 14px;
+}
+
+.foot-cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px 24px;
+}
+
+.foot-cols h2 {
+  margin-bottom: 10px;
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.foot-cols ul {
+  list-style: none;
+  display: grid;
+  gap: 2px;
+}
+
+.foot-cols a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  color: var(--body);
+  font-size: 14.5px;
+  text-decoration: none;
+}
+
+.foot-cols a:hover {
+  color: var(--ink);
+}
+
+.foot-base {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 24px;
+  padding-block: 20px 28px;
+  border-top: 1px solid var(--hairline);
+  color: var(--mute);
+  font-size: 13.5px;
+}
+
+.foot-base a {
+  color: var(--body);
+}
+
+@media (min-width: 768px) {
+  .foot-body {
+    grid-template-columns: 1fr auto;
+    align-items: start;
+  }
+  .foot-cols {
+    grid-template-columns: repeat(3, minmax(9rem, auto));
+    gap: 40px;
+  }
+}
+
+/* ---------- Reduced motion: nothing moves, nothing waits ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0s !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Background tab: CSS animations rest too, and carry on when it's back. */
+html[data-hidden] *,
+html[data-hidden] *::before,
+html[data-hidden] *::after {
+  animation-play-state: paused !important;
+}
+
+/* Paused by the visitor: everything that loops stops. One-time entrances still
+   finish, so nothing is left half-drawn. */
+html[data-still] .marquee-track,
+html[data-still] .sv-air b,
+html[data-still] .wire-line b,
+html[data-still] .wire-fill,
+html[data-still] .beam .packet,
+html[data-still] .beam .bar {
+  animation-play-state: paused !important;
+}
+
+.foot-end {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+}
+
+.still-toggle {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--body);
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    color var(--dur-quick),
+    border-color var(--dur-quick);
+}
+
+.still-toggle:hover {
+  color: var(--ink);
+  border-color: var(--hairline-strong);
+}
+
+@media (max-width: 639px) {
+  .cmd code {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
