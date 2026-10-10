@@ -19,7 +19,7 @@ cask "fuselane" do
   url "https://github.com/$repo/releases/download/v#{version}/Fuselane_#{version}_macos-universal.dmg"
   name "Fuselane"
   desc "Download one file over every network you have at once"
-  homepage "https://github.com/$repo"
+  homepage "https://fuselane.app"
 
   depends_on macos: :ventura
 
