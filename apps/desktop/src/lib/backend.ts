@@ -28,6 +28,7 @@ import type {
   NetView,
   PeerView,
   PreviewView,
+  ProxyRequest,
   ReceiveView,
   SeedSettings,
   ShareView,
@@ -121,6 +122,10 @@ export interface Backend {
   setSlow(on: boolean): Promise<LimitsView>
   networkPrefs(): Promise<NetPref[]>
   setNetworkPref(pref: NetPref): Promise<NetPref[]>
+  /** Sets a network's proxy, or removes it with null. Returns every network's prefs. */
+  setNetworkProxy(name: string, proxy: ProxyRequest | null): Promise<NetPref[]>
+  /** Checks a network's saved proxy; resolves with what worked, rejects with what's wrong. */
+  checkNetworkProxy(name: string): Promise<string>
   /** A privacy-safe report for bug reports. */
   diagnostics(): Promise<string>
   /** Bytes per network per day, for the Data used chart. */
@@ -335,6 +340,8 @@ async function tauriBackend(): Promise<Backend> {
     setSlow: (on) => call('set_slow', { on }),
     networkPrefs: () => call('network_prefs'),
     setNetworkPref: (pref) => call('set_network_pref', { pref }),
+    setNetworkProxy: (name, proxy) => call('set_network_proxy', { name, proxy }),
+    checkNetworkProxy: (name) => call('check_network_proxy', { name }),
     diagnostics: () => call('diagnostics'),
     unseenCrash: () => call('unseen_crash'),
     netCheckState: () => call('netcheck_state'),

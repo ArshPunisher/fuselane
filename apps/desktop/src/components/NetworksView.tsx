@@ -9,6 +9,7 @@ import { Orb } from './Orb'
 import { LimitField } from './LimitField'
 import { NetCheck } from './NetCheck'
 import { DataUsed } from './DataUsed'
+import { NetworkProxy } from './NetworkProxy'
 
 /** Live speed per network, summed over running downloads. */
 export function useLiveRates(): Record<string, number> {
@@ -677,6 +678,7 @@ export function NetworksView() {
             <div className="nets-side">
               <NetworkLimits />
               <NetworkUse />
+              <NetworkProxy />
             </div>
             <div className="nets-wide">
               <Allowances />

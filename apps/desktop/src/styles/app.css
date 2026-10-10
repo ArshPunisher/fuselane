@@ -5230,6 +5230,152 @@ html[data-hidden] .orb b {
   overflow-wrap: anywhere;
 }
 
+/* ---------- Proxy per network (8.4) ---------- */
+
+.proxy-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.proxy-row {
+  display: grid;
+  gap: 8px;
+  padding: 10px 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.proxy-row:first-child {
+  padding-top: 2px;
+  border-top: 0;
+}
+
+.proxy-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+}
+
+.proxy-name {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.proxy-summary {
+  color: var(--mute);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.proxy-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.proxy-form {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--radius-panel);
+  background: var(--surface-2);
+}
+
+.proxy-kind {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.proxy-kind .segmented button {
+  white-space: nowrap;
+}
+
+.proxy-label {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.proxy-label .muted {
+  font-weight: 400;
+}
+
+.proxy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.proxy-where {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) 96px;
+  gap: 10px;
+}
+
+.proxy-field {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.proxy-field input {
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+  color: var(--ink);
+}
+
+.proxy-field input::placeholder {
+  color: var(--mute);
+}
+
+.proxy-field input:focus-visible {
+  outline: 2px solid var(--fuse);
+  outline-offset: 1px;
+}
+
+.proxy-field input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.proxy-saved {
+  display: grid;
+  gap: 6px;
+}
+
+.proxy-form .net-editor-foot {
+  flex-wrap: wrap;
+}
+
+.proxy-remove {
+  margin-right: auto;
+  color: var(--danger);
+}
+
+.proxy-status:not([data-state]) {
+  display: none;
+}
+
+.proxy-ok {
+  color: var(--success);
+}
+
+@container (max-width: 560px) {
+  .proxy-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* ---------- A download's network notes (8.2, 8.4) ---------- */
 
 .net-notes {

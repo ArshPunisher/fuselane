@@ -28,6 +28,8 @@ import type {
   NetPref,
   NetView,
   PreviewView,
+  ProxyPref,
+  ProxyRequest,
   ReportView,
   UiError,
   UiEvent,
@@ -88,6 +90,79 @@ function err(code: string, message: string, hint: string | null): UiError {
   return { code, message, hint }
 }
 
+/** The same checks and words as service/proxy.rs. */
+function checkProxy(
+  req: ProxyRequest,
+  saved: ProxyPref | null,
+  savedPassword: string | null,
+): { pref: ProxyPref; password: string | null } {
+  const bad = (message: string, hint: string) => err('bad-proxy', message, hint)
+  const raw = req.host.trim()
+  if (!raw)
+    throw bad(
+      "Enter the proxy's name or address.",
+      'For example proxy.example.com or 192.168.1.10.',
+    )
+  if (raw.includes('://'))
+    throw bad(
+      "Enter just the proxy's name or address.",
+      'Leave out http:// or socks5://; choose the type above instead.',
+    )
+  const bare = raw.startsWith('[') && raw.endsWith(']') ? raw.slice(1, -1) : raw
+  const ipv4 = /^\d{1,3}(\.\d{1,3}){3}$/.test(bare)
+  const ipv6 = bare.includes(':') && /^[0-9a-f:.]+$/i.test(bare)
+  let host: string
+  if (ipv4 || ipv6) {
+    if (bare === '0.0.0.0' || bare === '::' || /^2(2[4-9]|3\d)\./.test(bare))
+      throw bad(
+        "That address can't be a proxy.",
+        'Use the address of the computer that runs the proxy.',
+      )
+    host = bare.toLowerCase()
+  } else {
+    if (raw.includes(':'))
+      throw bad(
+        'Put the port in the Port box, not after the name.',
+        'For example proxy.example.com, and 8080 as the port.',
+      )
+    const labels = raw.replace(/\.$/, '').split('.')
+    const ok =
+      raw.length <= 253 && labels.every((l) => /^[a-z0-9_]([a-z0-9_-]{0,61}[a-z0-9_])?$/i.test(l))
+    if (!ok)
+      throw bad(
+        "That isn't a valid proxy name.",
+        'Use letters, numbers, dots and dashes, like proxy.example.com.',
+      )
+    host = raw.replace(/\.$/, '').toLowerCase()
+  }
+  if (!Number.isInteger(req.port) || req.port < 1 || req.port > 65535)
+    throw bad(
+      "That port isn't valid.",
+      'Ports go from 1 to 65535; proxies often use 8080, 3128 or 1080.',
+    )
+  const username = req.username?.trim() || null
+  if (username && req.kind === 'http' && username.includes(':'))
+    throw bad(
+      "An HTTP proxy's username can't contain a colon.",
+      'Check the username your proxy gave you.',
+    )
+  let password: string | null
+  if (req.password === undefined)
+    password = username ? (saved?.hasPassword ? savedPassword : null) : null
+  else password = req.password === '' ? null : req.password
+  if (password && !username)
+    throw bad(
+      'Add the username that goes with the password.',
+      "Or clear the password if the proxy doesn't need one.",
+    )
+  if (password && password.length > 255)
+    throw bad("That password isn't valid.", 'Use up to 255 characters, without control characters.')
+  return {
+    pref: { kind: req.kind, host, port: req.port, username, hasPassword: !!password },
+    password,
+  }
+}
+
 function nameFromUrl(url: URL): string {
   const seg = url.pathname.split('/').filter(Boolean).pop()
   try {
@@ -138,6 +213,8 @@ export function createDemoBackend(params: URLSearchParams): Backend {
   const nearby = createDemoNearby(params, () => (e) => listener?.(e))
   let limits: LimitsView = { global: 0, networks: [], slow: false, slowRate: 1024 * 1024 }
   let prefs: NetPref[] = []
+  // Proxy passwords stay here, as in the service; the window only sees hasPassword.
+  const proxyPasswords = new Map<string, string>()
   let perNetDns = false
   const throttle = params.get('throttle')
   const proxyTrouble = params.get('proxytrouble') === '1'
@@ -1096,6 +1173,8 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         !['tide', 'volt', 'iris', 'rose', 'mint', 'sky', 'lilac', 'steel'].includes(pref.lane)
       )
         throw err('bad-network-color', "That colour isn't one of Fuselane's network colours.", null)
+      // The proxy is kept as saved, whatever the window sends.
+      const proxy = prefs.find((p) => p.name === pref.name)?.proxy ?? null
       prefs = prefs.filter((p) => p.name !== pref.name)
       const useFor = pref.useFor ?? 'always'
       if (!['always', 'long', 'never'].includes(useFor))
@@ -1103,9 +1182,76 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       const hours = pref.hours ?? null
       if (hours && (hours.start === hours.stop || hours.start >= 1440 || hours.stop >= 1440))
         throw err('bad-value', 'Pick a start and a stop time that are different.', null)
-      if (label || pref.lane || useFor !== 'always' || hours)
-        prefs.push({ name: pref.name, label, lane: pref.lane, useFor, hours })
+      if (label || pref.lane || useFor !== 'always' || hours || proxy)
+        prefs.push({ name: pref.name, label, lane: pref.lane, useFor, hours, proxy })
       return structuredClone(prefs)
+    },
+    setNetworkProxy: async (name, req) => {
+      const current = prefs.find((p) => p.name === name)
+      const base: NetPref = current ?? {
+        name,
+        label: null,
+        lane: null,
+        useFor: 'always',
+        hours: null,
+        proxy: null,
+      }
+      let proxy: ProxyPref | null = null
+      if (req) {
+        const checked = checkProxy(req, current?.proxy ?? null, proxyPasswords.get(name) ?? null)
+        proxy = checked.pref
+        if (checked.password) proxyPasswords.set(name, checked.password)
+        else proxyPasswords.delete(name)
+      } else {
+        proxyPasswords.delete(name)
+      }
+      const next = { ...base, proxy }
+      prefs = prefs.filter((p) => p.name !== name)
+      if (next.label || next.lane || next.useFor !== 'always' || next.hours || next.proxy)
+        prefs.push(next)
+      prefs.sort((a, b) => a.name.localeCompare(b.name))
+      return structuredClone(prefs)
+    },
+    checkNetworkProxy: async (name) => {
+      const pref = prefs.find((p) => p.name === name)
+      const proxy = pref?.proxy
+      if (!proxy)
+        throw err(
+          'no-proxy',
+          "There's no proxy set for that network.",
+          'Set one first, then check it.',
+        )
+      const net = NETWORKS.find((n) => n.name === name)
+      const label = pref?.label || net?.label || name
+      if (!net?.usable)
+        throw err(
+          'not-connected',
+          `${label} isn't connected right now, so its proxy can't be checked.`,
+          'Connect it, then check again.',
+        )
+      await new Promise((r) => setTimeout(r, 500 / speed))
+      const at = proxy.host.includes(':')
+        ? `[${proxy.host}]:${proxy.port}`
+        : `${proxy.host}:${proxy.port}`
+      if (proxy.host.endsWith('.invalid'))
+        throw err(
+          'proxy-not-found',
+          `${label}'s proxy, ${proxy.host}, couldn't be found.`,
+          'Check its name in Networks, under Proxy.',
+        )
+      if (proxy.port === 9)
+        throw err(
+          'proxy-unreachable',
+          `${label} couldn't connect to its proxy at ${at} (connection refused).`,
+          'Check the address and port, and that the proxy is running.',
+        )
+      if (proxyPasswords.get(name) === 'wrong')
+        throw err(
+          'proxy-login-refused',
+          `${label}'s proxy at ${at} turned down the username and password.`,
+          'Check them in Networks, under Proxy.',
+        )
+      return `Works: ${label} reaches the internet through this proxy.`
     },
     usageHistory: async () => {
       // Thirty days of made-up but believable use: home Wi-Fi most days, the phone

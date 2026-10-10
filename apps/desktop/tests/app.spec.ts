@@ -2020,6 +2020,101 @@ test('feeds: torrents start by themselves only when the feed allows it', async (
   await expect(waiting.getByRole('button', { name: 'Open' })).toBeVisible()
 })
 
+test.describe('Proxy per network', () => {
+  async function openProxy(page: Page, net: string) {
+    await page.goto('/?drop=0')
+    await page.getByRole('button', { name: 'Networks' }).first().click()
+    await page.getByRole('button', { name: `Set up a proxy for ${net}` }).click()
+    return page.getByRole('form', { name: `Proxy for ${net}` })
+  }
+
+  test('a proxy is validated, saved, checked, and its password never comes back', async ({
+    page,
+  }) => {
+    const form = await openProxy(page, 'Wi-Fi')
+    await expect(form.getByLabel('Address')).toBeFocused()
+    // Empty fields are explained next to them, and the first one gets the focus.
+    await form.getByRole('button', { name: 'Save' }).click()
+    await expect(form.getByText("Enter the proxy's name or address.")).toBeVisible()
+    await expect(form.getByText('Use a port from 1 to 65535, like 8080 or 1080.')).toBeVisible()
+    await expect(form.getByLabel('Address')).toHaveAttribute('aria-invalid', 'true')
+    await form.getByLabel('Address').fill('proxy.office.lan')
+    await form.getByRole('button', { name: 'Save' }).click()
+    await expect(form.getByLabel('Port')).toBeFocused()
+    // A link instead of a name gets the service's plain answer and what to do.
+    await form.getByLabel('Address').fill('http://proxy.office.lan:8080')
+    await form.getByLabel('Port').fill('8080')
+    await form.getByRole('button', { name: 'Save' }).click()
+    await expect(form.getByRole('alert')).toContainText(
+      "Enter just the proxy's name or address. Leave out http://",
+    )
+    await form.getByLabel('Address').fill('proxy.office.lan')
+    await form.getByRole('radio', { name: 'SOCKS5' }).click()
+    await form.getByLabel('Username').fill('ann')
+    await form.getByLabel(/^Password/).fill('s3cret-pass')
+    await form.getByRole('button', { name: 'Save' }).click()
+    const row = page.locator('.proxy-row', { hasText: 'Wi-Fi' })
+    await expect(row).toContainText('SOCKS5 proxy.office.lan:8080, as ann')
+    // Saving checks it straight away.
+    await expect(row.locator('.proxy-status')).toContainText(
+      'Works: Wi-Fi reaches the internet through this proxy.',
+    )
+    // Editing shows that a password is saved, never the password itself.
+    await row.getByRole('button', { name: 'Edit the proxy for Wi-Fi' }).click()
+    const edit = page.getByRole('form', { name: 'Proxy for Wi-Fi' })
+    await expect(edit.getByLabel(/^Password/)).toHaveValue('')
+    await expect(edit.getByLabel(/^Password/)).toHaveAttribute('placeholder', 'Saved')
+    await expect(edit.getByText('A password is saved and never shown.')).toBeVisible()
+    expect(await page.content()).not.toContain('s3cret-pass')
+    // Escape cancels and gives the focus back.
+    await edit.getByLabel('Port').press('Escape')
+    await expect(edit).toHaveCount(0)
+    await expect(row.getByRole('button', { name: 'Edit the proxy for Wi-Fi' })).toBeFocused()
+    // Torrents are told apart.
+    await expect(page.locator('.net-proxy')).toContainText(
+      "Torrents don't use these proxies: they connect to peers directly",
+    )
+    // Removing it goes back to direct.
+    await row.getByRole('button', { name: 'Edit the proxy for Wi-Fi' }).click()
+    await page
+      .getByRole('form', { name: 'Proxy for Wi-Fi' })
+      .getByRole('button', { name: 'Remove proxy' })
+      .click()
+    await expect(row).toContainText('Direct, no proxy')
+  })
+
+  test('a proxy that turns down the login says so, with what to do', async ({ page }) => {
+    const form = await openProxy(page, 'iPhone USB')
+    await form.getByLabel('Address').fill('10.0.0.2')
+    await form.getByLabel('Port').fill('3128')
+    await form.getByLabel('Username').fill('ann')
+    await form.getByLabel(/^Password/).fill('wrong')
+    await form.getByRole('button', { name: 'Save' }).click()
+    const row = page.locator('.proxy-row', { hasText: 'iPhone USB' })
+    await expect(row.locator('.proxy-status .field-error')).toHaveText(
+      "iPhone USB's proxy at 10.0.0.2:3128 turned down the username and password. Check them in Networks, under Proxy.",
+    )
+    // Checking again after fixing the password works.
+    await row.getByRole('button', { name: 'Edit the proxy for iPhone USB' }).click()
+    const edit = page.getByRole('form', { name: 'Proxy for iPhone USB' })
+    await edit.getByLabel(/^Password/).fill('right')
+    await edit.getByRole('button', { name: 'Save' }).click()
+    await expect(row.locator('.proxy-status')).toContainText('Works: iPhone USB reaches')
+  })
+
+  test('renaming a network keeps its proxy', async ({ page }) => {
+    const form = await openProxy(page, 'Ethernet')
+    await form.getByLabel('Address').fill('proxy.lan')
+    await form.getByLabel('Port').fill('3128')
+    await form.getByRole('button', { name: 'Save' }).click()
+    await page.getByRole('button', { name: 'Rename or recolour Ethernet' }).click()
+    await page.getByLabel('Name', { exact: true }).fill('Office cable')
+    await page.locator('.net-editor').getByRole('button', { name: 'Save' }).click()
+    const row = page.locator('.proxy-row', { hasText: 'Office cable' })
+    await expect(row).toContainText('HTTP proxy.lan:3128')
+  })
+})
+
 test('a download says when a network is throttled, comes back, or its proxy refuses', async ({
   page,
 }) => {
