@@ -1183,13 +1183,21 @@ kbd {
   }
 }
 
-/* Background tab, or animations paused by the visitor: CSS animations rest too. */
+/* Background tab: CSS animations rest too, and carry on when it's back. */
 html[data-hidden] *,
 html[data-hidden] *::before,
-html[data-hidden] *::after,
-html[data-still] *,
-html[data-still] *::before,
-html[data-still] *::after {
+html[data-hidden] *::after {
+  animation-play-state: paused !important;
+}
+
+/* Paused by the visitor: everything that loops stops. One-time entrances still
+   finish, so nothing is left half-drawn. */
+html[data-still] .marquee-track,
+html[data-still] .sv-air b,
+html[data-still] .wire-line b,
+html[data-still] .wire-fill,
+html[data-still] .beam .packet,
+html[data-still] .beam .bar {
   animation-play-state: paused !important;
 }
 
