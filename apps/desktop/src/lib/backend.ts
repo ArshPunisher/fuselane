@@ -137,8 +137,15 @@ export interface Backend {
     exclude: string,
     every: number,
     latest: boolean,
+    startTorrents: boolean,
   ): Promise<FeedView[]>
-  feedsUpdate(id: number, include: string, exclude: string, every: number): Promise<FeedView[]>
+  feedsUpdate(
+    id: number,
+    include: string,
+    exclude: string,
+    every: number,
+    startTorrents: boolean,
+  ): Promise<FeedView[]>
   feedsRemove(id: number): Promise<FeedView[]>
   feedsCheck(id: number): Promise<FeedView[]>
   remoteState(): Promise<RemoteView>
@@ -337,10 +344,10 @@ async function tauriBackend(): Promise<Backend> {
     watchState: () => call('watch_state'),
     watchSet: (on, path) => call('watch_set', { on, path }),
     feedsList: () => call('feeds_list'),
-    feedsAdd: (url, include, exclude, every, latest) =>
-      call('feeds_add', { url, include, exclude, every, latest }),
-    feedsUpdate: (id, include, exclude, every) =>
-      call('feeds_update', { id, include, exclude, every }),
+    feedsAdd: (url, include, exclude, every, latest, startTorrents) =>
+      call('feeds_add', { url, include, exclude, every, latest, startTorrents }),
+    feedsUpdate: (id, include, exclude, every, startTorrents) =>
+      call('feeds_update', { id, include, exclude, every, startTorrents }),
     feedsRemove: (id) => call('feeds_remove', { id }),
     feedsCheck: (id) => call('feeds_check', { id }),
     remoteState: () => call('remote_state'),

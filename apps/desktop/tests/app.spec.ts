@@ -1971,3 +1971,51 @@ test('welcome: Skip closes it; Settings shows it again; not shown otherwise', as
   await welcome.getByRole('button', { name: 'Skip' }).click()
   await expect(welcome).toBeHidden()
 })
+
+test('feeds: torrents start by themselves only when the feed allows it', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Feeds', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Feeds' })
+  const list = dialog.getByRole('list', { name: 'Feeds you follow' })
+  const talk = list.locator('.feed').filter({ hasText: 'Tech & Talk' })
+  // Off unless turned on: the setting sits in the feed's Filters.
+  await expect(talk).not.toContainText('Torrents start by themselves')
+  await talk.getByRole('button', { name: 'Filters' }).click()
+  const box = talk.getByRole('checkbox', { name: 'Start torrents by themselves' })
+  await expect(box).not.toBeChecked()
+  await box.check()
+  await talk.getByRole('button', { name: 'Save' }).click()
+  await expect(talk).toContainText('Torrents start by themselves.')
+  // A new torrent in the feed starts, so there's nothing to open by hand.
+  await talk.getByRole('button', { name: 'Check Tech & Talk now' }).click()
+  const newest = dialog.getByRole('list', { name: 'Latest in Tech & Talk' }).locator('li').first()
+  await expect(newest).toContainText('Episode 44 (torrent)')
+  await expect(newest).toContainText('Torrent started')
+  await expect(newest.getByRole('button', { name: 'Open' })).toHaveCount(0)
+  await expect(talk).toContainText('13 downloaded')
+
+  // The add form has it too, off until ticked.
+  const addBox = dialog
+    .locator('form.feed-add')
+    .getByRole('checkbox', { name: 'Start torrents by themselves' })
+  await expect(addBox).not.toBeChecked()
+  await dialog.getByLabel('Feed address').fill('https://shows.example/rss')
+  await addBox.check()
+  await dialog.getByRole('button', { name: 'Follow', exact: true }).click()
+  const shows = list.locator('.feed').filter({ hasText: 'Nightly builds' })
+  await expect(shows).toContainText('Torrents start by themselves.')
+  // Turned off again, its torrents wait for you.
+  await shows.getByRole('button', { name: 'Filters' }).click()
+  const showsBox = shows.getByRole('checkbox', { name: 'Start torrents by themselves' })
+  await expect(showsBox).toBeChecked()
+  await showsBox.uncheck()
+  await shows.getByRole('button', { name: 'Save' }).click()
+  await expect(shows).not.toContainText('Torrents start by themselves')
+  await shows.getByRole('button', { name: 'Check Nightly builds now' }).click()
+  const waiting = dialog
+    .getByRole('list', { name: 'Latest in Nightly builds' })
+    .locator('li')
+    .first()
+  await expect(waiting).toContainText('Torrent')
+  await expect(waiting.getByRole('button', { name: 'Open' })).toBeVisible()
+})

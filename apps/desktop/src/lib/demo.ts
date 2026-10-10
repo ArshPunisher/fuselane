@@ -471,6 +471,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
           note: null,
         },
       ],
+      startTorrents: false,
     },
   ]
   let remote = { on: false, lan: false, port: 6800, secret: '9f2c41d07be35a68c1e4f0d2a7b96e13' }
@@ -1121,6 +1122,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       exclude: string,
       every: number,
       latest: boolean,
+      startTorrents: boolean,
     ) => {
       if (!/^https?:\/\//.test(url.trim()))
         throw err(
@@ -1156,12 +1158,19 @@ export function createDemoBackend(params: URLSearchParams): Backend {
               },
             ]
           : [],
+        startTorrents,
       })
       return structuredClone(feeds)
     },
-    feedsUpdate: async (id: number, include: string, exclude: string, every: number) => {
+    feedsUpdate: async (
+      id: number,
+      include: string,
+      exclude: string,
+      every: number,
+      startTorrents: boolean,
+    ) => {
       const f = feeds.find((x) => x.id === id)
-      if (f) Object.assign(f, { include, exclude, every })
+      if (f) Object.assign(f, { include, exclude, every, startTorrents })
       return structuredClone(feeds)
     },
     feedsRemove: async (id: number) => {
@@ -1170,7 +1179,21 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     },
     feedsCheck: async (id: number) => {
       const f = feeds.find((x) => x.id === id)
-      if (f) f.lastCheck = Math.floor(Date.now() / 1000)
+      if (f) {
+        f.lastCheck = Math.floor(Date.now() / 1000)
+        // A new torrent in the feed, once: it starts when the feed allows it.
+        const link = `magnet:?xt=urn:btih:5d1a04c3b2e8f7a6c9d0e1f2a3b4c5d6e7f8a9b${f.id}&dn=ep44`
+        if (!f.recent.some((r) => r.url === link)) {
+          f.recent.unshift({
+            title: 'Episode 44 (torrent)',
+            url: link,
+            state: f.startTorrents ? 'torrent-started' : 'torrent',
+            note: null,
+          })
+          f.recent = f.recent.slice(0, 8)
+          if (f.startTorrents) f.added += 1
+        }
+      }
       return structuredClone(feeds)
     },
     remoteState: async () => remoteView(),

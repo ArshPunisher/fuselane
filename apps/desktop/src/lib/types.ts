@@ -545,9 +545,11 @@ export interface FeedView {
   recent: {
     title: string
     url: string
-    state: 'added' | 'filtered' | 'no-file' | 'torrent' | 'failed'
+    state: 'added' | 'filtered' | 'no-file' | 'torrent' | 'torrent-started' | 'failed'
     note: string | null
   }[]
+  /** Magnets and .torrent files start by themselves, with all their files. */
+  startTorrents: boolean
 }
 
 /** Remote control for aria2 tools (8.7, ADR 0013). */

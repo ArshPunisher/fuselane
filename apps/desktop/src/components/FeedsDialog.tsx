@@ -16,7 +16,13 @@ const STATE_WORD: Record<FeedView['recent'][number]['state'], string> = {
   filtered: 'Skipped by your words',
   'no-file': 'No file in it',
   torrent: 'Torrent',
+  'torrent-started': 'Torrent started',
   failed: "Couldn't add",
+}
+
+/** A magnet or a .torrent file: something New download can open. */
+function isTorrentLink(url: string): boolean {
+  return url.startsWith('magnet:') || url.endsWith('.torrent')
 }
 
 function ago(unix: number | null): string {
@@ -44,6 +50,7 @@ function FeedCard({
   const [include, setInclude] = useState(feed.include)
   const [exclude, setExclude] = useState(feed.exclude)
   const [every, setEvery] = useState(feed.every)
+  const [startTorrents, setStartTorrents] = useState(feed.startTorrents)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -77,6 +84,7 @@ function FeedCard({
             {ago(feed.lastCheck)}, {every_label}. {feed.added} downloaded
             {feed.include ? `, only with “${feed.include}”` : ''}
             {feed.exclude ? `, skipping “${feed.exclude}”` : ''}.
+            {feed.startTorrents ? ' Torrents start by themselves.' : ''}
           </p>
         </div>
         <div className="feed-actions">
@@ -123,9 +131,9 @@ function FeedCard({
           className="feed-filters"
           onSubmit={(e) => {
             e.preventDefault()
-            void run(() => backend!.feedsUpdate(feed.id, include, exclude, every)).then(
-              (ok) => ok && setEditing(false),
-            )
+            void run(() =>
+              backend!.feedsUpdate(feed.id, include, exclude, every, startTorrents),
+            ).then((ok) => ok && setEditing(false))
           }}
         >
           <FilterFields
@@ -137,6 +145,7 @@ function FeedCard({
             setExclude={setExclude}
             setEvery={setEvery}
           />
+          <TorrentsCheck checked={startTorrents} onChange={setStartTorrents} />
           <button type="submit" className="btn" disabled={busy}>
             Save
           </button>
@@ -152,7 +161,7 @@ function FeedCard({
               <span className="chip" data-state={r.state}>
                 {r.note ?? STATE_WORD[r.state]}
               </span>
-              {r.state === 'torrent' && (
+              {(r.state === 'torrent' || (r.state === 'failed' && isTorrentLink(r.url))) && (
                 <button
                   type="button"
                   className="link-btn"
@@ -228,6 +237,27 @@ function FilterFields(p: {
   )
 }
 
+/** Off unless the person lets a feed start torrents (all their files) by itself. */
+function TorrentsCheck({
+  checked,
+  onChange,
+}: {
+  checked: boolean
+  onChange: (on: boolean) => void
+}) {
+  return (
+    <label className="check feed-torrents">
+      <input
+        type="checkbox"
+        name="startTorrents"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <span>Start torrents by themselves</span>
+    </label>
+  )
+}
+
 /**
  * Feeds (B10.8): follow a podcast, a project's releases or any RSS or Atom
  * feed; new files in it download by themselves.
@@ -241,6 +271,7 @@ export function FeedsDialog({ open, onClose }: { open: boolean; onClose: () => v
   const [exclude, setExclude] = useState('')
   const [every, setEvery] = useState(60)
   const [latest, setLatest] = useState(true)
+  const [startTorrents, setStartTorrents] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<UiError | null>(null)
   const [status, setStatus] = useState('')
@@ -269,7 +300,7 @@ export function FeedsDialog({ open, onClose }: { open: boolean; onClose: () => v
     setError(null)
     setStatus('')
     try {
-      setFeeds(await backend.feedsAdd(url, include, exclude, every, latest))
+      setFeeds(await backend.feedsAdd(url, include, exclude, every, latest, startTorrents))
       setStatus(
         latest
           ? 'Following. The latest file is downloading; new ones follow by themselves.'
@@ -309,7 +340,8 @@ export function FeedsDialog({ open, onClose }: { open: boolean; onClose: () => v
           </header>
           <p className="dialog-text">
             Follow a podcast, a project&apos;s releases or any RSS or Atom feed. New files in it
-            download by themselves, over every network. Torrents wait for you to open them.
+            download by themselves, over every network. Torrents wait for you to open them, unless
+            you let them start by themselves.
           </p>
           <form
             className="feed-add"
@@ -349,14 +381,18 @@ export function FeedsDialog({ open, onClose }: { open: boolean; onClose: () => v
               setExclude={setExclude}
               setEvery={setEvery}
             />
-            <label className="check feed-latest">
-              <input
-                type="checkbox"
-                checked={latest}
-                onChange={(e) => setLatest(e.target.checked)}
-              />
-              <span>Download the latest one now</span>
-            </label>
+            <div className="feed-checks">
+              <label className="check">
+                <input
+                  type="checkbox"
+                  name="latest"
+                  checked={latest}
+                  onChange={(e) => setLatest(e.target.checked)}
+                />
+                <span>Download the latest one now</span>
+              </label>
+              <TorrentsCheck checked={startTorrents} onChange={setStartTorrents} />
+            </div>
             <button type="submit" className="btn btn-primary" disabled={busy || !url.trim()}>
               <Rss size={16} aria-hidden /> {busy ? 'Reading the feed…' : 'Follow'}
             </button>
