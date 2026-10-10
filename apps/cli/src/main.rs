@@ -423,6 +423,22 @@ fn human(bytes: f64) -> String {
     }
 }
 
+/// `-o` must be a folder that exists: a typo shouldn't become a download that
+/// can never finish.
+fn out_folder(out: &std::path::Path) -> Result<(), String> {
+    match std::fs::metadata(out) {
+        Ok(m) if m.is_dir() => Ok(()),
+        Ok(_) => Err(format!(
+            "{} is a file. -o takes the folder to save into.",
+            out.display()
+        )),
+        Err(_) => Err(format!(
+            "The folder {} doesn't exist. Create it, or pick another with -o.",
+            out.display()
+        )),
+    }
+}
+
 async fn get(
     link: &str,
     out: PathBuf,
@@ -432,6 +448,17 @@ async fn get(
     sha256: Option<[u8; 32]>,
 ) -> ExitCode {
     if let Err(msg) = parse_link(link) {
+        eprintln!("fuselane: {msg}");
+        return ExitCode::from(2);
+    }
+    // The same limit as the app: a link this long is a paste gone wrong.
+    if link.len() > 8192 {
+        eprintln!(
+            "fuselane: That link is too long (over 8 KB). Copy the link again from its page."
+        );
+        return ExitCode::from(2);
+    }
+    if let Err(msg) = out_folder(&out) {
         eprintln!("fuselane: {msg}");
         return ExitCode::from(2);
     }
@@ -563,6 +590,20 @@ mod tests {
     #[test]
     fn cli_definition_is_valid() {
         Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn the_out_folder_must_be_a_folder_that_exists() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(out_folder(dir.path()).is_ok());
+        let file = dir.path().join("a.txt");
+        std::fs::write(&file, "x").unwrap();
+        assert!(out_folder(&file).unwrap_err().contains("is a file"));
+        assert!(
+            out_folder(&dir.path().join("nope"))
+                .unwrap_err()
+                .contains("doesn't exist")
+        );
     }
 
     #[test]
