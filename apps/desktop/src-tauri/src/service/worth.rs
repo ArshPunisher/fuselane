@@ -95,7 +95,14 @@ impl Service {
         job: &fuselane_core::Job,
         all: Vec<fuselane_netif::Interface>,
     ) -> (Vec<fuselane_netif::Interface>, Vec<String>) {
-        let prefs = lock(&self.net_prefs).clone();
+        let mut prefs = lock(&self.net_prefs).clone();
+        // Outside its hours a network counts as Never (B10.6).
+        let minute = self.now().minute;
+        for p in &mut prefs {
+            if p.hours.is_some_and(|h| !h.contains(minute)) {
+                p.use_for = NetUse::Never;
+            }
+        }
         let long = lock(&self.known_long).contains(&job.id);
         let (now, held) = split_by_use(all.clone(), &prefs, long);
         if held.is_empty() {
@@ -162,7 +169,10 @@ impl Service {
 
 /// Saved preferences keep their old shape: a missing `useFor` means Always.
 pub(super) fn keep(pref: &NetPref) -> bool {
-    pref.label.is_some() || pref.lane.is_some() || pref.use_for != NetUse::Always
+    pref.label.is_some()
+        || pref.lane.is_some()
+        || pref.use_for != NetUse::Always
+        || pref.hours.is_some()
 }
 
 #[cfg(test)]
@@ -186,6 +196,7 @@ mod tests {
             label: None,
             lane: None,
             use_for,
+            hours: None,
         }
     }
 

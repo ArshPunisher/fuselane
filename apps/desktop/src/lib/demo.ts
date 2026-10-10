@@ -998,8 +998,11 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       const useFor = pref.useFor ?? 'always'
       if (!['always', 'long', 'never'].includes(useFor))
         throw err('bad-value', "That isn't a way to use a network.", null)
-      if (label || pref.lane || useFor !== 'always')
-        prefs.push({ name: pref.name, label, lane: pref.lane, useFor })
+      const hours = pref.hours ?? null
+      if (hours && (hours.start === hours.stop || hours.start >= 1440 || hours.stop >= 1440))
+        throw err('bad-value', 'Pick a start and a stop time that are different.', null)
+      if (label || pref.lane || useFor !== 'always' || hours)
+        prefs.push({ name: pref.name, label, lane: pref.lane, useFor, hours })
       return structuredClone(prefs)
     },
     usageHistory: async () => {

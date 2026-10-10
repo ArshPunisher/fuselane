@@ -1278,6 +1278,23 @@ test('Networks shows the data each network used this month and per day', async (
   ).toBeVisible()
 })
 
+test('a network can be used only at certain hours', async ({ page }) => {
+  await page.goto('/?drop=0')
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('button', { name: 'Networks' })
+    .click()
+  const row = page.locator('.use-list li', { hasText: 'iPhone USB' })
+  const from = row.getByLabel('iPhone USB from')
+  await expect(from).toBeDisabled()
+  await row.getByRole('checkbox', { name: 'Only from' }).check()
+  await expect(from).toBeEnabled()
+  await expect(from).toHaveValue('23:00')
+  await expect(row.getByLabel('iPhone USB until')).toHaveValue('06:00')
+  await row.getByRole('checkbox', { name: 'Only from' }).uncheck()
+  await expect(from).toBeDisabled()
+})
+
 test('Download later adds it paused, ready to start', async ({ page }) => {
   await page.goto('/?empty=1')
   const dialog = await openDialog(page)

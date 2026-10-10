@@ -346,6 +346,8 @@ export interface NetPref {
   lane: string | null
   /** When it helps: always, only for long downloads, or never. */
   useFor: NetUse
+  /** Only used between these times every day (minutes after midnight). */
+  hours: { start: number; stop: number } | null
 }
 
 export type NetUse = 'always' | 'long' | 'never'

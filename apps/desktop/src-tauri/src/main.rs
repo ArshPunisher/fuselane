@@ -1534,6 +1534,7 @@ fn main() {
             while let Some(svc) = weak.upgrade() {
                 svc.tick_usage(service::local_today());
                 svc.tick_schedule();
+                svc.tick_net_hours();
                 // The battery changes slowly: read it every 30 s (a process on macOS).
                 if round.is_multiple_of(6) {
                     svc.tick_battery(battery::read());

@@ -84,6 +84,7 @@ function NetEditor({ net, lane, onDone }: { net: NetView; lane: Lane; onDone: ()
             label: label.trim() || null,
             lane: color,
             useFor: current?.useFor ?? 'always',
+            hours: current?.hours ?? null,
           })
         )
           onDone()
@@ -135,6 +136,7 @@ function NetEditor({ net, lane, onDone }: { net: NetView; lane: Lane; onDone: ()
                 label: null,
                 lane: null,
                 useFor: current?.useFor ?? 'always',
+                hours: current?.hours ?? null,
               })
             )
               onDone()
@@ -150,6 +152,52 @@ function NetEditor({ net, lane, onDone }: { net: NetView; lane: Lane; onDone: ()
         </button>
       </div>
     </form>
+  )
+}
+
+const hhmm = (m: number) =>
+  `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+const minutes = (t: string) => {
+  const [h, m] = t.split(':').map(Number)
+  return (h ?? 0) * 60 + (m ?? 0)
+}
+
+/** "Only from 23:00 to 06:00" for one network (B10.6), e.g. a night data plan. */
+function Hours({
+  name,
+  hours,
+  onChange,
+}: {
+  name: string
+  hours: { start: number; stop: number } | null
+  onChange: (h: { start: number; stop: number } | null) => void
+}) {
+  return (
+    <div className="net-hours">
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={hours !== null}
+          onChange={(e) => onChange(e.target.checked ? { start: 23 * 60, stop: 6 * 60 } : null)}
+        />
+        <span>Only from</span>
+      </label>
+      <input
+        type="time"
+        aria-label={`${name} from`}
+        disabled={!hours}
+        value={hhmm(hours?.start ?? 23 * 60)}
+        onChange={(e) => hours && onChange({ ...hours, start: minutes(e.target.value) })}
+      />
+      <span>to</span>
+      <input
+        type="time"
+        aria-label={`${name} until`}
+        disabled={!hours}
+        value={hhmm(hours?.stop ?? 6 * 60)}
+        onChange={(e) => hours && onChange({ ...hours, stop: minutes(e.target.value) })}
+      />
+    </div>
   )
 }
 
@@ -210,6 +258,7 @@ function NetworkUse() {
                         label: p?.label ?? null,
                         lane: p?.lane ?? null,
                         useFor: u.value,
+                        hours: p?.hours ?? null,
                       })
                     }
                   >
@@ -217,6 +266,19 @@ function NetworkUse() {
                   </button>
                 ))}
               </div>
+              <Hours
+                name={netTitle(n)}
+                hours={p?.hours ?? null}
+                onChange={(hours) =>
+                  void save({
+                    name: n.name,
+                    label: p?.label ?? null,
+                    lane: p?.lane ?? null,
+                    useFor: value,
+                    hours,
+                  })
+                }
+              />
             </li>
           )
         })}

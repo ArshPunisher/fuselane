@@ -4648,3 +4648,23 @@ html[data-hidden] .orb b {
   min-height: 1px;
   flex-basis: 0;
 }
+
+/* ---------- Network hours (B10.6) ---------- */
+
+.net-hours {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  flex-basis: 100%;
+  color: var(--body);
+  font-size: 13px;
+}
+
+.net-hours input[type='time'] {
+  width: 104px;
+}
+
+.net-hours input:disabled {
+  opacity: 0.5;
+}

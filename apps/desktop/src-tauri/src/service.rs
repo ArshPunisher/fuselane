@@ -156,6 +156,28 @@ pub struct NetPref {
     /// When it helps: always, only for long downloads, or never (B9.5).
     #[serde(default)]
     pub use_for: NetUse,
+    /// Only used between these times every day (B10.6), e.g. a night plan.
+    #[serde(default)]
+    pub hours: Option<NetHours>,
+}
+
+/// A daily window, minutes after midnight; overnight when `start > stop`.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct NetHours {
+    pub start: u16,
+    pub stop: u16,
+}
+
+impl NetHours {
+    /// Whether `minute` (after midnight) is inside the window.
+    pub fn contains(&self, minute: u16) -> bool {
+        if self.start < self.stop {
+            minute >= self.start && minute < self.stop
+        } else {
+            minute >= self.start || minute < self.stop
+        }
+    }
 }
 
 const LANES: [&str; 8] = [
@@ -187,6 +209,15 @@ impl NetPref {
             if l.chars().any(char::is_control) {
                 return Err(bad("Names can't contain control characters."));
             }
+        }
+        if let Some(h) = &self.hours
+            && (h.start >= 1440 || h.stop >= 1440 || h.start == h.stop)
+        {
+            return Err(UiError::new(
+                "bad-value",
+                "Pick a start and a stop time that are different.",
+                None,
+            ));
         }
         if let Some(lane) = &self.lane
             && !LANES.contains(&lane.as_str())
@@ -634,6 +665,8 @@ pub struct Service {
     media_probes: Mutex<media_jobs::Probes>,
     /// Bytes per network per day, for the last two months (B10.5).
     daily: Mutex<Vec<daily::DayUse>>,
+    /// Networks outside their hours at the last tick (B10.6).
+    hours_closed: Mutex<Option<Vec<String>>>,
 }
 
 /// Opens a file with the system's default app.
@@ -972,6 +1005,7 @@ impl Service {
             netcheck: Mutex::default(),
             media_probes: Mutex::default(),
             daily: Mutex::new(daily_saved),
+            hours_closed: Mutex::new(None),
             outages: Mutex::new(saved_outages),
             retries: Mutex::new(HashMap::new()),
             limiter,
@@ -1619,6 +1653,31 @@ impl Service {
 
     /// Called every few seconds: pauses running downloads when the schedule's
     /// window closes and resumes the ones it paused when it opens.
+    /// Networks with hours (B10.6): when one opens or closes, running downloads
+    /// carry on at once with the networks allowed now.
+    pub fn tick_net_hours(self: &Arc<Self>) {
+        let minute = self.now().minute;
+        let closed: Vec<String> = lock(&self.net_prefs)
+            .iter()
+            .filter(|p| p.hours.is_some_and(|h| !h.contains(minute)))
+            .map(|p| p.name.clone())
+            .collect();
+        let mut last = lock(&self.hours_closed);
+        if last.as_ref() == Some(&closed) {
+            return;
+        }
+        let first = last.is_none();
+        *last = Some(closed);
+        drop(last);
+        if first {
+            return;
+        }
+        for r in lock(&self.running).values_mut() {
+            r.replan = true;
+            r.cancel.cancel();
+        }
+    }
+
     pub fn tick_schedule(self: &Arc<Self>) {
         if self.schedule_allows() {
             let ids: Vec<i64> = lock(&self.schedule_paused).drain().collect();
@@ -3906,6 +3965,82 @@ mod tests {
         );
     }
 
+    #[test]
+    fn network_hours_cover_the_day_and_the_night() {
+        let day = NetHours {
+            start: 9 * 60,
+            stop: 17 * 60,
+        };
+        assert!(day.contains(12 * 60) && !day.contains(18 * 60) && !day.contains(17 * 60));
+        let night = NetHours {
+            start: 23 * 60,
+            stop: 6 * 60,
+        };
+        assert!(night.contains(23 * 60 + 30) && night.contains(60) && !night.contains(12 * 60));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_network_opening_its_hours_moves_running_downloads_onto_it() {
+        let content = Content::new(1024 * KB, 251);
+        let server = RangeServer::start(content).await.unwrap();
+        server.add_rule(Rule {
+            skip: 1,
+            times: u32::MAX,
+            fault: Fault::Throttle(256 * KB),
+        });
+        let h = harness(3);
+        // Bad hours are refused.
+        assert!(
+            h.svc
+                .set_network_pref(NetPref {
+                    name: "en9".into(),
+                    label: None,
+                    lane: None,
+                    use_for: NetUse::Always,
+                    hours: Some(NetHours {
+                        start: 60,
+                        stop: 60
+                    }),
+                })
+                .is_err()
+        );
+        h.svc
+            .set_network_pref(NetPref {
+                name: "en9".into(),
+                label: None,
+                lane: None,
+                use_for: NetUse::Always,
+                hours: Some(NetHours {
+                    start: 23 * 60,
+                    stop: 6 * 60,
+                }),
+            })
+            .unwrap();
+        h.svc.set_clock(noon());
+        h.svc.tick_net_hours(); // the first look only remembers
+        let id = h.svc.add(&link(&server), None).unwrap();
+        h.wait("running", |h| h.job(id).status == "running").await;
+        h.svc.set_clock(crate::automation::Moment {
+            weekday: 3,
+            minute: 23 * 60 + 5,
+        });
+        h.svc.tick_net_hours();
+        assert_eq!(
+            lock(&h.svc.hours_closed).as_deref(),
+            Some(&[][..]),
+            "en9 is open now"
+        );
+        h.wait("finished after carrying on", |h| {
+            h.job(id).status == "completed"
+        })
+        .await;
+        let path = PathBuf::from(h.job(id).final_path.unwrap());
+        assert_eq!(
+            fuselane_testkit::sha256_file(&path).unwrap(),
+            content.sha256()
+        );
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn bad_names_and_checksums_are_refused_before_saving() {
         let h = harness(3);
@@ -4752,6 +4887,10 @@ mod tests {
                     label: None,
                     lane: None,
                     use_for: NetUse::Long,
+                    hours: Some(NetHours {
+                        start: 1380,
+                        stop: 360,
+                    }),
                 }),
             ),
         ] {
@@ -5057,6 +5196,7 @@ mod tests {
             label: label.map(Into::into),
             lane: lane.map(Into::into),
             use_for: NetUse::Always,
+            hours: None,
         };
         let all = svc
             .set_network_pref(pref("en0", Some("  Home Wi-Fi  "), Some("mint")))
