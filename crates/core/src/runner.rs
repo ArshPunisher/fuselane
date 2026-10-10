@@ -65,6 +65,22 @@ pub fn pick_networks(names: &[String]) -> Result<Vec<Interface>, String> {
         .collect()
 }
 
+/// Whether `names` (empty: every usable network) can carry `link`, decided as
+/// `run` will: a server on this computer needs no network at all, since
+/// loopback is never pinned. For front ends that check before starting.
+pub fn check_networks(link: &str, names: &[String]) -> Result<(), String> {
+    match pick_networks(names) {
+        Ok(_) => Ok(()),
+        Err(_)
+            if names.is_empty()
+                && parse_link(link).is_ok_and(|(_, host, _, _)| is_local_host(&host)) =>
+        {
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
+}
+
 /// Addresses a network can try, in Happy Eyeballs order (RFC 8305 §4): families
 /// interleaved starting with the first resolved, and the last address that worked
 /// first. Families the network has no address in are left out.
@@ -1252,6 +1268,20 @@ mod tests {
                 .await
                 .is_err()
         );
+    }
+
+    #[test]
+    fn a_server_on_this_computer_needs_no_network_to_start() {
+        for local in [
+            "http://127.0.0.1:9/a.iso",
+            "http://localhost:8080/a",
+            "http://[::1]/x",
+        ] {
+            assert_eq!(check_networks(local, &[]), Ok(()), "{local}");
+        }
+        // Naming a network that isn't there is still an error, local or not.
+        let named = vec!["no-such-net9".to_string()];
+        assert!(check_networks("http://127.0.0.1:9/a.iso", &named).is_err());
     }
 
     #[test]

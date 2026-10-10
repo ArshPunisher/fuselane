@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use clap::{Parser, Subcommand};
-use fuselane_core::runner::{self, describe, parse_link, parse_sha256, pick_networks};
+use fuselane_core::runner::{self, describe, parse_link, parse_sha256};
 use fuselane_core::{Outcome, RunOptions, StartError, Status, Store};
 use fuselane_engine_http::download::{Cancel, ProgressFn, Resume};
 
@@ -435,7 +435,8 @@ async fn get(
         eprintln!("fuselane: {msg}");
         return ExitCode::from(2);
     }
-    if let Err(msg) = pick_networks(names) {
+    // A server on this computer needs no network: the same rule as the download.
+    if let Err(msg) = runner::check_networks(link, names) {
         eprintln!("fuselane: {msg}");
         return ExitCode::from(2);
     }
