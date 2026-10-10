@@ -354,8 +354,14 @@ test('one switch pauses every animation, and it is remembered', async ({ page })
   await page.goto('/')
   await expect(page.locator('html')).toHaveAttribute('data-still', '')
   await page.waitForTimeout(1200)
-  const box = await page.locator('.hero h1 .line > span').first().boundingBox()
-  expect(box?.y ?? 0).toBeGreaterThan(0)
+  // The headline's lines have risen fully into place.
+  const offset = await page
+    .locator('.hero h1 .line')
+    .first()
+    .evaluate(
+      (l) => l.firstElementChild!.getBoundingClientRect().top - l.getBoundingClientRect().top,
+    )
+  expect(Math.abs(offset)).toBeLessThan(2)
   expect(await page.locator('.hero-lead').evaluate((e) => getComputedStyle(e).opacity)).toBe('1')
   await page.goto('/download/')
   await expect(page.locator('html')).toHaveAttribute('data-still', '')
