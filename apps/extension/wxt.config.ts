@@ -23,7 +23,13 @@ export default defineConfig({
     ...(browser === 'firefox'
       ? {
           browser_specific_settings: {
-            gecko: { id: 'fuselane@fuselane.app', strict_min_version: '128.0' },
+            gecko: {
+              id: 'fuselane@fuselane.app',
+              strict_min_version: '128.0',
+              // Required for new listings on addons.mozilla.org: Fuselane's
+              // extension collects and sends nothing to anyone.
+              data_collection_permissions: { required: ['none'] },
+            },
           },
         }
       : {}),
