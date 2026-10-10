@@ -56,8 +56,8 @@
 .detected {
   padding: 2px 7px;
   border-radius: 999px;
-  background: var(--fuse-soft);
-  color: var(--fuse);
+  background: var(--fuse);
+  color: var(--fuse-ink);
   font-size: 11.5px;
   font-weight: 600;
 }

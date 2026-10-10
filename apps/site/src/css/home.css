@@ -272,7 +272,7 @@
 }
 
 .core[data-wide] .sat[data-below] {
-  transform: translate(-50%, 22px);
+  transform: translate(20px, -50%);
 }
 
 .core[data-wide] .sat:active {
@@ -280,7 +280,7 @@
 }
 
 .core[data-wide] .sat[data-below]:active {
-  transform: translate(-50%, 22px) scale(0.97);
+  transform: translate(20px, -50%) scale(0.97);
 }
 
 .core-file {
