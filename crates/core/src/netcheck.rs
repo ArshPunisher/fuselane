@@ -1,27 +1,16 @@
 //! Network check (B10.1): "why is my internet bad?", measured per network.
 //!
-//! For each network on its own: latency and jitter (timed TCP connects),
-//! download speed (a real download through the engine, pinned to that network),
-//! latency while that download runs (bufferbloat, graded A+ to F) and how long
-//! a DNS lookup takes. Then every network together. Free to run: the speed test
-//! uses Cloudflare's public speed endpoint, and nothing is uploaded.
+//! The parts the speed test (`speedtest`) builds on: latency and jitter from
+//! timed TCP connects, latency while the line is busy (bufferbloat, graded A+
+//! to F) and how long a DNS lookup takes.
 
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use fuselane_netif::Interface;
 
-use crate::RunOptions;
-
-/// Downloaded per network for the speed test (enough to leave slow start).
-pub const SPEED_BYTES: u64 = 25_000_000;
-/// Cloudflare's public speed-test endpoint (free, no account).
-pub fn speed_url(bytes: u64) -> String {
-    format!("https://speed.cloudflare.com/__down?bytes={bytes}")
-}
 /// Where latency is timed: a TCP connect to Cloudflare's resolver on 443.
 pub const LATENCY_TARGET: &str = "1.1.1.1:443";
 /// The resolver timed for DNS, and the name asked for.
@@ -77,18 +66,6 @@ pub fn bloat_grade(idle_ms: f64, loaded_ms: f64) -> &'static str {
     }
 }
 
-/// One network's (or all networks') result.
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct Measured {
-    pub idle: Option<Latency>,
-    pub loaded: Option<Latency>,
-    /// Download speed in bytes per second.
-    pub down_bps: Option<f64>,
-    pub dns_ms: Option<f64>,
-    /// What went wrong, in plain words, when something couldn't be measured.
-    pub problem: Option<String>,
-}
-
 /// Times `n` TCP connects to `dest` through `iface`, one after another.
 pub async fn connect_times(
     iface: &Interface,
@@ -109,7 +86,7 @@ pub async fn connect_times(
 }
 
 /// Keeps timing connects until `stop` is set: latency under load.
-async fn connect_until(
+pub async fn connect_until(
     iface: Interface,
     dest: SocketAddr,
     stop: Arc<AtomicBool>,
@@ -134,64 +111,6 @@ pub async fn dns_time(iface: &Interface, server: SocketAddr, name: &str) -> Opti
         .ok()
         .filter(|a| !a.is_empty())
         .map(|_| start.elapsed().as_secs_f64() * 1000.0)
-}
-
-/// Downloads `url` through `networks` (empty = all) into `dir` and returns
-/// bytes per second; the file is removed afterwards.
-pub async fn download_speed(
-    url: &str,
-    networks: Vec<String>,
-    dir: PathBuf,
-    cancel: Option<fuselane_engine_http::download::Cancel>,
-) -> Result<f64, String> {
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let start = Instant::now();
-    let opts = RunOptions {
-        networks,
-        cancel,
-        ..RunOptions::default()
-    };
-    let report = crate::runner::fetch(url, dir, opts).await;
-    let secs = start.elapsed().as_secs_f64();
-    if let Ok(r) = &report {
-        let _ = std::fs::remove_file(&r.path);
-    }
-    let r = report?;
-    Ok(r.total as f64 / secs.max(0.001))
-}
-
-/// Everything for one network: idle latency, then a download with latency
-/// timed alongside, then DNS.
-pub async fn measure(
-    iface: &Interface,
-    url: &str,
-    latency_at: SocketAddr,
-    dns_at: SocketAddr,
-    dir: PathBuf,
-) -> Measured {
-    let mut m = Measured {
-        idle: latency_of(&connect_times(iface, latency_at, 8, Duration::from_secs(2)).await),
-        ..Measured::default()
-    };
-    if m.idle.is_none() {
-        m.problem = Some(
-            "No answer through this network: it may be offline or behind a sign-in page.".into(),
-        );
-        return m;
-    }
-    let stop = Arc::new(AtomicBool::new(false));
-    let loaded = tokio::spawn(connect_until(iface.clone(), latency_at, stop.clone()));
-    // Let the download get going before loaded latency counts.
-    let speed = download_speed(url, vec![iface.name.clone()], dir, None).await;
-    stop.store(true, Ordering::Relaxed);
-    let loaded = loaded.await.unwrap_or_default();
-    m.loaded = latency_of(&loaded[loaded.len().min(3)..]).or_else(|| latency_of(&loaded));
-    match speed {
-        Ok(bps) => m.down_bps = Some(bps),
-        Err(e) => m.problem = Some(format!("The speed test didn't finish: {e}")),
-    }
-    m.dns_ms = dns_time(iface, dns_at, DNS_NAME).await;
-    m
 }
 
 #[cfg(test)]
@@ -220,7 +139,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn connects_and_downloads_are_timed() {
+    async fn connects_are_timed() {
         use fuselane_testkit::{Content, RangeServer};
         let server = RangeServer::start(Content::new(400 * 1024, 7))
             .await
@@ -234,16 +153,5 @@ mod tests {
         };
         let times = connect_times(&lo, server.addr(), 3, Duration::from_secs(2)).await;
         assert!(times.iter().all(Option::is_some));
-        let dir = tempfile::tempdir().unwrap();
-        let url = format!("http://{}{}", server.addr(), server.path());
-        let bps = download_speed(&url, vec![], dir.path().to_path_buf(), None)
-            .await
-            .unwrap();
-        assert!(bps > 0.0);
-        assert_eq!(
-            std::fs::read_dir(dir.path()).unwrap().count(),
-            0,
-            "nothing left behind"
-        );
     }
 }

@@ -472,6 +472,10 @@ pub enum UiEvent {
     NetCheck {
         view: netcheck::NetCheckView,
     },
+    /// The speed test as it runs, ten times a second; `None` when it ends.
+    SpeedLive {
+        live: Option<netcheck::SpeedLive>,
+    },
     /// Nearby: devices, who can see this computer, requests, transfers (B8.11).
     Nearby {
         view: Box<crate::nearby::NearbyView>,
@@ -5655,5 +5659,284 @@ mod tests {
         }
         let svc = Service::new(Store::open(&path).unwrap(), dir.path().to_path_buf()).unwrap();
         assert_eq!(svc.jobs().unwrap()[0].status, "paused");
+    }
+}
+
+#[cfg(test)]
+mod speedtest_tests {
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    use fuselane_core::Store;
+    use fuselane_core::speedtest::{Plan, Target};
+
+    use super::netcheck::CheckTargets;
+    use super::{Service, UiEvent, lock};
+
+    /// A stand-in speed server on loopback: GET /__down?bytes=N sends N bytes,
+    /// POST /__up takes the body, GET /meta names a provider. Also answers the
+    /// latency connects.
+    async fn speed_server() -> std::net::SocketAddr {
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = l.local_addr().unwrap();
+        tokio::spawn(async move {
+            while let Ok((mut s, _)) = l.accept().await {
+                tokio::spawn(async move {
+                    let mut buf = vec![0u8; 64 * 1024];
+                    let mut pending: Vec<u8> = vec![];
+                    loop {
+                        while !pending.windows(4).any(|w| w == b"\r\n\r\n") {
+                            let Ok(n) = s.read(&mut buf).await else {
+                                return;
+                            };
+                            if n == 0 {
+                                return;
+                            }
+                            pending.extend_from_slice(&buf[..n]);
+                        }
+                        let end = pending.windows(4).position(|w| w == b"\r\n\r\n").unwrap() + 4;
+                        let head = String::from_utf8_lossy(&pending[..end]).to_string();
+                        pending.drain(..end);
+                        if head.starts_with("GET /meta") {
+                            let body = r#"{"asOrganization":"Test ISP","city":"Pune"}"#;
+                            let h = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}",
+                                body.len()
+                            );
+                            let _ = s.write_all(h.as_bytes()).await;
+                            return;
+                        } else if head.starts_with("GET /__down") {
+                            let n: usize = head
+                                .split("bytes=")
+                                .nth(1)
+                                .and_then(|r| r.split_whitespace().next())
+                                .and_then(|v| v.parse().ok())
+                                .unwrap_or(0);
+                            let h = format!("HTTP/1.1 200 OK\r\nContent-Length: {n}\r\n\r\n");
+                            if s.write_all(h.as_bytes()).await.is_err() {
+                                return;
+                            }
+                            let chunk = vec![1u8; 64 * 1024];
+                            let mut left = n;
+                            while left > 0 {
+                                let k = left.min(chunk.len());
+                                if s.write_all(&chunk[..k]).await.is_err() {
+                                    return;
+                                }
+                                left -= k;
+                            }
+                        } else {
+                            let len: usize = head
+                                .lines()
+                                .find_map(|l| {
+                                    l.to_ascii_lowercase()
+                                        .strip_prefix("content-length:")
+                                        .map(|v| v.trim().to_string())
+                                })
+                                .and_then(|v| v.parse().ok())
+                                .unwrap_or(0);
+                            let mut got = pending.len().min(len);
+                            pending.drain(..got);
+                            while got < len {
+                                let Ok(n) = s.read(&mut buf).await else {
+                                    return;
+                                };
+                                if n == 0 {
+                                    return;
+                                }
+                                got += n;
+                            }
+                            if s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
+                                .await
+                                .is_err()
+                            {
+                                return;
+                            }
+                        }
+                    }
+                });
+            }
+        });
+        addr
+    }
+
+    fn quick(addr: std::net::SocketAddr) -> CheckTargets {
+        let plan = Plan {
+            duration: Duration::from_millis(1200),
+            streams: 2,
+            request_bytes: 4_000_000,
+            cap_bytes: u64::MAX,
+        };
+        CheckTargets {
+            speed: Some(Target {
+                host: "localhost".into(),
+                addrs: vec![addr],
+                tls: false,
+            }),
+            latency: Some(addr),
+            dns: None,
+            down: plan,
+            up: plan,
+        }
+    }
+
+    struct H {
+        svc: Arc<Service>,
+        events: Arc<std::sync::Mutex<Vec<UiEvent>>>,
+        _dir: tempfile::TempDir,
+    }
+
+    fn harness() -> H {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("fuselane.db")).unwrap();
+        let svc = Service::new(store, dir.path().to_path_buf()).unwrap();
+        let events: Arc<std::sync::Mutex<Vec<UiEvent>>> = Arc::default();
+        svc.subscribe({
+            let events = events.clone();
+            Arc::new(move |e| lock(&events).push(e))
+        });
+        H {
+            svc,
+            events,
+            _dir: dir,
+        }
+    }
+
+    async fn until_done(svc: &Service) {
+        let start = Instant::now();
+        while svc.netcheck_view().running {
+            assert!(
+                start.elapsed() < Duration::from_secs(60),
+                "speed test never ended"
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_speed_test_measures_each_network_live_and_counts_its_data() {
+        let h = harness();
+        let nets = h.svc.download_networks().unwrap_or_default();
+        if nets.is_empty() {
+            return; // a machine with no network to test through
+        }
+        let addr = speed_server().await;
+        h.svc.start_netcheck(quick(addr)).unwrap();
+        // A second start while it runs doesn't start another.
+        assert!(h.svc.start_netcheck(quick(addr)).unwrap().running);
+        until_done(&h.svc).await;
+        let view = h.svc.netcheck_view();
+        let run = &view.history[0];
+        assert_eq!(run.results.len(), nets.len());
+        for r in &run.results {
+            assert!(r.down_bps.unwrap() > 0.0, "{r:?}");
+            assert!(r.up_bps.unwrap() > 0.0, "{r:?}");
+            assert!(r.idle_ms.is_some() && r.loaded_ms.is_some(), "{r:?}");
+            assert_eq!(r.isp.as_deref(), Some("Test ISP"));
+            assert_eq!(r.server.as_deref(), Some("Pune"));
+            assert!(r.bytes > 0);
+            assert!(r.problem.is_none(), "{r:?}");
+        }
+        assert_eq!(run.together_bps.is_some(), nets.len() > 1);
+        let events = lock(&h.events);
+        let live: Vec<_> = events
+            .iter()
+            .filter_map(|e| match e {
+                UiEvent::SpeedLive { live } => Some(live.clone()),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            live.iter()
+                .any(|l| l.as_ref().is_some_and(|l| l.step == "down" && l.bps > 0.0))
+        );
+        assert!(
+            live.iter()
+                .any(|l| l.as_ref().is_some_and(|l| l.step == "up"))
+        );
+        assert!(
+            live.last().unwrap().is_none(),
+            "the last live update clears it"
+        );
+        let overall: Vec<f64> = live.iter().flatten().map(|l| l.overall).collect();
+        assert!(
+            overall.windows(2).all(|w| w[1] + 1e-9 >= w[0]),
+            "progress only grows"
+        );
+        assert!(overall.iter().all(|o| (0.0..=1.0).contains(o)));
+        drop(events);
+        // Its data counts toward each network's usage.
+        let used: u64 = h.svc.limiter.drain_usage().iter().map(|(_, b)| b).sum();
+        assert!(used >= run.results.iter().map(|r| r.bytes).sum::<u64>());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_network_past_its_allowance_is_skipped_and_stop_ends_it_quickly() {
+        let h = harness();
+        let nets = h.svc.download_networks().unwrap_or_default();
+        let Some(first) = nets.first() else { return };
+        h.svc.limiter.set_blocked([first.name.clone()]);
+        let addr = speed_server().await;
+        let mut targets = quick(addr);
+        targets.down.duration = Duration::from_secs(20);
+        targets.up.duration = Duration::from_secs(20);
+        h.svc.start_netcheck(targets).unwrap();
+        tokio::time::sleep(Duration::from_millis(600)).await;
+        let start = Instant::now();
+        h.svc.cancel_netcheck();
+        until_done(&h.svc).await;
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "stop took {:?}",
+            start.elapsed()
+        );
+        let run = &h.svc.netcheck_view().history[0];
+        let skipped = run.results.iter().find(|r| r.name == first.name).unwrap();
+        assert!(
+            skipped
+                .problem
+                .as_deref()
+                .unwrap()
+                .contains("data allowance")
+        );
+        assert_eq!(skipped.bytes, 0);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_speed_server_that_is_down_is_a_problem_per_network_not_a_hang() {
+        let h = harness();
+        if h.svc.download_networks().unwrap_or_default().is_empty() {
+            return;
+        }
+        // Latency answers, but nothing serves the speed test.
+        let latency = speed_server().await;
+        let gone = {
+            let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            l.local_addr().unwrap()
+        };
+        let mut targets = quick(latency);
+        targets.speed = Some(Target {
+            host: "localhost".into(),
+            addrs: vec![gone],
+            tls: false,
+        });
+        let start = Instant::now();
+        h.svc.start_netcheck(targets).unwrap();
+        until_done(&h.svc).await;
+        assert!(start.elapsed() < Duration::from_secs(20));
+        let run = &h.svc.netcheck_view().history[0];
+        for r in &run.results {
+            assert_eq!(r.down_bps, None);
+            assert!(
+                r.problem
+                    .as_deref()
+                    .unwrap()
+                    .starts_with("The speed test didn't finish"),
+                "{r:?}"
+            );
+        }
+        assert_eq!(run.together_bps, None);
     }
 }

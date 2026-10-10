@@ -14,6 +14,7 @@ pub mod metalink;
 pub mod netcheck;
 pub mod proxy;
 pub mod runner;
+pub mod speedtest;
 pub mod store;
 
 pub use job::{Event, InvalidTransition, Status};

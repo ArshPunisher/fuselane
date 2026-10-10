@@ -16,7 +16,7 @@ fuselane-netif.workspace = true
 fuselane-transport.workspace = true
 fuselane-storage.workspace = true
 fuselane-limits.workspace = true
-tokio = { version = "1", features = ["net", "time", "rt", "macros"] }
+tokio = { version = "1", features = ["net", "time", "rt", "macros", "io-util"] }
 url = "2"
 percent-encoding = "2"
 quick-xml = "0.42"

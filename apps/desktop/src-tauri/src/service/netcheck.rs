@@ -1,14 +1,17 @@
-//! Network check (B10.1) in the app: runs `core::netcheck` on every network,
-//! shows progress live, keeps the last checks, logs outages from the regular
-//! reach checks, and writes a dated report people can send their internet
-//! provider as proof.
+//! Speedtest (B10.1) in the app: measures every network on its own (ping,
+//! download, upload, latency while busy, DNS) and then every network together,
+//! with the live speed shown as it goes; keeps the last runs, logs outages from
+//! the regular reach checks, and writes a dated report people can send their
+//! internet provider as proof.
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::{Deserialize, Serialize};
 
 use fuselane_core::netcheck;
+use fuselane_core::speedtest::{self, Direction, Plan, Target};
 use fuselane_transport::probe::Reach;
 
 use super::{Service, UiError, UiEvent, lock, store_error};
@@ -25,14 +28,29 @@ pub struct NetResult {
     pub kind: String,
     /// Bytes per second.
     pub down_bps: Option<f64>,
+    #[serde(default)]
+    pub up_bps: Option<f64>,
     pub idle_ms: Option<f64>,
     pub jitter_ms: Option<f64>,
     /// Share of connects that got no answer, 0..=1.
     pub loss: Option<f64>,
+    /// Latency while downloading.
     pub loaded_ms: Option<f64>,
-    /// Bufferbloat grade, A+ to F.
+    /// Latency while uploading.
+    #[serde(default)]
+    pub loaded_up_ms: Option<f64>,
+    /// Bufferbloat grade, A+ to F, from the worse of the two.
     pub grade: Option<String>,
     pub dns_ms: Option<f64>,
+    /// The internet provider behind this network, as the speed server sees it.
+    #[serde(default)]
+    pub isp: Option<String>,
+    /// Where the speed server answering this network is ("Mumbai").
+    #[serde(default)]
+    pub server: Option<String>,
+    /// Data the test used on this network, both ways.
+    #[serde(default)]
+    pub bytes: u64,
     pub problem: Option<String>,
 }
 
@@ -44,6 +62,25 @@ pub struct CheckRun {
     pub results: Vec<NetResult>,
     /// Every network at once, bytes per second.
     pub together_bps: Option<f64>,
+}
+
+/// The run as it happens, ten times a second (its own event, so the history
+/// isn't resent each time).
+#[derive(Debug, Clone, Default, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SpeedLive {
+    /// "ping", "down", "up" or "together".
+    pub step: String,
+    /// The network being measured (its label); none for "together".
+    pub network: Option<String>,
+    /// Speed right now, bytes per second.
+    pub bps: f64,
+    /// How far through this step, 0..=1.
+    pub progress: f64,
+    /// How far through the whole run, 0..=1.
+    pub overall: f64,
+    /// This step's speed every tenth of a second so far, bytes per second.
+    pub trace: Vec<f64>,
 }
 
 /// A time a network stopped reaching the internet.
@@ -75,30 +112,67 @@ pub(super) struct NetCheckState {
     pub running: bool,
     pub phase: Option<String>,
     pub current: Option<CheckRun>,
-    pub cancel: Option<fuselane_engine_http::download::Cancel>,
+    /// Set to stop the run; `None` once stopped.
+    pub cancel: Option<Arc<AtomicBool>>,
+    /// Steps done so far and in all, in seconds of planned time.
+    pub done_secs: f64,
+    pub total_secs: f64,
+}
+
+/// Seconds planned per step, for the overall progress.
+const PING_SECS: f64 = 1.5;
+
+/// Where a speed test reaches: the real internet, or stand-ins in tests.
+#[derive(Debug, Clone)]
+pub struct CheckTargets {
+    /// The speed server; `None` looks it up through each network.
+    pub speed: Option<Target>,
+    /// Timed for latency (TCP connects).
+    pub latency: Option<std::net::SocketAddr>,
+    /// Timed for DNS; `None` skips it.
+    pub dns: Option<std::net::SocketAddr>,
+    pub down: Plan,
+    pub up: Plan,
+}
+
+impl Default for CheckTargets {
+    fn default() -> Self {
+        CheckTargets {
+            speed: None,
+            latency: netcheck::LATENCY_TARGET.parse().ok(),
+            dns: netcheck::DNS_SERVER.parse().ok(),
+            down: Plan::DOWN,
+            up: Plan::UP,
+        }
+    }
 }
 
 fn now() -> i64 {
     super::deadline::unix_now()
 }
 
-fn result_from(iface: &fuselane_netif::Interface, m: &netcheck::Measured) -> NetResult {
-    NetResult {
-        name: iface.name.clone(),
-        label: iface.display_name.clone(),
-        kind: super::kind_word(iface.kind),
-        down_bps: m.down_bps,
-        idle_ms: m.idle.map(|l| l.median_ms),
-        jitter_ms: m.idle.map(|l| l.jitter_ms),
-        loss: m.idle.map(|l| l.loss),
-        loaded_ms: m.loaded.map(|l| l.median_ms),
-        grade: match (m.idle, m.loaded) {
-            (Some(i), Some(l)) => Some(netcheck::bloat_grade(i.median_ms, l.median_ms).to_string()),
-            _ => None,
-        },
-        dns_ms: m.dns_ms,
-        problem: m.problem.clone(),
-    }
+/// The provider and server city from Cloudflare's `/meta` answer.
+fn meta_of(body: &str) -> (Option<String>, Option<String>) {
+    let v: serde_json::Value = serde_json::from_str(body).unwrap_or_default();
+    let field = |k: &str| {
+        v.get(k)
+            .and_then(|x| x.as_str())
+            .map(str::trim)
+            .filter(|x| !x.is_empty())
+            .map(String::from)
+    };
+    (
+        field("asOrganization"),
+        field("city").or_else(|| field("colo")),
+    )
+}
+
+/// Latency from timed connects, dropping the first few (they overlap the
+/// start, before the line is busy).
+fn loaded_of(samples: &[Option<f64>]) -> Option<f64> {
+    netcheck::latency_of(&samples[samples.len().min(3)..])
+        .or_else(|| netcheck::latency_of(samples))
+        .map(|l| l.median_ms)
 }
 
 impl Service {
@@ -128,9 +202,12 @@ impl Service {
         });
     }
 
-    /// Starts a check of every usable network (one at a time, so they don't
-    /// slow each other), then all together. `url` is the speed-test file.
-    pub fn start_netcheck(self: &Arc<Self>, url: Option<String>) -> Result<NetCheckView, UiError> {
+    /// Starts a speed test of every usable network (one at a time, so they
+    /// don't slow each other), then all together.
+    pub fn start_netcheck(
+        self: &Arc<Self>,
+        targets: CheckTargets,
+    ) -> Result<NetCheckView, UiError> {
         {
             let mut st = lock(&self.netcheck);
             if st.running {
@@ -143,71 +220,239 @@ impl Service {
                 at: now(),
                 ..CheckRun::default()
             });
-            st.cancel = Some(fuselane_engine_http::download::Cancel::new());
+            st.cancel = Some(Arc::default());
+            st.done_secs = 0.0;
         }
         let me = self.clone();
-        let url = url.unwrap_or_else(|| netcheck::speed_url(netcheck::SPEED_BYTES));
-        tokio::spawn(async move { me.run_netcheck(url).await });
+        tokio::spawn(async move { me.run_netcheck(targets).await });
         Ok(self.netcheck_view())
     }
 
     pub fn cancel_netcheck(&self) {
         let mut st = lock(&self.netcheck);
         if let Some(c) = st.cancel.take() {
-            c.cancel();
+            c.store(true, Ordering::Relaxed);
         }
         st.phase = Some("Stopping…".into());
     }
 
-    fn cancelled(&self) -> bool {
-        lock(&self.netcheck).cancel.is_none()
+    fn stop_flag(&self) -> Arc<AtomicBool> {
+        lock(&self.netcheck)
+            .cancel
+            .clone()
+            .unwrap_or_else(|| Arc::new(AtomicBool::new(true)))
     }
 
-    async fn run_netcheck(self: Arc<Self>, url: String) {
+    fn cancelled(&self) -> bool {
+        self.stop_flag().load(Ordering::Relaxed)
+    }
+
+    fn set_phase(&self, phase: String) {
+        lock(&self.netcheck).phase = Some(phase);
+        self.publish_netcheck();
+    }
+
+    /// Sends where the run is: `step_secs` is this step's planned length.
+    fn publish_live(&self, live: SpeedLive, step_secs: f64) {
+        let mut live = live;
+        {
+            let st = lock(&self.netcheck);
+            live.overall = ((st.done_secs + live.progress * step_secs) / st.total_secs.max(1.0))
+                .clamp(0.0, 1.0);
+        }
+        self.send(UiEvent::SpeedLive { live: Some(live) });
+    }
+
+    fn step_done(&self, secs: f64) {
+        lock(&self.netcheck).done_secs += secs;
+    }
+
+    /// One direction over `nets`, with the live speed sent as it goes.
+    async fn speed_step(
+        &self,
+        dir: Direction,
+        step: &str,
+        network: Option<String>,
+        nets: &[(fuselane_netif::Interface, Target)],
+        plan: Plan,
+    ) -> (Vec<speedtest::Throughput>, speedtest::Throughput) {
+        let trace = std::sync::Mutex::new(Vec::<f64>::new());
+        let secs = plan.duration.as_secs_f64();
+        let out = speedtest::run(dir, nets, plan, self.stop_flag(), |t| {
+            let now: f64 = t.now_bps.iter().sum();
+            let mut tr = lock(&trace);
+            tr.push(now);
+            self.publish_live(
+                SpeedLive {
+                    step: step.into(),
+                    network: network.clone(),
+                    bps: now,
+                    progress: t.progress,
+                    overall: 0.0,
+                    trace: tr.clone(),
+                },
+                secs,
+            );
+        })
+        .await;
+        self.step_done(secs);
+        out
+    }
+
+    async fn run_netcheck(self: Arc<Self>, targets: CheckTargets) {
         let nets = self.download_networks().unwrap_or_default();
-        let dir = std::env::temp_dir().join("fuselane-netcheck");
-        let latency_at = netcheck::LATENCY_TARGET.parse().ok();
-        let dns_at = netcheck::DNS_SERVER.parse().ok();
+        let (latency_at, dns_at, target) = (targets.latency, targets.dns, targets.speed);
+        let (down_plan, up_plan) = (targets.down, targets.up);
+        let per_net = PING_SECS + down_plan.duration.as_secs_f64() + up_plan.duration.as_secs_f64();
+        lock(&self.netcheck).total_secs = per_net * nets.len() as f64
+            + if nets.len() > 1 {
+                down_plan.duration.as_secs_f64()
+            } else {
+                0.0
+            };
+        // Networks that measured, with the server they found, for "together".
+        let mut working = vec![];
         for iface in &nets {
             if self.cancelled() {
                 break;
             }
-            lock(&self.netcheck).phase = Some(format!("Testing {}…", iface.display_name));
-            self.publish_netcheck();
-            let m = match (latency_at, dns_at) {
-                (Some(l), Some(d)) => netcheck::measure(iface, &url, l, d, dir.clone()).await,
-                _ => netcheck::Measured::default(),
+            let label = iface.display_name.clone();
+            let mut r = NetResult {
+                name: iface.name.clone(),
+                label: label.clone(),
+                kind: super::kind_word(iface.kind),
+                ..NetResult::default()
             };
-            if let Some(c) = lock(&self.netcheck).current.as_mut() {
-                c.results.push(result_from(iface, &m));
+            // A network past its data allowance isn't run flat out.
+            if self.limiter.blocked(&iface.name) {
+                r.problem =
+                    Some("Skipped: this network has used its data allowance for the month.".into());
+                self.step_done(per_net);
+                self.push_result(r);
+                continue;
             }
-            self.publish_netcheck();
-        }
-        // Every network at once: each downloads its own copy at the same time.
-        if nets.len() > 1 && !self.cancelled() {
-            lock(&self.netcheck).phase = Some("Testing every network together…".into());
-            self.publish_netcheck();
-            let mut set = tokio::task::JoinSet::new();
-            for iface in nets.iter().filter(|i| {
-                lock(&self.netcheck).current.as_ref().is_some_and(|c| {
-                    c.results
-                        .iter()
-                        .any(|r| r.name == i.name && r.down_bps.is_some())
-                })
-            }) {
-                let (url, name, d) = (url.clone(), iface.name.clone(), dir.join(&iface.name));
-                set.spawn(async move { netcheck::download_speed(&url, vec![name], d, None).await });
+            // Ping: find the speed server, who the provider is, idle latency, DNS.
+            self.set_phase(format!("Testing {label}…"));
+            self.publish_live(
+                SpeedLive {
+                    step: "ping".into(),
+                    network: Some(label.clone()),
+                    ..SpeedLive::default()
+                },
+                PING_SECS,
+            );
+            let found = match (&target, dns_at) {
+                (Some(t), _) => Ok(t.clone()),
+                (None, Some(dns)) => speedtest::target_on(iface, dns).await,
+                (None, None) => Err("Couldn't look up the speed server.".into()),
+            };
+            let idle = match latency_at {
+                Some(at) => netcheck::latency_of(
+                    &netcheck::connect_times(iface, at, 10, std::time::Duration::from_secs(2))
+                        .await,
+                ),
+                None => None,
+            };
+            r.idle_ms = idle.map(|l| l.median_ms);
+            r.jitter_ms = idle.map(|l| l.jitter_ms);
+            r.loss = idle.map(|l| l.loss);
+            if let Some(dns) = dns_at {
+                r.dns_ms = netcheck::dns_time(iface, dns, netcheck::DNS_NAME).await;
             }
-            let mut sum = 0.0;
-            let mut any = false;
-            while let Some(r) = set.join_next().await {
-                if let Ok(Ok(bps)) = r {
-                    sum += bps;
-                    any = true;
+            self.step_done(PING_SECS);
+            let tgt = match (idle, found) {
+                (None, _) => {
+                    r.problem = Some(
+                        "No answer through this network: it may be offline or behind a sign-in page."
+                            .into(),
+                    );
+                    None
+                }
+                (_, Err(e)) => {
+                    r.problem = Some(e);
+                    None
+                }
+                (_, Ok(t)) => Some(t),
+            };
+            let Some(tgt) = tgt else {
+                // Skip its speed steps in the overall progress.
+                self.step_done(per_net - PING_SECS);
+                self.push_result(r);
+                continue;
+            };
+            if let Ok(body) = speedtest::fetch_small(iface, &tgt, "/meta").await {
+                (r.isp, r.server) = meta_of(&body);
+            }
+            let one = [(iface.clone(), tgt.clone())];
+            for dir in [Direction::Down, Direction::Up] {
+                if self.cancelled() {
+                    break;
+                }
+                let (step, plan) = match dir {
+                    Direction::Down => ("down", down_plan),
+                    Direction::Up => ("up", up_plan),
+                };
+                // Latency while busy, timed alongside.
+                let busy = Arc::new(AtomicBool::new(false));
+                let probe = latency_at.map(|at| {
+                    tokio::spawn(netcheck::connect_until(iface.clone(), at, busy.clone()))
+                });
+                let (per, _) = self
+                    .speed_step(dir, step, Some(label.clone()), &one, plan)
+                    .await;
+                busy.store(true, Ordering::Relaxed);
+                let loaded = match probe {
+                    Some(p) => loaded_of(&p.await.unwrap_or_default()),
+                    None => None,
+                };
+                let t = per.into_iter().next().unwrap_or_default();
+                r.bytes += t.bytes;
+                // Speed-test data counts toward the network's usage and allowance.
+                self.limiter.count(&iface.name, t.bytes);
+                match dir {
+                    Direction::Down => {
+                        r.down_bps = t.bps;
+                        r.loaded_ms = loaded;
+                    }
+                    Direction::Up => {
+                        r.up_bps = t.bps;
+                        r.loaded_up_ms = loaded;
+                    }
+                }
+                if t.bps.is_none() && r.problem.is_none() {
+                    r.problem = t
+                        .problem
+                        .map(|p| format!("The speed test didn't finish: {p}"));
                 }
             }
-            if let Some(c) = lock(&self.netcheck).current.as_mut() {
-                c.together_bps = any.then_some(sum);
+            let worse = match (r.loaded_ms, r.loaded_up_ms) {
+                (Some(d), Some(u)) => Some(d.max(u)),
+                (d, u) => d.or(u),
+            };
+            r.grade = match (r.idle_ms, worse) {
+                (Some(i), Some(l)) => Some(netcheck::bloat_grade(i, l).to_string()),
+                _ => None,
+            };
+            if r.down_bps.is_some() {
+                working.push((iface.clone(), tgt));
+            }
+            self.push_result(r);
+        }
+        // Every network at once: what Fuselane can pull in together.
+        if nets.len() > 1 && !self.cancelled() {
+            if working.len() > 1 {
+                self.set_phase("Testing every network together…".into());
+                let (per, all) = self
+                    .speed_step(Direction::Down, "together", None, &working, down_plan)
+                    .await;
+                for ((iface, _), t) in working.iter().zip(&per) {
+                    self.limiter.count(&iface.name, t.bytes);
+                }
+                if let Some(c) = lock(&self.netcheck).current.as_mut() {
+                    c.together_bps = all.bps;
+                }
+            } else {
+                self.step_done(down_plan.duration.as_secs_f64());
             }
         }
         let finished = lock(&self.netcheck).current.clone();
@@ -225,7 +470,14 @@ impl Service {
             st.phase = None;
             st.cancel = None;
         }
-        let _ = std::fs::remove_dir_all(&dir);
+        self.send(UiEvent::SpeedLive { live: None });
+        self.publish_netcheck();
+    }
+
+    fn push_result(&self, r: NetResult) {
+        if let Some(c) = lock(&self.netcheck).current.as_mut() {
+            c.results.push(r);
+        }
         self.publish_netcheck();
     }
 
@@ -336,12 +588,14 @@ fn when(t: i64) -> String {
 pub fn report_html(view: &NetCheckView, version: &str) -> String {
     let mut checks = String::new();
     for run in &view.history {
-        checks.push_str(&format!("<h3>{}</h3><table><tr><th>Network</th><th>Download</th><th>Latency</th><th>Jitter</th><th>Loss</th><th>Under load</th><th>DNS</th><th>Note</th></tr>", esc(&when(run.at))));
+        checks.push_str(&format!("<h3>{}</h3><table><tr><th>Network</th><th>Download</th><th>Upload</th><th>Latency</th><th>Jitter</th><th>Loss</th><th>Under load</th><th>DNS</th><th>Note</th></tr>", esc(&when(run.at))));
         for r in &run.results {
             checks.push_str(&format!(
-                "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}{}</td><td>{}</td><td>{}</td></tr>",
+                "<tr><td>{}{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}{}</td><td>{}</td><td>{}</td></tr>",
                 esc(&r.label),
+                r.isp.as_deref().map(|i| format!("<br><small>{}</small>", esc(i))).unwrap_or_default(),
                 mbps(r.down_bps),
+                mbps(r.up_bps),
                 ms(r.idle_ms),
                 ms(r.jitter_ms),
                 r.loss.map_or("–".into(), |l| format!("{:.0}%", l * 100.0)),
@@ -353,7 +607,7 @@ pub fn report_html(view: &NetCheckView, version: &str) -> String {
         }
         if run.together_bps.is_some() {
             checks.push_str(&format!(
-                "<tr class=\"all\"><td>All together</td><td>{}</td><td colspan=\"6\"></td></tr>",
+                "<tr class=\"all\"><td>All together</td><td>{}</td><td colspan=\"7\"></td></tr>",
                 mbps(run.together_bps)
             ));
         }
@@ -390,7 +644,7 @@ table{{border-collapse:collapse;width:100%;font-size:13px}}th,td{{text-align:lef
 <h1>Network report</h1><p class="sub">Made by Fuselane {version} on {made}. Each network measured on its own.</p>
 <h2>Checks</h2>{checks}
 <h2>Outages</h2>{outage_table}
-<p class="note">Download speed: a 25 MB file from Cloudflare's public speed test, over that network only. Latency and jitter: timed connections to 1.1.1.1. Under load: latency while the download runs (bufferbloat, graded A+ to F). Outages are seen by a check every minute, so short drops may be missed.</p>
+<p class="note">Download and upload: 8 and 7 seconds over several connections at once to Cloudflare's public speed test, over that network only; the ramp-up and short bursts are left out, as public speed tests do. Latency and jitter: timed connections to 1.1.1.1. Under load: latency while the download runs (bufferbloat, graded A+ to F). Outages are seen by a check every minute, so short drops may be missed.</p>
 </body></html>"#,
         made = esc(&when(now())),
         outage_table = if outages.is_empty() {

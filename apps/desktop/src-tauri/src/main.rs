@@ -114,7 +114,7 @@ fn netcheck_state(svc: State<'_>) -> service::netcheck::NetCheckView {
 /// Measures every network (latency, speed, bufferbloat, DNS), then all together.
 #[tauri::command]
 async fn netcheck_start(svc: State<'_>) -> Result<service::netcheck::NetCheckView, UiError> {
-    svc.start_netcheck(None)
+    svc.start_netcheck(service::netcheck::CheckTargets::default())
 }
 
 #[tauri::command]
@@ -1544,6 +1544,7 @@ fn watch_for_shell(app: tauri::AppHandle, svc: &Arc<Service>) {
                     .show();
             }
             UiEvent::NetCheck { .. }
+            | UiEvent::SpeedLive { .. }
             | UiEvent::Torrents { .. }
             | UiEvent::Sends { .. }
             | UiEvent::Open { .. }
