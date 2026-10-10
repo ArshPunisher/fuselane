@@ -3,6 +3,12 @@
 Everything the store forms ask for, in one place. Build the upload with
 `pnpm --filter @fuselane/extension zip` (files land in `apps/extension/.output/`).
 
+**Source code for Firefox (and Edge) reviewers:** `tools/extension-source-zip.sh` makes
+`fuselaneextension-<version>-source-package.zip` with the extension, `packages/capture`, the
+workspace files, the lockfile and `SOURCE-README.md`. Rebuilt from it in an empty folder,
+`build:firefox` gives exactly the uploaded Firefox zip (checked for 0.2.0). Don't upload WXT's
+own `-sources.zip`: it leaves out the shared package and the lockfile.
+
 **Chrome Web Store:** item `nggljghjikdkigiekdciocigdnnhponl`, **approved and live** (0.1.0, 2026-10-10): https://chromewebstore.google.com/detail/fuselane/nggljghjikdkigiekdciocigdnnhponl. Next upload: 0.2.0 (page list, signed-in downloads) with the images below.
 
 ## Name and summary
