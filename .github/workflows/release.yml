@@ -91,6 +91,37 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
+      # macOS remembers "Fuselane may use the Downloads folder" by who signed the
+      # app. An ad-hoc signature changes with every build, so each update asked
+      # again; one lasting (self-signed, free) certificate means it's asked once.
+      # Without the secret the build stays ad-hoc, as before.
+      - name: Lasting signature (macOS)
+        if: runner.os == 'macOS'
+        env:
+          MAC_SIGNING_P12: ${{ secrets.MAC_SIGNING_P12 }}
+          MAC_SIGNING_P12_PASSWORD: ${{ secrets.MAC_SIGNING_P12_PASSWORD }}
+        shell: bash
+        run: |
+          set -eu
+          if [ -z "${MAC_SIGNING_P12:-}" ]; then
+            echo "No MAC_SIGNING_P12 secret: ad-hoc signature."
+            exit 0
+          fi
+          kc="$RUNNER_TEMP/fuselane.keychain-db"
+          kcpw=$(openssl rand -hex 16)
+          security create-keychain -p "$kcpw" "$kc"
+          security set-keychain-settings -lut 21600 "$kc"
+          security unlock-keychain -p "$kcpw" "$kc"
+          echo "$MAC_SIGNING_P12" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+          security import "$RUNNER_TEMP/signing.p12" -k "$kc" -P "$MAC_SIGNING_P12_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/signing.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$kcpw" "$kc" >/dev/null
+          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+          # Self-signed isn't "trusted", so it's named by its fingerprint.
+          id=$(security find-certificate -c "Fuselane Local Signing" -Z "$kc" | awk '/SHA-1/ {print $3}')
+          test -n "$id"
+          echo "APPLE_SIGNING_IDENTITY=$id" >> "$GITHUB_ENV"
+
       - name: Build the desktop app (update files signed with the release key)
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
