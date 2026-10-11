@@ -170,8 +170,13 @@ function Sending({
 }) {
   // Accepted: nothing to decide here any more. The Send page shows it going.
   const accepted = transfer?.state === 'sending' || transfer?.state === 'done'
+  // Once: the callback is new on every render while the dialog closes.
+  const shown = useRef(false)
   useEffect(() => {
-    if (accepted) onShowAll()
+    if (accepted && !shown.current) {
+      shown.current = true
+      onShowAll()
+    }
   }, [accepted, onShowAll])
   if (!transfer || transfer.state === 'asking')
     return (
