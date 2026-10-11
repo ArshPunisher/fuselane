@@ -137,8 +137,72 @@ async function bigCards(): Promise<HTMLElement[]> {
     })
 }
 
+/** A link already in Fuselane, paused or stopped: Resume it, or another copy. */
+async function sameCard(): Promise<HTMLElement | null> {
+  const same = (await browser.storage.local.get('sameAsk')).sameAsk as
+    | {
+        id: number
+        name: string
+        status: string
+        written: number
+        total: number | null
+        at: number
+      }
+    | undefined
+  if (!same || Date.now() - same.at > 30 * 60_000) return null
+  const pct = same.total ? ` at ${Math.floor((same.written / same.total) * 100)}%` : ''
+  const where = same.status === 'paused' ? `paused${pct}` : `stopped${pct}`
+  const finish = async (action: 'resume' | 'again') => {
+    resume.disabled = again.disabled = true
+    const reply = (await ask({ v: 1, type: 'job.action', id: same.id, action }).catch(
+      () => null,
+    )) as { error?: string } | null
+    if (!reply || reply.error) {
+      // Gone from the list since, or the app closed: say so, nothing to choose.
+      c.querySelector('.card-actions')!.replaceChildren(
+        el(
+          'p',
+          { className: 'muted small', role: 'status' },
+          reply
+            ? 'That download isn’t in Fuselane any more.'
+            : 'Fuselane didn’t answer. Try again.',
+        ),
+      )
+      if (reply) await browser.storage.local.remove('sameAsk')
+      else setTimeout(() => void showCards(), 3000)
+      return
+    }
+    await browser.storage.local.remove('sameAsk')
+    c.remove()
+  }
+  const resume = el(
+    'button',
+    { type: 'button', className: 'btn btn-primary btn-block' },
+    icon('play'),
+    'Resume it',
+  )
+  resume.addEventListener('click', () => void finish('resume'))
+  const again = el(
+    'button',
+    { type: 'button', className: 'btn btn-block' },
+    icon('download-simple'),
+    'Download it again',
+  )
+  again.addEventListener('click', () => void finish('again'))
+  const c = card(
+    'download-simple',
+    'Already in Fuselane',
+    `${same.name} is in your downloads, ${where}. Carry on with it, or download a new copy?`,
+    el('div', { className: 'card-actions' }, resume, again),
+  )
+  c.classList.add('card-ask')
+  return c
+}
+
 async function showCards() {
   cards.replaceChildren()
+  const same = await sameCard()
+  if (same) cards.append(same)
   const big = await bigCards()
   cards.append(...big)
   const access = await browser.permissions.contains({ origins: ['<all_urls>'] })
@@ -720,6 +784,8 @@ async function load() {
   // A question waiting (a file too big for the extension) shows at once,
   // before the app's state is known.
   cards.prepend(...(await bigCards()))
+  const same = await sameCard()
+  if (same) cards.prepend(same)
   app = await appStatus(ask, hello())
   knowApp(app)
   void browser.runtime.sendMessage({ type: 'app-changed' }).catch(() => {})

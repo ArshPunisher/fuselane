@@ -1,5 +1,5 @@
 import { checkReply, normalizeRules, type Rules } from '@fuselane/capture'
-import { handOff, offerFor, offerLink, type Item } from '../lib/handoff.ts'
+import { acceptedId, handOff, offerFor, offerLink, type Item } from '../lib/handoff.ts'
 import { getSession } from '../lib/session.ts'
 import { appStatus, browserId, mustPush, settle, type AppState } from '../lib/status.ts'
 import { cleanLimit, route } from '../lib/route.ts'
@@ -242,14 +242,15 @@ async function onRunnerEvent(e: RunnerEvent) {
 }
 
 /** Offers a browser download to the app (its own copy already stopped). True when taken. */
-async function offerItem(it: Item): Promise<boolean> {
+/** Offers a browser download to the app; the app's id for it, or null if not taken. */
+async function offerItem(it: Item): Promise<string | null> {
   const session = await getSession(it.finalUrl || it.url).catch(() => null)
   const reply = await Promise.race([
     ask(offerFor(it, 'auto', session)),
     new Promise((r) => setTimeout(() => r(null), RUNNING_WAIT_MS)),
   ]).catch(() => null)
   const checked = checkReply(reply)
-  return checked.ok && checked.value.type === 'download.accepted'
+  return checked.ok && checked.value.type === 'download.accepted' ? acceptedId(checked.value) : null
 }
 
 /** "Too big for the extension": Get the app, or let the browser have it. */
@@ -257,11 +258,37 @@ async function offerItem(it: Item): Promise<boolean> {
  * A download just started in Fuselane: the popup opens on Downloads to show it
  * (the app stays in the background; it comes up only for things to choose).
  */
-async function showStarted() {
+async function showStarted(jobId?: string) {
+  // The link was already in Fuselane, paused or stopped: the app kept that one
+  // rather than starting another. The popup asks what to do with it.
+  if (jobId) await askIfAlreadyThere(jobId)
   await browser.storage.local.set({ showDownloads: Date.now() })
   await (browser.action as unknown as { openPopup?: () => Promise<void> })
     .openPopup?.()
     .catch(() => {})
+}
+
+/** A link already in Fuselane (not running): "Resume" or "Download again". */
+const SAME_KEY = 'sameAsk'
+async function askIfAlreadyThere(jobId: string) {
+  const reply = (await ask({ v: 1, type: 'jobs.list' }).catch(() => null)) as {
+    jobs?: { id: number; name: string; status: string; written: number; total: number | null }[]
+  } | null
+  const job = reply?.jobs?.find((j) => String(j.id) === jobId)
+  if (!job || !['paused', 'failed', 'failed-final'].includes(job.status)) {
+    await browser.storage.local.remove(SAME_KEY)
+    return
+  }
+  await browser.storage.local.set({
+    [SAME_KEY]: {
+      id: job.id,
+      name: job.name,
+      status: job.status,
+      written: job.written,
+      total: job.total,
+      at: Date.now(),
+    },
+  })
 }
 
 /** Files too big for the extension, each waiting for "get the app or the browser". */
@@ -342,6 +369,7 @@ async function grab(url: string, pageUrl: string | null, name: string | null) {
   )
   if (r.to !== 'browser') markTaken(url)
   if (r.to === 'app') {
+    let jobId = ''
     const took = await offerLink(
       url,
       pageUrl ?? undefined,
@@ -349,9 +377,10 @@ async function grab(url: string, pageUrl: string | null, name: string | null) {
       getSession,
       () => browserDownload(url),
       START_WAIT_MS,
+      (id) => (jobId = id),
     )
     if (!took) known = null
-    else void showStarted()
+    else void showStarted(jobId)
   } else if (r.to === 'self' || r.to === 'too-big') {
     // Size unknown until it starts: the extension stops past its limit and asks.
     await startSelf(url, pageUrl, nameFor(url, name), null)
@@ -481,10 +510,10 @@ export default defineBackground(() => {
       if (r.to === 'browser') return void browserDownload(d.finalUrl || d.url)
       markTaken(d.url, d.finalUrl)
       const took = await offerItem(item(d))
-      if (!took) {
+      if (took === null) {
         known = null
         await browserDownload(d.finalUrl || d.url)
-      } else void showStarted()
+      } else void showStarted(took)
       return
     }
     // Otherwise hold it before deciding: deciding takes a moment, and a fast
@@ -512,6 +541,7 @@ export default defineBackground(() => {
     if (r.to === 'app') {
       markTaken(d.url, d.finalUrl)
       const wait = s.app === 'connected' ? RUNNING_WAIT_MS : START_WAIT_MS
+      let jobId = ''
       const outcome = await handOff(
         item(d),
         { ...s.rules, minBytes: 0 },
@@ -519,11 +549,12 @@ export default defineBackground(() => {
         ask,
         wait,
         getSession,
+        (id) => (jobId = id),
       )
       if (outcome === 'returned') {
         known = null // the app may have closed: ask again next time
         await showBarFor()
-      } else if (outcome === 'handed-over') void showStarted()
+      } else if (outcome === 'handed-over') void showStarted(jobId)
       return
     }
     // The extension takes it: the browser's copy goes, without a trace.

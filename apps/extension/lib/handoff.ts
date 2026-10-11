@@ -56,6 +56,12 @@ export function offerFor(
   }
 }
 
+/** The app's id for a download it accepted ('' if it didn't say). */
+export function acceptedId(reply: object): string {
+  const id = (reply as { jobId?: unknown }).jobId
+  return typeof id === 'string' || typeof id === 'number' ? String(id) : ''
+}
+
 /**
  * Pauses the browser's download, asks the app, then cancels it if the app took
  * it or resumes it if not. The browser never loses a download.
@@ -67,6 +73,7 @@ export async function handOff(
   ask: AskApp,
   waitMs = ANSWER_WITHIN_MS,
   getSession: GetSession = async () => null,
+  onAccepted: (jobId: string) => void = () => {},
 ): Promise<Outcome> {
   if (item.state !== 'in_progress' || !decide(item, rules).capture) return 'kept'
   try {
@@ -86,6 +93,7 @@ export async function handOff(
   if (r.ok && r.value.type === 'download.accepted') {
     await downloads.cancel(item.id).catch(() => {})
     await downloads.erase(item.id).catch(() => {})
+    onAccepted(acceptedId(r.value))
     return 'handed-over'
   }
   await downloads.resume(item.id).catch(() => {})
@@ -103,6 +111,7 @@ export async function offerLink(
   getSession: GetSession,
   browserDownload: (url: string) => Promise<unknown>,
   waitMs = ANSWER_WITHIN_MS,
+  onAccepted: (jobId: string) => void = () => {},
 ): Promise<boolean> {
   const session = await getSession(url).catch(() => null)
   const offer = offerFor({ id: -1, state: 'in_progress', url, referrer }, 'contextMenu', session)
@@ -111,6 +120,7 @@ export async function offerLink(
     const reply = await Promise.race([ask(offer), timeout(waitMs)])
     const checked = checkReply(reply)
     accepted = checked.ok && checked.value.type === 'download.accepted'
+    if (checked.ok && accepted) onAccepted(acceptedId(checked.value))
   } catch {
     accepted = false
   }
