@@ -813,8 +813,15 @@ test('settings: downloads at once, schedule, when done, keep awake and sorting',
   await page.getByLabel('From', { exact: true }).fill('23:00')
   await expect(page.getByText('Runs overnight: from 23:00 until 07:00')).toBeVisible()
   // No days chosen is refused with a reason.
-  for (const d of ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
-    await page.getByRole('button', { name: d }).click()
+  // Each day button is checked after its click: the row can still be settling
+  // after "Runs overnight" appeared, and a click on the move would be lost.
+  for (const d of ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']) {
+    const day = page.getByRole('button', { name: d })
+    await expect(async () => {
+      if ((await day.getAttribute('aria-pressed')) === 'true') await day.click()
+      await expect(day).toHaveAttribute('aria-pressed', 'false', { timeout: 500 })
+    }).toPass()
+  }
   await page
     .getByRole('form', { name: 'Download schedule' })
     .getByRole('button', { name: 'Save' })
