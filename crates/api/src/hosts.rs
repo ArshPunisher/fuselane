@@ -401,10 +401,17 @@ pub fn register(exe: &Path, data: &Path) -> Result<Vec<(&'static str, Outcome)>,
         // A Fuselane running on its own data folder (FUSELANE_HOME, a test copy)
         // registers a launcher that carries it, so the host the browser starts
         // finds that copy rather than looking in the usual place.
-        let launcher = std::env::var_os("FUSELANE_HOME")
-            .map(|_| write_launcher(data, exe))
-            .transpose()
-            .map_err(|e| format!("couldn't write the browser launcher ({e})"))?;
+        // It lives outside the data folder: a browser may not read files in
+        // folders macOS protects (Documents, Desktop, Downloads). A data folder
+        // there still can't be reached from the browser (its socket is inside),
+        // so test copies keep theirs elsewhere.
+        let launcher = match (std::env::var_os("FUSELANE_HOME"), dirs::data_dir()) {
+            (Some(_), Some(app_data)) => Some(
+                write_launcher(&app_data.join("app.fuselane.hosts"), data, exe)
+                    .map_err(|e| format!("couldn't write the browser launcher ({e})"))?,
+            ),
+            _ => None,
+        };
         let exe = launcher.as_deref().unwrap_or(exe);
         match (dirs::config_dir(), dirs::home_dir()) {
             (Some(config), Some(home)) => Ok(install_files(&config, &home, exe, &extra)),
@@ -416,9 +423,10 @@ pub fn register(exe: &Path, data: &Path) -> Result<Vec<(&'static str, Outcome)>,
     }
 }
 
-/// A script in `data` that starts `exe` with `FUSELANE_HOME` set to `data`.
+/// A script in `dir` that starts `exe` with `FUSELANE_HOME` set to `data`
+/// (one per data folder, named after it).
 #[cfg(unix)]
-pub fn write_launcher(data: &Path, exe: &Path) -> std::io::Result<PathBuf> {
+pub fn write_launcher(dir: &Path, data: &Path, exe: &Path) -> std::io::Result<PathBuf> {
     use std::os::unix::fs::PermissionsExt;
     // Single quotes, with any inside closed and reopened, keep the paths literal.
     let quote = |p: &Path| format!("'{}'", p.to_string_lossy().replace('\'', r"'\''"));
@@ -427,10 +435,23 @@ pub fn write_launcher(data: &Path, exe: &Path) -> std::io::Result<PathBuf> {
         quote(data),
         quote(exe)
     );
-    std::fs::create_dir_all(data)?;
-    let path = data.join("browser-host.sh");
-    std::fs::write(&path, script)?;
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
+    std::fs::create_dir_all(dir)?;
+    // A short, stable name per data folder (FNV-1a of its path).
+    let id = data
+        .to_string_lossy()
+        .bytes()
+        .fold(0xcbf2_9ce4_8422_2325_u64, |h, b| {
+            (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
+        });
+    let path = dir.join(format!("host-{id:016x}.sh"));
+    // Rewritten only when it changes, and swapped in whole: a browser starting
+    // the host at that moment must never run half a script.
+    if std::fs::read_to_string(&path).ok().as_deref() != Some(script.as_str()) {
+        let tmp = path.with_extension("sh.tmp");
+        std::fs::write(&tmp, &script)?;
+        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755))?;
+        std::fs::rename(&tmp, &path)?;
+    }
     Ok(path)
 }
 
@@ -706,7 +727,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let data = dir.path().join("it's data");
         let exe = Path::new("/Apps/Fuse lane.app/Contents/MacOS/fuselane-desktop");
-        let script = write_launcher(&data, exe).unwrap();
+        let script = write_launcher(&dir.path().join("hosts"), &data, exe).unwrap();
+        assert!(
+            script.starts_with(dir.path().join("hosts")),
+            "kept out of the data folder"
+        );
+        assert_eq!(
+            write_launcher(&dir.path().join("hosts"), &data, exe).unwrap(),
+            script,
+            "the same data folder gets the same launcher"
+        );
         let text = std::fs::read_to_string(&script).unwrap();
         assert!(text.starts_with("#!/bin/sh\n"));
         assert!(text.contains(r"export FUSELANE_HOME='"), "{text}");
