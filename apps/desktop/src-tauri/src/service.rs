@@ -2873,7 +2873,13 @@ impl Service {
         let snapshot = {
             let me = self.clone();
             let last = last.clone();
+            // The window learns it's running with its first progress: until then
+            // it shows "Waiting" and sets this download's live numbers aside.
+            let told = std::sync::atomic::AtomicBool::new(false);
             SnapshotFn(Arc::new(move |s: &Snapshot| {
+                if !told.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                    me.publish_jobs();
+                }
                 let l = live(id, s, &nets);
                 me.note_rates(&l.networks);
                 lock(&me.rates).insert(id, l.rate);
@@ -3501,6 +3507,33 @@ mod tests {
         let (a, b) = tokio::join!(h.svc.media_info(url), h.svc.media_info(url));
         assert_eq!((a.unwrap(), b.unwrap()), (info.clone(), info));
         assert!(lock(&h.svc.media_lookups).is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_window_hears_a_download_is_running_while_it_runs() {
+        let server = RangeServer::start(Content::new(4 * 1024 * KB, 98))
+            .await
+            .unwrap();
+        server.add_rule(Rule {
+            skip: 1,
+            times: u32::MAX,
+            fault: Fault::Throttle(300 * KB),
+        });
+        let h = harness(3);
+        let id = h.svc.add(&link(&server), None).unwrap();
+        // Not just its live numbers: the list itself says "running", so the
+        // window stops showing "Waiting" (it ignores live numbers until then).
+        h.wait("a list with it running", |h| {
+            lock(&h.events).iter().any(|e| {
+                matches!(e, UiEvent::Jobs { jobs } if jobs.iter().any(|j| j.id == id && j.status == "running"))
+            })
+        })
+        .await;
+        assert_eq!(
+            h.job(id).status,
+            "running",
+            "still going when the window heard"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
