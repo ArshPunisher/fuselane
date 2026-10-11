@@ -21,8 +21,6 @@ cask "fuselane" do
   desc "Download one file over every network you have at once"
   homepage "https://fuselane.app/"
 
-  # The app updates itself (signed feed), so brew upgrade leaves it alone.
-  auto_updates true
   depends_on macos: :ventura
 
   app "Fuselane.app"
