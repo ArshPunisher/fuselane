@@ -950,7 +950,9 @@ impl Shared {
     }
 
     /// Counts in bytes that arrived from elsewhere, and lets go of what won't.
-    fn take_arrivals(&mut self, incoming: &Incoming) {
+    /// Returns how many bytes arrived (new to the count of bytes written).
+    fn take_arrivals(&mut self, incoming: &Incoming) -> u64 {
+        let mut new_bytes = 0;
         let (arrived, released) = {
             let mut st = incoming.lock();
             (std::mem::take(&mut st.arrived), st.released)
@@ -958,6 +960,9 @@ impl Shared {
         for (b, upto) in arrived {
             if b < self.blocks.len() {
                 let upto = upto.min(self.blocks[b].len);
+                // Only the arrived bytes are new: anything after them that the
+                // engine already fetched was counted when it was written.
+                new_bytes += upto.saturating_sub(self.blocks[b].secured);
                 self.extra[b].written.push((0, upto));
                 self.settle(b);
             }
@@ -970,6 +975,7 @@ impl Shared {
                 }
             }
         }
+        new_bytes
     }
 }
 
@@ -1078,7 +1084,8 @@ async fn run_stream(ctx: Arc<Ctx>, net: Network, stream: StreamId) {
         let work = {
             let mut s = ctx.lock();
             if let Some(inc) = &ctx.tuning.incoming {
-                s.take_arrivals(inc);
+                let arrived = s.take_arrivals(inc);
+                ctx.written_total.fetch_add(arrived, Ordering::Relaxed);
             }
             if let Some(n) = s.nets.get_mut(&net.id)
                 && n.retire > 0
@@ -2262,7 +2269,9 @@ pub async fn download_with(
         stop: AtomicBool::new(false),
         live_networks: networks.len(),
         epoch: Instant::now(),
-        written_total: AtomicU64::new(0),
+        // What's already on disk counts: a resumed download carries on from
+        // its saved bytes (36%), not from zero.
+        written_total: AtomicU64::new(resumed_secured.iter().flatten().sum()),
         staging_path: staging.path().to_path_buf(),
         filename: staging.name().to_string(),
         last_modified: resumed_validators
@@ -2288,6 +2297,7 @@ pub async fn download_with(
         for b in &mut s.blocks {
             b.secured = 0;
         }
+        ctx.written_total.store(0, Ordering::Relaxed);
     }
 
     // Interleave stream starts across networks (L-23).

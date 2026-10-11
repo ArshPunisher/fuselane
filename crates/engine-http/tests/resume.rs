@@ -275,3 +275,43 @@ async fn a_chosen_name_is_used_and_made_safe() {
         assert_eq!(sha256_file(&report.path).unwrap(), content.sha256());
     }
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_resumed_download_counts_from_what_it_had_not_from_zero() {
+    let content = Content::new(1600 * KB, 47);
+    let server = throttled(content).await;
+    let dir = tempfile::tempdir().unwrap();
+    let cp = paused_run(&server, dir.path(), 600 * KB).await;
+    let secured = cp.secured_bytes();
+    let first: Arc<Mutex<Option<u64>>> = Arc::default();
+    let tuning = Tuning {
+        progress: Some(ProgressFn(Arc::new({
+            let first = first.clone();
+            move |written, _| {
+                first.lock().unwrap().get_or_insert(written);
+            }
+        }))),
+        ..resume_tuning()
+    };
+    let report = tokio::time::timeout(
+        Duration::from_secs(30),
+        download_with(
+            source(&server),
+            vec![plain(1), plain(2)],
+            dir.path(),
+            tuning,
+            Option::<Resume>::from(cp),
+        ),
+    )
+    .await
+    .expect("resume hung")
+    .unwrap();
+    assert_eq!(sha256_file(&report.path).unwrap(), content.sha256());
+    // The first number after resuming already includes what was saved (the
+    // window showed 1% after resuming at 36%).
+    let first = first.lock().unwrap().expect("progress after resuming");
+    assert!(
+        first > secured,
+        "first reading {first} should be past the {secured} saved"
+    );
+}
