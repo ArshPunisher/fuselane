@@ -84,6 +84,28 @@ pub enum Failure {
     Disk(DiskFailure),
 }
 
+impl Failure {
+    /// The failure in plain words, for "Last problem: …" (rule 6: never a raw
+    /// debug dump in front of people).
+    pub fn plain(&self) -> String {
+        match self {
+            Failure::Connection => "the connection dropped or timed out".into(),
+            Failure::Lane(t) => t.message.clone(),
+            Failure::NoRoute => "this network has no route to the server".into(),
+            Failure::Status { code, .. } => format!("the server answered with status {code}"),
+            Failure::BadResponse(e) => e.to_string(),
+            Failure::VersionChanged { .. } => "the file on the server changed".into(),
+            Failure::Disk(d) => match d {
+                DiskFailure::NoSpace | DiskFailure::QuotaExceeded => "the disk is full".into(),
+                DiskFailure::ReadOnly => "the folder is read-only".into(),
+                DiskFailure::PermissionDenied => "Fuselane isn't allowed to write there".into(),
+                DiskFailure::DriveMissing => "the drive was disconnected".into(),
+                DiskFailure::Io => "the disk reported an error".into(),
+            },
+        }
+    }
+}
+
 /// What the stream should do next.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Decision {
@@ -279,6 +301,38 @@ fn parse_http_date(s: &str) -> Option<u64> {
 mod tests {
     use super::*;
     use proptest::prelude::*;
+
+    #[test]
+    fn every_failure_reads_as_words_never_as_a_debug_dump() {
+        let all = [
+            Failure::Connection,
+            Failure::NoRoute,
+            Failure::Status {
+                code: 502,
+                retry_after_ms: None,
+            },
+            Failure::BadResponse(RangeError::Overrun {
+                want: 1_048_575,
+                got: 2_097_151,
+            }),
+            Failure::VersionChanged { size_changed: true },
+            Failure::Disk(DiskFailure::NoSpace),
+            Failure::Disk(DiskFailure::DriveMissing),
+        ];
+        for f in all {
+            let words = f.plain();
+            assert!(!words.is_empty());
+            // Debug output has braces and type names; people shouldn't see either.
+            assert!(
+                !words.contains('{') && !words.contains("Overrun"),
+                "{words}"
+            );
+        }
+        assert_eq!(
+            Failure::BadResponse(RangeError::Overrun { want: 9, got: 19 }).plain(),
+            "the server sent bytes past the requested end (19 > 9)"
+        );
+    }
 
     #[test]
     fn connection_errors_never_retire_a_stream() {

@@ -100,8 +100,8 @@ export const hiBackend: Readonly<Record<string, string>> = {
     'डाउनलोड के दौरान सर्वर पर फ़ाइल बदल गई, इसलिए मिली-जुली फ़ाइल से बचने के लिए इसे रोक दिया गया। इसे दोबारा शुरू करें।',
   'Not enough free space on that disk: this download needs {needed} more and only {free} is free. Free up space or choose another folder.':
     'उस डिस्क पर जगह कम है: इस डाउनलोड को {needed} और चाहिए, जबकि सिर्फ़ {free} खाली है। जगह खाली करें या कोई दूसरा फ़ोल्डर चुनें।',
-  'Saving failed ({detail}). Check free space and that the folder is writable.':
-    'सेव नहीं हो सका ({detail})। खाली जगह जांचें, और यह भी कि फ़ोल्डर में लिखा जा सकता है।',
+  'Saving failed: {detail}. Check free space and that the folder is writable.':
+    'सेव नहीं हो सका: {detail}। खाली जगह जांचें, और यह भी कि फ़ोल्डर में लिखा जा सकता है।',
   'Every network failed. Last problem: {last}': 'हर नेटवर्क विफल रहा। आखिरी समस्या: {last}',
   "The downloaded file doesn't match the SHA-256 you gave, so it wasn't saved under its name. The partial file is kept for inspection.":
     'डाउनलोड की गई फ़ाइल आपके दिए SHA-256 से मेल नहीं खाती, इसलिए उसे उसके नाम से सेव नहीं किया गया। अधूरी फ़ाइल जांच के लिए रखी गई है।',

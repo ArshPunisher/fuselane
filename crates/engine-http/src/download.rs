@@ -1126,7 +1126,7 @@ async fn run_stream(ctx: Arc<Ctx>, net: Network, stream: StreamId) {
                 {
                     let mut s = ctx.lock();
                     s.retries += 1;
-                    s.last_error = format!("{} (mirror): {failure:?}", net.name);
+                    s.last_error = format!("{} (mirror): {}", net.name, failure.plain());
                     s.dead_networks.insert(net.id);
                     drop(s);
                     ctx.wake.notify_waiters();
@@ -1137,7 +1137,7 @@ async fn run_stream(ctx: Arc<Ctx>, net: Network, stream: StreamId) {
                     s.retries += 1;
                     s.last_error = match &failure {
                         Failure::Lane(t) => t.message.clone(),
-                        _ => format!("{}: {failure:?}", net.name),
+                        _ => format!("{}: {}", net.name, failure.plain()),
                     };
                     if signals.refused {
                         s.nets

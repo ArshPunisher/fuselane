@@ -286,7 +286,10 @@ pub fn describe(e: &JobError) -> String {
             human_bytes(*needed),
             human_bytes(*free)
         ),
-                JobError::Disk(d) => format!("Saving failed ({d:?}). Check free space and that the folder is writable."),
+        JobError::Disk(d) => format!(
+            "Saving failed: {}. Check free space and that the folder is writable.",
+            fuselane_engine_http::retry::Failure::Disk(*d).plain()
+        ),
         JobError::AllNetworksFailed(last) => format!("Every network failed. Last problem: {last}"),
         JobError::ChecksumMismatch { .. } => "The downloaded file doesn't match the SHA-256 you gave, so it wasn't saved under its name. The partial file is kept for inspection.".into(),
         JobError::Paused => "Paused. Progress is saved.".into(),
