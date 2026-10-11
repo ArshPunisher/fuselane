@@ -345,6 +345,58 @@ impl Headers {
     }
 }
 
+/// Bytes of some blocks arriving from elsewhere while the download runs: another
+/// computer handing it over sends what it had (REVIEW-2026-10-11 C3). The
+/// engine leaves those bytes alone and fetches the rest; whoever writes them
+/// tells it with [`Incoming::arrived`] once they're on disk (written and
+/// synced). [`Incoming::release`] says nothing more is coming: what's still
+/// missing is then fetched as usual, so a dropped connection loses nothing.
+#[derive(Debug, Default)]
+pub struct Incoming {
+    state: Mutex<IncomingState>,
+}
+
+#[derive(Debug, Default)]
+struct IncomingState {
+    /// Per block, the bytes from its start that are on their way.
+    held: Vec<u64>,
+    /// (block, bytes from its start) written since the engine last looked.
+    arrived: Vec<(usize, u64)>,
+    /// Every arrival so far, for checking samples against the server at the end.
+    seen: Vec<(usize, u64)>,
+    released: bool,
+}
+
+impl Incoming {
+    /// `held[i]`: bytes from the start of block `i` that will arrive.
+    pub fn new(held: Vec<u64>) -> Arc<Incoming> {
+        Arc::new(Incoming {
+            state: Mutex::new(IncomingState {
+                held,
+                ..IncomingState::default()
+            }),
+        })
+    }
+
+    /// The first `upto` bytes of `block` are on disk now.
+    pub fn arrived(&self, block: usize, upto: u64) {
+        let mut st = self.lock();
+        st.arrived.push((block, upto));
+        st.seen.push((block, upto));
+    }
+
+    /// Nothing more will arrive; the engine fetches whatever is still missing.
+    pub fn release(&self) {
+        self.lock().released = true;
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, IncomingState> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+}
+
 /// Every tunable in one place (CLAUDE.md coding conventions).
 #[derive(Debug, Clone)]
 pub struct Tuning {
@@ -387,6 +439,8 @@ pub struct Tuning {
     pub throttle: ThrottlePolicy,
     /// Hears when a network is benched as throttled or comes back.
     pub lane_events: Option<LaneEventFn>,
+    /// Bytes arriving from another computer while this runs (a hand-over).
+    pub incoming: Option<Arc<Incoming>>,
 }
 
 impl Default for Tuning {
@@ -417,6 +471,7 @@ impl Default for Tuning {
             job_limit: None,
             throttle: ThrottlePolicy::default(),
             lane_events: None,
+            incoming: None,
         }
     }
 }
@@ -874,6 +929,47 @@ impl Shared {
             }
         }
         ex.written.retain(|&(_, to)| to > blk.secured);
+        // With bytes held for arrival: how far the tail after them is written.
+        if blk.held > blk.secured {
+            let mut ahead = blk.held.max(blk.ahead);
+            let mut moved = true;
+            while moved {
+                moved = false;
+                for &(from, to) in &ex.written {
+                    if from <= ahead && to > ahead {
+                        ahead = to.min(blk.len);
+                        moved = true;
+                    }
+                }
+            }
+            blk.ahead = ahead;
+        } else {
+            blk.held = 0;
+            blk.ahead = 0;
+        }
+    }
+
+    /// Counts in bytes that arrived from elsewhere, and lets go of what won't.
+    fn take_arrivals(&mut self, incoming: &Incoming) {
+        let (arrived, released) = {
+            let mut st = incoming.lock();
+            (std::mem::take(&mut st.arrived), st.released)
+        };
+        for (b, upto) in arrived {
+            if b < self.blocks.len() {
+                let upto = upto.min(self.blocks[b].len);
+                self.extra[b].written.push((0, upto));
+                self.settle(b);
+            }
+        }
+        if released {
+            for b in 0..self.blocks.len() {
+                if self.blocks[b].held > self.blocks[b].secured {
+                    self.blocks[b].held = 0;
+                    self.blocks[b].ahead = 0;
+                }
+            }
+        }
     }
 }
 
@@ -981,6 +1077,9 @@ async fn run_stream(ctx: Arc<Ctx>, net: Network, stream: StreamId) {
         // Pick work (synchronously, under the lock: nothing can yield between choosing and registering).
         let work = {
             let mut s = ctx.lock();
+            if let Some(inc) = &ctx.tuning.incoming {
+                s.take_arrivals(inc);
+            }
             if let Some(n) = s.nets.get_mut(&net.id)
                 && n.retire > 0
             {
@@ -1522,6 +1621,38 @@ async fn verify_resumed(ctx: &Arc<Ctx>, net: &Network) -> bool {
             .map(|&(start, len)| (start, len.min(ctx.tuning.confirm_sample)))
             .collect()
     };
+    same_as_server(ctx, net, windows).await
+}
+
+/// Samples of what arrived from another computer, checked against the server
+/// before the file is published: its bytes are kept only if they're the same.
+async fn verify_arrived(ctx: &Arc<Ctx>, net: &Network, incoming: &Incoming) -> bool {
+    let windows: Vec<(u64, u64)> = {
+        let seen = incoming.lock().seen.clone();
+        let s = ctx.lock();
+        let all: Vec<(u64, u64)> = seen
+            .iter()
+            .filter(|(_, upto)| *upto > 0)
+            .filter_map(|&(b, upto)| s.plan.block(b as u64).map(|(start, _)| (start, upto)))
+            .collect();
+        if all.is_empty() {
+            return true;
+        }
+        let n = ctx.tuning.resume_samples.max(1) as usize;
+        let step = (all.len() / n).max(1);
+        all.iter()
+            .step_by(step)
+            .take(n)
+            .map(|&(start, len)| (start, len.min(ctx.tuning.confirm_sample)))
+            .collect()
+    };
+    same_as_server(ctx, net, windows).await
+}
+
+/// Whether each window of the file on disk matches the server's bytes.
+/// Unsure (no answer, no ranges) counts as the same: the per-response checks
+/// still apply.
+async fn same_as_server(ctx: &Arc<Ctx>, net: &Network, windows: Vec<(u64, u64)>) -> bool {
     let Ok(mut c) = connect(net, &ctx.src, &ctx.tuning).await else {
         return true;
     }; // can't check now: the per-response checks still apply
@@ -2068,6 +2199,12 @@ pub async fn download_with(
             attempts: vec![],
             avoid: None,
             hedges: 0,
+            held: tuning
+                .incoming
+                .as_ref()
+                .and_then(|inc| inc.lock().held.get(i as usize).copied())
+                .unwrap_or(0),
+            ahead: 0,
         })
         .collect();
     let n_blocks = blocks.len();
@@ -2314,6 +2451,14 @@ pub async fn download_with(
         return Err(JobError::AllNetworksFailed(last_error));
     }
     let total = probe.total.or(unknown_total).unwrap_or(0);
+    if let Some(inc) = &tuning.incoming
+        && !verify_arrived(&ctx, &networks[0], inc).await
+    {
+        drop(staging.discard());
+        return Err(JobError::NotResumable(
+            "the part from the other computer doesn't match the file on the server".into(),
+        ));
+    }
     if let Some(expected) = tuning.expected_sha256 {
         let path = ctx.staging_path.clone();
         let actual = tokio::task::spawn_blocking(move || sha256_of(&path))

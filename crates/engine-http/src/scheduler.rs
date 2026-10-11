@@ -52,7 +52,7 @@ pub struct Attempt {
 }
 
 /// A block as the scheduler sees it.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Block {
     pub len: u64,
     /// Bytes from the block's start that are on disk for sure.
@@ -62,22 +62,41 @@ pub struct Block {
     pub avoid: Option<NetId>,
     /// Hedges started so far.
     pub hedges: u8,
+    /// Bytes from the block's start that are arriving from elsewhere (another
+    /// computer handing the download over): nobody fetches below this. 0 = none.
+    pub held: u64,
+    /// With bytes held: how far past `held` the block is already written, so
+    /// work resumes there rather than starting the tail again.
+    pub ahead: u64,
 }
 
 impl Block {
     pub fn complete(&self) -> bool {
         self.secured >= self.len
     }
+    /// Where the next attempt starts: past what's secured, and past what's
+    /// arriving (and what's already written after it).
+    pub fn start(&self) -> u64 {
+        if self.held > self.secured {
+            self.held.max(self.ahead).min(self.len)
+        } else {
+            self.secured
+        }
+    }
+    /// Not complete, but all that's missing is arriving from elsewhere.
+    pub fn waiting(&self) -> bool {
+        !self.complete() && self.start() >= self.len
+    }
     /// Furthest any attempt (or the disk) has got.
     pub fn frontier(&self) -> u64 {
         self.attempts
             .iter()
             .map(|a| a.position)
-            .fold(self.secured, u64::max)
+            .fold(self.start(), u64::max)
             .min(self.len)
     }
     fn pending(&self) -> bool {
-        !self.complete() && self.attempts.is_empty()
+        !self.complete() && self.attempts.is_empty() && !self.waiting()
     }
 }
 
@@ -134,7 +153,7 @@ fn primary(s: &Snapshot<'_>, me: Requester) -> Option<Work> {
         }
         return Some(Work {
             block: i,
-            from: b.secured,
+            from: b.start(),
             hedge: false,
         });
     }
@@ -143,7 +162,7 @@ fn primary(s: &Snapshot<'_>, me: Requester) -> Option<Work> {
     if !someone_else_idle {
         return fallback.map(|i| Work {
             block: i,
-            from: s.blocks[i].secured,
+            from: s.blocks[i].start(),
             hedge: false,
         });
     }
@@ -158,6 +177,7 @@ fn hedge(s: &Snapshot<'_>, me: Requester) -> Option<Work> {
     let mut best: Option<(f64, usize)> = None;
     for (i, b) in s.blocks.iter().enumerate() {
         if b.complete()
+            || b.waiting()
             || b.attempts.is_empty()
             || b.hedges >= s.policy.max_per_block
             || b.avoid == Some(me.network)
@@ -216,6 +236,7 @@ mod tests {
             attempts: vec![],
             avoid: None,
             hedges: 0,
+            ..Block::default()
         }
     }
     fn busy(len: u64, net: NetId, stream: StreamId, started: u64, pos: u64, rate: f64) -> Block {
@@ -232,6 +253,7 @@ mod tests {
             }],
             avoid: None,
             hedges: 0,
+            ..Block::default()
         }
     }
     fn snap(blocks: &[Block]) -> Snapshot<'_> {
@@ -409,6 +431,7 @@ mod tests {
                     attempts,
                     avoid,
                     hedges,
+                    ..Block::default()
                 }
             })
     }
@@ -450,5 +473,24 @@ mod tests {
             // Determinism.
             prop_assert_eq!(pick_work(&s, me), decision);
         }
+    }
+
+    #[test]
+    fn bytes_arriving_from_elsewhere_are_never_fetched() {
+        // Block 0: its first 3 MB arrive from another computer.
+        let mut held = idle(4 * MB);
+        held.held = 3 * MB;
+        let blocks = [held, idle(4 * MB)];
+        let w = pick_work(&snap(&blocks), ME).unwrap();
+        assert_eq!((w.block, w.from), (0, 3 * MB), "only the tail is fetched");
+        // Once its tail is written, the block waits: not fetched, not raced.
+        let mut tail_done = blocks[0].clone();
+        tail_done.ahead = 4 * MB;
+        assert!(tail_done.waiting() && !tail_done.complete());
+        let blocks = [tail_done, idle(4 * MB)];
+        let w = pick_work(&snap(&blocks), ME).unwrap();
+        assert_eq!(w.block, 1);
+        let only_waiting = [blocks[0].clone()];
+        assert_eq!(pick_work(&snap(&only_waiting), ME), None);
     }
 }
