@@ -95,6 +95,11 @@ pub struct JobView {
     /// The group it was added in, and the group's name (B9.2).
     pub group_id: Option<i64>,
     pub group_name: Option<String>,
+    /// Pause was pressed and its connections are still closing (A4): the
+    /// window shows "Pausing…" at once rather than "Downloading".
+    pub pausing: bool,
+    /// Finished, but its file is no longer where it was saved.
+    pub missing: bool,
 }
 
 /// One network the app can see.
@@ -538,6 +543,8 @@ struct Running {
     replan: bool,
     /// Its own speed limit, changed live from the window.
     limit: Arc<fuselane_limits::JobLimit>,
+    /// Pause was pressed; the run is still closing its connections.
+    pausing: bool,
 }
 
 /// What the New download dialog can choose besides the link and folder.
@@ -836,6 +843,8 @@ fn view(job: &Job) -> JobView {
         ready_state: None,
         group_id: job.group_id,
         group_name: None,
+        pausing: false,
+        missing: false,
     }
 }
 
@@ -1183,6 +1192,10 @@ impl Service {
             .into_iter()
             .collect();
         let now = std::time::Instant::now();
+        let pausing: std::collections::HashSet<i64> = lock(&self.running)
+            .iter()
+            .filter_map(|(id, r)| r.pausing.then_some(*id))
+            .collect();
         Ok(self
             .store
             .list()
@@ -1191,6 +1204,10 @@ impl Service {
             .map(|j| {
                 let mut v = view(j);
                 v.focused = focus == Some(j.id);
+                v.pausing = pausing.contains(&j.id) && v.status == "running";
+                // Finished, but the file was moved or deleted since (A1).
+                v.missing = j.status == Status::Completed
+                    && j.final_path.as_deref().is_some_and(|p| !p.exists());
                 v.group_name = j.group_id.and_then(|g| group_names.get(&g).cloned());
                 if v.group_name.is_none() {
                     v.group_id = None; // a group since removed
@@ -2194,10 +2211,17 @@ impl Service {
 
     pub fn pause(self: &Arc<Self>, id: i64) -> Result<(), UiError> {
         self.forget_held(id);
-        if let Some(r) = lock(&self.running).get(&id) {
+        if let Some(r) = lock(&self.running).get_mut(&id) {
             r.cancel.cancel(); // the task records the pause once progress is saved
-            return Ok(());
+            r.pausing = true;
+        } else {
+            return self.pause_idle(id);
         }
+        self.publish_jobs(); // "Pausing…" shows at once
+        Ok(())
+    }
+
+    fn pause_idle(self: &Arc<Self>, id: i64) -> Result<(), UiError> {
         let job = self.store.get(id).map_err(|_| not_found(id))?;
         match job.status {
             Status::Queued => {
@@ -2560,6 +2584,51 @@ impl Service {
         self.add(&job.url, Some(&job.dir.to_string_lossy()))
     }
 
+    /// A finished download whose file is gone (moved or deleted, A1): fetches it
+    /// again from the same link, under the same name in the same folder, and
+    /// the old entry leaves the list.
+    pub fn download_again(self: &Arc<Self>, id: i64) -> Result<i64, UiError> {
+        let job = self.store.get(id).map_err(|_| not_found(id))?;
+        let path = match (job.status, &job.final_path) {
+            (Status::Completed, Some(p)) if !p.is_file() => p.clone(),
+            (Status::Completed, _) => {
+                return Err(UiError::new(
+                    "file-present",
+                    "The file is still there, so there's nothing to download again.",
+                    Some("Open it, or add the link again for another copy."),
+                ));
+            }
+            _ => {
+                return Err(UiError::new(
+                    "not-finished",
+                    "This download hasn't finished yet.",
+                    None,
+                ));
+            }
+        };
+        let dir = path
+            .parent()
+            .map_or_else(|| job.dir.clone(), Path::to_path_buf);
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .or_else(|| job.chosen_name.clone());
+        let new = self.add_with(
+            &job.url,
+            Some(&dir.to_string_lossy()),
+            &AddRequest {
+                name,
+                sha256: job.expected_sha256.clone(),
+                allow_duplicate: true,
+                mirrors: job.mirrors.clone(),
+                ..AddRequest::default()
+            },
+        )?;
+        runner::remove(&self.store, id).map_err(store_error)?;
+        self.publish_jobs();
+        Ok(new)
+    }
+
     /// Removes a download (and its partial file). A running one is stopped first.
     pub fn remove(self: &Arc<Self>, id: i64) -> Result<(), UiError> {
         if let Some(r) = lock(&self.running).get_mut(&id) {
@@ -2659,6 +2728,7 @@ impl Service {
                     cancel: cancel.clone(),
                     remove_after: false,
                     replan: false,
+                    pausing: false,
                     limit: limit.clone(),
                 },
             );
@@ -3299,6 +3369,32 @@ mod tests {
         assert_eq!(h.svc.remove(id).unwrap_err().code, "not-found");
         assert_eq!(h.svc.pause(999).unwrap_err().code, "not-found");
         assert_eq!(h.svc.resume(999).unwrap_err().code, "not-found");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn pause_shows_at_once_while_the_connections_close() {
+        let server = RangeServer::start(Content::new(4 * 1024 * KB, 97))
+            .await
+            .unwrap();
+        server.add_rule(Rule {
+            skip: 1,
+            times: u32::MAX,
+            fault: Fault::Throttle(300 * KB),
+        });
+        let h = harness(3);
+        let id = h.svc.add(&link(&server), None).unwrap();
+        h.wait("some progress", |h| !h.lives(id).is_empty()).await;
+        h.svc.pause(id).unwrap();
+        // Straight after the press: "Pausing…", unless it already stopped.
+        let now = h.job(id);
+        assert!(
+            (now.status == "running" && now.pausing) || now.status == "paused",
+            "{:?} pausing={}",
+            now.status,
+            now.pausing
+        );
+        h.wait("paused", |h| h.job(id).status == "paused").await;
+        assert!(!h.job(id).pausing);
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -4701,6 +4797,38 @@ mod tests {
                 .is_some_and(|e| e.contains("couldn't be unpacked"))
         })
         .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_finished_file_deleted_from_disk_shows_as_missing_and_downloads_again() {
+        let server = RangeServer::start(Content::new(64 * KB, 21)).await.unwrap();
+        let h = harness(3);
+        let id = h
+            .svc
+            .add_with(
+                &link(&server),
+                None,
+                &AddRequest {
+                    name: Some("notes.bin".into()),
+                    ..AddRequest::default()
+                },
+            )
+            .unwrap();
+        h.wait("finished", |h| h.job(id).status == "completed")
+            .await;
+        assert!(!h.job(id).missing);
+        // Still there: nothing to download again.
+        assert_eq!(h.svc.download_again(id).unwrap_err().code, "file-present");
+        let path = PathBuf::from(h.job(id).final_path.unwrap());
+        std::fs::remove_file(&path).unwrap();
+        assert!(h.job(id).missing);
+        let again = h.svc.download_again(id).unwrap();
+        // The old entry goes; the new one saves under the same name and folder.
+        assert!(h.svc.jobs().unwrap().iter().all(|j| j.id != id));
+        h.wait("downloaded again", |h| h.job(again).status == "completed")
+            .await;
+        assert_eq!(PathBuf::from(h.job(again).final_path.unwrap()), path);
+        assert!(path.is_file());
     }
 
     #[tokio::test(flavor = "multi_thread")]

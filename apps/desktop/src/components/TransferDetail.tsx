@@ -5,6 +5,7 @@ import {
   ArrowSquareOut,
   BatteryLow,
   FolderOpen,
+  HourglassMedium,
   Lightning,
   Pause,
   ShareFat,
@@ -69,7 +70,7 @@ function Center({ job, live }: { job: JobView; live: Live | undefined }) {
         <span className="unit">%</span>
       </p>
       <p className="speed-sub" data-status={job.status}>
-        {job.startAt ? startsAt(job.startAt) : statusWord(job.status)}
+        {job.pausing ? t('Pausing…') : job.startAt ? startsAt(job.startAt) : statusWord(job.status)}
       </p>
     </>
   )
@@ -320,17 +321,59 @@ function HandoffButton({ job }: { job: JobView }) {
   )
 }
 
-function RemoveButton({ job }: { job: JobView }) {
+/**
+ * Why a queued download hasn't started (A5): another one has every network, or
+ * every slot is busy. "Start now" gives it every network at once.
+ */
+function WaitReason({ job }: { job: JobView }) {
+  const act = useApp((s) => s.act)
+  const focused = useApp((s) => s.jobs.find((j) => j.focused && j.id !== job.id))
+  const running = useApp((s) => s.jobs.filter((j) => j.status === 'running').length)
+  if (job.status !== 'queued' || job.startAt || job.error || running === 0) return null
+  return (
+    <p className="notice notice-wait" role="status">
+      <HourglassMedium size={18} aria-hidden />
+      <span className="notice-body">
+        <span>
+          {focused
+            ? t('Waiting while {name} has every network.', { name: focused.name })
+            : tn(
+                running,
+                'Waiting for a free slot: {n} download is running.',
+                'Waiting for a free slot: {n} downloads are running.',
+              )}
+        </span>
+        <button className="btn" onClick={() => act((b) => b.focus(job.id))}>
+          <Lightning size={16} aria-hidden /> {t('Start now')}
+        </button>
+      </span>
+    </p>
+  )
+}
+
+/** Remove, with its "keep the file or not" question. `compact` is the list's icon button. */
+export function RemoveButton({ job, compact = false }: { job: JobView; compact?: boolean }) {
   const act = useApp((s) => s.act)
   const [open, setOpen] = useState(false)
   const done = job.status === 'completed'
   const where = job.finalPath ?? `${job.dir}/${job.name}`
   return (
     <>
-      <button className="btn btn-ghost" onClick={() => setOpen(true)}>
-        <Trash size={16} aria-hidden />
-        {t('Remove')}
-      </button>
+      {compact ? (
+        <button
+          className="icon-btn row-action"
+          aria-label={t('Remove {name}', { name: job.name })}
+          title={t('Remove')}
+          onClick={() => setOpen(true)}
+        >
+          <Trash size={16} aria-hidden />
+        </button>
+      ) : (
+        <button className="btn btn-ghost" onClick={() => setOpen(true)}>
+          <Trash size={16} aria-hidden />
+          {t('Remove')}
+        </button>
+      )}
       <RemoveDialog
         open={open}
         onClose={() => setOpen(false)}
@@ -477,6 +520,7 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
   const liveAll = useApp((s) => s.live[job.id])
   const history = useApp((s) => s.history[job.id])
   const act = useApp((s) => s.act)
+  const select = useApp((s) => s.select)
   const live = job.status === 'running' ? liveAll : undefined
   // After completion the last snapshot still tells who carried what.
   const finished = job.status === 'completed' ? liveAll : undefined
@@ -547,8 +591,13 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
             </button>
           )}
           {canPause && (
-            <button className="btn" onClick={() => act((b) => b.pause(job.id))}>
-              <Pause size={16} aria-hidden /> {t('Pause')}
+            <button
+              className="btn"
+              disabled={job.pausing}
+              aria-busy={job.pausing || undefined}
+              onClick={() => act((b) => b.pause(job.id))}
+            >
+              <Pause size={16} aria-hidden /> {job.pausing ? t('Pausing…') : t('Pause')}
             </button>
           )}
           {job.resumable && (
@@ -569,7 +618,20 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
                   : t('Resume')}
             </button>
           )}
-          {job.status === 'completed' && (
+          {job.missing && (
+            <>
+              <button
+                className="btn btn-primary"
+                onClick={() => act(async (b) => select(await b.downloadAgain(job.id)))}
+              >
+                <ArrowClockwise size={16} aria-hidden /> {t('Download again')}
+              </button>
+              <button className="btn btn-ghost" onClick={() => act((b) => b.remove(job.id))}>
+                <Trash size={16} aria-hidden /> {t('Remove from list')}
+              </button>
+            </>
+          )}
+          {job.status === 'completed' && !job.missing && (
             <>
               <button className="btn btn-primary" onClick={() => act((b) => b.openFile(job.id))}>
                 <ArrowSquareOut size={16} aria-hidden /> {t('Open')}
@@ -580,9 +642,20 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
             </>
           )}
           {job.status === 'paused' && job.written > 0 && <HandoffButton job={job} />}
-          <RemoveButton job={job} />
+          {!job.missing && <RemoveButton job={job} />}
         </div>
       </header>
+
+      <WaitReason job={job} />
+      {job.missing && (
+        <p className="notice" role="status">
+          <WarningCircle size={18} aria-hidden />
+          <span>
+            <strong>{t('File missing')}</strong>{' '}
+            {t('It was moved, renamed or deleted after it finished.')}
+          </span>
+        </p>
+      )}
 
       {/* Waiting for something that passes by itself: a calm note, not an error. */}
       {job.error && job.status !== 'running' && WAITS.includes(job.errorAction) && (

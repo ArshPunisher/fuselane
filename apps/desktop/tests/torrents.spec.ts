@@ -125,7 +125,7 @@ test('files can be changed mid-download and the torrent removed keeping files', 
   await files.getByRole('combobox', { name: 'Priority of poster.jpg' }).selectOption('skip')
   await expect(page.locator('.facts')).toContainText('2 of 5')
 
-  await page.getByRole('button', { name: 'Remove' }).click()
+  await page.getByRole('button', { name: 'Remove', exact: true }).click()
   const ask = page.getByRole('dialog', { name: 'Remove this torrent?' })
   await expect(
     ask.getByRole('button', { name: /^Move files to (Trash|Recycle Bin)$/ }),

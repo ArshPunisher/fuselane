@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
+  ArrowClockwise,
+  FolderOpen,
   Funnel,
   CheckCircle,
   MagnifyingGlass,
@@ -25,9 +27,11 @@ import { statusWord } from './status'
 import { mark, t } from '../lib/i18n'
 import { FeedsDialog } from './FeedsDialog'
 import { torrentWord, torrentNets } from './TorrentDetail'
+import { RemoveButton, REVEAL_LABEL } from './TransferDetail'
 
 function StatusIcon({ job }: { job: JobView }) {
   const p = { size: 18, 'aria-hidden': true } as const
+  if (job.missing) return <WarningCircle {...p} className="ic ic-danger" weight="fill" />
   switch (job.status) {
     case 'completed':
       return <CheckCircle {...p} className="ic ic-success" weight="fill" />
@@ -90,8 +94,14 @@ function Row({ job }: { job: JobView }) {
   const act = useApp((s) => s.act)
   const showLive = job.status === 'running' ? live : undefined
   const canPause = job.status === 'running' || job.status === 'queued'
+  const done = job.status === 'completed'
   return (
-    <li className="row" data-selected={selected || undefined} data-status={job.status}>
+    <li
+      className="row"
+      data-selected={selected || undefined}
+      data-status={job.status}
+      data-missing={job.missing || undefined}
+    >
       <button
         className="row-main"
         onClick={() => select(job.id)}
@@ -114,7 +124,13 @@ function Row({ job }: { job: JobView }) {
                   />{' '}
                 </>
               )}
-              {job.startAt ? startsAt(job.startAt) : statusWord(job.status)}
+              {job.missing
+                ? t('File missing')
+                : job.pausing
+                  ? t('Pausing…')
+                  : job.startAt
+                    ? startsAt(job.startAt)
+                    : statusWord(job.status)}
             </span>
             <span className="num">{meta(job, showLive)}</span>
           </span>
@@ -128,22 +144,46 @@ function Row({ job }: { job: JobView }) {
           <Bar job={job} live={showLive} />
         </span>
       </button>
-      {canPause || job.resumable ? (
-        <button
-          className="icon-btn row-action"
-          aria-label={
-            canPause
-              ? t('Pause {name}', { name: job.name })
-              : t('Resume {name}', { name: job.name })
-          }
-          title={canPause ? t('Pause') : t('Resume')}
-          onClick={() => act((b) => (canPause ? b.pause(job.id) : b.resume(job.id)))}
-        >
-          {canPause ? <Pause size={16} aria-hidden /> : <Play size={16} aria-hidden />}
-        </button>
-      ) : (
-        <span className="row-action-slot" aria-hidden="true" />
-      )}
+      {/* On hover or focus (always on touch): the likely next step for this row (A2). */}
+      <span className="row-actions">
+        {(canPause || job.resumable) && (
+          <button
+            className="icon-btn row-action"
+            aria-label={
+              canPause
+                ? t('Pause {name}', { name: job.name })
+                : t('Resume {name}', { name: job.name })
+            }
+            title={job.pausing ? t('Pausing…') : canPause ? t('Pause') : t('Resume')}
+            disabled={job.pausing}
+            aria-busy={job.pausing || undefined}
+            onClick={() => act((b) => (canPause ? b.pause(job.id) : b.resume(job.id)))}
+          >
+            {canPause ? <Pause size={16} aria-hidden /> : <Play size={16} aria-hidden />}
+          </button>
+        )}
+        {done && !job.missing && (
+          <button
+            className="icon-btn row-action"
+            aria-label={t('Show {name} in its folder', { name: job.name })}
+            title={t(REVEAL_LABEL)}
+            onClick={() => act((b) => b.reveal(job.id))}
+          >
+            <FolderOpen size={16} aria-hidden />
+          </button>
+        )}
+        {job.missing && (
+          <button
+            className="icon-btn row-action"
+            aria-label={t('Download {name} again', { name: job.name })}
+            title={t('Download again')}
+            onClick={() => act(async (b) => select(await b.downloadAgain(job.id)))}
+          >
+            <ArrowClockwise size={16} aria-hidden />
+          </button>
+        )}
+        {done && <RemoveButton job={job} compact />}
+      </span>
     </li>
   )
 }

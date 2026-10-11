@@ -949,7 +949,7 @@ export function NewDownload() {
               open={more}
               onToggle={(e) => setMore(e.currentTarget.open)}
             >
-              <summary>{t('More options')}</summary>
+              <summary>{more ? t('Fewer options') : t('More options')}</summary>
               <div className="field">
                 <label htmlFor="nd-name">{t('Save as')}</label>
                 <input

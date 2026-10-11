@@ -677,4 +677,9 @@ export const hiBackend: Readonly<Record<string, string>> = {
   'That size is too big.': 'यह साइज़ बहुत बड़ा है।',
   'Pick a size up to 1 TB.': '1 TB तक का साइज़ चुनें।',
   "Couldn't open the website: {e}": 'वेबसाइट नहीं खुल सकी: {e}',
+  "The file is still there, so there's nothing to download again.":
+    'फ़ाइल अभी भी वहीं है, इसलिए दोबारा डाउनलोड करने की ज़रूरत नहीं।',
+  'Open it, or add the link again for another copy.':
+    'उसे खोलें, या दूसरी कॉपी के लिए लिंक फिर से जोड़ें।',
+  "This download hasn't finished yet.": 'यह डाउनलोड अभी पूरा नहीं हुआ है।',
 }

@@ -95,6 +95,11 @@ test('pause, resume and a two-step remove', async ({ page }) => {
   await page.goto('/')
   const detail = page.locator('article.detail')
   await detail.getByRole('button', { name: 'Pause' }).click()
+  // At once, while its connections close (A4).
+  await expect(detail.getByRole('button', { name: 'Pausing…' })).toBeDisabled()
+  await expect(
+    page.locator('li.row', { hasText: 'ubuntu-26.04' }).locator('.row-state'),
+  ).toHaveText(/Pausing…|Paused/)
   await expect(detail.locator('.speed-sub')).toHaveText('Paused')
   await detail.getByRole('button', { name: 'Resume' }).click()
   await expect(detail.locator('.speed')).toContainText('MB/s', { timeout: 5000 })
@@ -328,19 +333,65 @@ test('a finished download keeps its network colours and shows who carried what',
   expect(lanes).toBeGreaterThan(50)
 })
 
-test('finished files can be opened or shown; a moved file explains itself', async ({ page }) => {
-  await page.goto('/?missing=1')
+test('finished files can be opened or shown from the detail and the row', async ({ page }) => {
+  await page.goto('/')
   await page.getByText('Blender-5.1-macos-arm64.dmg').click()
   const detail = page.locator('article.detail')
   await expect(detail.getByRole('button', { name: 'Open' })).toBeVisible()
-  const show = detail.getByRole('button', { name: /^Show in (Finder|Explorer|folder)$/ })
-  await show.click()
-  await expect(page.getByRole('alert').filter({ hasText: 'no longer at' })).toContainText(
-    'moved, renamed or deleted',
-  )
+  await expect(
+    detail.getByRole('button', { name: /^Show in (Finder|Explorer|folder)$/ }),
+  ).toBeVisible()
+  // The row has its own buttons, reachable by keyboard (A2).
+  const row = page.locator('li.row', { hasText: 'Blender-5.1-macos-arm64.dmg' })
+  await expect(
+    row.getByRole('button', { name: 'Show Blender-5.1-macos-arm64.dmg in its folder' }),
+  ).toBeVisible()
+  await row.getByRole('button', { name: 'Remove Blender-5.1-macos-arm64.dmg' }).focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('dialog', { name: 'Remove this download?' })).toBeVisible()
+  await page.keyboard.press('Escape')
   // Unfinished downloads offer neither.
   await page.getByText('dataset-shard-0042.tar.zst').click()
   await expect(detail.getByRole('button', { name: 'Open' })).toHaveCount(0)
+  const paused = page.locator('li.row', { hasText: 'dataset-shard-0042.tar.zst' })
+  await expect(paused.getByRole('button', { name: /^Remove / })).toHaveCount(0)
+  await expect(
+    paused.getByRole('button', { name: 'Resume dataset-shard-0042.tar.zst' }),
+  ).toBeAttached()
+})
+
+test('a finished file that was deleted says so and can be downloaded again', async ({ page }) => {
+  await page.goto('/?missing=1')
+  const row = page.locator('li.row', { hasText: 'Blender-5.1-macos-arm64.dmg' })
+  await expect(row.locator('.row-state')).toHaveText('File missing')
+  await row.locator('.row-main').click()
+  const detail = page.locator('article.detail')
+  await expect(detail.getByRole('status').filter({ hasText: 'File missing' })).toContainText(
+    'moved, renamed or deleted',
+  )
+  // Open and Show in folder would only fail: they make way for the two that help.
+  await expect(detail.getByRole('button', { name: 'Open' })).toHaveCount(0)
+  await expect(detail.getByRole('button', { name: /^Show in / })).toHaveCount(0)
+  await expect(detail.getByRole('button', { name: 'Remove from list' })).toBeVisible()
+  await detail.getByRole('button', { name: 'Download again' }).click()
+  // The fresh download takes its place, under the same name, and is shown.
+  await expect(page.locator('.row-name', { hasText: 'Blender-5.1-macos-arm64.dmg' })).toHaveCount(1)
+  await expect(page.locator('li.row', { hasText: 'Blender-5.1' })).not.toHaveAttribute(
+    'data-missing',
+    /.*/,
+  )
+  await expect(detail.getByRole('button', { name: 'Pause' })).toBeVisible()
+})
+
+test('a waiting download says why and can start now', async ({ page }) => {
+  await page.goto('/?queued=1')
+  await page.getByText('fedora-44-workstation.iso').click()
+  const detail = page.locator('article.detail')
+  const why = detail.getByRole('status').filter({ hasText: 'Waiting for a free slot' })
+  await expect(why).toContainText('1 download is running')
+  await why.getByRole('button', { name: 'Start now' }).click()
+  await expect(why).toHaveCount(0)
+  await expect(detail.getByRole('button', { name: 'Pause' })).toBeVisible()
 })
 
 test('Choose… fills the folder from the native picker, and cancelling leaves it alone', async ({
@@ -765,6 +816,7 @@ test('a chosen name and SHA-256 are offered under More options and checked', asy
   const dialog = await openDialog(page)
   await dialog.getByLabel('Link').fill('https://example.com/file.bin')
   await dialog.getByText('More options').click()
+  await expect(dialog.getByText('Fewer options')).toBeVisible()
   await dialog.getByLabel('SHA-256 to check').fill('abc')
   await dialog.getByRole('button', { name: 'Download', exact: true }).click()
   await expect(dialog.locator('#nd-sha-help')).toContainText('64 hex digits')

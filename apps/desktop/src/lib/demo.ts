@@ -278,6 +278,8 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       readyState: null,
       groupId: null,
       groupName: null,
+      pausing: false,
+      missing: false,
       fill,
       owner,
       inflight: [-1, -1, -1],
@@ -339,6 +341,9 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       'start-over',
     )
     make('dataset-shard-0042.tar.zst', 2.4 * 1024 * MB, 'paused', 0.38)
+    // ?queued=1: one waiting for a free slot (A5).
+    if (params.get('queued') === '1')
+      make('fedora-44-workstation.iso', 2.2 * 1024 * MB, 'queued', 0)
     if (params.get('offline') === '1') {
       make(
         'podcast-episode-212.mp3',
@@ -385,7 +390,8 @@ export function createDemoBackend(params: URLSearchParams): Backend {
 
   const view = (j: SimJob): JobView => {
     const { fill: _f, owner: _o, inflight: _i, bytes: _b, ran: _r, ...rest } = j
-    return { ...rest }
+    // ?missing=1: finished files were moved or deleted since.
+    return { ...rest, missing: j.status === 'completed' && params.get('missing') === '1' }
   }
   const emitJobs = () => listener?.({ type: 'jobs', jobs: jobs.map(view) })
 
@@ -1082,12 +1088,22 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     pause: async (id) => {
       held.delete(id)
       const j = find(id)
-      if (j.status === 'running' || j.status === 'queued') {
+      const stop = () => {
         j.status = 'paused'
+        j.pausing = false
         j.resumable = true
         j.inflight = [-1, -1, -1]
         listener?.({ type: 'live', ...live(j) }) // the final picture, as the engine sends
         emitJobs()
+      }
+      if (j.status === 'running') {
+        // Like the engine: "Pausing…" at once, paused once connections close.
+        if (j.pausing) return
+        j.pausing = true
+        emitJobs()
+        setTimeout(stop, 400)
+      } else if (j.status === 'queued') {
+        stop()
       } else if (j.status !== 'paused') {
         throw err('not-running', "This download isn't running, so there's nothing to pause.", null)
       }
@@ -1730,6 +1746,20 @@ export function createDemoBackend(params: URLSearchParams): Backend {
     },
     startOver: async (id) => {
       const j = find(id)
+      jobs.splice(jobs.indexOf(j), 1)
+      const fresh = make(j.name, j.total ?? 100 * MB, 'running')
+      fresh.url = j.url
+      emitJobs()
+      return fresh.id
+    },
+    downloadAgain: async (id) => {
+      const j = find(id)
+      if (j.status !== 'completed' || params.get('missing') !== '1')
+        throw err(
+          'file-present',
+          "The file is still there, so there's nothing to download again.",
+          null,
+        )
       jobs.splice(jobs.indexOf(j), 1)
       const fresh = make(j.name, j.total ?? 100 * MB, 'running')
       fresh.url = j.url

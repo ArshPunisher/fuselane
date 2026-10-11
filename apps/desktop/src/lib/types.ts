@@ -58,6 +58,10 @@ export interface JobView {
   /** The group it was added in, and its name. */
   groupId: number | null
   groupName: string | null
+  /** Pause was pressed and its connections are still closing. */
+  pausing: boolean
+  /** Finished, but its file is no longer where it was saved. */
+  missing: boolean
 }
 
 /** One network's latest news in a download. */

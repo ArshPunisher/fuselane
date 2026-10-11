@@ -50,6 +50,7 @@ export const hi: Readonly<Record<string, string>> = {
   Waiting: 'इंतज़ार में',
   Downloading: 'डाउनलोड जारी',
   Paused: 'रुका हुआ',
+  'Pausing…': 'रोका जा रहा है…',
   Stopped: 'रुका',
   Failed: 'विफल',
   Cancelled: 'रद्द',
@@ -511,6 +512,19 @@ export const hi: Readonly<Record<string, string>> = {
   'Leave empty to use your Downloads folder.':
     'अपना डाउनलोड फ़ोल्डर इस्तेमाल करने के लिए खाली छोड़ें।',
   'More options': 'और विकल्प',
+  'Fewer options': 'कम विकल्प',
+  'Remove from list': 'सूची से हटाएं',
+  'Waiting while {name} has every network.': '{name} को सारे नेटवर्क मिले हैं, तब तक इंतज़ार।',
+  'Waiting for a free slot: {n} download is running.':
+    'खाली जगह का इंतज़ार: {n} डाउनलोड चल रहा है।',
+  'Waiting for a free slot: {n} downloads are running.':
+    'खाली जगह का इंतज़ार: {n} डाउनलोड चल रहे हैं।',
+  'File missing': 'फ़ाइल नहीं मिली',
+  'It was moved, renamed or deleted after it finished.':
+    'पूरा होने के बाद इसे कहीं ले जाया गया, नाम बदला गया या हटा दिया गया।',
+  'Remove {name}': '{name} हटाएं',
+  'Show {name} in its folder': '{name} को उसके फ़ोल्डर में दिखाएं',
+  'Download {name} again': '{name} फिर से डाउनलोड करें',
   'Save as': 'इस नाम से सेव करें',
   "The server's name…": 'सर्वर का दिया नाम…',
   'Leave empty to keep the name the server gives it.': 'सर्वर का दिया नाम रखने के लिए खाली छोड़ें।',

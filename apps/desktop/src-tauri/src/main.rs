@@ -479,6 +479,12 @@ async fn remove(svc: State<'_>, id: i64) -> Result<(), UiError> {
     svc.remove(id)
 }
 
+/// A finished download whose file is gone: download it again in its place.
+#[tauri::command]
+async fn download_again(svc: State<'_>, id: i64) -> Result<i64, UiError> {
+    svc.download_again(id)
+}
+
 /// Continues a stopped download from a new link to the same file.
 #[tauri::command]
 async fn fix_link(svc: State<'_>, id: i64, url: String) -> Result<(), UiError> {
@@ -2193,6 +2199,7 @@ fn main() {
             fix_link,
             start_over,
             open_file,
+            download_again,
             pick_folder,
             pick_torrent,
             open_sign_in,

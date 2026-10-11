@@ -555,17 +555,35 @@ h2 {
 .row-action-slot {
   flex: none;
   width: 38px;
+  margin-right: 6px;
+}
+
+.row-actions {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  min-width: 38px;
+  margin-right: 6px;
 }
 
 .row-action {
-  margin-right: 6px;
   opacity: 0;
+}
+
+/* A lone action (torrents, groups) keeps its own gap to the edge. */
+:not(.row-actions) > .row-action {
+  margin-right: 6px;
 }
 
 .row:hover .row-action,
 .row-action:focus-visible,
+.row-actions:focus-within .row-action,
 .row[data-selected] .row-action {
   opacity: 1;
+}
+
+.row[data-missing] .row-state {
+  color: var(--danger);
 }
 
 @media (hover: none) {

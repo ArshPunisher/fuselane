@@ -104,6 +104,8 @@ export interface Backend {
   pause(id: number): Promise<void>
   resume(id: number): Promise<void>
   remove(id: number): Promise<void>
+  /** A finished download whose file is gone: fetch it again in its place. */
+  downloadAgain(id: number): Promise<number>
   /** Shows a finished file in the file manager. */
   reveal(id: number): Promise<void>
   /** Moves a finished download's file to the Trash and removes it from the list. */
@@ -339,6 +341,7 @@ async function tauriBackend(): Promise<Backend> {
     pause: (id) => call('pause', { id }),
     resume: (id) => call('resume', { id }),
     remove: (id) => call('remove', { id }),
+    downloadAgain: (id) => call('download_again', { id }),
     reveal: (id) => call('reveal', { id }),
     trashFile: (id) => call('trash_file', { id }),
     openFile: (id) => call('open_file', { id }),
