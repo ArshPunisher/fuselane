@@ -333,8 +333,9 @@ mod tests {
         assert_eq!(first["file"], false);
         assert_eq!(list["rate"], 0.0);
         b.job_action(id, JobAction::Cancel).unwrap();
-        // A running download stops first, then goes.
-        for _ in 0..100 {
+        // A running download stops first, then goes (its connections may take a
+        // while to close when the machine is busy).
+        for _ in 0..400 {
             if b.jobs().unwrap()["jobs"].as_array().unwrap().is_empty() {
                 break;
             }

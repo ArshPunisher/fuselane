@@ -199,6 +199,13 @@ impl Service {
             rates.retain(|id, _| running.contains(id));
         }
         let rates = lock(&self.rates).clone();
+        // Running ones show what's written now, not the last checkpoint (which
+        // moves every 15 s or so): the popup's numbers keep pace.
+        let written = {
+            let mut w = lock(&self.live_written);
+            w.retain(|id, _| running.contains(id));
+            w.clone()
+        };
         let active = |s: &str| matches!(s, "running" | "queued" | "paused");
         jobs.sort_by_key(|j| {
             (
@@ -225,8 +232,8 @@ impl Service {
                     "id": j.id,
                     "name": j.name,
                     "status": j.status,
-                    "written": j.written,
-                    "total": j.total,
+                    "written": written.get(&j.id).map_or(j.written, |(w, _)| (*w).max(j.written)),
+                    "total": written.get(&j.id).and_then(|(_, t)| *t).or(j.total),
                     "rate": rates.get(&j.id).copied().unwrap_or(0.0).round(),
                     "error": j.error,
                     "file": j.final_path.is_some(),

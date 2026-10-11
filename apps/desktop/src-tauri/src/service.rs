@@ -683,6 +683,9 @@ pub struct Service {
     revealer: Mutex<OpenFn>,
     /// Each running download's latest speed (bytes/s), for the extension's popup.
     rates: Mutex<HashMap<i64, f64>>,
+    /// Bytes each running download has written, live (the saved figure lags by
+    /// up to a checkpoint); for the extension's popup.
+    live_written: Mutex<HashMap<i64, (u64, Option<u64>)>>,
     /// Seconds before a when-done action runs (tests shorten it).
     countdown: std::sync::atomic::AtomicU32,
     /// Closing the window hides it; downloads carry on from the tray.
@@ -1117,6 +1120,7 @@ impl Service {
             to_front: Mutex::new(None),
             revealer: Mutex::new(Arc::new(|_| {})),
             rates: Mutex::new(HashMap::new()),
+            live_written: Mutex::default(),
             countdown: std::sync::atomic::AtomicU32::new(COUNTDOWN),
             close_to_tray: std::sync::atomic::AtomicBool::new(close_to_tray),
             watch_clipboard: std::sync::atomic::AtomicBool::new(watch_clipboard),
@@ -2883,6 +2887,7 @@ impl Service {
                 let l = live(id, s, &nets);
                 me.note_rates(&l.networks);
                 lock(&me.rates).insert(id, l.rate);
+                lock(&me.live_written).insert(id, (l.written, l.total));
                 *lock(&last) = Some(l.clone());
                 me.send(UiEvent::Live(l));
             }))
@@ -3507,6 +3512,30 @@ mod tests {
         let (a, b) = tokio::join!(h.svc.media_info(url), h.svc.media_info(url));
         assert_eq!((a.unwrap(), b.unwrap()), (info.clone(), info));
         assert!(lock(&h.svc.media_lookups).is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_extension_sees_bytes_as_they_arrive_not_at_each_checkpoint() {
+        let server = RangeServer::start(Content::new(4 * 1024 * KB, 99))
+            .await
+            .unwrap();
+        server.add_rule(Rule {
+            skip: 1,
+            times: u32::MAX,
+            fault: Fault::Throttle(300 * KB),
+        });
+        let h = harness(3);
+        let id = h.svc.add(&link(&server), None).unwrap();
+        let popup = |h: &Harness| -> u64 {
+            h.svc.extension_jobs().unwrap()["jobs"][0]["written"]
+                .as_u64()
+                .unwrap_or(0)
+        };
+        // Long before the first checkpoint (about 15 s in), the popup's number moves.
+        h.wait("bytes in the popup", |h| popup(h) > 256 * KB).await;
+        assert_eq!(h.job(id).status, "running");
+        let first = popup(&h);
+        h.wait("and keeps moving", |h| popup(h) > first).await;
     }
 
     #[tokio::test(flavor = "multi_thread")]
