@@ -98,7 +98,7 @@ Also: videos from web pages with your own [yt-dlp](https://github.com/yt-dlp/yt-
 | **macOS** 13.3+ | `brew install --cask arshpunisher/tap/fuselane`, or the `.dmg` from [Releases](https://github.com/ArshPunisher/fuselane/releases) |
 | **Windows** 10 / 11 (x64) | `Fuselane_<version>_windows-x64-setup.exe` from [Releases](https://github.com/ArshPunisher/fuselane/releases) |
 | **Linux** x64 / arm64 | `.AppImage` (x64), `.deb` or `.rpm` from [Releases](https://github.com/ArshPunisher/fuselane/releases) |
-| **Command line** | `fuselane-cli_<version>_<system>` from [Releases](https://github.com/ArshPunisher/fuselane/releases) |
+| **Command line** | `fuselane-cli_<version>_<system>` from [Releases](https://github.com/ArshPunisher/fuselane/releases). `fuselane update` updates the app |
 | **Browser** | [Chrome Web Store](https://chromewebstore.google.com/detail/nggljghjikdkigiekdciocigdnnhponl) (also Brave) and [Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/aeacngcllkfecpfoclekcfhpokjhijgc) |
 
 <details>
@@ -110,7 +110,7 @@ curl -fsSL https://raw.githubusercontent.com/ArshPunisher/fuselane/main/packagin
 
 </details>
 
-Every release lists `SHA256SUMS`. The app updates itself from a signed feed and sends nothing else ([privacy](docs/PRIVACY.md)).
+To update: **Update and restart** in the app, `fuselane update`, or `brew upgrade --cask fuselane`. Every release lists `SHA256SUMS`. The app updates itself from a signed feed and sends nothing else ([privacy](docs/PRIVACY.md)).
 
 ## How it works
 
