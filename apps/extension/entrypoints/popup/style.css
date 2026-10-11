@@ -654,50 +654,165 @@ h2 {
   display: none;
 }
 
-/* Downloads as tiles: a line above and below each, in the accent colour. */
-:root {
-  --tile-line: color-mix(in oklch, var(--fuse) 45%, transparent);
+/* All downloads together: the speed, and each network's share of it. */
+.sum {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 8px 12px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in oklch, var(--fuse) 22%, var(--hairline));
+  border-radius: 14px;
+  background: var(--surface-1);
+  box-shadow: var(--highlight-top);
+}
+
+.sum[hidden],
+.lanes[hidden],
+.lane-keys[hidden] {
+  display: none;
+}
+
+.sum-speed {
+  color: var(--ink);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.sum-speed small {
+  margin-left: 4px;
+  color: var(--fuse-text);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.sum-what {
+  color: var(--mute);
+  font-size: 12px;
+  text-align: right;
+}
+
+.lanes {
+  display: flex;
+  grid-column: 1 / -1;
+  gap: 3px;
+  height: 6px;
+}
+
+.lanes span {
+  min-width: 6px;
+  border-radius: var(--radius-pill);
+  transition: flex-grow 0.6s linear;
+}
+
+.lane-keys {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  gap: 4px 14px;
+  color: var(--mute);
+  font-size: 11.5px;
+}
+
+.lane-keys b {
+  color: var(--body);
+  font-weight: 500;
+}
+
+.lane-key::before {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 2px;
+  background: var(--k);
+  content: '';
+  vertical-align: -0.5px;
 }
 
 /* Speeds in the accent colour. */
 .rate {
   color: var(--fuse-text);
+  font-weight: 600;
+}
+
+.section-label {
+  margin: 4px 2px -2px;
+  color: var(--mute);
+  font-size: 11.5px;
   font-weight: 500;
 }
+
+.section-label[hidden] {
+  display: none;
+}
+
 .jobs {
   display: grid;
+  gap: 8px;
   margin: 0;
   padding: 0;
-  border-top: 1px solid var(--tile-line);
   list-style: none;
 }
 
-.jobs:empty {
-  border-top: 0;
-}
-
+/* Each download a tile: its kind, name, progress and buttons. */
 .job {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 4px 9px 6px;
-  border-bottom: 1px solid var(--tile-line);
-  transition: background var(--dur-quick) var(--ease-out);
-}
-
-.job:hover,
-.job:focus-within {
-  background: var(--surface-2);
-}
-
-.job-text {
   display: grid;
-  flex: 1;
-  gap: 3px;
-  min-width: 0;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 11px 8px 12px 11px;
+  border: 1px solid color-mix(in oklch, var(--fuse) 26%, var(--hairline));
+  border-radius: 14px;
+  background: var(--surface-1);
+  box-shadow: var(--highlight-top);
+}
+
+.job-ic {
+  display: grid;
+  grid-row: 1 / span 3;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--fuse-soft);
+  color: var(--fuse-text);
+}
+
+.job-ic .ic {
+  width: 18px;
+  height: 18px;
+}
+
+.job[data-status='paused'] .job-ic,
+.job[data-status='queued'] .job-ic {
+  background: var(--surface-2);
+  color: var(--mute);
+}
+
+.job[data-status='failed'] .job-ic,
+.job[data-status='too-big'] .job-ic {
+  background: color-mix(in oklch, var(--danger) 10%, transparent);
+  color: var(--danger);
+}
+
+.job[data-status='completed'] {
+  padding-block: 9px;
+  border-color: var(--hairline);
+  background: transparent;
+  box-shadow: none;
+}
+
+.job[data-status='completed'] .job-ic {
+  background: color-mix(in oklch, var(--success) 12%, transparent);
+  color: var(--success);
 }
 
 .job-name {
+  grid-column: 2;
   overflow: hidden;
   color: var(--ink);
   font-weight: 500;
@@ -706,13 +821,18 @@ h2 {
 }
 
 .job-meta {
+  grid-column: 2;
   overflow: hidden;
   color: var(--mute);
-  font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 11.5px;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.job-meta .pct {
+  color: var(--ink);
+  font-weight: 600;
 }
 
 .job[data-status='failed'] .job-meta,
@@ -721,9 +841,12 @@ h2 {
   white-space: normal;
 }
 
+/* Progress, split by the networks carrying it. */
 .bar {
-  display: block;
-  height: 3px;
+  display: flex;
+  grid-column: 2 / -1;
+  height: 4px;
+  margin-top: 4px;
   overflow: hidden;
   border-radius: var(--radius-pill);
   background: var(--surface-3);
@@ -733,17 +856,17 @@ h2 {
   display: block;
   width: 0;
   height: 100%;
-  border-radius: inherit;
-  background: var(--lane-iris);
+  background: var(--fuse);
   transition: width 0.6s linear;
 }
 
-.job[data-status='completed'] .bar-fill {
-  background: var(--success);
+.bar-fill + .bar-fill {
+  margin-left: 2px;
 }
 
-.job[data-status='paused'] .bar-fill {
-  background: var(--mute);
+.job[data-status='paused'] .bar-fill,
+.job[data-status='queued'] .bar-fill {
+  background: var(--mute) !important;
 }
 
 .job[data-status='completed'] .bar {
@@ -752,7 +875,13 @@ h2 {
 
 .job-actions {
   display: flex;
+  grid-row: 1 / span 2;
+  grid-column: 3;
   gap: 2px;
+}
+
+.job-actions[hidden] {
+  display: none;
 }
 
 .job-actions .icon-btn {
@@ -764,12 +893,62 @@ h2 {
 
 .job-actions .icon-btn:hover {
   border-color: var(--hairline-strong);
-  background: var(--surface-1);
+  background: var(--surface-2);
 }
 
 .job-actions .ic {
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
+}
+
+/* This page: what it is, and the video in one tap. */
+.page-card {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  background: var(--surface-1);
+  box-shadow: var(--highlight-top);
+}
+
+.page-card[hidden] {
+  display: none;
+}
+
+.page-thumb {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 40px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--lane-tide), var(--lane-iris));
+  color: oklch(1 0 0 / 0.92);
+}
+
+.page-text {
+  display: grid;
+  min-width: 0;
+}
+
+#page-title {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#page-site {
+  color: var(--mute);
+  font-size: 11.5px;
+}
+
+.page-card .btn {
+  grid-column: 1 / -1;
 }
 
 .empty {
@@ -801,7 +980,7 @@ h2 {
 .gauge {
   position: relative;
   margin: 2px auto 0;
-  width: 240px;
+  width: 250px;
 }
 
 .gauge svg {
@@ -830,37 +1009,26 @@ h2 {
 .gauge-tick {
   fill: var(--mute);
   font-family: var(--font-mono);
-  font-size: 8.5px;
+  font-size: 10px;
   text-anchor: middle;
 }
 
-.gauge-needle {
-  stroke: var(--ink);
-  stroke-width: 3;
-  stroke-linecap: round;
-  transform-box: view-box;
-  transform-origin: 120px 130px;
-  transform: rotate(-90deg);
-  transition: transform 0.25s var(--ease-out);
-}
-
-.gauge-hub {
+.gauge-tick.on {
   fill: var(--ink);
 }
 
 .gauge-read {
   display: flex;
-  margin-top: 6px;
+  margin-top: -34px;
   align-items: baseline;
   justify-content: center;
   gap: 4px;
   color: var(--ink);
-  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
 #gauge-value {
-  font-size: 26px;
+  font-size: 32px;
   font-weight: 600;
   letter-spacing: -0.02em;
 }
@@ -878,30 +1046,39 @@ h2 {
 
 .speed-results {
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 4px 12px;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 6px;
   margin: 0;
-  padding: 10px 12px;
-  border-radius: var(--radius-control);
-  background: var(--surface-2);
+}
+
+.speed-results[hidden] {
+  display: none;
+}
+
+.speed-results div {
+  padding: 9px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--surface-1);
 }
 
 .speed-results dt {
   color: var(--mute);
+  font-size: 11px;
 }
 
 .speed-results dd {
   margin: 0;
   color: var(--ink);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
-  text-align: right;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .gauge-needle,
   .gauge-fill,
+  .lanes span,
   .bar-fill,
   .big-switch-track,
   .big-switch-track span {
@@ -932,18 +1109,18 @@ h2 {
   gap: 8px;
 }
 
-/* Asking before a download is cancelled, inside its row. */
-.job.asking {
-  flex-wrap: wrap;
-}
-
+/* Asking before a download is cancelled, inside its tile. */
 .job-confirm {
   display: flex;
-  flex: 1 0 100%;
+  grid-column: 1 / -1;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 6px 10px;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 8px 8px 10px;
+  border-radius: 10px;
+  background: color-mix(in oklch, var(--danger) 9%, transparent);
   color: var(--ink);
   font-size: 12px;
 }
@@ -951,6 +1128,10 @@ h2 {
 .job-confirm-actions {
   display: flex;
   gap: 6px;
+}
+
+.job-confirm .btn {
+  white-space: nowrap;
 }
 
 .btn-small {

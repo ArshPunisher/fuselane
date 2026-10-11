@@ -23,8 +23,12 @@ import lockOpen from '@phosphor-icons/core/assets/regular/lock-open.svg?raw'
 import arrowClockwise from '@phosphor-icons/core/assets/regular/arrow-clockwise.svg?raw'
 import warningCircle from '@phosphor-icons/core/assets/regular/warning-circle.svg?raw'
 import checkCircle from '@phosphor-icons/core/assets/fill/check-circle-fill.svg?raw'
+import disc from '@phosphor-icons/core/assets/regular/disc.svg?raw'
+import fileZip from '@phosphor-icons/core/assets/regular/file-zip.svg?raw'
 
 const ICONS = {
+  disc,
+  'file-zip': fileZip,
   'arrow-square-out': arrowSquareOut,
   check,
   desktop,

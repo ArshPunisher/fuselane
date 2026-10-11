@@ -307,6 +307,27 @@ interface Row {
   rate: number
   error: string | null
   file: boolean
+  /** The networks carrying it, with their bytes so far (from the app). */
+  lanes?: { label: string; bytes: number }[]
+}
+
+/** A network's lane colour, the same one wherever it shows. */
+const LANE_COLOURS = ['tide', 'volt', 'iris', 'rose', 'mint', 'sky', 'lilac']
+const laneOf = new Map<string, string>()
+function laneColour(label: string): string {
+  if (!laneOf.has(label)) laneOf.set(label, LANE_COLOURS[laneOf.size % LANE_COLOURS.length]!)
+  return `var(--lane-${laneOf.get(label)})`
+}
+
+/** What kind of file, by its name: its badge on the tile. */
+function fileIcon(name: string): IconName {
+  const ext = name.toLowerCase().split('.').pop() ?? ''
+  if (['iso', 'img', 'dmg', 'appimage', 'deb', 'rpm', 'pkg', 'msi', 'exe'].includes(ext))
+    return 'disc'
+  if (['zip', 'tar', 'gz', 'tgz', '7z', 'rar', 'zst', 'xz', 'bz2'].includes(ext)) return 'file-zip'
+  if (['mp4', 'mkv', 'mov', 'webm', 'avi', 'm4v'].includes(ext)) return 'film-strip'
+  if (['mp3', 'flac', 'm4a', 'wav', 'ogg', 'aac'].includes(ext)) return 'music-note'
+  return 'file'
 }
 
 const speed = (bps: number) => `${formatSize(Math.max(0, bps))}/s`
@@ -314,15 +335,14 @@ const ACTIVE = new Set(['running', 'queued', 'paused', 'saving'])
 
 function meta(r: Row): string {
   const of = r.total ? `${formatSize(r.written)} of ${formatSize(r.total)}` : formatSize(r.written)
-  const pct = r.total ? `${Math.floor((r.written / r.total) * 100)}%, ` : ''
   switch (r.status) {
     case 'running':
-      // The speed is drawn separately, in the accent colour (see render).
-      return `${pct}${of}`
+      // The percentage (bold) and speed (accent) are drawn around this (render).
+      return of
     case 'queued':
       return r.written ? `Waiting, ${of}` : 'Waiting'
     case 'paused':
-      return `Paused, ${pct}${of}`
+      return `Paused, ${of}`
     case 'saving':
       return 'Saving to your Downloads folder…'
     case 'completed':
@@ -395,25 +415,55 @@ const rows = new Map<string, { li: HTMLLIElement; state: string }>()
 /** Pause pressed: shown at once, until the download says it has stopped. */
 const pausing = new Map<string, number>()
 
-function render(list: Row[], rate: number) {
+/** The speed card: all downloads together, and each network's share. */
+function summary(running: number, rate: number, networks: { label: string; rate: number }[]) {
+  const card = $('#summary')
+  card.hidden = running === 0
+  if (!running) return
+  const [num, unit] = speed(rate).split(' ')
+  $('#sum-rate').textContent = num ?? '0'
+  $('#sum-unit').textContent = unit ?? 'B/s'
+  $('#sum-what').textContent = running === 1 ? '1 downloading' : `${running} downloading`
+  const nets = networks.filter((n) => n.rate > 0)
+  const lanes = $('#sum-lanes')
+  const keys = $('#sum-keys')
+  lanes.hidden = keys.hidden = nets.length === 0
+  lanes.replaceChildren(
+    ...nets.map((n) => {
+      const seg = el('span')
+      seg.style.flex = String(n.rate)
+      seg.style.background = laneColour(n.label)
+      return seg
+    }),
+  )
+  keys.replaceChildren(
+    ...nets.map((n) => {
+      const k = el('span', { className: 'lane-key' }, el('b', {}, n.label), ` ${speed(n.rate)}`)
+      k.style.setProperty('--k', laneColour(n.label))
+      return k
+    }),
+  )
+}
+
+function render(list: Row[], rate: number, networks: { label: string; rate: number }[] = []) {
   const ul = $<HTMLUListElement>('#jobs')
+  const doneUl = $<HTMLUListElement>('#jobs-done')
   const active = list.filter((r) => ACTIVE.has(r.status))
   const running = list.filter((r) => r.status === 'running').length
+  summary(running, rate, networks)
   const line = $('#speed-line')
-  if (running)
-    line.replaceChildren(
-      `${running} downloading, `,
-      el('span', { className: 'rate' }, speed(rate)),
-      ' in all',
-    )
-  else line.textContent = active.length ? `${active.length} waiting or paused` : ''
+  line.textContent = running ? '' : active.length ? `${active.length} waiting or paused` : ''
   const count = $('#tab-count')
   count.hidden = !active.length
   count.textContent = String(active.length)
   $('#jobs-empty').hidden = list.length > 0
+  const finished = list.filter((r) => r.status === 'completed')
+  $('#done-label').hidden = finished.length === 0 || finished.length === list.length
   const seen = new Set<string>()
-  list.forEach((r, i) => {
+  const placed = new Map<HTMLUListElement, number>()
+  for (const r of list) {
     seen.add(r.id)
+    const into = r.status === 'completed' ? doneUl : ul
     const key = `${r.status}|${r.file}`
     let row = rows.get(r.id)
     if (!row || row.state !== key) {
@@ -438,17 +488,15 @@ function render(list: Row[], rate: number) {
         })
         actions.append(b)
       }
+      const badge = r.status === 'completed' ? 'check' : fileIcon(r.name)
       li.append(
-        el(
-          'span',
-          { className: 'job-text' },
-          el('span', { className: 'job-name', title: r.name }, r.name),
-          el('span', { className: 'job-meta' }),
-          el('span', { className: 'bar' }, el('span', { className: 'bar-fill' })),
-        ),
+        el('span', { className: 'job-ic' }, icon(badge)),
+        el('span', { className: 'job-name', title: r.name }, r.name),
         actions,
+        el('span', { className: 'job-meta mono' }),
+        el('span', { className: 'bar' }),
       )
-      if (row) row.li.replaceWith(li)
+      if (row) row.li.remove()
       row = { li, state: key }
       rows.set(r.id, row)
     }
@@ -461,24 +509,45 @@ function render(list: Row[], rate: number) {
       pausing.delete(r.id)
       for (const x of li.querySelectorAll('button')) x.disabled = false
     }
-    const metaEl = li.querySelector('.job-meta')!
-    if (stillPausing) metaEl.textContent = 'Pausing…'
-    else if (r.status === 'running')
-      // No speed yet: it's checking what it had and reconnecting (a few seconds).
-      metaEl.replaceChildren(
-        `${meta(r)}, `,
-        r.rate > 0 ? el('span', { className: 'rate' }, speed(r.rate)) : 'connecting…',
-      )
-    else metaEl.textContent = meta(r)
-    li.querySelector('.job-name')!.textContent = r.name
     const pct = r.total
       ? Math.min(100, (r.written / r.total) * 100)
       : r.status === 'completed'
         ? 100
         : 0
-    li.querySelector<HTMLElement>('.bar-fill')!.style.width = `${pct}%`
-    if (ul.children[i] !== li) ul.insertBefore(li, ul.children[i] ?? null)
-  })
+    const metaEl = li.querySelector('.job-meta')!
+    const bold =
+      r.total && r.status !== 'completed'
+        ? el('b', { className: 'pct' }, `${Math.floor(pct)}%`)
+        : null
+    if (stillPausing) metaEl.textContent = 'Pausing…'
+    else if (r.status === 'running')
+      // No speed yet: it's checking what it had and reconnecting (a few seconds).
+      metaEl.replaceChildren(
+        ...(bold ? [bold, ' '] : []),
+        `${meta(r)} `,
+        r.rate > 0 ? el('span', { className: 'rate' }, speed(r.rate)) : 'connecting…',
+      )
+    else metaEl.replaceChildren(...(bold ? [bold, ' '] : []), meta(r))
+    li.querySelector('.job-name')!.textContent = r.name
+    // The bar, coloured by the networks carrying it (one colour without the app).
+    const bar = li.querySelector<HTMLElement>('.bar')!
+    const lanes = (r.lanes ?? []).filter((l) => l.bytes > 0)
+    const sum = lanes.reduce((n, l) => n + l.bytes, 0)
+    const parts =
+      r.status === 'running' && lanes.length > 1 && sum > 0
+        ? lanes.map((l) => ({ w: (pct * l.bytes) / sum, c: laneColour(l.label) }))
+        : [{ w: pct, c: '' }]
+    if (bar.childElementCount !== parts.length)
+      bar.replaceChildren(...parts.map(() => el('span', { className: 'bar-fill' })))
+    parts.forEach((p, i) => {
+      const seg = bar.children[i] as HTMLElement
+      seg.style.width = `${p.w}%`
+      seg.style.background = p.c
+    })
+    const at = placed.get(into) ?? 0
+    if (into.children[at] !== li) into.insertBefore(li, into.children[at] ?? null)
+    placed.set(into, at + 1)
+  }
   for (const [id, row] of rows) {
     if (!seen.has(id)) {
       row.li.remove()
@@ -503,11 +572,13 @@ async function pollApp() {
   const reply = (await request({ v: 1, type: 'jobs.list' })) as {
     jobs?: Row[]
     rate?: number
+    networks?: { label: string; rate: number }[]
   } | null
   if (!reply?.jobs) return
   render(
     reply.jobs.map((j) => ({ ...j, id: String(j.id) })),
     reply.rate ?? 0,
+    reply.networks ?? [],
   )
 }
 
@@ -549,11 +620,13 @@ async function onThisPage() {
   const video = $<HTMLButtonElement>('#video')
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true })
   if (!tab?.id || !tab.url || !/^https?:/.test(tab.url)) {
-    video.hidden = true
+    $('#page-card').hidden = true
     said.textContent = "This page isn't a website, so there's nothing to get here."
     return
   }
   const pageUrl = tab.url
+  $('#page-title').textContent = tab.title || new URL(pageUrl).hostname
+  $('#page-site').textContent = new URL(pageUrl).hostname.replace(/^www\./, '')
   // A video page (YouTube and many more): the app finds the video and its
   // qualities. It opens Fuselane if it's closed, so this can take a moment.
   video.addEventListener('click', async () => {
@@ -658,26 +731,39 @@ async function onThisPage() {
 // ---- Speed test -----------------------------------------------------------
 // Evenly spaced numbers to 1 Gbps (lib/speed.ts), so everyday speeds use most
 // of the dial and every number has room.
+// The dial: 240°, from lower left round to lower right.
+const DIAL = { cx: 125, cy: 100, r: 84, start: 150, sweep: 240 }
+function dialPoint(deg: number, r: number): [number, number] {
+  const a = (deg * Math.PI) / 180
+  return [DIAL.cx + r * Math.cos(a), DIAL.cy + r * Math.sin(a)]
+}
+function dialArc(): string {
+  const [x1, y1] = dialPoint(DIAL.start, DIAL.r)
+  const [x2, y2] = dialPoint(DIAL.start + DIAL.sweep, DIAL.r)
+  return `M${x1.toFixed(1)} ${y1.toFixed(1)} A${DIAL.r} ${DIAL.r} 0 1 1 ${x2.toFixed(1)} ${y2.toFixed(1)}`
+}
 function needle(bps: number) {
   const f = dialFraction((Math.max(0, bps) * 8) / 1e6)
-  $<HTMLElement>('#gauge-needle').style.transform = `rotate(${-90 + f * 180}deg)`
   const fill = $<HTMLElement>('#gauge-fill')
   fill.style.strokeDasharray = `${f * 100} 100`
   // An empty arc would still draw its rounded end as a dot.
   fill.style.opacity = f > 0.005 ? '1' : '0'
+  for (const t of document.querySelectorAll<SVGTextElement>('#gauge-ticks text'))
+    t.classList.toggle('on', Number(t.dataset.f) <= f + 1e-9 && f > 0)
   $('#gauge-value').textContent = mbps(bps)
 }
 function ticks() {
+  $('#gauge-track').setAttribute('d', dialArc())
+  $('#gauge-fill').setAttribute('d', dialArc())
   const g = $<HTMLElement>('#gauge-ticks')
   for (const m of DIAL_STOPS) {
     const f = dialFraction(m)
-    const a = Math.PI * (1 - f)
-    const x = 120 + Math.cos(a) * 82
-    const y = 130 - Math.sin(a) * 82
+    const [x, y] = dialPoint(DIAL.start + DIAL.sweep * f, DIAL.r - 22)
     const t = document.createElementNS('http://www.w3.org/2000/svg', 'text')
     t.setAttribute('x', x.toFixed(1))
-    t.setAttribute('y', (y + 4).toFixed(1))
+    t.setAttribute('y', (y + 3.5).toFixed(1))
     t.setAttribute('class', 'gauge-tick')
+    t.dataset.f = String(f)
     t.textContent = m >= 1000 ? '1G' : String(m)
     g.append(t)
   }
@@ -685,7 +771,7 @@ function ticks() {
 
 function results(entries: [string, string][]) {
   const dl = $<HTMLDListElement>('#speed-results')
-  dl.replaceChildren(...entries.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, v)]))
+  dl.replaceChildren(...entries.map(([k, v]) => el('div', {}, el('dt', {}, k), el('dd', {}, v))))
   dl.hidden = !entries.length
 }
 

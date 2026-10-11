@@ -92,8 +92,19 @@
         </nav>
 
         <section id="panel-downloads" role="tabpanel" aria-labelledby="tab-downloads" class="panel">
+          <!-- All downloads together: the speed, and how much each network carries. -->
+          <div id="summary" class="sum" hidden>
+            <p class="sum-speed" aria-live="polite">
+              <span id="sum-rate">0</span><small id="sum-unit">MB/s</small>
+            </p>
+            <p id="sum-what" class="sum-what"></p>
+            <div id="sum-lanes" class="lanes" aria-hidden="true"></div>
+            <p id="sum-keys" class="lane-keys"></p>
+          </div>
           <p id="speed-line" class="speed-line" aria-live="polite"></p>
           <ul id="jobs" class="jobs" aria-label="Downloads"></ul>
+          <p id="done-label" class="section-label" hidden>Done</p>
+          <ul id="jobs-done" class="jobs jobs-done" aria-label="Finished downloads"></ul>
           <div id="jobs-empty" class="empty" hidden>
             <span class="empty-ic"><span class="ic" data-icon="download-simple"></span></span>
             <p class="empty-title">No downloads yet</p>
@@ -104,10 +115,18 @@
         </section>
 
         <section id="panel-page" role="tabpanel" aria-labelledby="tab-page" class="panel" hidden>
-          <button type="button" id="video" class="btn btn-block">
-            <span class="ic" data-icon="film-strip"></span>
-            Get this page's video in Fuselane
-          </button>
+          <div id="page-card" class="page-card">
+            <span class="page-thumb" aria-hidden="true"
+              ><span class="ic" data-icon="film-strip"></span
+            ></span>
+            <span class="page-text">
+              <span id="page-title" class="page-title"></span>
+              <span id="page-site" class="page-site"></span>
+            </span>
+            <button type="button" id="video" class="btn btn-primary btn-block">
+              <span class="ic" data-icon="download-simple"></span>Get this page's video
+            </button>
+          </div>
           <div id="feeds"></div>
           <ul id="media" aria-label="Videos and files on this page"></ul>
           <p id="media-status" class="muted small" role="status"></p>
@@ -115,17 +134,11 @@
 
         <section id="panel-speed" role="tabpanel" aria-labelledby="tab-speed" class="panel" hidden>
           <div class="gauge" aria-hidden="true">
-            <svg viewBox="0 0 240 140">
-              <path class="gauge-track" d="M20 130 A100 100 0 0 1 220 130" pathLength="100" />
-              <path
-                id="gauge-fill"
-                class="gauge-fill"
-                d="M20 130 A100 100 0 0 1 220 130"
-                pathLength="100"
-              />
+            <!-- A 240° dial with evenly spaced numbers (lib/speed.ts); the reading sits below. -->
+            <svg viewBox="0 0 250 168">
+              <path id="gauge-track" class="gauge-track" pathLength="100" />
+              <path id="gauge-fill" class="gauge-fill" pathLength="100" />
               <g id="gauge-ticks"></g>
-              <line id="gauge-needle" class="gauge-needle" x1="120" y1="130" x2="120" y2="64" />
-              <circle cx="120" cy="130" r="7" class="gauge-hub" />
             </svg>
             <p class="gauge-read">
               <span id="gauge-value">0</span><span class="gauge-unit">Mbps</span>
