@@ -30,15 +30,13 @@ await b.close()
     'data:font/woff2;base64,' +
     readFileSync(
       new URL(
-        '../../apps/site-next/node_modules/geist/dist/fonts/geist-sans/Geist-Variable.woff2',
+        '../../apps/desktop/node_modules/geist/dist/fonts/geist-sans/Geist-Variable.woff2',
         import.meta.url,
       ),
     ).toString('base64')
   const shot =
     'data:image/png;base64,' +
-    readFileSync(new URL('../../apps/site-next/public/shots/app.png', import.meta.url)).toString(
-      'base64',
-    )
+    readFileSync(new URL('shots/app.png', import.meta.url)).toString('base64')
   await p.setContent(`<html><head><style>
     @font-face { font-family: G; src: url('${font}'); font-weight: 100 900; }
     body { margin:0; width:1200px; height:630px; background:#0a0c11; font-family:G, sans-serif; overflow:hidden; position:relative; }

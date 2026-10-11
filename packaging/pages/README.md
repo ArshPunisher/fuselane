@@ -1,7 +1,7 @@
 # GitHub Pages files
 
 What https://arshpunisher.github.io/fuselane serves for apps already installed.
-The website itself is https://fuselane.app (`apps/site-next`, Cloudflare Pages).
+The website itself is https://fuselane.app (its own private repo, ArshPunisher/fuselane-site, on Cloudflare Pages).
 
 - `updates/latest.json` — the signed update feed, written by
   `.github/workflows/update-feed.yml` on each release (not stored here).

@@ -76,14 +76,14 @@
   - B10.4 Video from pages with the person's own yt-dlp, downloaded over every network (246 MB 1080p over Wi-Fi + Ethernet in 18.6 s), ffmpeg join, Audio (MP3); the extension's popup hands the page over.
   - B10.5 Data used per network per day, with a 30-day chart.
   - Site: "Built in" section and two FAQ entries (deploy with beta.10).
-- **Next:** owner reviews beta.10 in the demo (localhost:5191) and says release; then publish beta.10, deploy the site (`tools/deploy-site.sh`), upload extension 0.2.0 with the new images.
+- **Next:** owner reviews beta.10 in the demo (localhost:5191) and says release; then publish beta.10, deploy the site (`tools/deploy.sh` in the fuselane-site repo), upload extension 0.2.0 with the new images.
 - **Waiting on the owner:** Google Search Console (Domain property, Cloudflare verification, submit the sitemap); the Chrome Web Store upload.
 
 ### 2026-10-10 (beta.9 round: Send redesign, site on fuselane.app, ten download features)
 
 - **Done (tested, committed; not released):**
   - Send page as a radar (B and C hybrid) with motion: sweep, devices spring in, drop files on a device, transfer beams, progress rings, activity column; receiver Cancel; check words removed. Wide layouts for Networks and Settings; motion on Downloads.
-  - Site: served at fuselane.app through Cloudflare Pages (`tools/deploy-site.sh`); canonical, FAQPage, breadcrumbs, WebSite data, dated sitemap, 404, headers. GitHub Pages stays for installed apps: its sign-in check and update feed must not move (a custom domain there would redirect the probe and every installed app would see a sign-in page).
+  - Site: served at fuselane.app through Cloudflare Pages (its own private repo, fuselane-site); canonical, FAQPage, breadcrumbs, WebSite data, dated sitemap, 404, headers. GitHub Pages stays for installed apps: its sign-in check and update feed must not move (a custom domain there would redirect the probe and every installed app would see a sign-in page).
   - B9.1–B9.10: do this one now, groups, find files on a page, ready by, the phone only for long downloads, what each network saved, checksums found by themselves, already downloaded, continue on another computer, low battery. Store schema v10–v13.
   - Fixed on the way: receiver cancel could reach the sender as a network error; refused phone-page uploads reset the connection; WebKit sent clicks during a View Transition to the page root (screens now animate with plain CSS).
 - **Next:** owner presses Activate for fuselane.app in Cloudflare (Workers & Pages → fuselane → Custom domains); owner reviews the features; then release beta.9 when asked.
