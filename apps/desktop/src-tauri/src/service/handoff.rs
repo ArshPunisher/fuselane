@@ -32,6 +32,10 @@ pub const MANIFEST_SUFFIX: &str = ".fuselane-handoff";
 pub const PACK_SUFFIX: &str = ".fuselane-pack";
 /// Arrived bytes are synced to disk (and counted in) at least this often.
 const SYNC_EVERY: u64 = 8 * 1024 * 1024;
+/// If the downloaded bytes haven't started arriving by then (the sender quit,
+/// lost the network, or the second transfer was refused), they're fetched
+/// from the internet instead.
+pub(super) const PACK_WAIT: std::time::Duration = std::time::Duration::from_secs(90);
 /// Biggest manifest read (the secured list is one number per block).
 const MAX_MANIFEST: u64 = 4 * 1024 * 1024;
 /// Most blocks a manifest may list.
@@ -485,10 +489,34 @@ impl Service {
                 gone: Arc::default(),
             },
         );
+        // Bytes that never start arriving don't hold the download up for ever.
+        let (me, wait_for) = (Arc::downgrade(self), m.id.clone().unwrap_or_default());
+        let wait = *lock(&self.pack_wait);
+        tokio::spawn(async move {
+            tokio::time::sleep(wait).await;
+            if let Some(s) = me.upgrade() {
+                s.pack_never_came(&wait_for);
+            }
+        });
         // It starts now: what was never downloaded comes from the internet.
         self.publish_jobs();
         self.pump();
         Ok(id)
+    }
+
+    /// The pack of hand-off `id` never started arriving: the rest comes from
+    /// the internet.
+    fn pack_never_came(&self, id: &str) {
+        let handoffs = lock(&self.handoffs_in);
+        let Some(h) = handoffs.get(id).filter(|h| h.state_is("waiting")) else {
+            return;
+        };
+        *h.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = "stopped";
+        h.incoming.release();
+        drop(handoffs);
+        self.publish_jobs();
     }
 
     /// Whether a file Nearby is offered is the pack of a hand-off that's

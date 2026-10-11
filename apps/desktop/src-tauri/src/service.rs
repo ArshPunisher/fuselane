@@ -665,6 +665,8 @@ pub struct Service {
     joining: Mutex<HashMap<i64, i64>>,
     /// Downloads arriving from another computer, by hand-off id (C2–C4).
     handoffs_in: Mutex<HashMap<String, handoff::HandoffIn>>,
+    /// How long a hand-off's bytes may take to start arriving (tests shorten it).
+    pack_wait: Mutex<std::time::Duration>,
     /// Held while a browser offer checks for the same link and adds it.
     offer_lock: Mutex<()>,
     /// Tests pin the clock; None reads the real local time.
@@ -1104,6 +1106,7 @@ impl Service {
             joins_lock: Mutex::default(),
             joining: Mutex::default(),
             handoffs_in: Mutex::default(),
+            pack_wait: Mutex::new(handoff::PACK_WAIT),
             offer_lock: Mutex::default(),
             clock: Mutex::new(None),
             awake: Mutex::new(None),
@@ -4243,6 +4246,35 @@ mod tests {
         let sink = b.svc.pack_sink(&h.pack.name).unwrap();
         feed(&h, sink, h.pack.size / 2);
         assert_eq!(b.job(new_id).arriving.unwrap().state, "stopped");
+        b.wait("finished on B", |h| h.job(new_id).status == "completed")
+            .await;
+        let path = PathBuf::from(b.job(new_id).final_path.unwrap());
+        assert_eq!(
+            fuselane_testkit::sha256_file(&path).unwrap(),
+            content.sha256()
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_hand_over_whose_bytes_never_come_finishes_from_the_internet() {
+        let content = Content::new(1536 * KB, 245);
+        let server = RangeServer::start(content).await.unwrap();
+        server.add_rule(Rule {
+            skip: 1,
+            times: u32::MAX,
+            fault: Fault::Throttle(160 * KB),
+        });
+        let (_a, _id, h) = paused_for_handoff(&server, 1536 * KB).await;
+        let b = harness(3);
+        *lock(&b.svc.pack_wait) = Duration::from_millis(300);
+        let manifest = b.dir.path().join(&h.manifest.name);
+        std::fs::copy(&h.manifest.path, &manifest).unwrap();
+        let new_id = b.svc.import_handoff(&[manifest]).unwrap().unwrap();
+        // The sender went away after the manifest: nothing else ever comes.
+        b.wait("given up waiting", |h| {
+            h.job(new_id).arriving.is_some_and(|a| a.state == "stopped")
+        })
+        .await;
         b.wait("finished on B", |h| h.job(new_id).status == "completed")
             .await;
         let path = PathBuf::from(b.job(new_id).final_path.unwrap());
