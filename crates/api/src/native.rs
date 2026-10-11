@@ -59,6 +59,57 @@ async fn write_msg<W: AsyncWrite + Unpin>(w: &mut W, v: &Value) -> std::io::Resu
     w.flush().await
 }
 
+/// How long a closed app gets to start and listen before the browser keeps the download.
+const START_WAIT: Duration = Duration::from_secs(20);
+
+/// Sends a request to the app; when it isn't running, starts it (B1: "open the
+/// app instantly and start the download there"), waits until it listens, then
+/// sends the request again.
+async fn ask(
+    endpoint: &Path,
+    method: &str,
+    params: Value,
+    wait: Duration,
+) -> Result<Value, String> {
+    ask_with(endpoint, method, params, wait, START).await
+}
+
+/// Tests never start a real app (it would be the test binary itself).
+#[cfg(not(test))]
+const START: fn() -> bool = crate::launch::start_app;
+#[cfg(test)]
+const START: fn() -> bool = || false;
+
+async fn ask_with(
+    endpoint: &Path,
+    method: &str,
+    params: Value,
+    wait: Duration,
+    start: fn() -> bool,
+) -> Result<Value, String> {
+    match crate::client::request(endpoint, method, params.clone(), wait).await {
+        Err(e) if e.starts_with("Fuselane isn't running") => {
+            if !start() {
+                return Err(e);
+            }
+            let deadline = tokio::time::Instant::now() + START_WAIT;
+            loop {
+                tokio::time::sleep(Duration::from_millis(250)).await;
+                let up =
+                    crate::client::request(endpoint, "ping", json!({}), Duration::from_secs(1));
+                if up.await.is_ok() {
+                    break;
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    return Err(e);
+                }
+            }
+            crate::client::request(endpoint, method, params, wait).await
+        }
+        other => other,
+    }
+}
+
 /// What to tell the extension for one of its messages.
 async fn handle(endpoint: &Path, msg: &[u8]) -> Value {
     let Ok(v) = serde_json::from_slice::<Value>(msg) else {
@@ -67,17 +118,17 @@ async fn handle(endpoint: &Path, msg: &[u8]) -> Value {
     let wait = Duration::from_secs(3);
     match v.get("type").and_then(Value::as_str) {
         Some("download.offer") => {
-            match crate::client::request(endpoint, "download.offer", v, wait).await {
+            match ask(endpoint, "download.offer", v, wait).await {
                 Ok(reply) => reply,
                 // The app isn't running or didn't answer: the browser keeps the download.
                 Err(_) => decline("unsupported"),
             }
         }
-        Some("page.video") => match crate::client::request(endpoint, "page.video", v, wait).await {
+        Some("page.video") => match ask(endpoint, "page.video", v, wait).await {
             Ok(reply) => reply,
             Err(_) => decline("unsupported"),
         },
-        Some("page.feed") => match crate::client::request(endpoint, "page.feed", v, wait).await {
+        Some("page.feed") => match ask(endpoint, "page.feed", v, wait).await {
             Ok(reply) => reply,
             Err(_) => decline("unsupported"),
         },
@@ -103,6 +154,26 @@ async fn handle(endpoint: &Path, msg: &[u8]) -> Value {
             match crate::client::request(endpoint, "handoff.set", params, wait).await {
                 Ok(r) => json!({"v": 1, "type": "handoff", "handoff": r}),
                 Err(e) => json!({"v": 1, "type": "handoff", "error": e}),
+            }
+        }
+        // The popup's downloads list and its buttons (REVIEW-2026-10-11 D). The
+        // list is only asked for while the app runs, so it never starts it.
+        Some("jobs.list") => {
+            match crate::client::request(endpoint, "jobs.list", json!({}), wait).await {
+                Ok(r) => {
+                    json!({"v": 1, "type": "jobs", "jobs": r.get("jobs").cloned().unwrap_or(json!([])), "rate": r.get("rate").cloned().unwrap_or(json!(0))})
+                }
+                Err(e) => json!({"v": 1, "type": "jobs", "error": e}),
+            }
+        }
+        Some("job.action") => {
+            let params = json!({
+                "id": v.get("id").cloned().unwrap_or(Value::Null),
+                "action": v.get("action").cloned().unwrap_or(Value::Null),
+            });
+            match crate::client::request(endpoint, "job.action", params, wait).await {
+                Ok(_) => json!({"v": 1, "type": "job.done"}),
+                Err(e) => json!({"v": 1, "type": "job.done", "error": e}),
             }
         }
         _ => decline("invalid"),
@@ -218,6 +289,75 @@ mod tests {
         let r = relay(&crate::client::endpoint(dir.path()), &input[..], &mut out).await;
         assert_eq!(r.unwrap_err().kind(), std::io::ErrorKind::InvalidData);
         assert!(out.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_closed_app_is_started_and_the_offer_reaches_it() {
+        use crate::server::{Handler, start};
+        struct App;
+        impl Handler for App {
+            fn offer(
+                &self,
+                _: crate::offer::Offer,
+            ) -> crate::server::BoxFuture<'_, Result<String, crate::server::Decline>> {
+                Box::pin(async { Err(crate::server::Decline::Unsupported) })
+            }
+            fn version(&self) -> String {
+                "0.1.0".into()
+            }
+        }
+        static STARTED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        static EP: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+        let dir = tempfile::tempdir().unwrap();
+        EP.set(crate::client::endpoint(dir.path())).unwrap();
+        // "Starting the app" brings the API up a moment later, like a real launch.
+        fn starter() -> bool {
+            STARTED.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            tokio::spawn(async {
+                tokio::time::sleep(Duration::from_millis(600)).await;
+                start(EP.get().unwrap(), std::sync::Arc::new(App))
+                    .await
+                    .unwrap();
+            });
+            true
+        }
+        let r = ask_with(
+            EP.get().unwrap(),
+            "ping",
+            json!({}),
+            Duration::from_secs(2),
+            starter,
+        )
+        .await;
+        assert_eq!(r.unwrap()["version"], "0.1.0");
+        assert_eq!(STARTED.load(std::sync::atomic::Ordering::SeqCst), 1);
+        // Now it runs: nothing is started again.
+        let again = ask_with(
+            EP.get().unwrap(),
+            "ping",
+            json!({}),
+            Duration::from_secs(2),
+            starter,
+        )
+        .await;
+        assert!(again.is_ok());
+        assert_eq!(STARTED.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn when_the_app_cant_be_started_the_browser_keeps_the_download() {
+        let dir = tempfile::tempdir().unwrap();
+        let ep = crate::client::endpoint(dir.path());
+        let r = ask_with(
+            &ep,
+            "download.offer",
+            json!({}),
+            Duration::from_secs(1),
+            || false,
+        )
+        .await;
+        assert!(r.unwrap_err().starts_with("Fuselane isn't running"));
     }
 
     #[cfg(unix)]

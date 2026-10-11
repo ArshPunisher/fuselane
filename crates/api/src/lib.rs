@@ -7,6 +7,7 @@
 pub mod browsers;
 pub mod client;
 pub mod hosts;
+pub mod launch;
 pub mod native;
 pub mod offer;
 pub mod server;
