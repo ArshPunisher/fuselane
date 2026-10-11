@@ -931,3 +931,39 @@ h2 {
   display: grid;
   gap: 8px;
 }
+
+/* Asking before a download is cancelled, inside its row. */
+.job.asking {
+  flex-wrap: wrap;
+}
+
+.job-confirm {
+  display: flex;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.job-confirm-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-small {
+  min-height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.btn-danger {
+  border-color: color-mix(in oklch, var(--danger) 45%, transparent);
+  color: var(--danger);
+}
+
+.btn-danger:hover {
+  background: color-mix(in oklch, var(--danger) 10%, transparent);
+}

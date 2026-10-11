@@ -291,6 +291,42 @@ function buttons(r: Row): [IconName, string, string][] {
 }
 
 let act: (id: string, action: string) => Promise<void> = async () => {}
+
+/** "Cancel this download?" in its row: Keep it, or cancel and delete the part. */
+function askToCancel(li: HTMLElement, actions: HTMLElement, id: string) {
+  if (li.querySelector('.job-confirm')) return
+  const keep = el('button', { type: 'button', className: 'btn btn-small' }, 'Keep it')
+  const drop = el(
+    'button',
+    { type: 'button', className: 'btn btn-small btn-danger' },
+    'Cancel download',
+  )
+  const box = el(
+    'div',
+    { className: 'job-confirm', role: 'group' },
+    el('span', {}, 'Cancel it? What’s downloaded is deleted.'),
+    el('span', { className: 'job-confirm-actions' }, keep, drop),
+  )
+  box.setAttribute('aria-label', 'Cancel this download?')
+  actions.hidden = true
+  li.classList.add('asking')
+  li.append(box)
+  keep.addEventListener('click', () => {
+    box.remove()
+    li.classList.remove('asking')
+    actions.hidden = false
+  })
+  drop.addEventListener('click', async () => {
+    keep.disabled = drop.disabled = true
+    await act(id, 'cancel').catch(() => {})
+    // Gone, the row goes with it. Still here a moment later: it didn't take,
+    // so the choice is offered again.
+    setTimeout(() => {
+      if (box.isConnected) keep.disabled = drop.disabled = false
+    }, 3000)
+  })
+  drop.focus()
+}
 const rows = new Map<string, { li: HTMLLIElement; state: string }>()
 /** Pause pressed: shown at once, until the download says it has stopped. */
 const pausing = new Map<string, number>()
@@ -324,6 +360,8 @@ function render(list: Row[], rate: number) {
         const b = el('button', { type: 'button', className: 'icon-btn', title: label }, icon(ic))
         b.setAttribute('aria-label', `${label}: ${r.name}`)
         b.addEventListener('click', async () => {
+          // Cancelling throws away what's downloaded: ask first, in the row.
+          if (action === 'cancel') return askToCancel(li, actions, r.id)
           b.disabled = true
           if (action === 'pause') {
             // Its connections take a moment to close: say so now.

@@ -39,9 +39,12 @@ const SIZES: Record<string, number> = {
   '/files/huge.iso': 150 * 1024 * 1024,
   '/files/script.bin': 6 * 1024 * 1024 + 5,
   '/files/slow.bin': 24 * 1024 * 1024 + 9,
+  '/files/slow-two.bin': 24 * 1024 * 1024 + 11,
 }
 /** slow.bin trickles (about 4 MB/s in all) so a pause lands mid-way. */
 const SLOW = '/files/slow.bin'
+/** Trickles too (its own link: one taken seconds ago isn't taken again). */
+const isSlow = (path: string) => path.startsWith('/files/slow')
 
 let server: Server
 let base = ''
@@ -63,6 +66,7 @@ test.beforeAll(async () => {
         `<!doctype html><title>files</title>` +
           `<a id="tool" href="/files/tool.zip">tool.zip</a> <a id="huge" href="/files/huge.iso">huge.iso</a> ` +
           `<a id="slow" href="/files/slow.bin">slow.bin</a> ` +
+          `<a id="slow2" href="/files/slow-two.bin">slow-two.bin</a> ` +
           `<button id="script" onclick="location.href='/files/script.bin'">script</button>`,
       )
       return
@@ -78,11 +82,11 @@ test.beforeAll(async () => {
         'accept-ranges': 'bytes',
       })
       // In pieces, so big ranges stream; slow.bin waits between them.
-      const piece = path === SLOW ? 64 * 1024 : 1 << 20
+      const piece = isSlow(path) ? 64 * 1024 : 1 << 20
       void (async () => {
         for (let s = start; s <= end && !res.destroyed; s += piece) {
           res.write(bytes(s, Math.min(end, s + piece - 1)))
-          if (path === SLOW) await new Promise((r) => setTimeout(r, 60))
+          if (isSlow(path)) await new Promise((r) => setTimeout(r, 60))
         }
         res.end()
       })()
@@ -267,5 +271,44 @@ test('a download pauses, keeps what it has, and resumes to the exact file', asyn
     .update(bytes(0, SIZES[SLOW]! - 1))
     .digest('hex')
   expect(createHash('sha256').update(readFileSync(saved.filename)).digest('hex')).toBe(want)
+  await page.close()
+})
+
+test('cancelling a download asks first, in its row', async () => {
+  const page = await context.newPage()
+  await page.goto(base)
+  await page.click('#slow2')
+  await expect
+    .poll(
+      async () => (await jobs()).find((x) => x.name === 'slow-two.bin' && x.status === 'running'),
+      {
+        timeout: 20_000,
+      },
+    )
+    .toBeTruthy()
+  const popup = await context.newPage()
+  await popup.goto(`chrome-extension://${id}/popup.html`)
+  const row = popup.locator('li.job', { hasText: 'slow-two.bin' }).first()
+  await row.getByRole('button', { name: 'Cancel: slow-two.bin' }).click()
+  const ask = row.getByRole('group', { name: 'Cancel this download?' })
+  await expect(ask).toContainText('What’s downloaded is deleted.')
+  // Keep it: nothing happens, the buttons come back.
+  await ask.getByRole('button', { name: 'Keep it' }).click()
+  await expect(ask).toHaveCount(0)
+  expect((await jobs()).some((x) => x.name === 'slow-two.bin' && x.status !== 'cancelled')).toBe(
+    true,
+  )
+  // Cancel download: it goes from the list (not finished, not failed: gone).
+  await row.getByRole('button', { name: 'Cancel: slow-two.bin' }).click()
+  await row
+    .getByRole('group', { name: 'Cancel this download?' })
+    .getByRole('button', { name: 'Cancel download' })
+    .click()
+  await expect
+    .poll(async () => (await jobs()).filter((x) => x.name === 'slow-two.bin').length, {
+      timeout: 10_000,
+    })
+    .toBe(0)
+  await popup.close()
   await page.close()
 })
