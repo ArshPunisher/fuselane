@@ -152,6 +152,14 @@ pub trait Handler: Send + Sync + 'static {
     fn job_action(&self, _id: i64, _action: JobAction) -> Result<(), String> {
         Err("This version of Fuselane can't do that from the browser.".into())
     }
+    /// Starts the app's speed test of every network; returns its state.
+    fn speedtest_start(&self) -> Result<Value, String> {
+        Err("This version of Fuselane can't test from the browser.".into())
+    }
+    /// The speed test's progress and results.
+    fn speedtest_state(&self) -> Option<Value> {
+        None
+    }
 }
 
 /// A page link from the extension: http(s) only, and not absurdly long.
@@ -273,6 +281,14 @@ pub async fn answer(handler: &dyn Handler, line: &str) -> Value {
                 _ => error(&id, "bad-request", "a download id and an action are needed"),
             }
         }
+        Some("speedtest.start") => match handler.speedtest_start() {
+            Ok(state) => json!({"id": id, "result": state}),
+            Err(why) => error(&id, "refused", &why),
+        },
+        Some("speedtest.state") => match handler.speedtest_state() {
+            Some(state) => json!({"id": id, "result": state}),
+            None => error(&id, "unsupported", "this app can't test from the browser"),
+        },
         Some(_) => error(&id, "unknown-method", "unknown method"),
         None => error(&id, "bad-request", "method is missing"),
     }
@@ -493,6 +509,14 @@ mod tests {
                 "{bad}"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn an_app_without_the_speed_test_says_so() {
+        let start = answer(&Fake, r#"{"id":1,"method":"speedtest.start"}"#).await;
+        assert_eq!(start["error"]["code"], "refused");
+        let state = answer(&Fake, r#"{"id":2,"method":"speedtest.state"}"#).await;
+        assert_eq!(state["error"]["code"], "unsupported");
     }
 
     #[tokio::test]

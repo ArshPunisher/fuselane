@@ -102,6 +102,17 @@ impl Handler for ApiBridge {
         self.svc.extension_jobs().ok()
     }
 
+    fn speedtest_start(&self) -> Result<serde_json::Value, String> {
+        self.svc
+            .start_netcheck(crate::service::netcheck::CheckTargets::default())
+            .map_err(|e| e.message)?;
+        Ok(self.svc.speedtest_for_extension())
+    }
+
+    fn speedtest_state(&self) -> Option<serde_json::Value> {
+        Some(self.svc.speedtest_for_extension())
+    }
+
     fn job_action(&self, id: i64, action: JobAction) -> Result<(), String> {
         self.svc.extension_action(id, action).map_err(|e| {
             [e.message, e.hint.unwrap_or_default()]

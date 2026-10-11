@@ -117,6 +117,8 @@ pub(super) struct NetCheckState {
     /// Steps done so far and in all, in seconds of planned time.
     pub done_secs: f64,
     pub total_secs: f64,
+    /// The latest live reading, for the browser extension's speedometer.
+    pub live: Option<SpeedLive>,
 }
 
 /// Seconds planned per step, for the overall progress.
@@ -185,6 +187,19 @@ impl Service {
             history: self.check_history(),
             outages: lock(&self.outages).clone(),
         }
+    }
+
+    /// The speed test as the browser extension's popup shows it: running or not,
+    /// the live reading, and the run in progress or the latest one.
+    pub fn speedtest_for_extension(&self) -> serde_json::Value {
+        let st = lock(&self.netcheck);
+        let latest = st.current.clone().or_else(|| self.check_history().pop());
+        serde_json::json!({
+            "running": st.running,
+            "phase": st.phase,
+            "live": st.live,
+            "run": latest,
+        })
     }
 
     fn check_history(&self) -> Vec<CheckRun> {
@@ -260,6 +275,10 @@ impl Service {
             live.overall = ((st.done_secs + live.progress * step_secs) / st.total_secs.max(1.0))
                 .clamp(0.0, 1.0);
         }
+        lock(&self.netcheck).live = Some(SpeedLive {
+            trace: Vec::new(),
+            ..live.clone()
+        });
         self.send(UiEvent::SpeedLive { live: Some(live) });
     }
 
@@ -469,6 +488,7 @@ impl Service {
             st.running = false;
             st.phase = None;
             st.cancel = None;
+            st.live = None;
         }
         self.send(UiEvent::SpeedLive { live: None });
         self.publish_netcheck();

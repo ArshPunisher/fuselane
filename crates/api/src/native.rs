@@ -176,6 +176,12 @@ async fn handle(endpoint: &Path, msg: &[u8]) -> Value {
                 Err(e) => json!({"v": 1, "type": "job.done", "error": e}),
             }
         }
+        Some(t @ ("speedtest.start" | "speedtest.state")) => {
+            match crate::client::request(endpoint, t, json!({}), wait).await {
+                Ok(r) => json!({"v": 1, "type": "speedtest", "state": r}),
+                Err(e) => json!({"v": 1, "type": "speedtest", "error": e}),
+            }
+        }
         _ => decline("invalid"),
     }
 }
