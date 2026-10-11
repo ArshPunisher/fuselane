@@ -17,23 +17,29 @@ pub fn bundle_of(exe: &Path) -> Option<PathBuf> {
         .map(Path::to_path_buf)
 }
 
-/// What to start for the app at `exe`: `open <bundle>` on macOS (Launch Services
-/// brings it to the front), else the executable itself.
-pub fn command_for(exe: &Path) -> Command {
+/// What to start for the app at `exe`: `open <bundle>` on macOS, else the
+/// executable itself. It starts in the background (`--minimized`, to the tray):
+/// a download from the browser carries on without the window jumping up; what
+/// needs the person (a video's qualities, a feed) brings the window up itself.
+/// `home` is a data folder of its own (FUSELANE_HOME), kept for the new process.
+pub fn command_for(exe: &Path, home: Option<&std::ffi::OsStr>) -> Command {
     if cfg!(target_os = "macos")
         && let Some(bundle) = bundle_of(exe)
     {
         let mut c = Command::new("/usr/bin/open");
-        // Launch Services doesn't pass this process's environment on: a copy
-        // running on its own data folder is started on that same folder.
-        if let Some(home) = std::env::var_os("FUSELANE_HOME") {
+        // -g: not brought to the front. Launch Services doesn't pass this
+        // process's environment on, so a data folder of its own goes as --env.
+        c.arg("-g");
+        if let Some(home) = home {
             c.arg("--env")
                 .arg(format!("FUSELANE_HOME={}", home.to_string_lossy()));
         }
-        c.arg(bundle);
+        c.arg(bundle).args(["--args", "--minimized"]);
         return c;
     }
-    Command::new(exe)
+    let mut c = Command::new(exe);
+    c.arg("--minimized");
+    c
 }
 
 /// Starts the app, detached from the browser that started this host. False when
@@ -47,7 +53,8 @@ pub fn start_app() -> bool {
     if is_cli(&exe) {
         return false;
     }
-    spawn_detached(command_for(&exe)).is_ok()
+    let home = std::env::var_os("FUSELANE_HOME");
+    spawn_detached(command_for(&exe, home.as_deref())).is_ok()
 }
 
 /// The command-line tool (`fuselane`) can be the host too, for people without
@@ -113,16 +120,35 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn on_macos_the_bundle_is_opened_not_the_binary() {
-        let c = command_for(Path::new(
-            "/Applications/Fuselane.app/Contents/MacOS/fuselane",
-        ));
+        let args = |c: &Command| {
+            c.get_args()
+                .map(|a| a.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+        };
+        let app = Path::new("/Applications/Fuselane.app/Contents/MacOS/fuselane");
+        let c = command_for(app, None);
         assert_eq!(c.get_program(), "/usr/bin/open");
+        // In the background, to the tray: the window doesn't jump up.
         assert_eq!(
-            c.get_args().collect::<Vec<_>>(),
-            vec![std::ffi::OsStr::new("/Applications/Fuselane.app")]
+            args(&c),
+            ["-g", "/Applications/Fuselane.app", "--args", "--minimized"]
+        );
+        // A copy on its own data folder is started on that folder.
+        let test = command_for(app, Some(std::ffi::OsStr::new("/Users/me/fuselane-test")));
+        assert_eq!(
+            args(&test),
+            [
+                "-g",
+                "--env",
+                "FUSELANE_HOME=/Users/me/fuselane-test",
+                "/Applications/Fuselane.app",
+                "--args",
+                "--minimized"
+            ]
         );
         // A development build has no bundle: the binary itself starts.
-        let dev = command_for(Path::new("/tmp/target/debug/fuselane-desktop"));
+        let dev = command_for(Path::new("/tmp/target/debug/fuselane-desktop"), None);
         assert_eq!(dev.get_program(), "/tmp/target/debug/fuselane-desktop");
+        assert_eq!(args(&dev), ["--minimized"]);
     }
 }

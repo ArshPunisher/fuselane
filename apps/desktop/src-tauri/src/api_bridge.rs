@@ -80,10 +80,9 @@ impl Handler for ApiBridge {
                         ..Default::default()
                     },
                 )
-                .map(|id| {
-                    self.svc.bring_to_front();
-                    id.to_string()
-                })
+                // It carries on in the background; the extension's popup shows it
+                // starting. The window comes up only when the person has to choose.
+                .map(|id| id.to_string())
                 .map_err(|_| Decline::Unsupported)
         })
     }

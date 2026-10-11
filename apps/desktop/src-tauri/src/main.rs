@@ -1921,7 +1921,11 @@ fn main() {
     }
     let mut single_instance =
         tauri_plugin_single_instance::Builder::new().callback(|app, argv, cwd| {
-            show_main(app);
+            // Started by the browser extension for a download (--minimized):
+            // it carries on in the background, the window stays as it is.
+            if !argv.iter().any(|a| a == "--minimized") {
+                show_main(app);
+            }
             // A second launch (double-clicked .torrent, a browser's magnet link on
             // Windows or Linux) hands its arguments to this instance.
             let svc = app.state::<Arc<Service>>();
