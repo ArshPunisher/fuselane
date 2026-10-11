@@ -3,7 +3,10 @@
 //! `fuselane get <url>` downloads one file over every usable network at once.
 //! Ctrl-C pauses (progress is saved); `fuselane resume <id>` continues, even after
 //! a crash. `fuselane ls` lists downloads, `fuselane rm <id>` removes one.
-//! `fuselane nets` shows the networks Fuselane can see.
+//! `fuselane nets` shows the networks Fuselane can see. `fuselane update` updates
+//! the Fuselane app.
+
+mod update;
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -75,6 +78,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Update the Fuselane app to the newest version (opens it if it's closed).
+    Update {
+        /// Only say whether there's a newer version.
+        #[arg(long)]
+        check: bool,
+    },
     /// List the networks Fuselane can use.
     Nets {
         /// Include loopback, tunnels and virtual adapters.
@@ -118,6 +127,7 @@ fn main() -> ExitCode {
     runtime.block_on(async {
         match command {
             Command::Nets { all, json } => nets(all, json),
+            Command::Update { check } => update::update(check).await,
             Command::Browsers { json } => browsers(json),
             Command::Ls { json } => ls(json),
             Command::Rm { id } => rm(id),
