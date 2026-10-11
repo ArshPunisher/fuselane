@@ -253,7 +253,8 @@ function meta(r: Row): string {
   const pct = r.total ? `${Math.floor((r.written / r.total) * 100)}%, ` : ''
   switch (r.status) {
     case 'running':
-      return `${pct}${of}${r.rate > 0 ? `, ${speed(r.rate)}` : ''}`
+      // The speed is drawn separately, in the accent colour (see render).
+      return `${pct}${of}`
     case 'queued':
       return r.written ? `Waiting, ${of}` : 'Waiting'
     case 'paused':
@@ -298,11 +299,14 @@ function render(list: Row[], rate: number) {
   const ul = $<HTMLUListElement>('#jobs')
   const active = list.filter((r) => ACTIVE.has(r.status))
   const running = list.filter((r) => r.status === 'running').length
-  $('#speed-line').textContent = running
-    ? `${running} downloading, ${speed(rate)} in all`
-    : active.length
-      ? `${active.length} waiting or paused`
-      : ''
+  const line = $('#speed-line')
+  if (running)
+    line.replaceChildren(
+      `${running} downloading, `,
+      el('span', { className: 'rate' }, speed(rate)),
+      ' in all',
+    )
+  else line.textContent = active.length ? `${active.length} waiting or paused` : ''
   const count = $('#tab-count')
   count.hidden = !active.length
   count.textContent = String(active.length)
@@ -355,7 +359,15 @@ function render(list: Row[], rate: number) {
       pausing.delete(r.id)
       for (const x of li.querySelectorAll('button')) x.disabled = false
     }
-    li.querySelector('.job-meta')!.textContent = stillPausing ? 'Pausing…' : meta(r)
+    const metaEl = li.querySelector('.job-meta')!
+    if (stillPausing) metaEl.textContent = 'Pausing…'
+    else if (r.status === 'running')
+      // No speed yet: it's checking what it had and reconnecting (a few seconds).
+      metaEl.replaceChildren(
+        `${meta(r)}, `,
+        r.rate > 0 ? el('span', { className: 'rate' }, speed(r.rate)) : 'connecting…',
+      )
+    else metaEl.textContent = meta(r)
     li.querySelector('.job-name')!.textContent = r.name
     const pct = r.total
       ? Math.min(100, (r.written / r.total) * 100)

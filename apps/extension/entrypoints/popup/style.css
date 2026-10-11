@@ -654,12 +654,21 @@ h2 {
   display: none;
 }
 
-/* Downloads as tiles: a line above and below each. */
+/* Downloads as tiles: a line above and below each, in the accent colour. */
+:root {
+  --tile-line: color-mix(in oklch, var(--fuse) 45%, transparent);
+}
+
+/* Speeds in the accent colour. */
+.rate {
+  color: var(--fuse-text);
+  font-weight: 500;
+}
 .jobs {
   display: grid;
   margin: 0;
   padding: 0;
-  border-top: 1px solid var(--hairline);
+  border-top: 1px solid var(--tile-line);
   list-style: none;
 }
 
@@ -672,7 +681,7 @@ h2 {
   align-items: center;
   gap: 8px;
   padding: 9px 4px 9px 6px;
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--tile-line);
   transition: background var(--dur-quick) var(--ease-out);
 }
 
