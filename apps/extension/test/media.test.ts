@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { MAX_ITEMS, mediaList, type Found } from '../lib/media.ts'
+import { MAX_ITEMS, mediaList, worthPeeking, type Found } from '../lib/media.ts'
 
 const PAGE = 'https://videos.example.org/watch/42'
 
@@ -45,4 +45,15 @@ test('a page full of links is capped', () => {
     label: '',
   }))
   assert.equal(mediaList(found, PAGE).length, MAX_ITEMS)
+})
+
+test('the app starts reading a page early only on video sites or pages with a video', () => {
+  assert.equal(worthPeeking('https://www.youtube.com/watch?v=x', []), true)
+  assert.equal(worthPeeking('https://m.youtube.com/shorts/x', []), true)
+  assert.equal(worthPeeking('https://youtu.be/x', []), true)
+  assert.equal(worthPeeking('https://example.org/blog', []), false)
+  assert.equal(worthPeeking('https://notyoutube.com/x', []), false)
+  assert.equal(worthPeeking('https://example.org/talk', [{ kind: 'video' }]), true)
+  assert.equal(worthPeeking('https://example.org/talk', [{ kind: 'link' }]), false)
+  assert.equal(worthPeeking('chrome://extensions', [{ kind: 'video' }]), false)
 })

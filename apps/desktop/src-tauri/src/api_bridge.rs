@@ -24,6 +24,14 @@ impl Handler for ApiBridge {
         true
     }
 
+    fn page_peek(&self, url: String) {
+        // The answer is kept a few minutes, so "Get the video" finds it ready.
+        let svc = self.svc.clone();
+        tokio::spawn(async move {
+            let _ = svc.media_info(&url).await;
+        });
+    }
+
     fn page_video(&self, url: String) -> bool {
         self.svc.open_request(format!("{VIDEO_DRAFT}{url}"));
         self.svc.bring_to_front();

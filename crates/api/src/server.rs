@@ -129,6 +129,9 @@ pub trait Handler: Send + Sync + 'static {
     fn page_video(&self, _url: String) -> bool {
         false
     }
+    /// A video page open in the browser, worth reading before it's asked for
+    /// (the popup opened on it): the app looks it up quietly, no window.
+    fn page_peek(&self, _url: String) {}
     /// A feed the person wants to follow (the extension's "Follow this site's
     /// feed"): the app opens Feeds with it. False when it can't.
     fn page_feed(&self, _url: String) -> bool {
@@ -243,6 +246,17 @@ pub async fn answer(handler: &dyn Handler, line: &str) -> Value {
                     } else {
                         declined(Decline::Unsupported)
                     }
+                }
+                None => declined(Decline::Invalid),
+            };
+            json!({"id": id, "result": result})
+        }
+        Some("page.peek") => {
+            let params = req.get("params").cloned().unwrap_or(Value::Null);
+            let result = match page_url(&params) {
+                Some(url) => {
+                    handler.page_peek(url);
+                    json!({"v": 1, "type": "page.peek.ok"})
                 }
                 None => declined(Decline::Invalid),
             };
@@ -536,6 +550,22 @@ mod tests {
         let bad = answer(
             &Fake,
             r#"{"id":3,"method":"page.feed","params":{"url":"file:///etc/feed"}}"#,
+        )
+        .await;
+        assert_eq!(bad["result"]["reason"], "invalid");
+    }
+
+    #[tokio::test]
+    async fn a_look_ahead_at_a_video_page_is_quiet_and_checks_its_link() {
+        let ok = answer(
+            &Fake,
+            r#"{"id":1,"method":"page.peek","params":{"url":"https://www.youtube.com/watch?v=x"}}"#,
+        )
+        .await;
+        assert_eq!(ok["result"]["type"], "page.peek.ok");
+        let bad = answer(
+            &Fake,
+            r#"{"id":2,"method":"page.peek","params":{"url":"javascript:alert(1)"}}"#,
         )
         .await;
         assert_eq!(bad["result"]["reason"], "invalid");

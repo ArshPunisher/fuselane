@@ -1,6 +1,6 @@
 import { formatSize, normalizeRules } from '@fuselane/capture'
 import { appStatus, browserId, sendHandoff, type Status } from '../../lib/status.ts'
-import { findOnPage, mediaList, type MediaItem } from '../../lib/media.ts'
+import { findOnPage, mediaList, worthPeeking, type MediaItem } from '../../lib/media.ts'
 import { feedList, findFeeds, type FoundFeed } from '../../lib/feeds.ts'
 import { KEY, readJobs, type SelfJob } from '../../lib/selfjobs.ts'
 import { cleanLimit } from '../../lib/route.ts'
@@ -63,6 +63,9 @@ function request(m: object): Promise<unknown> {
 
 // ---- The Fuselane switch --------------------------------------------------
 let app: Status = { state: 'not-installed', text: '' }
+/** Resolves once the app's state is known (the page tab waits for it). */
+let knowApp: (s: Status) => void = () => {}
+const appKnown = new Promise<Status>((r) => (knowApp = r))
 
 async function setOn(on: boolean) {
   const { rules } = await browser.storage.local.get('rules')
@@ -415,6 +418,14 @@ async function onThisPage() {
   } catch {
     // a page the browser doesn't let extensions read
   }
+  // A video page and the app running: it starts reading the page now, so the
+  // qualities are ready (or nearly) when "Get this page's video" is pressed (B3).
+  // Never starts the app: a closed app isn't opened just for a look.
+  if (worthPeeking(pageUrl, items))
+    void appKnown.then((a) => {
+      if (a.state === 'connected')
+        void ask({ v: 1, type: 'page.peek', url: pageUrl }).catch(() => {})
+    })
   const feedBox = $<HTMLDivElement>('#feeds')
   for (const f of feeds) {
     const b = el(
@@ -596,6 +607,7 @@ async function load() {
   }
   show(tab)
   app = await appStatus(ask, hello())
+  knowApp(app)
   void browser.runtime.sendMessage({ type: 'app-changed' }).catch(() => {})
   status.textContent = app.text
   chip.dataset.state = app.state

@@ -88,3 +88,38 @@ export function findOnPage(): Found[] {
   })
   return out.slice(0, 2000)
 }
+
+/** Sites where a page is usually one video that yt-dlp reads (YouTube and the like). */
+const VIDEO_SITES = [
+  'youtube.com',
+  'youtu.be',
+  'vimeo.com',
+  'dailymotion.com',
+  'twitch.tv',
+  'tiktok.com',
+  'instagram.com',
+  'facebook.com',
+  'x.com',
+  'twitter.com',
+  'reddit.com',
+  'bilibili.com',
+  'soundcloud.com',
+]
+
+/**
+ * Whether the app should start reading this page's video now, before it's
+ * asked for (B3): a known video site, or a page with a video on it. Other pages
+ * aren't worth a yt-dlp run each time the popup opens.
+ */
+export function worthPeeking(pageUrl: string, items: { kind: string }[]): boolean {
+  let host: string
+  try {
+    const u = new URL(pageUrl)
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return false
+    host = u.hostname.toLowerCase()
+  } catch {
+    return false
+  }
+  const known = VIDEO_SITES.some((s) => host === s || host.endsWith(`.${s}`))
+  return known || items.some((i) => i.kind === 'video')
+}

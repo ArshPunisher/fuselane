@@ -128,6 +128,11 @@ async fn handle(endpoint: &Path, msg: &[u8]) -> Value {
             Ok(reply) => reply,
             Err(_) => decline("unsupported"),
         },
+        // Only while the app runs: a look ahead never starts it.
+        Some("page.peek") => match crate::client::request(endpoint, "page.peek", v, wait).await {
+            Ok(reply) => reply,
+            Err(_) => decline("unsupported"),
+        },
         Some("page.feed") => match ask(endpoint, "page.feed", v, wait).await {
             Ok(reply) => reply,
             Err(_) => decline("unsupported"),
