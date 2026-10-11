@@ -1,5 +1,12 @@
 import { formatSize, normalizeRules } from '@fuselane/capture'
-import { appStatus, browserId, sendHandoff, settle, type Status } from '../../lib/status.ts'
+import {
+  appStatus,
+  browserId,
+  mustPush,
+  sendHandoff,
+  settle,
+  type Status,
+} from '../../lib/status.ts'
 import { offerLink } from '../../lib/handoff.ts'
 import { findOnPage, mediaList, type MediaItem } from '../../lib/media.ts'
 import { getSession } from '../../lib/session.ts'
@@ -92,16 +99,15 @@ function showCard(s: Status) {
 }
 
 async function load() {
-  const stored = await browser.storage.local.get(['rules', 'handoffPending'])
+  const stored = await browser.storage.local.get(['rules', 'handoffPending', 'handoffSynced'])
   const s = await appStatus(ask, hello())
   // The app decides where downloads go, unless we have a change it hasn't seen.
-  const { rules, pending } = await settle(
-    s,
-    normalizeRules(stored.rules),
-    stored.handoffPending === true,
-    ask,
-  )
-  await browser.storage.local.set({ rules, handoffPending: pending })
+  const { rules, pending } = await settle(s, normalizeRules(stored.rules), mustPush(stored), ask)
+  await browser.storage.local.set({
+    rules,
+    handoffPending: pending,
+    handoffSynced: stored.handoffSynced === true || (s.state === 'connected' && !pending),
+  })
   enabled.checked = rules.enabled
   summary.textContent = describe(rules.enabled, rules.minBytes, s.state)
   status.textContent = s.text
@@ -119,7 +125,11 @@ enabled.addEventListener('change', async () => {
   // Tell the app too, so its Browser extension page and other browsers agree; if
   // it's closed, the change waits and goes with the next ping.
   const delivered = await sendHandoff(ask, next)
-  await browser.storage.local.set({ rules: next, handoffPending: !delivered })
+  await browser.storage.local.set({
+    rules: next,
+    handoffPending: !delivered,
+    ...(delivered ? { handoffSynced: true } : {}),
+  })
   summary.textContent = describe(
     next.enabled,
     next.minBytes,

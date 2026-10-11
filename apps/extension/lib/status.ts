@@ -100,6 +100,18 @@ export async function settle(
   return { rules: withHandoff(rules, s.handoff), pending: false }
 }
 
+/**
+ * Whether our switch and size must go to the app before we follow it: a change
+ * made while it was closed, or an extension upgraded from before the app kept
+ * this setting (it has rules but has never synced), so the person's earlier
+ * choice isn't replaced by the app's default.
+ */
+export function mustPush(stored: Record<string, unknown>): boolean {
+  return (
+    stored.handoffPending === true || (stored.rules !== undefined && stored.handoffSynced !== true)
+  )
+}
+
 /** Sends a change of the switch or size to the app; true when the app has it. */
 export async function sendHandoff(ask: AskApp, rules: Rules): Promise<boolean> {
   const reply = (await ask({

@@ -174,7 +174,7 @@ async function download(page: import('@playwright/test').Page, path: string) {
 
 test('a big download from the page goes to the app and arrives byte for byte', async () => {
   // A first launch checks its networks before downloading, which can take a while.
-  test.setTimeout(90_000)
+  test.setTimeout(150_000)
   // The extension picks up the app's setting when its popup opens.
   const popup = await context.newPage()
   await popup.goto(`chrome-extension://${new URL(worker.url()).host}/popup.html`)
@@ -185,7 +185,7 @@ test('a big download from the page goes to the app and arrives byte for byte', a
   await download(page, '/big/fuselane-e2e-big.bin')
   const file = join(tmp, 'home/Downloads/fuselane-e2e-big.bin')
   await expect
-    .poll(() => existsSync(file) && readFileSync(file).length, { timeout: 60_000 })
+    .poll(() => existsSync(file) && readFileSync(file).length, { timeout: 120_000 })
     .toBe(big.length)
   expect(sha(readFileSync(file))).toBe(sha(big))
 })

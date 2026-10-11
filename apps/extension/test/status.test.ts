@@ -102,3 +102,14 @@ test('a change made while the app was closed wins over its older value', async (
   })
   assert.deepEqual(closed, { rules: mine, pending: true })
 })
+
+test("an upgrade keeps the person's earlier switch and size until the app has them", async () => {
+  const { mustPush } = await import('../lib/status.ts')
+  // Upgraded: rules saved by the old version, never synced. Ours goes first.
+  assert.equal(mustPush({ rules: { enabled: false } }), true)
+  // A new install has no rules yet: follow the app.
+  assert.equal(mustPush({}), false)
+  // Synced before: follow the app, unless a change is waiting.
+  assert.equal(mustPush({ rules: {}, handoffSynced: true }), false)
+  assert.equal(mustPush({ rules: {}, handoffSynced: true, handoffPending: true }), true)
+})

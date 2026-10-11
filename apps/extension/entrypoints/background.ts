@@ -1,7 +1,7 @@
 import { normalizeRules, type Rules } from '@fuselane/capture'
 import { handOff, offerLink, type Item } from '../lib/handoff.ts'
 import { getSession } from '../lib/session.ts'
-import { appStatus, browserId, settle } from '../lib/status.ts'
+import { appStatus, browserId, mustPush, settle } from '../lib/status.ts'
 
 const HOST = 'app.fuselane.host'
 
@@ -44,9 +44,13 @@ async function checkIn() {
     browser: browserId(navigator.userAgent, 'brave' in navigator),
     version: browser.runtime.getManifest().version,
   })
-  const { handoffPending } = await browser.storage.local.get('handoffPending')
-  const now = await settle(s, await rules(), handoffPending === true, ask)
-  await browser.storage.local.set({ rules: now.rules, handoffPending: now.pending })
+  const got = await browser.storage.local.get(['rules', 'handoffPending', 'handoffSynced'])
+  const now = await settle(s, await rules(), mustPush(got), ask)
+  await browser.storage.local.set({
+    rules: now.rules,
+    handoffPending: now.pending,
+    handoffSynced: got.handoffSynced === true || (s.state === 'connected' && !now.pending),
+  })
 }
 
 export default defineBackground(() => {

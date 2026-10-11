@@ -1,6 +1,6 @@
 import { DEFAULT_RULES, normalizeRules } from '@fuselane/capture'
 import { readForm, toForm, type Field, type FormValues } from '../../lib/settings-form.ts'
-import { appStatus, browserId, sendHandoff, settle } from '../../lib/status.ts'
+import { appStatus, browserId, mustPush, sendHandoff, settle } from '../../lib/status.ts'
 import { SESSION_PERMISSIONS, sessionAllowed } from '../../lib/session.ts'
 import './style.css'
 
@@ -42,7 +42,7 @@ function showErrors(errors: Partial<Record<Field, string>>) {
 const ask = (m: unknown) => browser.runtime.sendNativeMessage('app.fuselane.host', m as object)
 
 async function load() {
-  const got = await browser.storage.local.get(['rules', 'handoffPending'])
+  const got = await browser.storage.local.get(['rules', 'handoffPending', 'handoffSynced'])
   const rules = normalizeRules(got.rules)
   fill(toForm(rules))
   stored = JSON.stringify(values())
@@ -56,8 +56,12 @@ async function load() {
   // The app decides where downloads go (unless we have a change it hasn't seen):
   // show its setting unless the person has already started editing.
   if (!dirty()) {
-    const now = await settle(s, rules, got.handoffPending === true, ask)
-    await browser.storage.local.set({ rules: now.rules, handoffPending: now.pending })
+    const now = await settle(s, rules, mustPush(got), ask)
+    await browser.storage.local.set({
+      rules: now.rules,
+      handoffPending: now.pending,
+      handoffSynced: got.handoffSynced === true || (s.state === 'connected' && !now.pending),
+    })
     fill(toForm(now.rules))
     stored = JSON.stringify(values())
   }
@@ -81,7 +85,11 @@ form.addEventListener('submit', async (e) => {
     // The app keeps the on/off switch and the size too; tell it, or keep the
     // change waiting for the next time it's running.
     const delivered = await sendHandoff(ask, r.rules)
-    await browser.storage.local.set({ rules: r.rules, handoffPending: !delivered })
+    await browser.storage.local.set({
+      rules: r.rules,
+      handoffPending: !delivered,
+      ...(delivered ? { handoffSynced: true } : {}),
+    })
     // Show what was stored, cleaned: "20mb" comes back as "20 MB".
     fill(toForm(r.rules))
     stored = JSON.stringify(values())
