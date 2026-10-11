@@ -589,7 +589,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
               demoBrowser('edge', 'Microsoft Edge', 'edge', 'missing', null, null),
               demoBrowser('firefox', 'Firefox', 'firefox', 'off', 9 * 86400, '0.2.0'),
             ]
-  let handoff: HandoffView = { enabled: true, minBytes: 1024 * 1024 }
+  let handoff: HandoffView = { enabled: true, minBytes: 0 }
   /** What the demo "opened", for tests (the real app starts the browser). */
   const opened: string[] = []
   ;(window as unknown as { __demoBrowserOpens?: string[] }).__demoBrowserOpens = opened

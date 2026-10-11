@@ -1128,14 +1128,10 @@ export const hi: Readonly<Record<string, string>> = {
   'Your browsers': 'आपके ब्राउज़र',
   'Everything to Fuselane': 'सब कुछ Fuselane में',
   'Every download from the browser comes here.': 'ब्राउज़र का हर डाउनलोड यहां आता है।',
-  'Small files stay in the browser': 'छोटी फ़ाइलें ब्राउज़र में रहें',
-  'Files up to the size below stay in the browser; bigger ones come here.':
-    'नीचे दिए साइज़ तक की फ़ाइलें ब्राउज़र में रहती हैं; बड़ी फ़ाइलें यहां आती हैं।',
   'Keep downloads in the browser': 'डाउनलोड ब्राउज़र में ही रखें',
   'The extension stays quiet. Right-click a link to send one to Fuselane.':
     'एक्सटेंशन कुछ नहीं करेगा। किसी लिंक को Fuselane में भेजने के लिए उस पर राइट-क्लिक करें।',
   'Where browser downloads go': 'ब्राउज़र के डाउनलोड कहां जाएं',
-  'Stay in the browser up to': 'इतने साइज़ तक ब्राउज़र में रहें',
   'With the extension, downloads you start in your browser come to Fuselane by themselves and use every network.':
     'एक्सटेंशन से, ब्राउज़र में शुरू किए गए डाउनलोड अपने आप Fuselane में आते हैं और हर नेटवर्क का इस्तेमाल करते हैं।',
 }

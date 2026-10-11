@@ -15,11 +15,11 @@ use serde_json::{Value, json};
 use super::deadline::unix_now;
 use super::{Service, UiError, lock, store_error};
 
-/// Out of the box: downloads from 1 MiB up go to the app (the extension's own
-/// default before this setting existed).
+/// Out of the box: every download goes to the app (REVIEW-2026-10-11 D; size
+/// no longer keeps small files in the browser).
 pub const DEFAULT_HANDOFF: Handoff = Handoff {
     enabled: true,
-    min_bytes: 1024 * 1024,
+    min_bytes: 0,
 };
 
 /// A ping older than this no longer counts as connected (the browser may have

@@ -9,18 +9,10 @@ import {
 } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import type { BrowserView, HandoffView } from '../lib/types'
-import { ago, bytes } from '../lib/format'
+import { ago } from '../lib/format'
 import { t } from '../lib/i18n'
 
-/** Sizes offered for "small files stay in the browser". */
-const SIZES = [1, 100, 500, 1024, 2048, 3072].map((mb) => mb * 1024 * 1024)
-
-type Mode = 'all' | 'size' | 'off'
-
-function modeOf(h: HandoffView): Mode {
-  if (!h.enabled) return 'off'
-  return h.minBytes === 0 ? 'all' : 'size'
-}
+type Mode = 'all' | 'off'
 
 function BrowserIcon({ b }: { b: BrowserView }) {
   return b.id === 'chrome' || b.id === 'chromium' ? (
@@ -162,7 +154,10 @@ export function BrowserList({ compact = false }: { compact?: boolean }) {
   )
 }
 
-/** Where downloads started in the browser go: all to Fuselane, big ones only, or none. */
+/**
+ * Where downloads started in the browser go: all to Fuselane, or none. Size no
+ * longer splits them (REVIEW-2026-10-11 D): with the app, every file comes here.
+ */
 function HandoffSetting() {
   const backend = useApp((s) => s.backend)
   const act = useApp((s) => s.act)
@@ -176,8 +171,7 @@ function HandoffSetting() {
   }, [backend])
 
   if (!h) return null
-  const mode = modeOf(h)
-  const size = h.minBytes > 0 ? h.minBytes : SIZES[0]!
+  const mode: Mode = h.enabled ? 'all' : 'off'
   const save = (next: HandoffView) => {
     setH(next)
     void act(async (b) => setH(await b.setHandoff(next)))
@@ -187,11 +181,6 @@ function HandoffSetting() {
       id: 'all',
       name: t('Everything to Fuselane'),
       detail: t('Every download from the browser comes here.'),
-    },
-    {
-      id: 'size',
-      name: t('Small files stay in the browser'),
-      detail: t('Files up to the size below stay in the browser; bigger ones come here.'),
     },
     {
       id: 'off',
@@ -210,15 +199,7 @@ function HandoffSetting() {
               name="handoff"
               value={o.id}
               checked={mode === o.id}
-              onChange={() =>
-                save(
-                  o.id === 'off'
-                    ? { enabled: false, minBytes: h.minBytes }
-                    : o.id === 'all'
-                      ? { enabled: true, minBytes: 0 }
-                      : { enabled: true, minBytes: size },
-                )
-              }
+              onChange={() => save({ enabled: o.id === 'all', minBytes: 0 })}
             />
             <span>
               <span className="ext-option-name">{o.name}</span>
@@ -227,22 +208,6 @@ function HandoffSetting() {
           </label>
         ))}
       </div>
-      {mode === 'size' && (
-        <label className="ext-size">
-          <span>{t('Stay in the browser up to')}</span>
-          <select
-            value={size}
-            onChange={(e) => save({ enabled: true, minBytes: Number(e.target.value) })}
-          >
-            {/* A size set elsewhere (the extension's settings) shows as itself. */}
-            {(SIZES.includes(size) ? SIZES : [...SIZES, size].sort((a, b) => a - b)).map((s) => (
-              <option key={s} value={s}>
-                {bytes(s)}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
     </fieldset>
   )
 }

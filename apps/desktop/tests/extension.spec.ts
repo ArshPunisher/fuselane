@@ -47,26 +47,22 @@ test('each browser shows its state and the one thing to do next', async ({ page 
   await expect(edge.getByRole('button')).toHaveCount(0)
 })
 
-test('where browser downloads go: all, small ones in the browser, or none', async ({ page }) => {
+test('where browser downloads go: everything to Fuselane, or none', async ({ page }) => {
   await openPage(page)
   const group = page.getByRole('radiogroup', { name: 'Where browser downloads go' })
-  const small = group.getByRole('radio', { name: /Small files stay in the browser/ })
-  await expect(small).toBeChecked()
-  const size = page.getByRole('combobox', { name: 'Stay in the browser up to' })
-  await expect(size).toHaveValue(String(1024 * 1024))
-  await size.selectOption({ label: '2.0 GB' })
-
-  await group.getByRole('radio', { name: /Everything to Fuselane/ }).check()
-  await expect(size).toBeHidden()
-  // Leaving the page and coming back reads the saved setting.
-  await page.getByRole('button', { name: 'Settings' }).first().click()
-  await page.getByRole('button', { name: 'Extension' }).first().click()
+  await expect(group.getByRole('radio')).toHaveCount(2)
   await expect(group.getByRole('radio', { name: /Everything to Fuselane/ })).toBeChecked()
 
   await group.getByRole('radio', { name: /Keep downloads in the browser/ }).check()
+  // Leaving the page and coming back reads the saved setting.
   await page.getByRole('button', { name: 'Settings' }).first().click()
   await page.getByRole('button', { name: 'Extension' }).first().click()
   await expect(group.getByRole('radio', { name: /Keep downloads in the browser/ })).toBeChecked()
+
+  await group.getByRole('radio', { name: /Everything to Fuselane/ }).check()
+  await page.getByRole('button', { name: 'Settings' }).first().click()
+  await page.getByRole('button', { name: 'Extension' }).first().click()
+  await expect(group.getByRole('radio', { name: /Everything to Fuselane/ })).toBeChecked()
 })
 
 test('no browser found: says which ones work, and Downloads asks nothing', async ({ page }) => {
