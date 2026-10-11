@@ -34,6 +34,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
+    site: '@ClearCraftLabs',
+    creator: '@ClearCraftLabs',
     title: 'Fuselane guide: every feature in plain words, and its limits',
     description:
       "How to use Fuselane: add a second network, download over all of them, get videos and torrents, send files, check your networks, and what it can't do yet.",

@@ -638,6 +638,32 @@ export function FooterMarkup() {
                   </li>{' '}
                 </ul>{' '}
               </nav>{' '}
+              <nav aria-labelledby="foot-follow">
+                <h2 id="foot-follow">Follow</h2>
+                <ul>
+                  <li>
+                    <a
+                      href="https://x.com/ClearCraftLabs"
+                      rel="me noopener"
+                      aria-label="ClearCraft Labs on X (@ClearCraftLabs)"
+                    >
+                      X
+                    </a>
+                  </li>
+                  <li>
+                    <a
+                      href="https://www.instagram.com/clearcraftlabs/"
+                      rel="me noopener"
+                      aria-label="ClearCraft Labs on Instagram (@clearcraftlabs)"
+                    >
+                      Instagram
+                    </a>
+                  </li>
+                  <li>
+                    <a href="https://github.com/ArshPunisher/fuselane">GitHub</a>
+                  </li>
+                </ul>
+              </nav>{' '}
             </div>{' '}
           </div>{' '}
           <div className="foot-base">

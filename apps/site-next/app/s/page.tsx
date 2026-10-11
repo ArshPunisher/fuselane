@@ -34,6 +34,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
+    site: '@ClearCraftLabs',
+    creator: '@ClearCraftLabs',
     title: 'Someone sent you a file with Fuselane',
     description:
       "Open this Fuse Send link in Fuselane to receive the file straight from the sender's computer, encrypted end to end. Free, no account.",

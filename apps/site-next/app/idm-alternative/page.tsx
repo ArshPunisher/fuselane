@@ -34,6 +34,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
+    site: '@ClearCraftLabs',
+    creator: '@ClearCraftLabs',
     title: 'Free IDM alternative for Mac, Windows and Linux: Fuselane',
     description:
       'Looking for an Internet Download Manager alternative? Fuselane is a free, open-source download manager for macOS, Windows and Linux that also uses Wi-Fi, Ethernet and your phone at once.',

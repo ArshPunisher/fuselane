@@ -34,6 +34,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
+    site: '@ClearCraftLabs',
+    creator: '@ClearCraftLabs',
     title: 'Combine Wi-Fi and mobile data for faster downloads: Fuselane',
     description:
       'Use Wi-Fi, Ethernet and your phone’s mobile data at the same time to download one file faster. Free download manager for macOS, Windows and Linux, no VPN or router change.',

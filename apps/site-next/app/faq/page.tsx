@@ -33,6 +33,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
+    site: '@ClearCraftLabs',
+    creator: '@ClearCraftLabs',
     title: 'Fuselane questions, answered',
     description:
       'How Fuselane combines Wi-Fi, Ethernet and a tethered phone, which connections work, why your computer may warn the first time, and what it does with your data.',

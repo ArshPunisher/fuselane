@@ -34,6 +34,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
+    site: '@ClearCraftLabs',
+    creator: '@ClearCraftLabs',
     title: 'Fuselane: free download manager that combines Wi-Fi, Ethernet and your phone',
     description:
       'Fuselane splits each download across every network you have (Wi-Fi, Ethernet, a USB-tethered phone) and joins the parts into one verified file. Free and open source for macOS, Windows and Linux.',
@@ -57,6 +59,11 @@ const LD: object[] = [
     license: 'https://www.apache.org/licenses/LICENSE-2.0',
     codeRepository: 'https://github.com/ArshPunisher/fuselane',
     isAccessibleForFree: true,
+    sameAs: [
+      'https://github.com/ArshPunisher/fuselane',
+      'https://chromewebstore.google.com/detail/nggljghjikdkigiekdciocigdnnhponl',
+      'https://microsoftedge.microsoft.com/addons/detail/aeacngcllkfecpfoclekcfhpokjhijgc',
+    ],
     author: {
       '@type': 'Organization',
       name: 'ClearCraft Labs',

@@ -33,6 +33,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
+    site: '@ClearCraftLabs',
+    creator: '@ClearCraftLabs',
     title: 'Download Fuselane for macOS, Windows and Linux',
     description:
       'Get Fuselane, the free download manager that uses every network at once. Universal macOS app, Windows installer, Linux AppImage, deb and rpm, and a command line tool.',

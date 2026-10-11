@@ -33,6 +33,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
+    site: '@ClearCraftLabs',
+    creator: '@ClearCraftLabs',
     title: 'Terms of use: Fuselane',
     description:
       'Fuselane is free software under Apache-2.0, provided as is. What that means, and your responsibility for what you download.',

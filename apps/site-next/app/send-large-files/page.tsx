@@ -34,6 +34,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
+    site: '@ClearCraftLabs',
+    creator: '@ClearCraftLabs',
     title: 'Send large files free, no upload and no size limit: Fuselane',
     description:
       'Send a file or folder of any size straight from your computer, encrypted, with no upload, no account and no size limit. Free with Fuselane on macOS, Windows and Linux.',

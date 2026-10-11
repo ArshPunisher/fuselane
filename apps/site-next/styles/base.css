@@ -1180,8 +1180,8 @@ kbd {
     align-items: start;
   }
   .foot-cols {
-    grid-template-columns: repeat(3, minmax(9rem, auto));
-    gap: 40px;
+    grid-template-columns: repeat(4, minmax(8rem, auto));
+    gap: 36px;
   }
 }
 

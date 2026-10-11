@@ -33,6 +33,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
+    site: '@ClearCraftLabs',
+    creator: '@ClearCraftLabs',
     title: 'Support Fuselane: star, share, report, suggest',
     description:
       'Fuselane is free and open source. Star it on GitHub, share it, report a problem or suggest what it should do next.',

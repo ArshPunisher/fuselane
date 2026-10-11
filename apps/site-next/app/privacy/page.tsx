@@ -32,6 +32,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
+    site: '@ClearCraftLabs',
+    creator: '@ClearCraftLabs',
     title: 'Privacy policy: Fuselane',
     description:
       'Fuselane collects nothing: no accounts, no analytics, no tracking. What the app, the browser extension and this website send, and when.',
