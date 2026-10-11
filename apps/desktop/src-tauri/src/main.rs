@@ -1909,9 +1909,14 @@ fn main() {
     if let Some(id) = flatpak::id() {
         single_instance = single_instance.dbus_id(id);
     }
-    let result = tauri::Builder::default()
-        // Must be registered first: a second launch focuses the existing window.
-        .plugin(single_instance.build())
+    let mut builder = tauri::Builder::default();
+    // Must be registered first: a second launch focuses the existing window. A
+    // debug build is a separate app (its own data folder and API pipe), so it
+    // doesn't hand itself over to an installed Fuselane that's running.
+    if !cfg!(debug_assertions) {
+        builder = builder.plugin(single_instance.build());
+    }
+    let result = builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
