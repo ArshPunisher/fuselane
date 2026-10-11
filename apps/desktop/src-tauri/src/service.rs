@@ -1219,10 +1219,19 @@ impl Service {
             .collect();
         let now = std::time::Instant::now();
         let arriving = self.arriving_view();
-        let pausing: std::collections::HashSet<i64> = lock(&self.running)
-            .iter()
-            .filter_map(|(id, r)| r.pausing.then_some(*id))
-            .collect();
+        let (pausing, started): (
+            std::collections::HashSet<i64>,
+            std::collections::HashSet<i64>,
+        ) = {
+            let running = lock(&self.running);
+            (
+                running
+                    .iter()
+                    .filter_map(|(id, r)| r.pausing.then_some(*id))
+                    .collect(),
+                running.keys().copied().collect(),
+            )
+        };
         let views = self
             .store
             .list()
@@ -1231,6 +1240,11 @@ impl Service {
             .map(|j| {
                 let mut v = view(j);
                 v.focused = focus == Some(j.id);
+                // Its run has begun (checking the server, connecting): it's
+                // running from here, not "Waiting", even before the store says so.
+                if v.status == "queued" && started.contains(&j.id) {
+                    v.status = "running";
+                }
                 v.pausing = pausing.contains(&j.id) && v.status == "running";
                 v.arriving = arriving.get(&j.id).cloned();
                 // Finished, but the file was moved or deleted since (A1).
@@ -2824,6 +2838,7 @@ impl Service {
         // Deadlines first, earliest first (B9.4); then the order chosen.
         jobs.sort_by_key(|j| (j.ready_by.unwrap_or(i64::MAX), j.position, j.id));
         let mut running = lock(&self.running);
+        let mut started = false;
         for job in jobs.into_iter().filter(|j| j.status == Status::Queued) {
             if running.len() >= self.max_running() {
                 break;
@@ -2854,9 +2869,14 @@ impl Service {
             }
             let me = self.clone();
             tokio::spawn(async move { me.run(job, cancel, limit).await });
+            started = true;
         }
         drop(running);
         self.update_awake();
+        // The window sees it running at once (it checks the server first).
+        if started {
+            self.publish_jobs();
+        }
     }
 
     async fn run(self: Arc<Self>, job: Job, cancel: Cancel, limit: Arc<fuselane_limits::JobLimit>) {
@@ -3536,6 +3556,30 @@ mod tests {
         assert_eq!(h.job(id).status, "running");
         let first = popup(&h);
         h.wait("and keeps moving", |h| popup(h) > first).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_resumed_download_shows_running_at_once_not_waiting() {
+        let server = RangeServer::start(Content::new(4 * 1024 * KB, 97))
+            .await
+            .unwrap();
+        server.add_rule(Rule {
+            skip: 1,
+            times: u32::MAX,
+            fault: Fault::Throttle(300 * KB),
+        });
+        let h = harness(3);
+        let id = h.svc.add(&link(&server), None).unwrap();
+        h.wait("some progress", |h| !h.lives(id).is_empty()).await;
+        h.svc.pause(id).unwrap();
+        h.wait("paused", |h| h.job(id).status == "paused").await;
+        lock(&h.events).clear();
+        h.svc.resume(id).unwrap();
+        // Straight away, before the server has been asked anything.
+        assert_eq!(h.job(id).status, "running");
+        assert!(lock(&h.events).iter().any(|e| {
+            matches!(e, UiEvent::Jobs { jobs } if jobs.iter().any(|j| j.id == id && j.status == "running"))
+        }), "the window was told");
     }
 
     #[tokio::test(flavor = "multi_thread")]
