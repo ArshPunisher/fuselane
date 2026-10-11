@@ -9,14 +9,14 @@
 Wi-Fi, Ethernet and a phone tethered over USB, at the same time. No VPN, no relay server, no admin rights.
 
 [![Latest release](https://img.shields.io/github/v/release/ArshPunisher/fuselane?include_prereleases&label=release&color=C2410C)](https://github.com/ArshPunisher/fuselane/releases)
-[![Downloads](https://img.shields.io/github/downloads/ArshPunisher/fuselane/total?label=downloads&color=C2410C)](https://github.com/ArshPunisher/fuselane/releases)
-[![CI](https://img.shields.io/github/actions/workflow/status/ArshPunisher/fuselane/ci.yml?branch=main&label=CI)](https://github.com/ArshPunisher/fuselane/actions/workflows/ci.yml)
-[![Licence](https://img.shields.io/github/license/ArshPunisher/fuselane?color=3f3f46)](LICENSE)
+[![CI](https://github.com/ArshPunisher/fuselane/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ArshPunisher/fuselane/actions/workflows/ci.yml)
+[![Licence: Apache-2.0](docs/badges/licence.svg)](LICENSE)
 <br>
-![macOS](https://img.shields.io/badge/macOS-13.3%2B-3f3f46?logo=apple&logoColor=white)
-![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-3f3f46?logo=windows&logoColor=white)
-![Linux](https://img.shields.io/badge/Linux-x64%20%7C%20arm64-3f3f46?style=flat&logo=linux&logoColor=white)
-[![Chrome Web Store](https://img.shields.io/badge/Chrome-Web%20Store-3f3f46?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/nggljghjikdkigiekdciocigdnnhponl)
+<img src="docs/badges/macos.svg" alt="macOS 13.3+">
+<img src="docs/badges/windows.svg" alt="Windows 10 and 11">
+<img src="docs/badges/linux.svg" alt="Linux x64 and arm64">
+[![Chrome Web Store](docs/badges/chrome.svg)](https://chromewebstore.google.com/detail/nggljghjikdkigiekdciocigdnnhponl)
+[![Edge Add-ons](docs/badges/edge.svg)](https://microsoftedge.microsoft.com/addons/detail/aeacngcllkfecpfoclekcfhpokjhijgc)
 
 **[Download](https://fuselane.app/download)** &nbsp;&nbsp;|&nbsp;&nbsp; **[Website](https://fuselane.app)** &nbsp;&nbsp;|&nbsp;&nbsp; **[Guide](https://fuselane.app/guide)** &nbsp;&nbsp;|&nbsp;&nbsp; **[FAQ](https://fuselane.app/faq)**
 
