@@ -24,6 +24,12 @@ pub fn command_for(exe: &Path) -> Command {
         && let Some(bundle) = bundle_of(exe)
     {
         let mut c = Command::new("/usr/bin/open");
+        // Launch Services doesn't pass this process's environment on: a copy
+        // running on its own data folder is started on that same folder.
+        if let Some(home) = std::env::var_os("FUSELANE_HOME") {
+            c.arg("--env")
+                .arg(format!("FUSELANE_HOME={}", home.to_string_lossy()));
+        }
         c.arg(bundle);
         return c;
     }

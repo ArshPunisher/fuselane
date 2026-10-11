@@ -398,7 +398,14 @@ pub fn register(exe: &Path, data: &Path) -> Result<Vec<(&'static str, Outcome)>,
     }
     #[cfg(not(windows))]
     {
-        let _ = data;
+        // A Fuselane running on its own data folder (FUSELANE_HOME, a test copy)
+        // registers a launcher that carries it, so the host the browser starts
+        // finds that copy rather than looking in the usual place.
+        let launcher = std::env::var_os("FUSELANE_HOME")
+            .map(|_| write_launcher(data, exe))
+            .transpose()
+            .map_err(|e| format!("couldn't write the browser launcher ({e})"))?;
+        let exe = launcher.as_deref().unwrap_or(exe);
         match (dirs::config_dir(), dirs::home_dir()) {
             (Some(config), Some(home)) => Ok(install_files(&config, &home, exe, &extra)),
             _ => Err(
@@ -407,6 +414,24 @@ pub fn register(exe: &Path, data: &Path) -> Result<Vec<(&'static str, Outcome)>,
             ),
         }
     }
+}
+
+/// A script in `data` that starts `exe` with `FUSELANE_HOME` set to `data`.
+#[cfg(unix)]
+pub fn write_launcher(data: &Path, exe: &Path) -> std::io::Result<PathBuf> {
+    use std::os::unix::fs::PermissionsExt;
+    // Single quotes, with any inside closed and reopened, keep the paths literal.
+    let quote = |p: &Path| format!("'{}'", p.to_string_lossy().replace('\'', r"'\''"));
+    let script = format!(
+        "#!/bin/sh\n# Written by Fuselane: starts its browser host on this data folder.\nexport FUSELANE_HOME={}\nexec {} \"$@\"\n",
+        quote(data),
+        quote(exe)
+    );
+    std::fs::create_dir_all(data)?;
+    let path = data.join("browser-host.sh");
+    std::fs::write(&path, script)?;
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
+    Ok(path)
 }
 
 #[cfg(windows)]
@@ -673,5 +698,27 @@ mod tests {
                 "{name}: {o:?}"
             );
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_copy_on_its_own_data_folder_registers_a_launcher_that_carries_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let data = dir.path().join("it's data");
+        let exe = Path::new("/Apps/Fuse lane.app/Contents/MacOS/fuselane-desktop");
+        let script = write_launcher(&data, exe).unwrap();
+        let text = std::fs::read_to_string(&script).unwrap();
+        assert!(text.starts_with("#!/bin/sh\n"));
+        assert!(text.contains(r"export FUSELANE_HOME='"), "{text}");
+        assert!(
+            text.contains(r"it'\''s data'"),
+            "quotes kept literal: {text}"
+        );
+        assert!(text.contains("exec '/Apps/Fuse lane.app/Contents/MacOS/fuselane-desktop' \"$@\""));
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            std::fs::metadata(&script).unwrap().permissions().mode() & 0o111,
+            0o111
+        );
     }
 }
