@@ -762,7 +762,9 @@ pub async fn find_checksum(link: &str, file: &str) -> Option<(String, String)> {
     let count = set.len();
     let mut done = vec![false; count];
     let mut best: Option<(usize, (String, String))> = None;
-    while let Some(Ok((i, found))) = set.join_next().await {
+    while let Some(joined) = set.join_next().await {
+        // A lookup that failed outright just doesn't count; the others still do.
+        let Ok((i, found)) = joined else { continue };
         done[i] = true;
         if let Some(f) = found
             && best.as_ref().is_none_or(|(b, _)| i < *b)
