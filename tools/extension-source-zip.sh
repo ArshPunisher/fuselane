@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds the source package that addons.mozilla.org (and Edge) reviewers use to
-# rebuild the Firefox add-on byte for byte: the extension, the shared capture
-# package, the workspace files and the lockfile, plus the build steps.
+# rebuild the Firefox add-on byte for byte: the extension, the shared capture and ui
+# packages, the workspace files and the lockfile, plus the build steps.
 #   tools/extension-source-zip.sh [out.zip]
 set -eu
 cd "$(dirname "$0")/.."
@@ -10,14 +10,14 @@ out=${1:-apps/extension/.output/fuselaneextension-$version-source-package.zip}
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 git archive --format=tar HEAD \
-  package.json pnpm-lock.yaml pnpm-workspace.yaml packages/capture apps/extension |
+  package.json pnpm-lock.yaml pnpm-workspace.yaml packages/capture packages/ui apps/extension |
   tar -x -C "$tmp"
 rm -rf "$tmp/apps/extension/store" "$tmp/apps/extension/e2e"
 cat > "$tmp/SOURCE-README.md" <<README
 # Fuselane browser extension $version: how to build
 
 The add-on is built from this folder with WXT. Nothing is minified by hand;
-WXT bundles the TypeScript sources in \`apps/extension\` and \`packages/capture\`.
+WXT bundles the TypeScript sources in \`apps/extension\` and \`packages/capture\`, and the styles from \`packages/ui\`.
 
 Requirements: Node.js 22.12 or newer and pnpm 11 (\`corepack enable\` gives the
 pnpm version pinned in package.json).
