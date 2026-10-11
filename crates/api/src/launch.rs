@@ -57,6 +57,54 @@ pub fn start_app() -> bool {
     spawn_detached(command_for(&exe, home.as_deref())).is_ok()
 }
 
+/// Starts the installed app from the command-line tool (`fuselane update`),
+/// which isn't inside the app: macOS asks Launch Services for the app by its
+/// bundle id; Windows and Linux look where the installers put it. False when no
+/// app was found to start.
+pub fn start_installed_app() -> bool {
+    let home = std::env::var_os("FUSELANE_HOME");
+    if cfg!(target_os = "macos") {
+        let mut c = Command::new("/usr/bin/open");
+        c.arg("-g");
+        if let Some(home) = &home {
+            c.arg("--env")
+                .arg(format!("FUSELANE_HOME={}", home.to_string_lossy()));
+        }
+        c.args(["-b", "app.fuselane", "--args", "--minimized"]);
+        return spawn_detached(c).is_ok();
+    }
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    let candidates = installed_app_candidates(
+        std::env::var_os("LOCALAPPDATA").map(PathBuf::from),
+        std::env::var_os("ProgramFiles").map(PathBuf::from),
+        std::env::split_paths(&path).collect(),
+    );
+    candidates
+        .into_iter()
+        .find(|exe| exe.is_file())
+        .is_some_and(|exe| spawn_detached(command_for(&exe, home.as_deref())).is_ok())
+}
+
+/// Where the Windows installer (per user, then for everyone) and the Linux
+/// packages (on PATH) put the app, in the order to try.
+fn installed_app_candidates(
+    local_app_data: Option<PathBuf>,
+    program_files: Option<PathBuf>,
+    path: Vec<PathBuf>,
+) -> Vec<PathBuf> {
+    if cfg!(windows) {
+        [local_app_data, program_files]
+            .into_iter()
+            .flatten()
+            .map(|dir| dir.join("Fuselane").join("fuselane-desktop.exe"))
+            .collect()
+    } else {
+        path.into_iter()
+            .map(|dir| dir.join("fuselane-desktop"))
+            .collect()
+    }
+}
+
 /// The command-line tool (`fuselane`) can be the host too, for people without
 /// the app; it has no window to open, so nothing is started for it.
 pub fn is_cli(exe: &Path) -> bool {
@@ -104,6 +152,32 @@ mod tests {
             Some(PathBuf::from("/Applications/Fuselane.app"))
         );
         assert_eq!(bundle_of(Path::new("/usr/bin/fuselane")), None);
+    }
+
+    #[test]
+    fn the_installed_app_is_looked_for_where_installers_put_it() {
+        let found = installed_app_candidates(
+            Some(PathBuf::from("/local")),
+            Some(PathBuf::from("/programs")),
+            vec![PathBuf::from("/usr/local/bin"), PathBuf::from("/usr/bin")],
+        );
+        if cfg!(windows) {
+            assert_eq!(
+                found,
+                [
+                    PathBuf::from("/local/Fuselane/fuselane-desktop.exe"),
+                    PathBuf::from("/programs/Fuselane/fuselane-desktop.exe"),
+                ]
+            );
+        } else {
+            assert_eq!(
+                found,
+                [
+                    PathBuf::from("/usr/local/bin/fuselane-desktop"),
+                    PathBuf::from("/usr/bin/fuselane-desktop"),
+                ]
+            );
+        }
     }
 
     #[test]

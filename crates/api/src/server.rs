@@ -162,11 +162,28 @@ pub trait Handler: Send + Sync + 'static {
     fn speedtest_start(&self) -> Result<Value, String> {
         Err("This version of Fuselane can't test from the browser.".into())
     }
+    /// Looks for a newer app on the signed update feed: `{"current", "latest"}`
+    /// (`latest` is null when this is the newest). For `fuselane update`.
+    fn update_check(&self) -> BoxFuture<'_, Result<Value, String>> {
+        Box::pin(async { Err(NO_UPDATES.to_string()) })
+    }
+    /// Starts downloading and installing the update in the background; the app
+    /// restarts into it when it's done.
+    fn update_install(&self) -> Result<Value, String> {
+        Err(NO_UPDATES.to_string())
+    }
+    /// The update's progress: `{"phase", "done", "total", "rate", "networks", "error"}`.
+    fn update_state(&self) -> Option<Value> {
+        None
+    }
     /// The speed test's progress and results.
     fn speedtest_state(&self) -> Option<Value> {
         None
     }
 }
+
+/// What an app without the update requests says.
+const NO_UPDATES: &str = "this Fuselane can't update from the command line";
 
 /// A page link from the extension: http(s) only, and not absurdly long.
 fn page_url(params: &Value) -> Option<String> {
@@ -305,6 +322,18 @@ pub async fn answer(handler: &dyn Handler, line: &str) -> Value {
         Some("speedtest.state") => match handler.speedtest_state() {
             Some(state) => json!({"id": id, "result": state}),
             None => error(&id, "unsupported", "this app can't test from the browser"),
+        },
+        Some("update.check") => match handler.update_check().await {
+            Ok(found) => json!({"id": id, "result": found}),
+            Err(why) => error(&id, "refused", &why),
+        },
+        Some("update.install") => match handler.update_install() {
+            Ok(state) => json!({"id": id, "result": state}),
+            Err(why) => error(&id, "refused", &why),
+        },
+        Some("update.state") => match handler.update_state() {
+            Some(state) => json!({"id": id, "result": state}),
+            None => error(&id, "unsupported", NO_UPDATES),
         },
         Some(_) => error(&id, "unknown-method", "unknown method"),
         None => error(&id, "bad-request", "method is missing"),
@@ -534,6 +563,15 @@ mod tests {
         assert_eq!(start["error"]["code"], "refused");
         let state = answer(&Fake, r#"{"id":2,"method":"speedtest.state"}"#).await;
         assert_eq!(state["error"]["code"], "unsupported");
+    }
+
+    #[tokio::test]
+    async fn an_app_without_updates_says_so_for_each_update_request() {
+        for method in ["update.check", "update.install", "update.state"] {
+            let reply = answer(&Fake, &format!(r#"{{"id":1,"method":"{method}"}}"#)).await;
+            assert_eq!(reply["error"]["message"], NO_UPDATES, "{method}");
+            assert!(reply.get("result").is_none(), "{method}");
+        }
     }
 
     #[tokio::test]
