@@ -65,6 +65,15 @@ export interface JobView {
   missing: boolean
   /** A video with separate sound: getting it, joining them, or the sound is missing. */
   sound: 'getting' | 'joining' | 'missing' | null
+  /** Arriving from another computer (a hand-off): who from, and how much has come. */
+  arriving: ArrivingView | null
+}
+
+export interface ArrivingView {
+  from: string
+  done: number
+  total: number
+  state: 'waiting' | 'arriving' | 'arrived' | 'stopped'
 }
 
 /** One network's latest news in a download. */

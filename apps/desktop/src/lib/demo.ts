@@ -281,6 +281,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       pausing: false,
       missing: false,
       sound: null,
+      arriving: null,
       fill,
       owner,
       inflight: [-1, -1, -1],
@@ -342,6 +343,21 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       'start-over',
     )
     make('dataset-shard-0042.tar.zst', 2.4 * 1024 * MB, 'paused', 0.38)
+    // ?arriving=1: one handed over from another computer, its bytes coming (C2).
+    if (params.get('arriving') === '1') {
+      const a = make('fedora-44-workstation.iso', 2.2 * 1024 * MB, 'running', 0)
+      a.arriving = { from: "Arsh's MacBook", done: 0, total: 1.4 * 1024 * MB, state: 'arriving' }
+      const tick = setInterval(() => {
+        const v = a.arriving
+        if (!v) return clearInterval(tick)
+        v.done = Math.min(v.total, v.done + 160 * MB)
+        if (v.done >= v.total) {
+          v.state = 'arrived'
+          clearInterval(tick)
+        }
+        emitJobs()
+      }, 300)
+    }
     // ?queued=1: one waiting for a free slot (A5).
     if (params.get('queued') === '1')
       make('fedora-44-workstation.iso', 2.2 * 1024 * MB, 'queued', 0)
@@ -1107,8 +1123,9 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       const j = find(id)
       if (j.status !== 'paused' && j.status !== 'failed')
         throw err('not-paused', 'Pause the download first, then send it.', null)
-      const name = (j.name.split('/').pop() ?? j.name) + '.fuselane'
-      return backend.nearbySend(fingerprint, [`/Users/demo/Downloads/${name}`])
+      // One row named after the download, like the app's hand-off; its id back.
+      const v = await backend.nearbySend(fingerprint, [`/Users/demo/Downloads/${j.name}`])
+      return v.transfers[0]?.id ?? ''
     },
     focus: async (id) => {
       const j = find(id)

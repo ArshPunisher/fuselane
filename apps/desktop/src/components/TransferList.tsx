@@ -128,8 +128,11 @@ function Row({ job }: { job: JobView }) {
                 ? t('File missing')
                 : job.pausing
                   ? t('Pausing…')
-                  : (soundWord(job) ??
-                    (job.startAt ? startsAt(job.startAt) : statusWord(job.status)))}
+                  : job.arriving &&
+                      (job.arriving.state === 'waiting' || job.arriving.state === 'arriving')
+                    ? t('Arriving from {device}', { device: job.arriving.from })
+                    : (soundWord(job) ??
+                      (job.startAt ? startsAt(job.startAt) : statusWord(job.status)))}
             </span>
             <span className="num">{meta(job, showLive)}</span>
           </span>

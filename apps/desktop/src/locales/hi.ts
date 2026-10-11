@@ -439,13 +439,9 @@ export const hi: Readonly<Record<string, string>> = {
 
   // HandoffDialog
   'Continue on another computer': 'दूसरे कंप्यूटर पर जारी रखें',
-  'Sent to {device}. It appears there paused; press Resume on that computer to carry on. You can remove it here.':
-    '{device} पर भेज दिया। वहां यह रुका हुआ दिखेगा; आगे बढ़ाने के लिए उस कंप्यूटर पर "फिर शुरू करें" दबाएं। यहां से आप इसे हटा सकते हैं।',
   "What's downloaded so far goes along, so the other computer carries on where this one stopped. Both need Fuselane, on the same network.":
     'अब तक जितना डाउनलोड हुआ है वह भी साथ जाता है, ताकि दूसरा कंप्यूटर वहीं से आगे बढ़े जहां यह रुका था। दोनों पर Fuselane होना चाहिए, एक ही नेटवर्क पर।',
   'Sending…': 'भेजा जा रहा है…',
-  'Looking for other computers with Fuselane… Open Fuselane on the other computer.':
-    'Fuselane वाले दूसरे कंप्यूटर खोजे जा रहे हैं… दूसरे कंप्यूटर पर Fuselane खोलें।',
 
   // ==== Adding downloads, and feeds ====
 
@@ -513,6 +509,34 @@ export const hi: Readonly<Record<string, string>> = {
     'अपना डाउनलोड फ़ोल्डर इस्तेमाल करने के लिए खाली छोड़ें।',
   'More options': 'और विकल्प',
   'Fewer options': 'कम विकल्प',
+  'Arriving from {device}': '{device} से आ रहा है',
+  'From {device}. What it downloaded is on its way; the rest comes from the internet now.':
+    '{device} से। उसने जो डाउनलोड किया वह आ रहा है; बाकी अभी इंटरनेट से आ रहा है।',
+  'From {device}: {done} of {total} of what it downloaded has arrived. The rest comes from the internet meanwhile.':
+    '{device} से: उसके डाउनलोड किए {total} में से {done} आ गया है। बाकी इस बीच इंटरनेट से आ रहा है।',
+  'Everything {device} downloaded has arrived.': '{device} ने जो डाउनलोड किया था, सब आ गया।',
+  '{device} stopped sending. What arrived is kept; {name} gets the rest from the internet.':
+    '{device} ने भेजना बंद कर दिया। जो आया वह रखा गया है; {name} का बाकी हिस्सा इंटरनेट से आएगा।',
+  'Looking for other computers with Fuselane…': 'Fuselane वाले दूसरे कंप्यूटर खोज रहे हैं…',
+  'On the other computer:': 'दूसरे कंप्यूटर पर:',
+  'Open Fuselane, then Send.': 'Fuselane खोलें, फिर भेजें।',
+  'Under Nearby, choose "Everyone for 10 minutes", or trust this computer when it shows up.':
+    'Nearby में "Everyone for 10 minutes" चुनें, या यह कंप्यूटर दिखे तो उस पर भरोसा करें।',
+  'Once you trust each other, they always find each other.':
+    'एक बार भरोसा कर लेने पर दोनों कंप्यूटर हमेशा एक-दूसरे को ढूंढ लेते हैं।',
+  'Waiting for {device} to take it…': '{device} के लेने का इंतज़ार…',
+  'Sending {done} of {total} to {device}. It has started there already.':
+    '{device} को {total} में से {done} भेज रहे हैं। वहां यह शुरू हो चुका है।',
+  'Everything arrived on {device}. It carries on there; you can remove it here.':
+    '{device} पर सब पहुंच गया। यह वहां चलता रहेगा; यहां से आप इसे हटा सकते हैं।',
+  '{device} said no.': '{device} ने मना कर दिया।',
+  'Sending stopped. What arrived is kept there; it gets the rest from the internet.':
+    'भेजना रुक गया। जो पहुंचा वह वहां रखा है; बाकी इंटरनेट से आएगा।',
+  "It couldn't be sent.": 'इसे भेजा नहीं जा सका।',
+  'Stop sending': 'भेजना बंद करें',
+  Sent: 'भेजा गया',
+  'See it in Send': 'Send में देखें',
+  'You can close this; sending goes on.': 'आप इसे बंद कर सकते हैं; भेजना जारी रहेगा।',
   'Get sound again': 'आवाज़ फिर से लाएं',
   'Save without sound': 'बिना आवाज़ के सेव करें',
   'Getting the sound…': 'आवाज़ आ रही है…',

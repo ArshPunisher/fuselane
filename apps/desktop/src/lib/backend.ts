@@ -251,7 +251,8 @@ export interface Backend {
   /** Sends text to a device; null sends what's on the clipboard. */
   nearbySendText(fingerprint: string, text: string | null): Promise<NearbyView>
   /** Hands a paused download to another Fuselane, which carries on with it. */
-  nearbyHandoff(id: number, fingerprint: string): Promise<NearbyView>
+  /** Hands a paused download over; returns the transfer row's id. */
+  nearbyHandoff(id: number, fingerprint: string): Promise<string>
   nearbyAnswer(id: number, accept: boolean, trust: boolean): Promise<NearbyView>
   nearbyForget(fingerprint: string): Promise<NearbyView>
   nearbyCancel(id: string): Promise<void>

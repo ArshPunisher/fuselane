@@ -852,8 +852,12 @@ test('settings: downloads at once, schedule, when done, keep awake and sorting',
   await page.getByRole('button', { name: 'Settings' }).click()
   const group = page.getByRole('group', { name: 'Downloads at once' })
   await expect(group.locator('output')).toHaveText('3')
-  await group.getByRole('button', { name: 'One more' }).click()
-  await expect(group.locator('output')).toHaveText('4')
+  // WebKit under load can drop a click: retry until the count moves.
+  await expect(async () => {
+    if ((await group.locator('output').textContent()) === '3')
+      await group.getByRole('button', { name: 'One more' }).click()
+    await expect(group.locator('output')).toHaveText('4', { timeout: 1000 })
+  }).toPass()
   await expect(page.getByText('Up to 4 at once.')).toBeVisible()
 
   const schedule = page.getByRole('switch', { name: 'Download only on a schedule' })
@@ -1234,6 +1238,20 @@ test('the files a page links to can be picked by type and added as a group', asy
   )
 })
 
+test('a download handed over from another computer shows at once and fills in', async ({
+  page,
+}) => {
+  await page.goto('/?arriving=1')
+  const row = page.locator('li.row', { hasText: 'fedora-44-workstation.iso' })
+  await expect(row.locator('.row-state')).toHaveText("Arriving from Arsh's MacBook")
+  await row.locator('.row-main').click()
+  const note = page.locator('article.detail').getByRole('status').filter({ hasText: 'MacBook' })
+  await expect(note).toContainText('has arrived')
+  await expect(note).toContainText("Everything Arsh's MacBook downloaded has arrived.", {
+    timeout: 10_000,
+  })
+})
+
 test('a paused download can continue on another computer with Fuselane', async ({ page }) => {
   await page.goto('/?drop=0')
   await page
@@ -1247,7 +1265,17 @@ test('a paused download can continue on another computer with Fuselane', async (
   await expect(dialog.getByRole('button', { name: "Maya's MacBook Air" })).toBeVisible()
   await expect(dialog.getByRole('button', { name: 'Pixel 9' })).toHaveCount(0)
   await dialog.getByRole('button', { name: "Maya's MacBook Air" }).click()
-  await expect(dialog.getByRole('status')).toContainText("Sent to Maya's MacBook Air")
+  // The sending shows here (C6), and can be left running.
+  const status = dialog.getByRole('status')
+  await expect(status).toContainText(
+    /Waiting for Maya's MacBook Air|Sending .* to Maya's MacBook Air/,
+  )
+  await expect(status).toContainText('Sending', { timeout: 10_000 })
+  await expect(dialog.getByRole('progressbar', { name: 'Sent' })).toBeVisible()
+  await expect(dialog.getByText('You can close this; sending goes on.')).toBeVisible()
+  await expect(status).toContainText("Everything arrived on Maya's MacBook Air", {
+    timeout: 30_000,
+  })
   await dialog.getByRole('button', { name: 'Done' }).click()
   await expect(dialog).toBeHidden()
   // A running download offers no hand-off.

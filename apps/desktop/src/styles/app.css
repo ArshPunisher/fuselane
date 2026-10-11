@@ -4680,6 +4680,26 @@ html[data-hidden] .orb b {
   gap: 4px;
 }
 
+.handoff-help,
+.handoff-sending {
+  display: grid;
+  gap: 8px;
+}
+
+.handoff-steps {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.handoff-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
 .handoff-devices {
   display: grid;
   gap: 6px;

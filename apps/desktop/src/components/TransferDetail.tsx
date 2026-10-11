@@ -4,6 +4,7 @@ import {
   ArrowClockwise,
   ArrowSquareOut,
   BatteryLow,
+  Desktop,
   FolderOpen,
   HourglassMedium,
   Lightning,
@@ -333,6 +334,43 @@ function HandoffButton({ job }: { job: JobView }) {
   )
 }
 
+/** A download handed over from another computer, while its bytes come (C2–C4). */
+function Arriving({ job, a }: { job: JobView; a: NonNullable<JobView['arriving']> }) {
+  const who = <b translate="no">{a.from}</b>
+  return (
+    <p className="notice notice-wait" role="status">
+      <Desktop size={18} aria-hidden />
+      <span>
+        {a.state === 'waiting'
+          ? tr(
+              'From {device}. What it downloaded is on its way; the rest comes from the internet now.',
+              {
+                device: who,
+              },
+            )
+          : a.state === 'arriving'
+            ? tr(
+                'From {device}: {done} of {total} of what it downloaded has arrived. The rest comes from the internet meanwhile.',
+                {
+                  device: who,
+                  done: <span className="num">{bytes(a.done)}</span>,
+                  total: <span className="num">{bytes(a.total)}</span>,
+                },
+              )
+            : a.state === 'arrived'
+              ? tr('Everything {device} downloaded has arrived.', { device: who })
+              : tr(
+                  '{device} stopped sending. What arrived is kept; {name} gets the rest from the internet.',
+                  {
+                    device: who,
+                    name: job.name,
+                  },
+                )}
+      </span>
+    </p>
+  )
+}
+
 /**
  * Why a queued download hasn't started (A5): another one has every network, or
  * every slot is busy. "Start now" gives it every network at once.
@@ -659,6 +697,7 @@ export function TransferDetail({ job, onBack }: { job: JobView; onBack: (() => v
       </header>
 
       <WaitReason job={job} />
+      {job.arriving && <Arriving job={job} a={job.arriving} />}
       {job.missing && (
         <p className="notice" role="status">
           <WarningCircle size={18} aria-hidden />
