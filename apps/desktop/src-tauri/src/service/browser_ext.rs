@@ -6,10 +6,13 @@
 //! profile files (`fuselane_api::browsers`). Both are kept as settings so they
 //! survive a restart.
 
+use std::sync::Arc;
+
 use serde::Serialize;
 
 use fuselane_api::browsers::{self, ExtState};
 use fuselane_api::server::{Handoff, JobAction, Seen};
+use fuselane_core::Status;
 use serde_json::{Value, json};
 
 use super::deadline::unix_now;
@@ -154,7 +157,37 @@ impl Service {
 /// Finished and failed downloads the popup lists after the active ones.
 const POPUP_RECENT: usize = 30;
 
+/// A browser offer for a link added this recently is the same click again
+/// (a page that starts its download twice, or the extension asking again after
+/// a slow answer), not a request for another copy.
+const SAME_CLICK_SECS: i64 = 120;
+
 impl Service {
+    /// Adds a download offered by the browser, unless the same link is already
+    /// downloading or was added moments ago: then that download's id comes back
+    /// and nothing new is made. A link that finished a while ago is downloaded
+    /// again, since asking in the browser once more is deliberate.
+    pub fn add_offer(self: &Arc<Self>, url: &str, req: &super::AddRequest) -> Result<i64, UiError> {
+        let _held = lock(&self.offer_lock);
+        let now = unix_now();
+        let jobs = self.store.list().map_err(store_error)?;
+        let same = jobs.iter().filter(|j| j.url == url.trim()).find(|j| {
+            matches!(j.status, Status::Queued | Status::Running | Status::Paused)
+                || now - j.created_at < SAME_CLICK_SECS
+        });
+        if let Some(j) = same {
+            return Ok(j.id);
+        }
+        self.add_with(
+            url,
+            None,
+            &super::AddRequest {
+                allow_duplicate: true,
+                ..req.clone()
+            },
+        )
+    }
+
     /// The downloads for the extension's popup: everything active, then the
     /// latest finished ones, each with its live speed; plus the combined speed.
     pub fn extension_jobs(&self) -> Result<Value, UiError> {
@@ -205,11 +238,7 @@ impl Service {
     }
 
     /// Does what the popup asked to download `id`.
-    pub fn extension_action(
-        self: &std::sync::Arc<Self>,
-        id: i64,
-        action: JobAction,
-    ) -> Result<(), UiError> {
+    pub fn extension_action(self: &Arc<Self>, id: i64, action: JobAction) -> Result<(), UiError> {
         match action {
             JobAction::Pause => self.pause(id),
             JobAction::Resume => self.resume(id),

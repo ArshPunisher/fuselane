@@ -123,14 +123,12 @@ impl Service {
         let Some(audio) = &plan.audio else {
             if plan.mp3 {
                 let id = add(&plan.video, format!("{base}.{}", plan.video.ext))?;
-                let mut joins = self.joins();
-                joins.push(Join {
+                self.add_join(Join {
                     video: id,
                     audio: id,
                     name: format!("{base}.mp3"),
                     mp3: true,
                 });
-                self.save_joins(&joins);
                 return Ok(vec![id]);
             }
             let suffix = if plan.label == "audio" {
@@ -154,14 +152,12 @@ impl Service {
         let _ = self
             .store
             .create_group(&title.chars().take(80).collect::<String>(), &[v, a]);
-        let mut joins = self.joins();
-        joins.push(Join {
+        self.add_join(Join {
             video: v,
             audio: a,
             name: format!("{base} ({}).{}", plan.label, plan.out_ext),
             mp3: false,
         });
-        self.save_joins(&joins);
         self.publish_jobs();
         Ok(vec![v, a])
     }
@@ -175,6 +171,13 @@ impl Service {
             .unwrap_or_default()
     }
 
+    fn add_join(&self, j: Join) {
+        let _held = lock(&self.joins_lock);
+        let mut joins = self.joins();
+        joins.push(j);
+        self.save_joins(&joins);
+    }
+
     fn save_joins(&self, joins: &[Join]) {
         if let Ok(json) = serde_json::to_string(joins) {
             let _ = self.store.set_setting("media_joins", &json);
@@ -184,6 +187,8 @@ impl Service {
     /// After a download finishes: joins video and audio whose both halves are
     /// done. The joined file takes the video's place in the list.
     pub(super) fn join_finished(self: &Arc<Self>) {
+        // Taken out of the saved list under the lock: each join starts once.
+        let _held = lock(&self.joins_lock);
         let joins = self.joins();
         if joins.is_empty() {
             return;

@@ -646,6 +646,11 @@ pub struct Service {
     automation: Mutex<crate::automation::Automation>,
     /// Jobs the schedule paused; they resume when the window opens again.
     schedule_paused: Mutex<std::collections::HashSet<i64>>,
+    /// Held while the video/audio joins are read and saved, so two downloads
+    /// finishing together can't both start the same join.
+    joins_lock: Mutex<()>,
+    /// Held while a browser offer checks for the same link and adds it.
+    offer_lock: Mutex<()>,
     /// Tests pin the clock; None reads the real local time.
     clock: Mutex<Option<crate::automation::Moment>>,
     awake: Mutex<Option<crate::power::KeepAwake>>,
@@ -1070,6 +1075,8 @@ impl Service {
             sessions: Mutex::default(),
             automation: Mutex::new(automation),
             schedule_paused: Mutex::default(),
+            joins_lock: Mutex::default(),
+            offer_lock: Mutex::default(),
             clock: Mutex::new(None),
             awake: Mutex::new(None),
             had_work: std::sync::atomic::AtomicBool::new(false),

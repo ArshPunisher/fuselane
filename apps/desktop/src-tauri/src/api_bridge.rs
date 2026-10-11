@@ -64,12 +64,10 @@ impl Handler for ApiBridge {
                 return Err(Decline::Unsupported);
             }
             self.svc
-                // Asked for in the browser just now: a repeat is deliberate.
-                .add_with(
+                // The same click offered twice comes back as the one download.
+                .add_offer(
                     link,
-                    None,
                     &crate::service::AddRequest {
-                        allow_duplicate: true,
                         headers,
                         ..Default::default()
                     },
@@ -183,9 +181,27 @@ mod tests {
             Err(Decline::Unsupported)
         );
         assert_eq!(b.svc.jobs().unwrap().len(), 1);
-        // With no size (a right-click), a server that sends a file: taken.
-        assert!(b.offer(ask(None, Some(&url))).await.is_ok());
-        assert_eq!(b.svc.jobs().unwrap().len(), 2);
+        // With no size (a right-click), a server that sends a file: taken. The
+        // link is already downloading, so it's that same download (one click,
+        // one job).
+        assert_eq!(b.offer(ask(None, Some(&url))).await, Ok(id));
+        assert_eq!(b.svc.jobs().unwrap().len(), 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_same_link_offered_twice_at_once_is_one_download() {
+        use fuselane_testkit::{Content, RangeServer};
+        let server = RangeServer::start(Content::new(300_000, 3)).await.unwrap();
+        let url = format!("http://{}{}", server.addr(), server.path());
+        let (b, _events, _dir) = bridge();
+        let ask = || {
+            offer(
+                serde_json::json!({"v": 1, "type": "download.offer", "url": url, "size": 300_000}),
+            )
+        };
+        let (one, two) = tokio::join!(b.offer(ask()), b.offer(ask()));
+        assert_eq!(one.unwrap(), two.unwrap());
+        assert_eq!(b.svc.jobs().unwrap().len(), 1);
     }
 
     /// Answers every request with a small HTML page, like a sign-in screen.

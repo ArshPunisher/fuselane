@@ -88,6 +88,22 @@ async function showBarFor(ms = 8000) {
   setTimeout(() => void followSwitch(), ms)
 }
 
+// ---- One click, one download ------------------------------------------------
+// A page can start the same file twice (an auto-start plus its "download now"
+// link), and a click can arrive both as a grab and as a browser download. A link
+// taken in the last few seconds isn't taken again.
+const taken = new Map<string, number>()
+const SAME_CLICK_MS = 10_000
+function takenRecently(...urls: (string | undefined)[]): boolean {
+  const now = Date.now()
+  for (const [u, at] of taken) if (now - at > SAME_CLICK_MS) taken.delete(u)
+  return urls.some((u) => u !== undefined && taken.has(u))
+}
+/** Fuselane (the app or the extension) has this link now. */
+function markTaken(...urls: (string | undefined)[]) {
+  for (const u of urls) if (u) taken.set(u, Date.now())
+}
+
 // ---- Links we let the browser download on purpose -------------------------
 const letThrough = new Set<string>()
 async function browserDownload(url: string) {
@@ -274,6 +290,7 @@ async function followAccess() {
 
 /** A file link clicked in a page: straight to Fuselane, the browser never starts it. */
 async function grab(url: string, pageUrl: string | null, name: string | null) {
+  if (takenRecently(url)) return
   const r = route(
     { url, filename: name ?? undefined },
     {
@@ -283,6 +300,7 @@ async function grab(url: string, pageUrl: string | null, name: string | null) {
       limit: await limit(),
     },
   )
+  if (r.to !== 'browser') markTaken(url)
   if (r.to === 'app') {
     const took = await offerLink(
       url,
@@ -394,6 +412,12 @@ export default defineBackground(() => {
       d.url.startsWith('blob:')
     )
       return
+    if (switchOn !== false && takenRecently(d.url, d.finalUrl)) {
+      // The same file again within seconds: the first one already has it.
+      await downloads.cancel(d.id).catch(() => {})
+      await downloads.erase(d.id).catch(() => {})
+      return
+    }
     // The app is running and Fuselane is on: like IDM, the browser's copy stops
     // at once (a pause can't stop a small file that's already on its way), and the
     // link goes to the app. If the app can't take it, the browser gets it again.
@@ -414,6 +438,7 @@ export default defineBackground(() => {
         limit: 0,
       })
       if (r.to === 'browser') return void browserDownload(d.finalUrl || d.url)
+      markTaken(d.url, d.finalUrl)
       const took = await offerItem(item(d))
       if (!took) {
         known = null
@@ -444,6 +469,7 @@ export default defineBackground(() => {
       return
     }
     if (r.to === 'app') {
+      markTaken(d.url, d.finalUrl)
       const wait = s.app === 'connected' ? RUNNING_WAIT_MS : START_WAIT_MS
       const outcome = await handOff(
         item(d),
@@ -460,6 +486,7 @@ export default defineBackground(() => {
       return
     }
     // The extension takes it: the browser's copy goes, without a trace.
+    markTaken(d.url, d.finalUrl)
     await downloads.cancel(d.id).catch(() => {})
     await downloads.erase(d.id).catch(() => {})
     const url = d.finalUrl || d.url
