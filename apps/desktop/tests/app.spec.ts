@@ -1304,6 +1304,74 @@ test('the extension hands a video page over and the qualities open by themselves
   await expect(pick.getByRole('radio', { name: /1080p/ })).toBeVisible()
 })
 
+test('a new video page never shows the previous one, and Back returns to the qualities', async ({
+  page,
+}) => {
+  await page.goto('/?empty=1&mediaDelay=1500')
+  await expect(page.getByText('Nothing downloading yet')).toBeVisible()
+  const open = (link: string) =>
+    page.evaluate(
+      (l) =>
+        (window as unknown as { __demoOpen: (t: string) => void }).__demoOpen(
+          `fuselane-video:${l}`,
+        ),
+      link,
+    )
+  await open('https://www.youtube.com/watch?v=aqz-KE-bpKQ')
+  const pick = page.getByRole('dialog', { name: 'Get the video' })
+  // The loader shows at once, with the site, before yt-dlp answers (B3).
+  await expect(pick.getByRole('status')).toContainText('Looking at the video…')
+  await expect(pick.getByRole('status')).toContainText('youtube.com')
+  await expect(pick).toContainText('Big Buck Bunny')
+  // Another page: the old one's video is gone at once, not after the lookup (B2).
+  await open('https://www.youtube.com/watch?v=sintel')
+  await expect(pick).not.toContainText('Big Buck Bunny')
+  await expect(pick.getByRole('status')).toContainText('Looking at the video…')
+  await expect(pick).toContainText('Sintel')
+  // Back shows the plain dialog; the way back to the qualities needs no new search (B4).
+  await pick.getByRole('button', { name: 'Back' }).click()
+  const plain = page.getByRole('dialog', { name: 'New download' })
+  await plain.getByRole('button', { name: 'Back to video qualities' }).click()
+  await expect(pick.getByRole('radio', { name: /2160p/ })).toBeChecked()
+  await expect(pick).toContainText('Sintel')
+})
+
+test('an HD video is one item that gets its sound and is joined', async ({ page }) => {
+  await page.goto('/?empty=1&speed=50')
+  const dialog = await openDialog(page)
+  await dialog.getByLabel('Link').fill('https://www.youtube.com/watch?v=aqz-KE-bpKQ')
+  await dialog.getByRole('button', { name: 'Get the video from this page' }).click()
+  const pick = page.getByRole('dialog', { name: 'Get the video' })
+  await pick.getByRole('radio', { name: /1080p/ }).check()
+  await pick.getByRole('button', { name: 'Download', exact: true }).click()
+  // One row, never a separate .m4a.
+  await expect(page.locator('li.row')).toHaveCount(1)
+  await expect(page.locator('.row-name', { hasText: '.m4a' })).toHaveCount(0)
+  const state = page.locator('li.row .row-state')
+  await expect(state).toHaveText('Joining video and sound…', { timeout: 30_000 })
+  await expect(state).toHaveText('Done', { timeout: 5000 })
+})
+
+test('an HD video whose sound is lost offers to get it again or save without sound', async ({
+  page,
+}) => {
+  await page.goto('/?empty=1&speed=50&sound=lost')
+  const dialog = await openDialog(page)
+  await dialog.getByLabel('Link').fill('https://www.youtube.com/watch?v=aqz-KE-bpKQ')
+  await dialog.getByRole('button', { name: 'Get the video from this page' }).click()
+  const pick = page.getByRole('dialog', { name: 'Get the video' })
+  await pick.getByRole('radio', { name: /2160p/ }).check()
+  await pick.getByRole('button', { name: 'Download', exact: true }).click()
+  const state = page.locator('li.row .row-state')
+  await expect(state).toHaveText('No sound yet', { timeout: 30_000 })
+  const detail = page.locator('article.detail')
+  await expect(detail.getByRole('alert')).toContainText('no sound yet')
+  await expect(detail.getByRole('button', { name: 'Open' })).toHaveCount(0)
+  await detail.getByRole('button', { name: 'Save without sound' }).click()
+  await expect(state).toHaveText('Done')
+  await expect(detail.getByRole('button', { name: 'Open' })).toBeVisible()
+})
+
 test('without yt-dlp a video page says what to install', async ({ page }) => {
   await page.goto('/?empty=1&ytdlp=0')
   const dialog = await openDialog(page)

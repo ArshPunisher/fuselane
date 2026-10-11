@@ -67,6 +67,10 @@ export interface Backend {
   mediaTools(): Promise<MediaTools>
   mediaInfo(url: string): Promise<MediaInfo>
   mediaAdd(url: string, option: string, dir: string | null): Promise<number[]>
+  /** A video whose sound part was lost: keep it without sound. */
+  mediaKeepSilent(id: number): Promise<void>
+  /** A video whose sound part was lost: download the sound again. */
+  mediaGetSound(id: number): Promise<number>
   /** Reads a web page and lists the files it links to; nothing is downloaded. */
   filesOnPage(url: string): Promise<PageFiles>
   /** The files a Metalink lists, each with its mirrors and checksum (8.3). */
@@ -319,6 +323,8 @@ async function tauriBackend(): Promise<Backend> {
     mediaTools: () => call('media_tools'),
     mediaInfo: (url) => call('media_info', { url }),
     mediaAdd: (url, option, dir) => call('media_add', { url, option, dir }),
+    mediaKeepSilent: (id) => call('media_keep_silent', { id }),
+    mediaGetSound: (id) => call('media_get_sound', { id }),
     renameGroup: (id, name) => call('rename_group', { id, name }),
     ungroup: (id) => call('ungroup', { id }),
     pauseGroup: (id) => call('pause_group', { id }),

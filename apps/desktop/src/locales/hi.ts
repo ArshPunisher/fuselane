@@ -513,6 +513,13 @@ export const hi: Readonly<Record<string, string>> = {
     'अपना डाउनलोड फ़ोल्डर इस्तेमाल करने के लिए खाली छोड़ें।',
   'More options': 'और विकल्प',
   'Fewer options': 'कम विकल्प',
+  'Get sound again': 'आवाज़ फिर से लाएं',
+  'Save without sound': 'बिना आवाज़ के सेव करें',
+  'Getting the sound…': 'आवाज़ आ रही है…',
+  'Joining video and sound…': 'वीडियो और आवाज़ जोड़ रहे हैं…',
+  'No sound yet': 'अभी आवाज़ नहीं',
+  'Back to video qualities': 'वीडियो क्वालिटी पर वापस',
+  'Looking at the video…': 'वीडियो देख रहे हैं…',
   'Remove from list': 'सूची से हटाएं',
   'Waiting while {name} has every network.': '{name} को सारे नेटवर्क मिले हैं, तब तक इंतज़ार।',
   'Waiting for a free slot: {n} download is running.':

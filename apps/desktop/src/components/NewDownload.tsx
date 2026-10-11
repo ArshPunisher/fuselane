@@ -96,6 +96,10 @@ export function NewDownload() {
   const [media, setMedia] = useState<MediaInfo | null>(null)
   const [quality, setQuality] = useState('')
   const [mediaBusy, setMediaBusy] = useState(false)
+  // The page being looked up (B3: the loader shows at once), and the last
+  // qualities found, so Back can return to them without a new search (B4).
+  const [videoLook, setVideoLook] = useState<string | null>(null)
+  const [lastVideo, setLastVideo] = useState<{ url: string; info: MediaInfo } | null>(null)
   const [chosen, setChosen] = useState<Set<number>>(new Set())
   const [finding, setFinding] = useState(false)
   // Bumped on cancel or close, so a late answer for an abandoned lookup is ignored.
@@ -235,6 +239,13 @@ export function NewDownload() {
   // when the dialog is already open with something else.
   useEffect(() => {
     if (!open) return
+    // Whatever was showing belongs to the previous hand-off.
+    if (!draft.startsWith(VIDEO_DRAFT) && (draftTorrent || draft)) {
+      lookup.current++
+      setMedia(null)
+      setVideoLook(null)
+      setMediaBusy(false)
+    }
     if (draftTorrent) {
       setListing(null)
       void inspect((b) => b.inspectTorrentBytes(draftTorrent, dir.trim() || null))
@@ -300,21 +311,41 @@ export function NewDownload() {
   /** Looks a video page up and shows its qualities (B10.4). */
   async function getVideo(link: string) {
     if (!backend) return
+    // A new page never shows the previous one's video, not even for a moment (B2).
+    const mine = ++lookup.current
+    setMedia(null)
+    setVideoLook(link)
     setMediaBusy(true)
     setError(null)
     try {
       const m = await backend.mediaInfo(link)
+      if (mine !== lookup.current) return
       setQuality(m.options[0]?.id ?? '')
       setMedia(m)
+      setLastVideo({ url: link, info: m })
     } catch (err) {
-      setError(toUiError(err))
+      if (mine === lookup.current) setError(toUiError(err))
     } finally {
-      setMediaBusy(false)
+      if (mine === lookup.current) {
+        setMediaBusy(false)
+        setVideoLook(null)
+      }
     }
+  }
+
+  /** Back to the qualities found a moment ago, without looking again (B4). */
+  function backToVideo() {
+    if (!lastVideo) return
+    setUrl(lastVideo.url)
+    setQuality(lastVideo.info.options[0]?.id ?? '')
+    setMedia(lastVideo.info)
+    setError(null)
   }
 
   function reset() {
     setMedia(null)
+    setVideoLook(null)
+    setLastVideo(null)
     setPage(null)
     setPicked(new Set())
     setUrl('')
@@ -424,7 +455,35 @@ export function NewDownload() {
         if (!dialog.current?.open) setAdding(false)
       }}
     >
-      {media ? (
+      {videoLook && !media ? (
+        <div className="video-look" aria-busy="true">
+          <header className="dialog-head">
+            <h2 id="nd-title">{t('Get the video')}</h2>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label={t('Close')}
+              onClick={() => setAdding(false)}
+            >
+              <X size={18} aria-hidden />
+            </button>
+          </header>
+          <VideoLoader url={videoLook} />
+          <footer className="dialog-foot">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => {
+                lookup.current++
+                setVideoLook(null)
+                setMediaBusy(false)
+              }}
+            >
+              <ArrowLeft size={16} aria-hidden /> {t('Back')}
+            </button>
+          </footer>
+        </div>
+      ) : media ? (
         <form
           onSubmit={async (e) => {
             e.preventDefault()
@@ -804,16 +863,24 @@ export function NewDownload() {
                 {pageBusy ? t('Reading the page…') : t('Find files on this page')}
               </button>
             )}
-            {!batch && !metalink && !isMagnet(url) && /^https?:\/\/\S+$/i.test(url.trim()) && (
-              <button
-                type="button"
-                className="link-btn find-files"
-                disabled={mediaBusy}
-                onClick={() => void getVideo(url.trim())}
-              >
-                {mediaBusy ? t('Looking for the video…') : t('Get the video from this page')}
-              </button>
-            )}
+            {!batch &&
+              !metalink &&
+              !isMagnet(url) &&
+              /^https?:\/\/\S+$/i.test(url.trim()) &&
+              (lastVideo?.url === url.trim() ? (
+                <button type="button" className="link-btn find-files" onClick={backToVideo}>
+                  {t('Back to video qualities')}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="link-btn find-files"
+                  disabled={mediaBusy}
+                  onClick={() => void getVideo(url.trim())}
+                >
+                  {mediaBusy ? t('Looking for the video…') : t('Get the video from this page')}
+                </button>
+              ))}
           </div>
           {batch && count > 1 && (
             <div className="group-choice">
@@ -1213,5 +1280,39 @@ export function NewDownload() {
         </form>
       )}
     </dialog>
+  )
+}
+
+/**
+ * While yt-dlp reads the page (B3): three tilted rings orbiting in the brand
+ * colour, the page's site, and rows shaped like the qualities to come.
+ */
+function VideoLoader({ url }: { url: string }) {
+  let site = url
+  try {
+    site = new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    // shown as given
+  }
+  return (
+    <div className="video-loader">
+      <div className="video-loader-art" aria-hidden="true">
+        <span className="vl-ring vl-ring-a" />
+        <span className="vl-ring vl-ring-b" />
+        <span className="vl-ring vl-ring-c" />
+        <span className="vl-core" />
+      </div>
+      <p className="video-loader-text" role="status">
+        <span>{t('Looking at the video…')}</span>
+        <span className="muted" translate="no">
+          {site}
+        </span>
+      </p>
+      <div className="video-loader-rows" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
+    </div>
   )
 }

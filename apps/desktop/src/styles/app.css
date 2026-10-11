@@ -790,6 +790,12 @@ h2 {
   justify-self: start;
 }
 
+.notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .notice svg {
   flex: none;
   margin-top: 2px;
@@ -7304,5 +7310,156 @@ html[data-hidden] .orb b {
 
   .ext-browser-action {
     grid-column: 2 / -1;
+  }
+}
+
+/* "Get the video" while the page is read (B3): three tilted rings orbit a
+   glowing core, in depth; still when motion is reduced. */
+.dialog .video-look {
+  display: grid;
+  gap: 18px;
+  padding: 18px 20px 20px;
+}
+
+.video-loader {
+  display: grid;
+  justify-items: center;
+  gap: 18px;
+  padding: 20px 0 8px;
+}
+
+.video-loader-art {
+  position: relative;
+  width: 112px;
+  height: 112px;
+  perspective: 420px;
+}
+
+.video-loader-art .vl-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: var(--fuse);
+  border-right-color: color-mix(in oklch, var(--fuse) 45%, transparent);
+  transform-style: preserve-3d;
+}
+
+.video-loader-art .vl-ring-a {
+  transform: rotateX(68deg) rotateZ(0deg);
+}
+
+.video-loader-art .vl-ring-b {
+  inset: 10px;
+  border-top-color: var(--lane-sky);
+  border-right-color: color-mix(in oklch, var(--lane-sky) 45%, transparent);
+  transform: rotateY(62deg) rotateZ(0deg);
+}
+
+.video-loader-art .vl-ring-c {
+  inset: 22px;
+  border-top-color: var(--lane-mint);
+  border-right-color: color-mix(in oklch, var(--lane-mint) 45%, transparent);
+  transform: rotateX(-48deg) rotateY(36deg) rotateZ(0deg);
+}
+
+.video-loader-art .vl-core {
+  position: absolute;
+  inset: 44px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--fuse-soft), var(--fuse) 70%);
+  box-shadow: 0 0 24px color-mix(in oklch, var(--fuse) 45%, transparent);
+}
+
+.video-loader-text {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  margin: 0;
+  text-align: center;
+}
+
+.video-loader-rows {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+}
+
+.video-loader-rows span {
+  height: 38px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-control);
+  background: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in oklch, var(--ink) 6%, transparent) 50%,
+      transparent 100%
+    )
+    0 0 / 200% 100% no-repeat;
+}
+
+.video-loader-rows span:nth-child(2) {
+  opacity: 0.7;
+}
+
+.video-loader-rows span:nth-child(3) {
+  opacity: 0.45;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .video-loader-art .vl-ring-a {
+    animation: orbit-a 1.6s linear infinite;
+  }
+
+  .video-loader-art .vl-ring-b {
+    animation: orbit-b 2.1s linear infinite;
+  }
+
+  .video-loader-art .vl-ring-c {
+    animation: orbit-c 1.3s linear infinite reverse;
+  }
+
+  .video-loader-art .vl-core {
+    animation: core-breathe 1.8s var(--ease-out) infinite alternate;
+  }
+
+  .video-loader-rows span {
+    animation: rows-sheen 1.4s linear infinite;
+  }
+}
+
+@keyframes orbit-a {
+  to {
+    transform: rotateX(68deg) rotateZ(360deg);
+  }
+}
+
+@keyframes orbit-b {
+  to {
+    transform: rotateY(62deg) rotateZ(360deg);
+  }
+}
+
+@keyframes orbit-c {
+  to {
+    transform: rotateX(-48deg) rotateY(36deg) rotateZ(360deg);
+  }
+}
+
+@keyframes core-breathe {
+  from {
+    transform: scale(0.86);
+  }
+  to {
+    transform: scale(1.06);
+  }
+}
+
+@keyframes rows-sheen {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
   }
 }

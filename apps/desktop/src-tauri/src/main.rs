@@ -101,6 +101,18 @@ async fn media_add(
     svc.media_add(&url, &option, dir.as_deref())
 }
 
+/// A video whose sound part was lost: keep it without sound (B5).
+#[tauri::command]
+async fn media_keep_silent(svc: State<'_>, id: i64) -> Result<(), UiError> {
+    svc.media_keep_silent(id)
+}
+
+/// A video whose sound part was lost: download the sound again (B5).
+#[tauri::command]
+async fn media_get_sound(svc: State<'_>, id: i64) -> Result<i64, UiError> {
+    svc.media_get_sound(id)
+}
+
 /// Bytes per network per day, for the Data used chart (B10.5).
 #[tauri::command]
 fn usage_history(svc: State<'_>) -> service::UsageHistory {
@@ -2200,6 +2212,8 @@ fn main() {
             start_over,
             open_file,
             download_again,
+            media_keep_silent,
+            media_get_sound,
             pick_folder,
             pick_torrent,
             open_sign_in,

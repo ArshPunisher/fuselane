@@ -280,6 +280,7 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       groupName: null,
       pausing: false,
       missing: false,
+      sound: null,
       fill,
       owner,
       inflight: [-1, -1, -1],
@@ -391,7 +392,17 @@ export function createDemoBackend(params: URLSearchParams): Backend {
   const view = (j: SimJob): JobView => {
     const { fill: _f, owner: _o, inflight: _i, bytes: _b, ran: _r, ...rest } = j
     // ?missing=1: finished files were moved or deleted since.
-    return { ...rest, missing: j.status === 'completed' && params.get('missing') === '1' }
+    const v = { ...rest, missing: j.status === 'completed' && params.get('missing') === '1' }
+    // A video getting its sound, or being joined, isn't done yet (B5).
+    if (v.sound === 'getting' || v.sound === 'joining') return { ...v, status: 'running' as const }
+    if (v.sound === 'missing')
+      return {
+        ...v,
+        status: 'failed-final' as const,
+        error: 'The sound part is gone, so this video has no sound yet.',
+        errorAction: 'no-sound' as const,
+      }
+    return v
   }
   const emitJobs = () => listener?.({ type: 'jobs', jobs: jobs.map(view) })
 
@@ -459,9 +470,27 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         )
         listener?.({ type: 'live', ...live(j) }) // the final picture, as the engine sends
         if (j.focused) endFocus(j)
+        if (withSound.has(j.id)) soundThenJoin(j)
         emitJobs()
       }
     }
+  }
+
+  // HD from a video page: the sound comes after the video part, then the two
+  // are joined (B5). ?sound=lost: the sound part goes missing instead.
+  const withSound = new Set<number>()
+  function soundThenJoin(j: SimJob) {
+    withSound.delete(j.id)
+    j.sound = 'getting'
+    setTimeout(() => {
+      j.sound = params.get('sound') === 'lost' ? 'missing' : 'joining'
+      emitJobs()
+      if (j.sound === 'joining')
+        setTimeout(() => {
+          j.sound = null
+          emitJobs()
+        }, 700)
+    }, 700)
   }
 
   // "Do this one now": the held downloads carry on when the focused one ends.
@@ -954,7 +983,8 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       ffmpeg: '/opt/homebrew/bin/ffmpeg',
     }),
     mediaInfo: async (url) => {
-      await new Promise((r) => setTimeout(r, 300))
+      // ?mediaDelay=ms: yt-dlp taking its time, to see the loader.
+      await new Promise((r) => setTimeout(r, Number(params.get('mediaDelay') ?? 300)))
       if (params.get('ytdlp') === '0')
         throw err(
           'needs-yt-dlp',
@@ -964,7 +994,9 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       if (url.includes('nomedia'))
         throw err('no-media', 'No video found there: unsupported URL.', null)
       return {
-        title: 'Big Buck Bunny 60fps 4K - Official Blender Foundation Short Film',
+        title: url.includes('sintel')
+          ? 'Sintel - Open Movie by Blender Foundation'
+          : 'Big Buck Bunny 60fps 4K - Official Blender Foundation Short Film',
         site: 'Youtube',
         duration: 635,
         hdNeedsFfmpeg: false,
@@ -990,7 +1022,28 @@ export function createDemoBackend(params: URLSearchParams): Backend {
         name: `Big Buck Bunny (${label}).${ext}`,
         allowDuplicate: true,
       })
+      // 1080p and up come as video and sound, joined into this one item.
+      if (/^v(1080|1440|2160)$/.test(option)) withSound.add(id)
       return [id]
+    },
+    mediaKeepSilent: async (id) => {
+      const j = find(id)
+      j.sound = null
+      emitJobs()
+    },
+    mediaGetSound: async (id) => {
+      const j = find(id)
+      j.sound = 'getting'
+      emitJobs()
+      setTimeout(() => {
+        j.sound = 'joining'
+        emitJobs()
+        setTimeout(() => {
+          j.sound = null
+          emitJobs()
+        }, 700)
+      }, 700)
+      return id
     },
     addMetalink: async (url, dir, later) => {
       await new Promise((r) => setTimeout(r, 200))

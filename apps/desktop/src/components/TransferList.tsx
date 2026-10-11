@@ -23,7 +23,7 @@ import { fileType, TYPE_LABEL, typeLabel, type FileType } from '../lib/categorie
 import { bytes, percent, rateText, readyBy, startsAt } from '../lib/format'
 import { assignLanes } from '../lib/lanes'
 import type { JobView, Live, TorrentView } from '../lib/types'
-import { statusWord } from './status'
+import { soundWord, statusWord } from './status'
 import { mark, t } from '../lib/i18n'
 import { FeedsDialog } from './FeedsDialog'
 import { torrentWord, torrentNets } from './TorrentDetail'
@@ -128,9 +128,8 @@ function Row({ job }: { job: JobView }) {
                 ? t('File missing')
                 : job.pausing
                   ? t('Pausing…')
-                  : job.startAt
-                    ? startsAt(job.startAt)
-                    : statusWord(job.status)}
+                  : (soundWord(job) ??
+                    (job.startAt ? startsAt(job.startAt) : statusWord(job.status)))}
             </span>
             <span className="num">{meta(job, showLive)}</span>
           </span>

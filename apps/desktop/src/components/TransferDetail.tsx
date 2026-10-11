@@ -22,7 +22,7 @@ import { assignLanes, kindLabel, netTitle } from '../lib/lanes'
 import { FuseCore } from './FuseCore'
 import { Stream } from './Stream'
 import { Orb } from './Orb'
-import { statusWord } from './status'
+import { soundWord, statusWord } from './status'
 import { LimitField } from './LimitField'
 import { LiveRate } from './LiveRate'
 import { BIN, RemoveDialog } from './RemoveDialog'
@@ -70,7 +70,9 @@ function Center({ job, live }: { job: JobView; live: Live | undefined }) {
         <span className="unit">%</span>
       </p>
       <p className="speed-sub" data-status={job.status}>
-        {job.pausing ? t('Pausing…') : job.startAt ? startsAt(job.startAt) : statusWord(job.status)}
+        {job.pausing
+          ? t('Pausing…')
+          : (soundWord(job) ?? (job.startAt ? startsAt(job.startAt) : statusWord(job.status)))}
       </p>
     </>
   )
@@ -180,6 +182,16 @@ function ErrorPanel({ job }: { job: JobView }) {
               </p>
             )}
           </form>
+        )}
+        {action === 'no-sound' && (
+          <div className="notice-actions">
+            <button className="btn btn-primary" onClick={() => act((b) => b.mediaGetSound(job.id))}>
+              <ArrowClockwise size={16} aria-hidden /> {t('Get sound again')}
+            </button>
+            <button className="btn" onClick={() => act((b) => b.mediaKeepSilent(job.id))}>
+              {t('Save without sound')}
+            </button>
+          </div>
         )}
         {action === 'start-over' && (
           <button

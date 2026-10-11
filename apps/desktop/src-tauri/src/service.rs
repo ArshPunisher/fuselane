@@ -100,6 +100,8 @@ pub struct JobView {
     pub pausing: bool,
     /// Finished, but its file is no longer where it was saved.
     pub missing: bool,
+    /// A video with separate sound (B5): getting, joining or missing.
+    pub sound: Option<&'static str>,
 }
 
 /// One network the app can see.
@@ -656,6 +658,8 @@ pub struct Service {
     /// Held while the video/audio joins are read and saved, so two downloads
     /// finishing together can't both start the same join.
     joins_lock: Mutex<()>,
+    /// Videos being joined with their sound right now: video id to sound id.
+    joining: Mutex<HashMap<i64, i64>>,
     /// Held while a browser offer checks for the same link and adds it.
     offer_lock: Mutex<()>,
     /// Tests pin the clock; None reads the real local time.
@@ -704,6 +708,10 @@ pub struct Service {
     outages: Mutex<Vec<netcheck::Outage>>,
     /// Pages looked up with yt-dlp, and their choices, for a few minutes (B10.4).
     media_probes: Mutex<media_jobs::Probes>,
+    /// What each page offered, shown again at once while still fresh (B3).
+    media_seen: Mutex<HashMap<String, (std::time::Instant, crate::media::MediaInfo)>>,
+    /// One yt-dlp lookup per page at a time: a second ask waits for the first.
+    media_lookups: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
     /// Bytes per network per day, for the last two months (B10.5).
     daily: Mutex<Vec<daily::DayUse>>,
     /// Networks outside their hours at the last tick (B10.6).
@@ -845,6 +853,7 @@ fn view(job: &Job) -> JobView {
         group_name: None,
         pausing: false,
         missing: false,
+        sound: None,
     }
 }
 
@@ -1065,6 +1074,8 @@ impl Service {
             battery_paused: Mutex::default(),
             netcheck: Mutex::default(),
             media_probes: Mutex::default(),
+            media_seen: Mutex::default(),
+            media_lookups: Mutex::default(),
             daily: Mutex::new(daily_saved),
             hours_closed: Mutex::new(None),
             outages: Mutex::new(saved_outages),
@@ -1085,6 +1096,7 @@ impl Service {
             automation: Mutex::new(automation),
             schedule_paused: Mutex::default(),
             joins_lock: Mutex::default(),
+            joining: Mutex::default(),
             offer_lock: Mutex::default(),
             clock: Mutex::new(None),
             awake: Mutex::new(None),
@@ -1196,7 +1208,7 @@ impl Service {
             .iter()
             .filter_map(|(id, r)| r.pausing.then_some(*id))
             .collect();
-        Ok(self
+        let views = self
             .store
             .list()
             .map_err(store_error)?
@@ -1226,7 +1238,38 @@ impl Service {
                 }
                 v
             })
-            .collect())
+            .collect::<Vec<_>>();
+        Ok(self.as_one_item(views))
+    }
+
+    /// A video and its separate sound show as one item (B5): the sound part
+    /// leaves the list, and the video speaks for both.
+    fn as_one_item(&self, mut views: Vec<JobView>) -> Vec<JobView> {
+        let joins = self.sound_joins();
+        let joining = lock(&self.joining).clone();
+        if joins.is_empty() && joining.is_empty() {
+            return views;
+        }
+        let parts: HashMap<i64, JobView> = views
+            .iter()
+            .filter(|v| joins.values().any(|j| j.audio == v.id))
+            .map(|v| (v.id, v.clone()))
+            .collect();
+        for v in &mut views {
+            if let Some(j) = joins.get(&v.id) {
+                media_jobs::merge_sound(v, j, parts.get(&j.audio));
+            } else if joining.contains_key(&v.id) {
+                v.status = "running";
+                v.sound = Some(media_jobs::Sound::Joining.word());
+            }
+        }
+        let hidden: std::collections::HashSet<i64> = joins
+            .values()
+            .map(|j| j.audio)
+            .chain(joining.values().copied())
+            .collect();
+        views.retain(|v| !hidden.contains(&v.id));
+        views
     }
 
     fn retry_wait(&self, attempt: usize) -> std::time::Duration {
@@ -2209,7 +2252,22 @@ impl Service {
         Ok(())
     }
 
+    /// Pauses a download; a video waiting for its sound pauses both parts.
     pub fn pause(self: &Arc<Self>, id: i64) -> Result<(), UiError> {
+        if let Some(sound) = self.sound_part(id) {
+            let _ = self.pause_one(sound);
+            if self
+                .store
+                .get(id)
+                .is_ok_and(|j| j.status == Status::Completed)
+            {
+                return Ok(()); // only the sound was still going
+            }
+        }
+        self.pause_one(id)
+    }
+
+    fn pause_one(self: &Arc<Self>, id: i64) -> Result<(), UiError> {
         self.forget_held(id);
         if let Some(r) = lock(&self.running).get_mut(&id) {
             r.cancel.cancel(); // the task records the pause once progress is saved
@@ -2240,7 +2298,30 @@ impl Service {
         }
     }
 
+    /// Resumes a download; a video waiting for its sound resumes both parts.
     pub fn resume(self: &Arc<Self>, id: i64) -> Result<(), UiError> {
+        if let Some(sound) = self.sound_part(id) {
+            let sound_left = self
+                .store
+                .get(sound)
+                .is_ok_and(|j| j.status != Status::Completed);
+            let got = if sound_left {
+                self.resume_one(sound)
+            } else {
+                Ok(())
+            };
+            if self
+                .store
+                .get(id)
+                .is_ok_and(|j| j.status == Status::Completed)
+            {
+                return got;
+            }
+        }
+        self.resume_one(id)
+    }
+
+    fn resume_one(self: &Arc<Self>, id: i64) -> Result<(), UiError> {
         if lock(&self.running).contains_key(&id) {
             return Ok(());
         }
@@ -2630,7 +2711,23 @@ impl Service {
     }
 
     /// Removes a download (and its partial file). A running one is stopped first.
+    /// Removes a download (and its partial file). A video waiting for its
+    /// sound goes with its sound part, and its video-only file is deleted too:
+    /// it was never the finished file.
     pub fn remove(self: &Arc<Self>, id: i64) -> Result<(), UiError> {
+        if let Some(j) = self.sound_part(id).and_then(|_| self.drop_join(id)) {
+            let _ = self.remove_one(j.audio);
+            if let Ok(v) = self.store.get(id)
+                && v.status == Status::Completed
+                && let Some(p) = v.final_path
+            {
+                let _ = std::fs::remove_file(p);
+            }
+        }
+        self.remove_one(id)
+    }
+
+    fn remove_one(self: &Arc<Self>, id: i64) -> Result<(), UiError> {
         if let Some(r) = lock(&self.running).get_mut(&id) {
             r.remove_after = true;
             r.cancel.cancel();
@@ -3369,6 +3466,26 @@ mod tests {
         assert_eq!(h.svc.remove(id).unwrap_err().code, "not-found");
         assert_eq!(h.svc.pause(999).unwrap_err().code, "not-found");
         assert_eq!(h.svc.resume(999).unwrap_err().code, "not-found");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_page_looked_up_a_moment_ago_shows_again_without_a_new_search() {
+        let h = harness(3);
+        let info = crate::media::MediaInfo {
+            title: "Bunny".into(),
+            site: "Youtube".into(),
+            duration: Some(60.0),
+            options: vec![],
+            hd_needs_ffmpeg: false,
+        };
+        let url = "https://www.youtube.com/watch?v=bunny";
+        lock(&h.svc.media_seen).insert(url.into(), (Instant::now(), info.clone()));
+        // Answered from what was found, so no yt-dlp is needed (or run).
+        assert_eq!(h.svc.media_info(url).await.unwrap(), info);
+        // Two asks at once share the one answer, and nothing waits behind them.
+        let (a, b) = tokio::join!(h.svc.media_info(url), h.svc.media_info(url));
+        assert_eq!((a.unwrap(), b.unwrap()), (info.clone(), info));
+        assert!(lock(&h.svc.media_lookups).is_empty());
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -4120,7 +4237,11 @@ mod tests {
             .svc
             .media_add("https://video.example/watch", "v90", None)
             .unwrap();
-        assert_eq!(ids.len(), 2);
+        // One item in the list, under the joined file's name (B5).
+        assert_eq!(ids.len(), 1);
+        let shown = h.svc.jobs().unwrap();
+        assert_eq!(shown.len(), 1);
+        assert!(shown[0].name.ends_with("(90p).mp4"), "{}", shown[0].name);
         assert!(
             h.svc
                 .media_add("https://video.example/watch", "v1080", None)
@@ -4154,6 +4275,84 @@ mod tests {
             "{kinds}"
         );
         assert_eq!(h.job(ids[0]).group_id, None, "a single file now");
+        assert_eq!(h.job(ids[0]).sound, None);
+        assert_eq!(h.job(ids[0]).status, "completed");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_video_whose_sound_part_is_lost_never_shows_as_done() {
+        let server = RangeServer::start(Content::new(1024, 1)).await.unwrap();
+        server.serve_file("/v.mp4", vec![7u8; 20_000]);
+        server.serve_file("/a.m4a", vec![9u8; 5_000]);
+        let base = format!("http://{}", server.addr());
+        let stream = |path: &str, ext: &str| crate::media::Stream {
+            url: format!("{base}{path}"),
+            ext: ext.into(),
+            headers: vec![],
+            size: None,
+        };
+        // One at a time: each sound part is still waiting when it's removed.
+        let h = harness(1);
+        lock(&h.svc.media_probes).insert(
+            "https://video.example/talk".into(),
+            (
+                Instant::now(),
+                "Talk".into(),
+                HashMap::from([(
+                    "v90".to_string(),
+                    crate::media::Plan {
+                        video: stream("/v.mp4", "mp4"),
+                        audio: Some(stream("/a.m4a", "m4a")),
+                        out_ext: "mkv".into(),
+                        label: "90p".into(),
+                        mp3: false,
+                    },
+                )]),
+            ),
+        );
+        let add = || {
+            h.svc
+                .media_add("https://video.example/talk", "v90", None)
+                .unwrap()[0]
+        };
+        let (keep, fetch) = (add(), add());
+        // Both sound parts go (removed elsewhere, say) before they're joined.
+        let sounds: Vec<i64> = [keep, fetch]
+            .iter()
+            .map(|v| h.svc.sound_part(*v).unwrap())
+            .collect();
+        for s in &sounds {
+            h.svc.remove(*s).unwrap();
+        }
+        h.wait("video parts done and sound parts gone", |h| {
+            [keep, fetch].iter().all(|v| {
+                h.svc
+                    .store
+                    .get(*v)
+                    .is_ok_and(|j| j.status == Status::Completed)
+            }) && sounds.iter().all(|s| h.svc.store.get(*s).is_err())
+        })
+        .await;
+        h.svc.join_finished();
+        for v in [keep, fetch] {
+            let shown = h.job(v);
+            assert_eq!(shown.status, "failed-final", "not done without its sound");
+            assert_eq!(shown.sound, Some("missing"));
+            assert_eq!(shown.error_action.as_deref(), Some("no-sound"));
+        }
+
+        // Save without sound: the video part becomes the file, named for it.
+        h.svc.media_keep_silent(keep).unwrap();
+        let kept = h.job(keep);
+        assert_eq!(kept.status, "completed");
+        assert_eq!(kept.sound, None);
+        assert!(kept.final_path.unwrap().ends_with("Talk (90p).mp4"));
+
+        // Get sound again: a fresh sound part, hidden like the first.
+        let again = h.svc.media_get_sound(fetch).unwrap();
+        assert_eq!(h.svc.sound_part(fetch), Some(again));
+        assert!(h.svc.jobs().unwrap().iter().all(|j| j.id != again));
+        assert_ne!(h.job(fetch).sound, Some("missing"));
     }
 
     #[tokio::test(flavor = "multi_thread")]

@@ -15,6 +15,7 @@ export type ErrorAction =
   | 'focus'
   | 'battery'
   | 'handoff'
+  | 'no-sound'
   | null
 
 export interface JobView {
@@ -62,6 +63,8 @@ export interface JobView {
   pausing: boolean
   /** Finished, but its file is no longer where it was saved. */
   missing: boolean
+  /** A video with separate sound: getting it, joining them, or the sound is missing. */
+  sound: 'getting' | 'joining' | 'missing' | null
 }
 
 /** One network's latest news in a download. */

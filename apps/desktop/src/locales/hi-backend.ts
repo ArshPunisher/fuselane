@@ -682,4 +682,12 @@ export const hiBackend: Readonly<Record<string, string>> = {
   'Open it, or add the link again for another copy.':
     'उसे खोलें, या दूसरी कॉपी के लिए लिंक फिर से जोड़ें।',
   "This download hasn't finished yet.": 'यह डाउनलोड अभी पूरा नहीं हुआ है।',
+  'The sound part is gone, so this video has no sound yet.':
+    'आवाज़ वाला हिस्सा नहीं रहा, इसलिए इस वीडियो में अभी आवाज़ नहीं है।',
+  "The sound couldn't be downloaded: {e}": 'आवाज़ डाउनलोड नहीं हो सकी: {e}',
+  "The sound couldn't be downloaded.": 'आवाज़ डाउनलोड नहीं हो सकी।',
+  "The video part hasn't finished yet.": 'वीडियो वाला हिस्सा अभी पूरा नहीं हुआ है।',
+  "This download isn't waiting for its sound.": 'यह डाउनलोड अपनी आवाज़ का इंतज़ार नहीं कर रहा।',
+  "The sound's link wasn't kept. Look the page up again.":
+    'आवाज़ का लिंक सेव नहीं था। पेज फिर से खोजें।',
 }
