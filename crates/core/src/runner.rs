@@ -746,40 +746,67 @@ pub async fn preview_with(link: &str, headers: Headers) -> Result<Preview, Strin
 /// hash and where it was found ("SHA256SUMS"). Quick and quiet: a few seconds
 /// per place, small files only, and None whenever anything is off.
 pub async fn find_checksum(link: &str, file: &str) -> Option<(String, String)> {
+    // Every place is asked at once (one after another took seconds before a
+    // download could start); the first place in the list that has it wins.
+    let mut set = tokio::task::JoinSet::new();
+    for (i, (place, label)) in crate::checksums::candidates(link).into_iter().enumerate() {
+        let file = file.to_string();
+        set.spawn(async move {
+            let found = tokio::time::timeout(Duration::from_secs(10), checksum_at(place, file, i))
+                .await
+                .ok()
+                .flatten();
+            (i, found.map(|hash| (hash, label)))
+        });
+    }
+    let count = set.len();
+    let mut done = vec![false; count];
+    let mut best: Option<(usize, (String, String))> = None;
+    while let Some(Ok((i, found))) = set.join_next().await {
+        done[i] = true;
+        if let Some(f) = found
+            && best.as_ref().is_none_or(|(b, _)| i < *b)
+        {
+            best = Some((i, f));
+        }
+        // Every place before the best one has answered: nothing can beat it.
+        if let Some((b, _)) = &best
+            && done[..*b].iter().all(|d| *d)
+        {
+            break;
+        }
+    }
+    best.map(|(_, f)| f)
+}
+
+/// The SHA-256 of `file` in the checksum list at `place` (candidate number `i`).
+async fn checksum_at(place: String, file: String, i: usize) -> Option<String> {
     let tuning = Tuning {
         connect_timeout: Duration::from_secs(4),
         first_byte_timeout: Duration::from_secs(4),
         ..Tuning::default()
     };
-    for (i, (place, label)) in crate::checksums::candidates(link).into_iter().enumerate() {
-        let found = async {
-            let (place, _) = follow(
-                &place,
-                &[],
-                false,
-                Headers::default(),
-                Duration::from_secs(4),
-            )
-            .await
-            .ok()?;
-            let (source, networks, _) = connect_plan(&place, &[], false).await.ok()?;
-            let net = networks.first()?;
-            let body = fuselane_engine_http::download::read_small(
-                &source,
-                net,
-                &tuning,
-                crate::checksums::MAX_LIST,
-            )
-            .await?;
-            let text = String::from_utf8(body).ok()?;
-            // A lone hash counts only in a file named after this one (`os.iso.sha256`).
-            crate::checksums::find_in(&text, file, i < 2)
-        };
-        if let Ok(Some(hash)) = tokio::time::timeout(Duration::from_secs(10), found).await {
-            return Some((hash, label));
-        }
-    }
-    None
+    let (place, _) = follow(
+        &place,
+        &[],
+        false,
+        Headers::default(),
+        Duration::from_secs(4),
+    )
+    .await
+    .ok()?;
+    let (source, networks, _) = connect_plan(&place, &[], false).await.ok()?;
+    let net = networks.first()?;
+    let body = fuselane_engine_http::download::read_small(
+        &source,
+        net,
+        &tuning,
+        crate::checksums::MAX_LIST,
+    )
+    .await?;
+    let text = String::from_utf8(body).ok()?;
+    // A lone hash counts only in a file named after this one (`os.iso.sha256`).
+    crate::checksums::find_in(&text, &file, i < 2)
 }
 
 /// Reads a web page (at most `grab::MAX_PAGE`) to list the files it links to
