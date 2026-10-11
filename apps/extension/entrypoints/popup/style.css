@@ -906,3 +906,13 @@ h2 {
   display: grid;
   gap: 10px;
 }
+
+/* A question waiting for an answer (a file too big for the extension). */
+.card-ask {
+  border-color: color-mix(in oklch, var(--fuse) 45%, var(--hairline));
+}
+
+.card-actions {
+  display: grid;
+  gap: 8px;
+}

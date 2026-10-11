@@ -165,19 +165,31 @@ test('a clicked file link downloads in the extension, byte for byte, and never i
   await page.close()
 })
 
-test('a file over the limit asks: get the app, or download in the browser', async () => {
+test('a file over the limit asks in the popup: get the app, or download in the browser', async () => {
   await worker.evaluate(() => chrome.storage.local.set({ selfLimit: 100 * 1024 * 1024 }))
   const page = await context.newPage()
   await page.goto(base)
-  const decide = context.waitForEvent('page', {
-    predicate: (p) => p.url().includes('/decide.html'),
-  })
   await page.click('#huge')
-  const d = await decide
-  await expect(d.getByText('This one needs the Fuselane app')).toBeVisible()
-  await expect(d.getByText(/huge\.iso is 150 MB/)).toBeVisible()
-  await d.getByRole('button', { name: 'Download in the browser' }).click()
-  // Now the browser has it, as asked (not taken again by Fuselane).
+  // The question waits in the popup (opened by itself), with a "!" on the icon.
+  await expect
+    .poll(() =>
+      worker.evaluate(async () => {
+        const a = ((await chrome.storage.local.get('bigAsks')).bigAsks as { name?: string }[])?.[0]
+        const badge = await (
+          chrome as unknown as { action: { getBadgeText(d: object): Promise<string> } }
+        ).action.getBadgeText({})
+        return `${a?.name ?? ''} ${badge}`
+      }),
+    )
+    .toBe('huge.iso !')
+  const popup = await context.newPage()
+  await popup.goto(`chrome-extension://${id}/popup.html`)
+  const ask = popup.locator('.card-ask')
+  await expect(ask.getByText('This one needs the Fuselane app')).toBeVisible()
+  await expect(ask.getByText(/huge\.iso is 150 MB/)).toBeVisible()
+  await ask.getByRole('button', { name: 'Download in the browser' }).click()
+  // Now the browser has it, as asked (not taken again by Fuselane), and the
+  // question is gone.
   await expect
     .poll(
       async () =>
@@ -188,6 +200,11 @@ test('a file over the limit asks: get the app, or download in the browser', asyn
     )
     .toBe(1)
   expect((await jobs()).find((j) => j.name === 'huge.iso')?.status).toBe('too-big')
+  await expect
+    .poll(() =>
+      worker.evaluate(async () => (await chrome.storage.local.get('bigAsk')).bigAsk ?? null),
+    )
+    .toBe(null)
 })
 
 test('a download a page starts by script is taken from the browser without a trace', async () => {

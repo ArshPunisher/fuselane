@@ -252,7 +252,35 @@ async function offerItem(it: Item): Promise<boolean> {
 }
 
 /** "Too big for the extension": Get the app, or let the browser have it. */
+/** Files too big for the extension, each waiting for "get the app or the browser". */
+const BIG_KEY = 'bigAsks'
+type BigAsk = { url: string; name: string; size: number; at: number }
+
+async function bigAsks(): Promise<BigAsk[]> {
+  const v = (await browser.storage.local.get(BIG_KEY))[BIG_KEY]
+  return Array.isArray(v) ? (v as BigAsk[]) : []
+}
+
+/** Keeps the waiting questions, and the "!" (or how many) on the icon. */
+async function setBigAsks(asks: BigAsk[]) {
+  await browser.storage.local.set({ [BIG_KEY]: asks })
+  const text = asks.length === 0 ? '' : asks.length === 1 ? '!' : String(asks.length)
+  await browser.action.setBadgeText({ text }).catch(() => {})
+}
+
 async function askAboutBig(url: string, name: string, size: number) {
+  // The question goes in the extension's own popup, opened at once; it stays
+  // (with a "!" on the icon) until it's answered. A browser that can't open
+  // the popup by itself gets a small window instead.
+  const asks = (await bigAsks()).filter((a) => a.url !== url)
+  await setBigAsks([...asks, { url, name, size, at: Date.now() }].slice(-5))
+  const opened = await (browser.action as unknown as { openPopup?: () => Promise<void> })
+    .openPopup?.()
+    .then(
+      () => true,
+      () => false,
+    )
+  if (opened) return
   const q = new URLSearchParams({ url, name, size: String(size) })
   await browser.windows
     .create({ url: `/decide.html?${q}`, type: 'popup', width: 440, height: 360, focused: true })
@@ -536,6 +564,8 @@ export default defineBackground(() => {
     ) {
       void selfAction(msg.id, msg.action)
     } else if (type === 'decide' && typeof msg.url === 'string') {
+      const answered = msg.url
+      void bigAsks().then((asks) => setBigAsks(asks.filter((a) => a.url !== answered)))
       if (msg.choice === 'browser') void browserDownload(msg.url)
       else void browser.tabs.create({ url: GET_APP })
     } else if (type === 'app-changed') {

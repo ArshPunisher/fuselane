@@ -124,3 +124,20 @@ export function mbps(bps: number | null | undefined): string {
   const m = (bps * 8) / 1e6
   return m >= 100 ? m.toFixed(0) : m >= 10 ? m.toFixed(1) : m.toFixed(2)
 }
+
+/** The speedometer's numbers, in Mbps: evenly spaced round the dial. */
+export const DIAL_STOPS = [0, 10, 25, 50, 100, 250, 500, 1000]
+
+/**
+ * Where `mbps` sits on the dial, 0 to 1: each pair of neighbouring numbers is
+ * the same distance apart, and the needle moves evenly between them.
+ */
+export function dialFraction(mbps: number): number {
+  const last = DIAL_STOPS.length - 1
+  if (!(mbps > 0)) return 0
+  if (mbps >= DIAL_STOPS[last]!) return 1
+  const i = DIAL_STOPS.findIndex((s) => s > mbps) - 1
+  const lo = DIAL_STOPS[i]!
+  const hi = DIAL_STOPS[i + 1]!
+  return (i + (mbps - lo) / (hi - lo)) / last
+}

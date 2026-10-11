@@ -4,7 +4,7 @@ import { findOnPage, mediaList, worthPeeking, type MediaItem } from '../../lib/m
 import { feedList, findFeeds, type FoundFeed } from '../../lib/feeds.ts'
 import { KEY, readJobs, type SelfJob } from '../../lib/selfjobs.ts'
 import { cleanLimit } from '../../lib/route.ts'
-import { mbps, speedTest } from '../../lib/speed.ts'
+import { DIAL_STOPS, dialFraction, mbps, speedTest } from '../../lib/speed.ts'
 import { fillIcons, icon, type IconName } from './icons.ts'
 import './style.css'
 
@@ -99,10 +99,51 @@ for (const link of [$<HTMLAnchorElement>('#settings'), $<HTMLAnchorElement>('#mo
 }
 
 // ---- Cards: no app, or no site access yet ---------------------------------
+/** Downloads too big for the extension, asked about in this popup (D). */
+async function bigCards(): Promise<HTMLElement[]> {
+  const v = (await browser.storage.local.get('bigAsks')).bigAsks
+  const asks = (Array.isArray(v) ? v : []) as { url: string; name: string; size: number }[]
+  return asks
+    .slice()
+    .reverse()
+    .map((ask) => {
+      const done = (choice: 'app' | 'browser') => {
+        void browser.runtime
+          .sendMessage({ type: 'decide', choice, url: ask.url })
+          .finally(() => window.close())
+      }
+      const get = el(
+        'button',
+        { type: 'button', className: 'btn btn-primary btn-block' },
+        icon('download-simple'),
+        'Get the free app',
+      )
+      get.addEventListener('click', () => done('app'))
+      const here = el(
+        'button',
+        { type: 'button', className: 'btn btn-block' },
+        icon('globe'),
+        'Download in the browser',
+      )
+      here.addEventListener('click', () => done('browser'))
+      const c = card(
+        'desktop',
+        'This one needs the Fuselane app',
+        `${ask.name}${ask.size > 0 ? ` is ${formatSize(ask.size)}, ` : ' is '}more than the extension downloads by itself. The free app takes any size and splits it across Wi‑Fi, Ethernet and your phone at once.`,
+        el('div', { className: 'card-actions' }, get, here),
+      )
+      c.classList.add('card-ask')
+      return c
+    })
+}
+
 async function showCards() {
   cards.replaceChildren()
+  const big = await bigCards()
+  cards.append(...big)
   const access = await browser.permissions.contains({ origins: ['<all_urls>'] })
-  if (app.state === 'not-installed') {
+  // A question about a big file already offers the app.
+  if (app.state === 'not-installed' && !big.length) {
     const limit = cleanLimit((await browser.storage.local.get('selfLimit')).selfLimit)
     cards.append(
       card(
@@ -485,12 +526,10 @@ async function onThisPage() {
 }
 
 // ---- Speed test -----------------------------------------------------------
-// The needle reads on a square-root scale to 1 Gbps, so everyday speeds use
-// most of the dial.
-const FULL_MBPS = 1000
+// Evenly spaced numbers to 1 Gbps (lib/speed.ts), so everyday speeds use most
+// of the dial and every number has room.
 function needle(bps: number) {
-  const m = (Math.max(0, bps) * 8) / 1e6
-  const f = Math.min(1, Math.sqrt(m / FULL_MBPS))
+  const f = dialFraction((Math.max(0, bps) * 8) / 1e6)
   $<HTMLElement>('#gauge-needle').style.transform = `rotate(${-90 + f * 180}deg)`
   const fill = $<HTMLElement>('#gauge-fill')
   fill.style.strokeDasharray = `${f * 100} 100`
@@ -500,8 +539,8 @@ function needle(bps: number) {
 }
 function ticks() {
   const g = $<HTMLElement>('#gauge-ticks')
-  for (const m of [0, 10, 50, 100, 250, 500, 1000]) {
-    const f = Math.sqrt(m / FULL_MBPS)
+  for (const m of DIAL_STOPS) {
+    const f = dialFraction(m)
     const a = Math.PI * (1 - f)
     const x = 120 + Math.cos(a) * 82
     const y = 130 - Math.sin(a) * 82
@@ -606,6 +645,9 @@ async function load() {
     // ignore
   }
   show(tab)
+  // A question waiting (a file too big for the extension) shows at once,
+  // before the app's state is known.
+  cards.prepend(...(await bigCards()))
   app = await appStatus(ask, hello())
   knowApp(app)
   void browser.runtime.sendMessage({ type: 'app-changed' }).catch(() => {})
