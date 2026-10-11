@@ -25,9 +25,17 @@ export default defineContentScript({
           )
         })
         .catch(() => {})
+    /** This page's copy of the script can still reach the extension. */
+    const alive = () => {
+      try {
+        return Boolean(browser.runtime?.id)
+      } catch {
+        return false
+      }
+    }
     void read()
     browser.storage.onChanged.addListener((c) => {
-      if (c.rules) void read()
+      if (c.rules && alive()) void read()
     })
 
     const isFile = (a: HTMLAnchorElement): boolean => {
@@ -57,14 +65,23 @@ export default defineContentScript({
           return
         }
         if (url.protocol !== 'https:' && url.protocol !== 'http:') return
+        // After the extension is reloaded or updated, this copy in an open page
+        // can't reach it any more: leave the click to the browser (no error,
+        // and the link still works).
+        if (!alive()) return
         e.preventDefault()
         e.stopImmediatePropagation()
-        void browser.runtime.sendMessage({
-          type: 'grab',
-          url: url.href,
-          page: location.href,
-          name: a.getAttribute('download') || null,
-        })
+        browser.runtime
+          .sendMessage({
+            type: 'grab',
+            url: url.href,
+            page: location.href,
+            name: a.getAttribute('download') || null,
+          })
+          .catch(() => {
+            // Lost between the check and the send: the browser gets it after all.
+            location.assign(url.href)
+          })
       },
       true,
     )
