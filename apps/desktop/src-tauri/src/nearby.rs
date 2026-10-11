@@ -181,6 +181,20 @@ pub struct Nearby {
     sync_status: Mutex<HashMap<u64, sync::Status>>,
     sync_busy: AtomicBool,
     sync_last: Mutex<Option<Instant>>,
+    /// Hand-offs arriving (REVIEW-2026-10-11 C): which packs are expected, and
+    /// where their bytes go (set by the app).
+    packs: Mutex<Option<Packs>>,
+}
+
+/// Where an expected hand-off pack's bytes go, by its file name.
+pub type PackSinkFn = Arc<dyn Fn(&str) -> Option<Box<dyn fuselane_nearby::Sink>> + Send + Sync>;
+
+/// The app's side of hand-off packs: is this file expected, and where do its
+/// bytes go.
+#[derive(Clone)]
+pub struct Packs {
+    pub expected: Arc<dyn Fn(&str) -> bool + Send + Sync>,
+    pub sink: PackSinkFn,
 }
 
 /// Called with a received text message: who from, the text, and whether it may
@@ -291,6 +305,7 @@ impl Nearby {
             sync_status: Mutex::new(HashMap::new()),
             sync_busy: AtomicBool::new(false),
             sync_last: Mutex::new(None),
+            packs: Mutex::new(None),
         });
         n.load_syncs();
         n
@@ -327,6 +342,13 @@ impl Nearby {
             }
             None => None,
         }
+    }
+
+    /// Some computer is trusted: Nearby then starts with the app, so the two
+    /// always find each other (REVIEW-2026-10-11 C7). Only trusted computers
+    /// can see this one unless "Everyone" is turned on.
+    pub fn has_trusted(&self) -> bool {
+        !lock(&self.trusted).is_empty()
     }
 
     fn is_trusted(&self, fp: &str) -> bool {
@@ -641,21 +663,27 @@ impl Nearby {
         *lock(&self.on_received) = Some(f);
     }
 
+    /// This computer's name as others see it.
+    pub fn alias(&self) -> String {
+        self.alias.chars().take(64).collect()
+    }
+
+    pub fn set_packs(&self, p: Packs) {
+        *lock(&self.packs) = Some(p);
+    }
+
     pub async fn send(
         self: &Arc<Self>,
         fingerprint: &str,
         paths: Vec<String>,
     ) -> Result<NearbyView, UiError> {
-        let (info, addr) = lock(&self.devices)
-            .get(fingerprint)
-            .map(|s| (s.info.clone(), s.addr))
-            .ok_or_else(|| {
-                err(
-                    "nearby-gone",
-                    "That device isn't on the network anymore.",
-                    Some("Ask them to open Fuselane or LocalSend, then try again."),
-                )
-            })?;
+        if !lock(&self.devices).contains_key(fingerprint) {
+            return Err(err(
+                "nearby-gone",
+                "That device isn't on the network anymore.",
+                Some("Ask them to open Fuselane or LocalSend, then try again."),
+            ));
+        }
         let mut files = vec![];
         for p in paths {
             let path = PathBuf::from(p.trim());
@@ -694,16 +722,58 @@ impl Nearby {
         if files.is_empty() {
             return Err(err("send-missing", "Pick at least one file to send.", None));
         }
-        let id = format!("out-{}", self.next_request.fetch_add(1, Ordering::Relaxed));
-        let (sent, cancel) = (
-            Arc::new(AtomicU64::new(0)),
-            Arc::new(AtomicBool::new(false)),
-        );
         let name = if files.len() == 1 {
             files[0].name.clone()
         } else {
             format!("{} files", files.len())
         };
+        self.start_send(fingerprint, vec![files], name)
+            .map(|_| self.view())
+    }
+
+    /// Hands a download over (C1, C2): its manifest first, so it shows up and
+    /// starts on the other computer at once, then only its downloaded bytes.
+    /// One row in the list, named after the download. Returns the row's id.
+    pub fn send_handoff(
+        self: &Arc<Self>,
+        fingerprint: &str,
+        manifest: Outgoing,
+        pack: Outgoing,
+        name: String,
+    ) -> Result<String, UiError> {
+        let sessions = if pack.size > 0 {
+            vec![vec![manifest], vec![pack]]
+        } else {
+            vec![vec![manifest]]
+        };
+        self.start_send(fingerprint, sessions, name)
+    }
+
+    /// Sends each group of files as its own transfer, one after another, shown
+    /// as one row; the first that fails ends it.
+    fn start_send(
+        self: &Arc<Self>,
+        fingerprint: &str,
+        sessions: Vec<Vec<Outgoing>>,
+        name: String,
+    ) -> Result<String, UiError> {
+        let (info, addr) = lock(&self.devices)
+            .get(fingerprint)
+            .map(|s| (s.info.clone(), s.addr))
+            .ok_or_else(|| {
+                err(
+                    "nearby-gone",
+                    "That device isn't on the network anymore.",
+                    Some("Ask them to open Fuselane or LocalSend, then try again."),
+                )
+            })?;
+        let files: Vec<Outgoing> = sessions.iter().flatten().cloned().collect();
+        let id = format!("out-{}", self.next_request.fetch_add(1, Ordering::Relaxed));
+        let id_out = id.clone();
+        let (sent, cancel) = (
+            Arc::new(AtomicU64::new(0)),
+            Arc::new(AtomicBool::new(false)),
+        );
         lock(&self.outgoing).push(Out {
             view: TransferView {
                 id: id.clone(),
@@ -746,7 +816,20 @@ impl Nearby {
                     }
                 })
             };
-            let r = fuselane_nearby::client::send(&my, &target, &files, sent.clone(), cancel).await;
+            let mut r = Ok(0);
+            for group in &sessions {
+                r = fuselane_nearby::client::send(
+                    &my,
+                    &target,
+                    group,
+                    sent.clone(),
+                    cancel.clone(),
+                )
+                .await;
+                if r.is_err() {
+                    break;
+                }
+            }
             watch.abort();
             if let Some(o) = lock(&me.outgoing).iter_mut().find(|o| o.view.id == id) {
                 o.view.done = sent.load(Ordering::Relaxed).min(o.view.size);
@@ -769,7 +852,7 @@ impl Nearby {
             }
             me.publish();
         });
-        Ok(self.view())
+        Ok(id_out)
     }
 
     /// Stops a transfer from either side: an outgoing one stops sending; an
@@ -943,6 +1026,16 @@ impl Nearby {
 struct Receiver(std::sync::Weak<Nearby>);
 
 impl Host for Receiver {
+    fn sink(
+        &self,
+        _session: &str,
+        file: &fuselane_nearby::proto::FileMeta,
+    ) -> Option<Box<dyn fuselane_nearby::Sink>> {
+        let n = self.0.upgrade()?;
+        let packs = lock(&n.packs).clone()?;
+        (packs.sink)(&file.file_name)
+    }
+
     fn me(&self) -> DeviceInfo {
         self.0
             .upgrade()
@@ -988,6 +1081,18 @@ impl Host for Receiver {
             let Some(n) = self.0.upgrade() else {
                 return Decision::Decline;
             };
+            // A hand-off's bytes, expected here by their random id: taken
+            // without asking (the manifest before them was accepted already).
+            let packs = lock(&n.packs).clone();
+            if let Some(p) = packs
+                && !req.files.is_empty()
+                && req.files.values().all(|f| (p.expected)(&f.file_name))
+            {
+                return Decision::Accept {
+                    dir: n.inbox.clone(),
+                    only: None,
+                };
+            }
             let trusted = verified.as_deref().is_some_and(|fp| n.is_trusted(fp));
             if trusted {
                 // Text from a verified, trusted computer goes straight to the clipboard.

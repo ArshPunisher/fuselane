@@ -345,6 +345,8 @@ pub struct RunOptions {
     /// Hears when a network is benched as throttled, comes back, or can't
     /// connect for a reason worth showing (8.2, 8.4).
     pub lane_events: Option<LaneEventFn>,
+    /// Bytes arriving from another computer while it runs (a hand-over).
+    pub incoming: Option<Arc<fuselane_engine_http::download::Incoming>>,
 }
 
 /// Why a job couldn't start at all (nothing in the store changed state).
@@ -1038,6 +1040,7 @@ pub async fn run(
         filename: opts.filename,
         headers,
         lane_events: opts.lane_events,
+        incoming: opts.incoming,
         ..defaults
     };
     let _ = store.apply(id, Event::Start, None);

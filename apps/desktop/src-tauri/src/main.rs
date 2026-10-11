@@ -1308,21 +1308,15 @@ async fn nearby_handoff(
     near: Near<'_>,
     id: i64,
     fingerprint: String,
-) -> Result<nearby::NearbyView, UiError> {
+) -> Result<String, UiError> {
     let out = fuselane_core::home::home()
         .unwrap_or_else(|_| std::env::temp_dir().join("fuselane"))
         .join("handoff")
         .join(id.to_string());
-    let files = svc.handoff_files(id, &out)?;
+    let h = svc.handoff_out(id, &out, &near.inner().alias())?;
+    // The transfer row's id: the dialog follows that one's progress.
     near.inner()
-        .send(
-            &fingerprint,
-            files
-                .iter()
-                .map(|p| p.to_string_lossy().into_owned())
-                .collect(),
-        )
-        .await
+        .send_handoff(&fingerprint, h.manifest, h.pack, h.name)
 }
 
 #[tauri::command]
@@ -1852,6 +1846,14 @@ fn main() {
     let tor = open_torrents(&svc);
     let snd = open_sends(&svc);
     let near = open_nearby(&svc);
+    if near.has_trusted() {
+        // Trusted computers find each other from the start (C7); a port taken by
+        // LocalSend just leaves Nearby off, as when started by hand.
+        let near = near.clone();
+        tauri::async_runtime::spawn(async move {
+            let _ = near.start().await;
+        });
+    }
     let for_text = near.clone();
     let rem = remote::Remote::new(&svc, Arc::new(nearby::lan_addrs));
     let fds = feeds::Feeds::new(
@@ -1871,6 +1873,12 @@ fn main() {
                 reports::log(&format!("hand-off not usable: {why}"));
             }
         }));
+        // Its downloaded bytes follow, straight into the download (C1, C4).
+        let (expect, sink) = (Arc::downgrade(&svc), Arc::downgrade(&svc));
+        near.set_packs(nearby::Packs {
+            expected: Arc::new(move |name| expect.upgrade().is_some_and(|s| s.expects_pack(name))),
+            sink: Arc::new(move |name| sink.upgrade().and_then(|s| s.pack_sink(name))),
+        });
     }
     {
         // Torrents and Fuse Send count as work: no sleep or shut-down meanwhile.

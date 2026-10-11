@@ -102,6 +102,9 @@ pub struct JobView {
     pub missing: bool,
     /// A video with separate sound (B5): getting, joining or missing.
     pub sound: Option<&'static str>,
+    /// Arriving from another computer (a hand-off, C2): who from, and how much
+    /// of what was downloaded there has arrived.
+    pub arriving: Option<handoff::ArrivingView>,
 }
 
 /// One network the app can see.
@@ -660,6 +663,8 @@ pub struct Service {
     joins_lock: Mutex<()>,
     /// Videos being joined with their sound right now: video id to sound id.
     joining: Mutex<HashMap<i64, i64>>,
+    /// Downloads arriving from another computer, by hand-off id (C2–C4).
+    handoffs_in: Mutex<HashMap<String, handoff::HandoffIn>>,
     /// Held while a browser offer checks for the same link and adds it.
     offer_lock: Mutex<()>,
     /// Tests pin the clock; None reads the real local time.
@@ -854,6 +859,7 @@ fn view(job: &Job) -> JobView {
         pausing: false,
         missing: false,
         sound: None,
+        arriving: None,
     }
 }
 
@@ -1097,6 +1103,7 @@ impl Service {
             schedule_paused: Mutex::default(),
             joins_lock: Mutex::default(),
             joining: Mutex::default(),
+            handoffs_in: Mutex::default(),
             offer_lock: Mutex::default(),
             clock: Mutex::new(None),
             awake: Mutex::new(None),
@@ -1204,6 +1211,7 @@ impl Service {
             .into_iter()
             .collect();
         let now = std::time::Instant::now();
+        let arriving = self.arriving_view();
         let pausing: std::collections::HashSet<i64> = lock(&self.running)
             .iter()
             .filter_map(|(id, r)| r.pausing.then_some(*id))
@@ -1217,6 +1225,7 @@ impl Service {
                 let mut v = view(j);
                 v.focused = focus == Some(j.id);
                 v.pausing = pausing.contains(&j.id) && v.status == "running";
+                v.arriving = arriving.get(&j.id).cloned();
                 // Finished, but the file was moved or deleted since (A1).
                 v.missing = j.status == Status::Completed
                     && j.final_path.as_deref().is_some_and(|p| !p.exists());
@@ -2728,6 +2737,7 @@ impl Service {
     }
 
     fn remove_one(self: &Arc<Self>, id: i64) -> Result<(), UiError> {
+        self.forget_handoff(id);
         if let Some(r) = lock(&self.running).get_mut(&id) {
             r.remove_after = true;
             r.cancel.cancel();
@@ -2890,6 +2900,7 @@ impl Service {
                 .expected_sha256
                 .as_deref()
                 .and_then(|s| runner::parse_sha256(s).ok()),
+            incoming: self.incoming_for(id),
             ..RunOptions::default()
         };
         if !held_back.is_empty() {
@@ -2957,6 +2968,7 @@ impl Service {
             self.sort_finished(id, &job.dir, &path, report.total);
             self.after_download(id);
             self.join_finished();
+            self.forget_handoff(id);
         }
         if lock(&self.schedule_paused).contains(&id) {
             let next = self.automation_view().next.unwrap_or_default();
@@ -4121,6 +4133,154 @@ mod tests {
 
         // A download still running can't be handed over; nor can plain files.
         assert_eq!(b.svc.import_handoff(&[path]), None);
+    }
+
+    /// Computer A downloads part of a file and pauses; returns A and the
+    /// hand-off it would send (version 2).
+    async fn paused_for_handoff(
+        server: &RangeServer,
+        size: u64,
+    ) -> (Harness, i64, handoff::HandoffOut) {
+        let a = harness(3);
+        let id = a.svc.add(&link(server), None).unwrap();
+        a.wait("some bytes", |h| {
+            lock(&h.events)
+                .iter()
+                .any(|e| matches!(e, UiEvent::Live(l) if l.id == id && l.written > 128 * KB))
+        })
+        .await;
+        a.svc.pause(id).unwrap();
+        a.wait("paused", |h| h.job(id).status == "paused").await;
+        let had = a.job(id).written;
+        assert!(had > 0 && had < size);
+        let out = a.dir.path().join("handoff");
+        let h = a.svc.handoff_out(id, &out, "Arsh's Mac").unwrap();
+        // Only what's downloaded travels (C1), not the full-size partial file.
+        assert_eq!(h.pack.size, had);
+        assert!(std::fs::metadata(&h.pack.path).unwrap().len() == size);
+        (a, id, h)
+    }
+
+    /// Feeds a hand-off's pack into `sink` the way Nearby does, `stop_after`
+    /// bytes at most (the connection dropping).
+    fn feed(h: &handoff::HandoffOut, mut sink: Box<dyn fuselane_nearby::Sink>, stop_after: u64) {
+        use std::io::{Read, Seek, SeekFrom};
+        let mut f = std::fs::File::open(&h.pack.path).unwrap();
+        let mut sent = 0u64;
+        for &(off, len) in &h.pack.ranges {
+            f.seek(SeekFrom::Start(off)).unwrap();
+            let mut left = len;
+            while left > 0 {
+                if sent >= stop_after {
+                    sink.abort();
+                    return;
+                }
+                let n = left.min(7_000).min(stop_after - sent);
+                let mut buf = vec![0u8; n as usize];
+                f.read_exact(&mut buf).unwrap();
+                sink.write(&buf).unwrap();
+                left -= n;
+                sent += n;
+            }
+        }
+        sink.finish().unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_handed_over_download_shows_and_starts_at_once_and_its_bytes_fill_in() {
+        let content = Content::new(1536 * KB, 242);
+        let server = RangeServer::start(content).await.unwrap();
+        server.add_rule(Rule {
+            skip: 1,
+            times: u32::MAX,
+            fault: Fault::Throttle(160 * KB),
+        });
+        let (_a, _id, h) = paused_for_handoff(&server, 1536 * KB).await;
+        // The manifest reaches B first: the download is there and starting (C2, C3).
+        let b = harness(3);
+        let manifest = b.dir.path().join(&h.manifest.name);
+        std::fs::copy(&h.manifest.path, &manifest).unwrap();
+        let new_id = b.svc.import_handoff(&[manifest]).unwrap().unwrap();
+        let j = b.job(new_id);
+        assert!(matches!(j.status, "queued" | "running"), "{}", j.status);
+        let arriving = j.arriving.unwrap();
+        assert_eq!(arriving.from, "Arsh's Mac");
+        assert_eq!((arriving.state, arriving.total), ("waiting", h.pack.size));
+        // The pack is expected, and taken once.
+        assert!(b.svc.expects_pack(&h.pack.name));
+        let sink = b.svc.pack_sink(&h.pack.name).unwrap();
+        assert!(b.svc.pack_sink(&h.pack.name).is_none());
+        assert!(
+            !b.svc
+                .expects_pack("0123456789abcdef0123456789abcdef.fuselane-pack")
+        );
+        feed(&h, sink, u64::MAX);
+        assert_eq!(b.job(new_id).arriving.unwrap().state, "arrived");
+        b.wait("finished on B", |h| h.job(new_id).status == "completed")
+            .await;
+        let path = PathBuf::from(b.job(new_id).final_path.unwrap());
+        assert_eq!(
+            fuselane_testkit::sha256_file(&path).unwrap(),
+            content.sha256()
+        );
+        assert!(b.job(new_id).arriving.is_none(), "forgotten once done");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_hand_over_that_drops_halfway_still_finishes_byte_exact() {
+        let content = Content::new(1536 * KB, 243);
+        let server = RangeServer::start(content).await.unwrap();
+        server.add_rule(Rule {
+            skip: 1,
+            times: u32::MAX,
+            fault: Fault::Throttle(160 * KB),
+        });
+        let (_a, _id, h) = paused_for_handoff(&server, 1536 * KB).await;
+        let b = harness(3);
+        let manifest = b.dir.path().join(&h.manifest.name);
+        std::fs::copy(&h.manifest.path, &manifest).unwrap();
+        let new_id = b.svc.import_handoff(&[manifest]).unwrap().unwrap();
+        let sink = b.svc.pack_sink(&h.pack.name).unwrap();
+        feed(&h, sink, h.pack.size / 2);
+        assert_eq!(b.job(new_id).arriving.unwrap().state, "stopped");
+        b.wait("finished on B", |h| h.job(new_id).status == "completed")
+            .await;
+        let path = PathBuf::from(b.job(new_id).final_path.unwrap());
+        assert_eq!(
+            fuselane_testkit::sha256_file(&path).unwrap(),
+            content.sha256()
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn removing_a_download_while_its_bytes_arrive_stops_them_and_cleans_up() {
+        let content = Content::new(1536 * KB, 244);
+        let server = RangeServer::start(content).await.unwrap();
+        server.add_rule(Rule {
+            skip: 1,
+            times: u32::MAX,
+            fault: Fault::Throttle(160 * KB),
+        });
+        let (_a, _id, h) = paused_for_handoff(&server, 1536 * KB).await;
+        let b = harness(3);
+        let manifest = b.dir.path().join(&h.manifest.name);
+        std::fs::copy(&h.manifest.path, &manifest).unwrap();
+        let new_id = b.svc.import_handoff(&[manifest]).unwrap().unwrap();
+        let mut sink = b.svc.pack_sink(&h.pack.name).unwrap();
+        sink.write(&[1u8; 1000]).unwrap();
+        b.svc.remove(new_id).unwrap();
+        b.wait("removed", |h| h.svc.jobs().unwrap().is_empty())
+            .await;
+        // The pack is told to stop; when it ends its file goes, and nothing's left.
+        assert!(sink.write(&[1u8; 10]).is_err());
+        sink.abort();
+        assert!(lock(&b.svc.handoffs_in).is_empty());
+        let left: Vec<_> = std::fs::read_dir(b.dir.path())
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|e| e.file_name().to_string_lossy().ends_with(".fuselane"))
+            .collect();
+        assert!(left.is_empty(), "{left:?}");
     }
 
     #[test]
