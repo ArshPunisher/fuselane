@@ -603,6 +603,7 @@ export const hiBackend: Readonly<Record<string, string>> = {
   'Try again. It picks up the check from the start, and your downloads are safe.':
     'फिर से कोशिश करें। जांच शुरू से होगी, और आपके डाउनलोड सुरक्षित हैं।',
   'Update cancelled.': 'अपडेट रद्द किया गया।',
+  'The update is already being installed.': 'अपडेट पहले से इंस्टॉल हो रहा है।',
   "Couldn't open the browser: {e}": 'ब्राउज़र नहीं खुल सका: {e}',
   // Opening the download list at launch (src-tauri/src/startup.rs)
   'This download list was made by a newer Fuselane.':

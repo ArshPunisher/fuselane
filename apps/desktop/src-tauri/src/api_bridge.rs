@@ -10,6 +10,19 @@ use crate::service::Service;
 
 pub struct ApiBridge {
     pub svc: Arc<Service>,
+    /// The app's own updater, for `fuselane update` (None in tests).
+    pub updates: Option<Arc<dyn UpdateCtl>>,
+}
+
+/// The app's updater as the local API sees it (main.rs owns the real one: it
+/// needs the window's handle to install and restart).
+pub trait UpdateCtl: Send + Sync {
+    /// The newer version on the signed feed, or None when this is the newest.
+    fn check(&self) -> BoxFuture<'_, Result<Option<String>, String>>;
+    /// Starts the download and install in the background.
+    fn install(&self) -> Result<(), String>;
+    /// Where the update stands (phase, bytes, speed, networks, error).
+    fn state(&self) -> serde_json::Value;
 }
 
 /// Drafts starting with this open New download on its video picker (B10.4).
@@ -94,6 +107,30 @@ impl Handler for ApiBridge {
         env!("CARGO_PKG_VERSION").into()
     }
 
+    fn update_check(&self) -> BoxFuture<'_, Result<serde_json::Value, String>> {
+        Box::pin(async move {
+            let updates = self
+                .updates
+                .as_ref()
+                .ok_or("updates aren't available here")?;
+            let latest = updates.check().await?;
+            Ok(serde_json::json!({ "current": self.version(), "latest": latest }))
+        })
+    }
+
+    fn update_install(&self) -> Result<serde_json::Value, String> {
+        let updates = self
+            .updates
+            .as_ref()
+            .ok_or("updates aren't available here")?;
+        updates.install()?;
+        Ok(updates.state())
+    }
+
+    fn update_state(&self) -> Option<serde_json::Value> {
+        self.updates.as_ref().map(|u| u.state())
+    }
+
     fn extension_seen(&self, seen: Seen) {
         self.svc.extension_seen(seen);
     }
@@ -145,7 +182,7 @@ mod tests {
         let events: Arc<Mutex<Vec<UiEvent>>> = Arc::default();
         let sink = events.clone();
         svc.subscribe(Arc::new(move |e| sink.lock().unwrap().push(e)));
-        (ApiBridge { svc }, events, dir)
+        (ApiBridge { svc, updates: None }, events, dir)
     }
 
     fn offer(v: serde_json::Value) -> Offer {

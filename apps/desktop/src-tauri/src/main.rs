@@ -727,19 +727,112 @@ async fn check_update(app: tauri::AppHandle) -> Result<Option<UpdateInfo>, UiErr
 /// built-in key), after pausing downloads so their progress is saved, then restarts.
 #[tauri::command]
 async fn install_update(app: tauri::AppHandle, svc: State<'_>) -> Result<(), UiError> {
-    let svc = svc.inner().clone();
+    if !begin_update() {
+        return Err(ui_error(
+            "update-busy",
+            "The update is already being installed.".into(),
+        ));
+    }
+    run_update(app, svc.inner().clone()).await
+}
+
+/// Where the update stands, shared by the window's banner and `fuselane update`
+/// so only one install runs at a time (both download to the same folder).
+static UPDATE_STATE: std::sync::Mutex<serde_json::Value> =
+    std::sync::Mutex::new(serde_json::Value::Null);
+
+fn set_update_state(value: serde_json::Value) {
+    *UPDATE_STATE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = value;
+}
+
+/// Claims the update for this caller; false when one is already running.
+fn begin_update() -> bool {
+    let mut state = UPDATE_STATE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if matches!(
+        state["phase"].as_str(),
+        Some("checking" | "downloading" | "installing")
+    ) {
+        return false;
+    }
+    *state = serde_json::json!({"phase": "checking", "done": 0, "total": null, "rate": 0, "networks": 0, "error": null});
+    true
+}
+
+/// Installs the claimed update: progress goes to the window and to the shared
+/// state. Only returns on a failure (a good install restarts the app), which is
+/// recorded so `fuselane update` can say why.
+async fn run_update(app: tauri::AppHandle, svc: Arc<Service>) -> Result<(), UiError> {
     let send: ProgressSink = {
         let svc = svc.clone();
-        Arc::new(move |progress| svc.send(UiEvent::Update { progress }))
+        Arc::new(move |p: update::UpdateProgress| {
+            set_update_state(
+                serde_json::json!({"phase": p.phase, "done": p.done, "total": p.total, "rate": p.rate, "networks": p.networks, "error": null}),
+            );
+            svc.send(UiEvent::Update { progress: p });
+        })
     };
-    install_with(&app, send, || async move {
-        svc.pause_all();
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        while svc.running() > 0 && std::time::Instant::now() < deadline {
-            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    let result = install_with(&app, send, || pause_for_update(svc)).await;
+    if let Err(e) = &result {
+        let error = [e.message.as_str(), e.hint.as_deref().unwrap_or_default()].join(" ");
+        set_update_state(serde_json::json!({"phase": "failed", "error": error.trim()}));
+    }
+    result
+}
+
+/// Pauses every download so its progress is saved before the app restarts.
+async fn pause_for_update(svc: Arc<Service>) {
+    svc.pause_all();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while svc.running() > 0 && std::time::Instant::now() < deadline {
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+}
+
+/// `fuselane update` drives the same updater as the window's banner: the same
+/// signed feed, the same download over every network and signature check, and
+/// the window shows its progress too.
+struct AppUpdates {
+    app: tauri::AppHandle,
+    svc: Arc<Service>,
+}
+
+impl api_bridge::UpdateCtl for AppUpdates {
+    fn check(&self) -> fuselane_api::server::BoxFuture<'_, Result<Option<String>, String>> {
+        Box::pin(async move {
+            check_update(self.app.clone())
+                .await
+                .map(|found| found.map(|u| u.version))
+                .map_err(|e| e.message)
+        })
+    }
+
+    fn install(&self) -> Result<(), String> {
+        // Already running (asked twice, or from the window's banner): the caller
+        // follows that one's progress.
+        if begin_update() {
+            let (app, svc) = (self.app.clone(), self.svc.clone());
+            tauri::async_runtime::spawn(async move {
+                let _ = run_update(app, svc).await;
+            });
         }
-    })
-    .await
+        Ok(())
+    }
+
+    fn state(&self) -> serde_json::Value {
+        let state = UPDATE_STATE
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        if state.is_null() {
+            serde_json::json!({"phase": "idle"})
+        } else {
+            state
+        }
+    }
 }
 
 /// Where update progress goes: the event channel in the app, a per-call
@@ -2055,12 +2148,19 @@ fn main() {
             // The local API (2.43) for the CLI and the browser extension's host.
             {
                 let svc = for_shell.clone();
+                let updates: Arc<dyn api_bridge::UpdateCtl> = Arc::new(AppUpdates {
+                    app: app.handle().clone(),
+                    svc: svc.clone(),
+                });
                 tauri::async_runtime::spawn(async move {
                     let Ok(home) = fuselane_core::home::home() else {
                         return;
                     };
                     let endpoint = fuselane_api::client::endpoint(&home);
-                    let bridge = Arc::new(api_bridge::ApiBridge { svc });
+                    let bridge = Arc::new(api_bridge::ApiBridge {
+                        svc,
+                        updates: Some(updates),
+                    });
                     if let Err(e) = fuselane_api::server::start(&endpoint, bridge).await {
                         eprintln!("fuselane: the local API isn't available: {e}");
                     }
