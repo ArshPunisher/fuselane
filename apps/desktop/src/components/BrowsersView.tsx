@@ -231,10 +231,11 @@ function HandoffSetting() {
         <label className="ext-size">
           <span>{t('Stay in the browser up to')}</span>
           <select
-            value={SIZES.includes(size) ? size : SIZES[0]}
+            value={size}
             onChange={(e) => save({ enabled: true, minBytes: Number(e.target.value) })}
           >
-            {SIZES.map((s) => (
+            {/* A size set elsewhere (the extension's settings) shows as itself. */}
+            {(SIZES.includes(size) ? SIZES : [...SIZES, size].sort((a, b) => a - b)).map((s) => (
               <option key={s} value={s}>
                 {bytes(s)}
               </option>
