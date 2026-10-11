@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Mutex};
 
-use fuselane_nearby::server::{Decision, Ended, Host};
+use fuselane_nearby::server::{Decision, Ended, Host, Sink};
 use fuselane_nearby::{
     DeviceInfo, Identity, Outgoing, PrepareUpload, SendError, Server, Target, client,
 };
@@ -23,9 +23,32 @@ struct Box1 {
     /// Receives slowly, so a cancel always lands mid-file even on a busy machine.
     slow: AtomicBool,
     messages: Mutex<Vec<(String, String)>>,
+    /// Files named `*.pack` go here instead of the folder, with how they ended.
+    sunk: Arc<Mutex<(Vec<u8>, Vec<&'static str>)>>,
+}
+
+struct Collect(Arc<Mutex<(Vec<u8>, Vec<&'static str>)>>);
+
+impl Sink for Collect {
+    fn write(&mut self, data: &[u8]) -> std::io::Result<()> {
+        self.0.lock().unwrap().0.extend_from_slice(data);
+        Ok(())
+    }
+    fn finish(self: Box<Self>) -> Result<PathBuf, String> {
+        self.0.lock().unwrap().1.push("finished");
+        Ok(PathBuf::from("into the download"))
+    }
+    fn abort(self: Box<Self>) {
+        self.0.lock().unwrap().1.push("aborted");
+    }
 }
 
 impl Host for Box1 {
+    fn sink(&self, _: &str, file: &fuselane_nearby::proto::FileMeta) -> Option<Box<dyn Sink>> {
+        file.file_name
+            .ends_with(".pack")
+            .then(|| Box::new(Collect(self.sunk.clone())) as Box<dyn Sink>)
+    }
     fn me(&self) -> DeviceInfo {
         self.me.clone()
     }
@@ -100,6 +123,7 @@ async fn device(alias: &str, inbox: &Path) -> Device {
         written: AtomicU64::new(0),
         slow: AtomicBool::new(false),
         messages: Mutex::default(),
+        sunk: Arc::default(),
     });
     let server = Server::start(&id, host.clone(), 0).await.unwrap();
     Device {
@@ -125,6 +149,7 @@ fn outgoing(dir: &Path, name: &str, data: &[u8]) -> Outgoing {
         name: name.into(),
         size: data.len() as u64,
         mime: "application/octet-stream".into(),
+        ranges: vec![],
     }
 }
 
@@ -395,4 +420,106 @@ async fn a_folder_arrives_as_a_folder_and_a_newer_copy_replaces_the_old() {
         assert!(r.is_err());
         assert_eq!(std::fs::read_dir(outside.path()).unwrap().count(), 0);
     }
+}
+
+#[tokio::test]
+async fn only_the_chosen_parts_of_a_file_are_sent() {
+    let inbox = tempfile::tempdir().unwrap();
+    let outbox = tempfile::tempdir().unwrap();
+    let a = device("Receiver", inbox.path()).await;
+    let b = device("Sender", tempfile::tempdir().unwrap().path()).await;
+    let me = info("Sender", &b.id, b.server.addr.port());
+    let data: Vec<u8> = (0..3_000_000u32).map(|i| (i % 251) as u8).collect();
+    let ranges = vec![(10u64, 100u64), (5_000, 2_000), (2_999_000, 1_000)];
+    let mut file = outgoing(outbox.path(), "part.bin", &data);
+    file.size = ranges.iter().map(|r| r.1).sum();
+    file.ranges = ranges.clone();
+    let sent = Arc::new(AtomicU64::new(0));
+    client::send(
+        &me,
+        &target(&a, Some(&a.id.fingerprint)),
+        &[file],
+        sent.clone(),
+        Arc::new(AtomicBool::new(false)),
+    )
+    .await
+    .unwrap();
+    let want: Vec<u8> = ranges
+        .iter()
+        .flat_map(|&(o, l)| data[o as usize..(o + l) as usize].to_vec())
+        .collect();
+    assert_eq!(std::fs::read(inbox.path().join("part.bin")).unwrap(), want);
+    assert_eq!(sent.load(std::sync::atomic::Ordering::Relaxed), 3_100);
+}
+
+#[tokio::test]
+async fn the_app_can_take_a_file_s_bytes_itself() {
+    let inbox = tempfile::tempdir().unwrap();
+    let outbox = tempfile::tempdir().unwrap();
+    let a = device("Receiver", inbox.path()).await;
+    let b = device("Sender", tempfile::tempdir().unwrap().path()).await;
+    let me = info("Sender", &b.id, b.server.addr.port());
+    let data: Vec<u8> = (0..1_000_000u32).map(|i| (i % 249) as u8).collect();
+    client::send(
+        &me,
+        &target(&a, Some(&a.id.fingerprint)),
+        &[outgoing(outbox.path(), "x.pack", &data)],
+        Arc::new(AtomicU64::new(0)),
+        Arc::new(AtomicBool::new(false)),
+    )
+    .await
+    .unwrap();
+    let sunk = a.host.sunk.lock().unwrap().clone();
+    assert_eq!(sunk.0, data);
+    assert_eq!(sunk.1, vec!["finished"]);
+    assert!(!inbox.path().join("x.pack").exists(), "not saved as a file");
+    assert_eq!(a.host.ends.lock().unwrap().as_slice(), &[Ended::Done]);
+}
+
+#[tokio::test]
+async fn a_file_taken_by_the_app_keeps_what_arrived_when_it_stops() {
+    let inbox = tempfile::tempdir().unwrap();
+    let outbox = tempfile::tempdir().unwrap();
+    let a = device("Receiver", inbox.path()).await;
+    a.host
+        .slow
+        .store(true, std::sync::atomic::Ordering::Relaxed);
+    let b = device("Sender", tempfile::tempdir().unwrap().path()).await;
+    let me = info("Sender", &b.id, b.server.addr.port());
+    let data: Vec<u8> = (0..20_000_000u32).map(|i| (i % 247) as u8).collect();
+    let cancel = Arc::new(AtomicBool::new(false));
+    let stop = {
+        let (cancel, host) = (cancel.clone(), a.host.clone());
+        tokio::spawn(async move {
+            while host.written.load(std::sync::atomic::Ordering::Relaxed) == 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            }
+            cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+        })
+    };
+    let res = client::send(
+        &me,
+        &target(&a, Some(&a.id.fingerprint)),
+        &[outgoing(outbox.path(), "big.pack", &data)],
+        Arc::new(AtomicU64::new(0)),
+        cancel,
+    )
+    .await;
+    stop.await.unwrap();
+    assert!(res.is_err());
+    // The server notices the dropped upload a moment later.
+    for _ in 0..200 {
+        if !a.host.sunk.lock().unwrap().1.is_empty() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    let sunk = a.host.sunk.lock().unwrap().clone();
+    assert_eq!(sunk.1, vec!["aborted"]);
+    assert!(!sunk.0.is_empty() && sunk.0.len() < data.len());
+    assert_eq!(
+        sunk.0,
+        data[..sunk.0.len()],
+        "what arrived is kept, in order"
+    );
 }

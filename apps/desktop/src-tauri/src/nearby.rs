@@ -674,6 +674,7 @@ impl Nearby {
                         name: e.rel,
                         size: e.size,
                         mime: "application/octet-stream".into(),
+                        ranges: vec![],
                     });
                 }
                 continue;
@@ -687,6 +688,7 @@ impl Nearby {
                 name,
                 size: meta.len(),
                 mime: "application/octet-stream".into(),
+                ranges: vec![],
             });
         }
         if files.is_empty() {

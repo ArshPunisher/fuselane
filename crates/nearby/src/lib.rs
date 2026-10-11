@@ -13,4 +13,4 @@ pub use client::{Outgoing, SendError, Target};
 pub use discovery::Discovery;
 pub use identity::Identity;
 pub use proto::{DeviceInfo, PrepareUpload};
-pub use server::{Decision, Ended, Host, Server};
+pub use server::{Decision, Ended, Host, Server, Sink};

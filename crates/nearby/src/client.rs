@@ -47,12 +47,16 @@ pub struct Target {
 }
 
 /// A file to send.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Outgoing {
     pub path: PathBuf,
     pub name: String,
+    /// Bytes sent: the file's size, or the sum of `ranges`.
     pub size: u64,
     pub mime: String,
+    /// Only these (offset, length) parts of the file, one after another; empty
+    /// sends all of it. A download handed over sends just the bytes it has.
+    pub ranges: Vec<(u64, u64)>,
 }
 
 type Conn = hyper::client::conn::http1::SendRequest<BoxedBody>;
@@ -184,6 +188,90 @@ impl Body for FileBody {
     }
 }
 
+/// Streams chosen parts of a file, read in order by a task of its own.
+struct RangedBody {
+    rx: tokio::sync::mpsc::Receiver<std::io::Result<Bytes>>,
+    sent: Arc<std::sync::atomic::AtomicU64>,
+    cancel: Arc<AtomicBool>,
+}
+
+impl RangedBody {
+    fn new(
+        path: PathBuf,
+        ranges: Vec<(u64, u64)>,
+        sent: Arc<std::sync::atomic::AtomicU64>,
+        cancel: Arc<AtomicBool>,
+    ) -> RangedBody {
+        let (tx, rx) = tokio::sync::mpsc::channel(4);
+        let stop = cancel.clone();
+        tokio::spawn(async move {
+            use tokio::io::{AsyncReadExt, AsyncSeekExt};
+            let mut file = match tokio::fs::File::open(&path).await {
+                Ok(f) => f,
+                Err(e) => {
+                    let _ = tx.send(Err(e)).await;
+                    return;
+                }
+            };
+            for (offset, len) in ranges {
+                if let Err(e) = file.seek(std::io::SeekFrom::Start(offset)).await {
+                    let _ = tx.send(Err(e)).await;
+                    return;
+                }
+                let mut left = len;
+                while left > 0 {
+                    if stop.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    let mut buf = vec![0u8; left.min(256 * 1024) as usize];
+                    let got = match file.read(&mut buf).await {
+                        Ok(0) => Err(std::io::Error::other("the file got shorter")),
+                        Ok(n) => Ok(n),
+                        Err(e) => Err(e),
+                    };
+                    match got {
+                        Ok(n) => {
+                            buf.truncate(n);
+                            left -= n as u64;
+                            if tx.send(Ok(Bytes::from(buf))).await.is_err() {
+                                return; // the upload ended
+                            }
+                        }
+                        Err(e) => {
+                            let _ = tx.send(Err(e)).await;
+                            return;
+                        }
+                    }
+                }
+            }
+        });
+        RangedBody { rx, sent, cancel }
+    }
+}
+
+impl Body for RangedBody {
+    type Data = Bytes;
+    type Error = std::io::Error;
+
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Bytes>, std::io::Error>>> {
+        if self.cancel.load(Ordering::Relaxed) {
+            return Poll::Ready(Some(Err(std::io::Error::other("cancelled"))));
+        }
+        match self.rx.poll_recv(cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Ready(Some(Err(e))) => Poll::Ready(Some(Err(e))),
+            Poll::Ready(Some(Ok(b))) => {
+                self.sent.fetch_add(b.len() as u64, Ordering::Relaxed);
+                Poll::Ready(Some(Ok(Frame::data(b))))
+            }
+        }
+    }
+}
+
 /// Sends `files` to `t`: asks first, then streams each accepted file.
 /// `sent` counts bytes across all files; `cancel` stops it.
 pub async fn send(
@@ -233,15 +321,26 @@ pub async fn send(
             let _ = cancel_session(t, &accepted.session_id).await;
             return Err(SendError::Cancelled);
         }
-        let file = tokio::fs::File::open(&f.path)
-            .await
-            .map_err(|e| SendError::Failed(format!("couldn't read {} ({e})", f.name)))?;
-        let body = FileBody {
-            file,
-            left: f.size,
-            sent: sent.clone(),
-            cancel: cancel.clone(),
-            buf: Vec::new(),
+        let body = if f.ranges.is_empty() {
+            let file = tokio::fs::File::open(&f.path)
+                .await
+                .map_err(|e| SendError::Failed(format!("couldn't read {} ({e})", f.name)))?;
+            FileBody {
+                file,
+                left: f.size,
+                sent: sent.clone(),
+                cancel: cancel.clone(),
+                buf: Vec::new(),
+            }
+            .boxed()
+        } else {
+            RangedBody::new(
+                f.path.clone(),
+                f.ranges.clone(),
+                sent.clone(),
+                cancel.clone(),
+            )
+            .boxed()
         };
         let q: String = url::form_urlencoded::Serializer::new(String::new())
             .append_pair("sessionId", &accepted.session_id)
@@ -249,7 +348,7 @@ pub async fn send(
             .append_pair("token", token)
             .finish();
         let path = format!("/api/localsend/v2/upload?{q}");
-        let res = call(t, &path, body.boxed(), Some(f.size)).await;
+        let res = call(t, &path, body, Some(f.size)).await;
         if cancel.load(Ordering::Relaxed) {
             let _ = cancel_session(t, &accepted.session_id).await;
             return Err(SendError::Cancelled);

@@ -67,6 +67,23 @@ pub trait Host: Send + Sync + 'static {
     fn ended(&self, session: &str, how: Ended);
     /// An accepted text message (no file is uploaded for it).
     fn message(&self, _from: &DeviceInfo, _text: &str) {}
+    /// Takes an accepted file's bytes itself rather than as a file in the
+    /// folder (a download handed over is written straight into the download).
+    /// None: it's saved like any other file.
+    fn sink(&self, _session: &str, _file: &FileMeta) -> Option<Box<dyn Sink>> {
+        None
+    }
+}
+
+/// Where the app takes a file's bytes as they arrive (see [`Host::sink`]).
+pub trait Sink: Send {
+    /// The next bytes, in order.
+    fn write(&mut self, data: &[u8]) -> std::io::Result<()>;
+    /// Every byte arrived; the path to report as where it went.
+    fn finish(self: Box<Self>) -> Result<PathBuf, String>;
+    /// It stopped early (dropped, cancelled, refused). What was written stays
+    /// the app's to keep.
+    fn abort(self: Box<Self>);
 }
 
 struct Incoming1 {
@@ -349,12 +366,35 @@ impl<H: Host> State<H> {
             Err(why) => return text(StatusCode::BAD_REQUEST, &why),
         };
         let part = dir.join(format!(".{}.{}.fuselane-part", meta.file_name, &token[..8]));
-        let result = self.receive(req, &part, &meta, sid, fid).await;
         let failed = |why: String| {
             let _ = std::fs::remove_file(&part);
             why
         };
-        let outcome = match result {
+        let outcome = if let Some(sink) = self.host.sink(sid, &meta) {
+            self.receive_into(req, sink, &meta, sid, fid).await
+        } else {
+            self.received_file(req, &part, &dir, &meta, replace, sid, fid, failed)
+                .await
+        };
+        self.after_upload(outcome, sid, fid)
+    }
+
+    /// Saves one file into the folder under a free name (or in place of the
+    /// old one, in a folder kept in sync).
+    #[allow(clippy::too_many_arguments)]
+    async fn received_file(
+        &self,
+        req: Request<Incoming>,
+        part: &Path,
+        dir: &Path,
+        meta: &FileMeta,
+        replace: bool,
+        sid: &str,
+        fid: &str,
+        failed: impl Fn(String) -> String,
+    ) -> Result<PathBuf, String> {
+        let result = self.receive(req, part, meta, sid, fid).await;
+        match result {
             Ok(()) => {
                 // In a folder the newest copy wins (a folder kept in sync); loose
                 // files keep both.
@@ -365,15 +405,82 @@ impl<H: Host> State<H> {
                     }
                     t
                 } else {
-                    free_name(&dir, &meta.file_name)
+                    free_name(dir, &meta.file_name)
                 };
-                match std::fs::rename(&part, &target) {
+                match std::fs::rename(part, &target) {
                     Ok(()) => Ok(target),
                     Err(e) => Err(failed(format!("couldn't save it ({e})"))),
                 }
             }
             Err(why) => Err(failed(why)),
-        };
+        }
+    }
+
+    /// Streams one file's body into the app's sink, exactly `meta.size` bytes.
+    async fn receive_into(
+        &self,
+        req: Request<Incoming>,
+        mut sink: Box<dyn Sink>,
+        meta: &FileMeta,
+        sid: &str,
+        fid: &str,
+    ) -> Result<PathBuf, String> {
+        let mut body = req.into_body();
+        let mut written = 0u64;
+        let mut last_report = 0u64;
+        let result: Result<(), String> = async {
+            while let Some(frame) = tokio::time::timeout(Duration::from_secs(60), body.frame())
+                .await
+                .map_err(|_| "the sender stopped sending".to_string())?
+            {
+                let frame = frame.map_err(|_| "the connection dropped".to_string())?;
+                let Ok(data) = frame.into_data() else {
+                    continue;
+                };
+                written += data.len() as u64;
+                if written > meta.size {
+                    return Err("it was bigger than announced".into());
+                }
+                sink.write(&data)
+                    .map_err(|e| format!("couldn't write it ({e})"))?;
+                if self
+                    .cancelled
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .contains(sid)
+                {
+                    return Err(CANCELLED_HERE.into());
+                }
+                if written - last_report >= 256 * 1024 {
+                    last_report = written;
+                    self.host.progress(sid, fid, written);
+                }
+            }
+            if written != meta.size {
+                return Err("it was smaller than announced".into());
+            }
+            Ok(())
+        }
+        .await;
+        match result {
+            Ok(()) => {
+                self.host.progress(sid, fid, written);
+                sink.finish()
+            }
+            Err(why) => {
+                sink.abort();
+                Err(why)
+            }
+        }
+    }
+
+    /// Records how one upload ended and answers the sender.
+    fn after_upload(
+        &self,
+        outcome: Result<PathBuf, String>,
+        sid: &str,
+        fid: &str,
+    ) -> Response<Full<Bytes>> {
         let mut s = self
             .session
             .lock()
@@ -381,7 +488,7 @@ impl<H: Host> State<H> {
         match outcome {
             Ok(target) => {
                 let mut all_done = false;
-                if let Some(sess) = s.as_mut().filter(|x| &x.id == sid) {
+                if let Some(sess) = s.as_mut().filter(|x| x.id == sid) {
                     if let Some(f) = sess.files.get_mut(fid) {
                         f.done = true;
                     }

@@ -242,6 +242,7 @@ impl Nearby {
                 name: e.rel.clone(),
                 size: e.size,
                 mime: "application/octet-stream".into(),
+                ranges: vec![],
             })
             .collect();
         let target = Target {

@@ -201,6 +201,7 @@ async fn loopback_nearby() -> Result<String, String> {
             name: "note.bin".into(),
             size: body.len() as u64,
             mime: "application/octet-stream".into(),
+            ranges: vec![],
         };
         tokio::time::timeout(
             Duration::from_secs(30),
