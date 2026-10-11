@@ -11,6 +11,18 @@ import musicNote from '@phosphor-icons/core/assets/regular/music-note.svg?raw'
 import power from '@phosphor-icons/core/assets/regular/power.svg?raw'
 import rss from '@phosphor-icons/core/assets/regular/rss.svg?raw'
 import videoCamera from '@phosphor-icons/core/assets/regular/video-camera.svg?raw'
+import globe from '@phosphor-icons/core/assets/regular/globe.svg?raw'
+import pause from '@phosphor-icons/core/assets/fill/pause-fill.svg?raw'
+import play from '@phosphor-icons/core/assets/fill/play-fill.svg?raw'
+import x from '@phosphor-icons/core/assets/regular/x.svg?raw'
+import trash from '@phosphor-icons/core/assets/regular/trash.svg?raw'
+import folderOpen from '@phosphor-icons/core/assets/regular/folder-open.svg?raw'
+import gauge from '@phosphor-icons/core/assets/regular/gauge.svg?raw'
+import listIcon from '@phosphor-icons/core/assets/regular/list.svg?raw'
+import lockOpen from '@phosphor-icons/core/assets/regular/lock-open.svg?raw'
+import arrowClockwise from '@phosphor-icons/core/assets/regular/arrow-clockwise.svg?raw'
+import warningCircle from '@phosphor-icons/core/assets/regular/warning-circle.svg?raw'
+import checkCircle from '@phosphor-icons/core/assets/fill/check-circle-fill.svg?raw'
 
 const ICONS = {
   'arrow-square-out': arrowSquareOut,
@@ -24,6 +36,18 @@ const ICONS = {
   power,
   rss,
   'video-camera': videoCamera,
+  globe,
+  pause,
+  play,
+  x,
+  trash,
+  'folder-open': folderOpen,
+  gauge,
+  list: listIcon,
+  'lock-open': lockOpen,
+  'arrow-clockwise': arrowClockwise,
+  'warning-circle': warningCircle,
+  'check-circle': checkCircle,
 } as const
 
 export type IconName = keyof typeof ICONS

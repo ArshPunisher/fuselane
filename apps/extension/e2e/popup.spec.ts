@@ -29,28 +29,41 @@ test.afterAll(async () => {
   if (tmp) rmSync(tmp, { recursive: true, force: true })
 })
 
-test('the popup opens, explains the app is missing, and remembers its switch', async () => {
+test('the popup opens, offers the app, and its Fuselane switch turns everything off and on', async () => {
   const page = await context.newPage()
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
   await page.goto(`chrome-extension://${id}/popup.html`)
   await expect(page.getByRole('heading', { name: 'Fuselane' })).toBeVisible()
-  // No native host is registered in this profile, so the status says what to do.
-  await expect(page.getByRole('status').first()).not.toHaveText('Checking for the Fuselane app…', {
-    timeout: 10_000,
-  })
-  // Without the app, the popup offers it, linking to the download page.
-  const get = page.getByRole('link', { name: 'Get the Fuselane app' })
+  // No native host is registered in this profile: no app.
+  await expect(page.locator('#chip')).toHaveText('No app', { timeout: 10_000 })
+  const get = page.getByRole('link', { name: 'Get the app' })
   await expect(get).toBeVisible()
   expect(await get.getAttribute('href')).toMatch(/^https:\/\/fuselane\.app\/download\//)
-  await expect(page.locator('#chip')).toHaveText('No app')
-  const toggle = page.getByLabel('Hand big downloads to Fuselane')
-  const was = await toggle.isChecked()
-  await toggle.setChecked(!was)
+  // Site access isn't given yet, so it's offered.
+  await expect(page.getByRole('button', { name: 'Allow Fuselane on all sites' })).toBeVisible()
+  // The tabs.
+  await expect(page.getByRole('tab', { name: 'Downloads' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  await expect(page.getByText('No downloads yet')).toBeVisible()
+  await page.getByRole('tab', { name: 'Speed' }).click()
+  await expect(page.getByRole('button', { name: 'Start the test' })).toBeVisible()
+  await page.getByRole('tab', { name: 'Downloads' }).click()
+  // Off: only the big switch is left. It's remembered, and turns back on.
+  await page.getByRole('button', { name: 'Turn Fuselane downloads off' }).click()
+  const on = page.getByRole('switch', { name: 'Turn on' })
+  await expect(on).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Downloads' })).toBeHidden()
+  await expect(page.locator('#chip')).toBeHidden()
   await page.reload()
-  await expect(page.getByLabel('Hand big downloads to Fuselane')).toBeChecked({ checked: !was })
-  await expect(page.getByRole('link', { name: /Size, sites and file types/ })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Settings' })).toBeVisible()
+  await expect(page.getByRole('switch', { name: 'Turn on' })).toBeVisible()
+  await page.getByRole('switch', { name: 'Turn on' }).click()
+  await expect(page.getByRole('tab', { name: 'Downloads' })).toBeVisible()
+  await page.reload()
+  await expect(page.getByRole('tab', { name: 'Downloads' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Settings' }).first()).toBeVisible()
   await expect(page.getByRole('link', { name: 'by ClearCraft Labs' })).toHaveAttribute(
     'href',
     /^https:\/\/clearcraftlabs\.com\//,

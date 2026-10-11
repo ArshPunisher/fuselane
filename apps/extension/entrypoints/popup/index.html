@@ -19,10 +19,19 @@
           </svg>
           Fuselane
         </h1>
-        <span id="chip" class="chip" data-state="checking">Checking…</span>
+        <span id="chip" class="chip on-only" data-state="checking">Checking…</span>
+        <button
+          type="button"
+          id="power"
+          class="icon-btn on-only"
+          aria-label="Turn Fuselane downloads off"
+          title="Turn Fuselane downloads off"
+        >
+          <span class="ic" data-icon="power"></span>
+        </button>
         <a
           id="settings"
-          class="icon-btn"
+          class="icon-btn on-only"
           href="/options.html"
           aria-label="Settings"
           title="Settings"
@@ -32,33 +41,107 @@
 
       <p id="status" class="sr-only" role="status">Checking for the Fuselane app…</p>
 
-      <!-- Shown when the app isn't there or isn't running; filled in by main.ts. -->
-      <section id="app-card" class="card" hidden></section>
-
-      <div class="setting" id="handoff-row">
-        <div>
-          <p class="setting-name" id="enabled-label">Hand big downloads to Fuselane</p>
-          <p class="muted" id="handoff-summary">Big downloads go to the app when it is running.</p>
-        </div>
-        <label class="switch">
-          <input type="checkbox" id="enabled" role="switch" aria-labelledby="enabled-label" />
-          <span aria-hidden="true"></span>
-        </label>
-      </div>
-
-      <section id="page" aria-labelledby="page-title" hidden>
-        <h2 id="page-title">On this page</h2>
-        <button type="button" id="video" class="btn btn-block">
-          <span class="ic" data-icon="film-strip"></span>
-          Get this page's video in Fuselane
+      <!-- Fuselane switched off: one big switch, nothing else. -->
+      <section id="off" class="off" aria-labelledby="off-title" hidden>
+        <p id="off-title" class="off-title">Fuselane is off</p>
+        <p class="muted small">The browser downloads everything itself.</p>
+        <button type="button" id="turn-on" class="big-switch" role="switch" aria-checked="false">
+          <span class="big-switch-track" aria-hidden="true"><span></span></span>
+          <span class="big-switch-label">Turn on</span>
         </button>
-        <div id="feeds"></div>
-        <ul id="media" aria-label="Videos and files on this page"></ul>
-        <p id="media-status" class="muted small" role="status"></p>
       </section>
 
-      <footer class="foot">
-        <a id="more-settings" href="/options.html">Size, sites and file types…</a>
+      <div id="on" class="on">
+        <!-- App missing, or site access not given yet; filled in by main.ts. -->
+        <section id="cards" class="cards"></section>
+
+        <nav class="tabs" role="tablist" aria-label="Fuselane">
+          <button
+            type="button"
+            role="tab"
+            id="tab-downloads"
+            aria-controls="panel-downloads"
+            aria-selected="true"
+          >
+            <span class="ic" data-icon="list"></span>Downloads<span
+              id="tab-count"
+              class="count"
+              hidden
+            ></span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-page"
+            aria-controls="panel-page"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            <span class="ic" data-icon="globe"></span>This page
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-speed"
+            aria-controls="panel-speed"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            <span class="ic" data-icon="gauge"></span>Speed
+          </button>
+        </nav>
+
+        <section id="panel-downloads" role="tabpanel" aria-labelledby="tab-downloads" class="panel">
+          <p id="speed-line" class="speed-line" aria-live="polite"></p>
+          <ul id="jobs" class="jobs" aria-label="Downloads"></ul>
+          <div id="jobs-empty" class="empty" hidden>
+            <span class="empty-ic"><span class="ic" data-icon="download-simple"></span></span>
+            <p class="empty-title">No downloads yet</p>
+            <p class="muted small" id="jobs-empty-text">
+              Downloads you start in the browser show up here.
+            </p>
+          </div>
+        </section>
+
+        <section id="panel-page" role="tabpanel" aria-labelledby="tab-page" class="panel" hidden>
+          <button type="button" id="video" class="btn btn-block">
+            <span class="ic" data-icon="film-strip"></span>
+            Get this page's video in Fuselane
+          </button>
+          <div id="feeds"></div>
+          <ul id="media" aria-label="Videos and files on this page"></ul>
+          <p id="media-status" class="muted small" role="status"></p>
+        </section>
+
+        <section id="panel-speed" role="tabpanel" aria-labelledby="tab-speed" class="panel" hidden>
+          <div class="gauge" aria-hidden="true">
+            <svg viewBox="0 0 240 140">
+              <path class="gauge-track" d="M20 130 A100 100 0 0 1 220 130" pathLength="100" />
+              <path
+                id="gauge-fill"
+                class="gauge-fill"
+                d="M20 130 A100 100 0 0 1 220 130"
+                pathLength="100"
+              />
+              <g id="gauge-ticks"></g>
+              <line id="gauge-needle" class="gauge-needle" x1="120" y1="130" x2="120" y2="44" />
+              <circle cx="120" cy="130" r="7" class="gauge-hub" />
+            </svg>
+            <p class="gauge-read">
+              <span id="gauge-value">0</span><span class="gauge-unit">Mbps</span>
+            </p>
+          </div>
+          <p id="speed-step" class="speed-step" role="status">Test this computer's internet.</p>
+          <button type="button" id="speed-go" class="btn btn-primary btn-block">
+            <span class="ic" data-icon="gauge"></span>Start the test
+          </button>
+          <dl id="speed-results" class="speed-results" hidden></dl>
+          <p id="speed-note" class="muted small"></p>
+        </section>
+      </div>
+
+      <footer class="foot on-only">
+        <a id="more-settings" href="/options.html">Settings</a>
         <a
           class="powered"
           href="https://clearcraftlabs.com/?ref=fuselane-extension"

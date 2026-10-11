@@ -1,43 +1,30 @@
 import { formatSize, normalizeRules } from '@fuselane/capture'
-import {
-  appStatus,
-  browserId,
-  mustPush,
-  sendHandoff,
-  settle,
-  type Status,
-} from '../../lib/status.ts'
-import { offerLink } from '../../lib/handoff.ts'
+import { appStatus, browserId, sendHandoff, type Status } from '../../lib/status.ts'
 import { findOnPage, mediaList, type MediaItem } from '../../lib/media.ts'
-import { getSession } from '../../lib/session.ts'
 import { feedList, findFeeds, type FoundFeed } from '../../lib/feeds.ts'
+import { KEY, readJobs, type SelfJob } from '../../lib/selfjobs.ts'
+import { cleanLimit } from '../../lib/route.ts'
+import { mbps, speedTest } from '../../lib/speed.ts'
 import { fillIcons, icon, type IconName } from './icons.ts'
 import './style.css'
+
+// The popup (REVIEW-2026-10-11 D): the Fuselane switch, the downloads (the
+// app's, or the extension's own when there's no app) with their buttons and
+// the combined speed, this page's video and files, and a speed test.
 
 const HOST = 'app.fuselane.host'
 const DOWNLOAD_PAGE = 'https://fuselane.app/download/?ref=extension'
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!
-const status = $<HTMLParagraphElement>('#status')
 const chip = $<HTMLSpanElement>('#chip')
-const card = $<HTMLElement>('#app-card')
-const enabled = $<HTMLInputElement>('#enabled')
-const summary = $<HTMLParagraphElement>('#handoff-summary')
+const status = $<HTMLParagraphElement>('#status')
+const cards = $<HTMLElement>('#cards')
 
 const ask = (m: unknown) => browser.runtime.sendNativeMessage(HOST, m as object)
 const hello = () => ({
   browser: browserId(navigator.userAgent, 'brave' in navigator),
   version: browser.runtime.getManifest().version,
 })
-
-/** What the switch's line says, in the app's terms. */
-function describe(on: boolean, minBytes: number, state: Status['state']): string {
-  if (!on) return 'Off: every download stays in the browser.'
-  const what = minBytes > 0 ? `Downloads over ${formatSize(minBytes)}` : 'Every download'
-  return state === 'connected'
-    ? `${what} go to Fuselane.`
-    : `${what} go to Fuselane when it's running.`
-}
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -49,93 +36,56 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return e
 }
 
-/** The card for an app that's missing or closed: what's wrong and the one fix. */
-function showCard(s: Status) {
-  card.replaceChildren()
-  card.dataset.state = s.state
-  if (s.state === 'connected') {
-    card.hidden = true
-    return
+// ---- A connection to the app while the popup is open ----------------------
+// One native host for the popup's life: the downloads list refreshes several
+// times a second without starting a new host each time.
+let port: Browser.runtime.Port | null = null
+const waiting: ((v: unknown) => void)[] = []
+function openPort() {
+  try {
+    port = browser.runtime.connectNative(HOST)
+    port.onMessage.addListener((m) => waiting.shift()?.(m))
+    port.onDisconnect.addListener(() => {
+      port = null
+      for (const w of waiting.splice(0)) w(null)
+    })
+  } catch {
+    port = null
   }
-  const missing = s.state === 'not-installed'
-  const go = el(
-    'a',
-    {
-      className: 'btn btn-primary btn-block',
-      href: missing ? DOWNLOAD_PAGE : 'fuselane://open',
-      target: '_blank',
-      rel: 'noopener',
-    },
-    icon(missing ? 'download-simple' : 'power'),
-    missing ? 'Get the Fuselane app' : 'Open Fuselane',
-  )
-  if (!missing) {
-    // The OS starts the app for its own link; look again once it's had a moment.
-    go.addEventListener('click', () => setTimeout(() => void load(), 2500))
-  }
-  card.append(
-    el(
-      'div',
-      { className: 'card-head' },
-      el('span', { className: 'card-ic' }, icon('desktop')),
-      el(
-        'div',
-        {},
-        el('p', { className: 'card-title' }, missing ? 'Get the free app' : 'Fuselane is closed'),
-        el(
-          'p',
-          { className: 'muted small' },
-          missing
-            ? 'The extension hands downloads to the Fuselane app, which splits them across Wi‑Fi, Ethernet and your phone at once. Until then, downloads stay in the browser.'
-            : 'Open it and big downloads go to it again. Until then, they stay in the browser.',
-        ),
-      ),
-    ),
-    go,
-  )
-  if (missing)
-    card.append(el('p', { className: 'muted small center' }, 'Free for Windows, macOS and Linux.'))
-  card.hidden = false
 }
-
-async function load() {
-  const stored = await browser.storage.local.get(['rules', 'handoffPending', 'handoffSynced'])
-  const s = await appStatus(ask, hello())
-  // The app decides where downloads go, unless we have a change it hasn't seen.
-  const { rules, pending } = await settle(s, normalizeRules(stored.rules), mustPush(stored), ask)
-  await browser.storage.local.set({
-    rules,
-    handoffPending: pending,
-    handoffSynced: stored.handoffSynced === true || (s.state === 'connected' && !pending),
+function request(m: object): Promise<unknown> {
+  if (!port) return ask(m).catch(() => null)
+  return new Promise((resolve) => {
+    waiting.push(resolve)
+    port!.postMessage(m)
   })
-  enabled.checked = rules.enabled
-  summary.textContent = describe(rules.enabled, rules.minBytes, s.state)
-  status.textContent = s.text
-  chip.dataset.state = s.state
-  chip.textContent =
-    s.state === 'connected' ? 'Connected' : s.state === 'not-running' ? 'App closed' : 'No app'
-  chip.title = s.text
-  showCard(s)
-  return s
 }
 
-enabled.addEventListener('change', async () => {
+// ---- The Fuselane switch --------------------------------------------------
+let app: Status = { state: 'not-installed', text: '' }
+
+async function setOn(on: boolean) {
   const { rules } = await browser.storage.local.get('rules')
-  const next = { ...normalizeRules(rules), enabled: enabled.checked }
-  // Tell the app too, so its Browser extension page and other browsers agree; if
-  // it's closed, the change waits and goes with the next ping.
-  const delivered = await sendHandoff(ask, next)
+  const next = { ...normalizeRules(rules), enabled: on, minBytes: 0 }
+  // The app keeps it too, so every browser agrees; if it's closed, it waits.
+  const delivered = app.state === 'connected' && (await sendHandoff(ask, next))
   await browser.storage.local.set({
     rules: next,
     handoffPending: !delivered,
     ...(delivered ? { handoffSynced: true } : {}),
   })
-  summary.textContent = describe(
-    next.enabled,
-    next.minBytes,
-    delivered ? 'connected' : 'not-running',
-  )
-})
+  showOn(on)
+}
+
+function showOn(on: boolean) {
+  $('#off').hidden = on
+  $('#on').hidden = !on
+  for (const e of document.querySelectorAll<HTMLElement>('.on-only')) e.hidden = !on
+  $<HTMLButtonElement>('#turn-on').setAttribute('aria-checked', String(on))
+}
+
+$<HTMLButtonElement>('#power').addEventListener('click', () => void setOn(false))
+$<HTMLButtonElement>('#turn-on').addEventListener('click', () => void setOn(true))
 
 for (const link of [$<HTMLAnchorElement>('#settings'), $<HTMLAnchorElement>('#more-settings')]) {
   link.addEventListener('click', (e) => {
@@ -145,36 +95,298 @@ for (const link of [$<HTMLAnchorElement>('#settings'), $<HTMLAnchorElement>('#mo
   })
 }
 
+// ---- Cards: no app, or no site access yet ---------------------------------
+async function showCards() {
+  cards.replaceChildren()
+  const access = await browser.permissions.contains({ origins: ['<all_urls>'] })
+  if (app.state === 'not-installed') {
+    const limit = cleanLimit((await browser.storage.local.get('selfLimit')).selfLimit)
+    cards.append(
+      card(
+        'desktop',
+        'Get the free Fuselane app',
+        `It splits every download across Wi‑Fi, Ethernet and your phone. Until then, the extension downloads files up to ${formatSize(limit)}.`,
+        el(
+          'a',
+          {
+            className: 'btn btn-primary btn-block',
+            href: DOWNLOAD_PAGE,
+            target: '_blank',
+            rel: 'noopener',
+          },
+          icon('download-simple'),
+          'Get the app',
+        ),
+      ),
+    )
+  }
+  if (!access) {
+    const allow = el(
+      'button',
+      { type: 'button', className: 'btn btn-block' },
+      icon('lock-open'),
+      'Allow Fuselane on all sites',
+    )
+    allow.addEventListener('click', async () => {
+      const ok = await browser.permissions.request({ origins: ['<all_urls>'] }).catch(() => false)
+      if (ok) void showCards()
+    })
+    cards.append(
+      card(
+        'lock-open',
+        'Catch downloads before the browser',
+        'Fuselane takes file links as you click them, so the browser never starts them. It only reads links you click.',
+        allow,
+      ),
+    )
+  }
+  cards.hidden = !cards.childElementCount
+}
+
+function card(ic: IconName, title: string, text: string, action: Node): HTMLElement {
+  return el(
+    'div',
+    { className: 'card' },
+    el(
+      'div',
+      { className: 'card-head' },
+      el('span', { className: 'card-ic' }, icon(ic)),
+      el(
+        'div',
+        {},
+        el('p', { className: 'card-title' }, title),
+        el('p', { className: 'muted small' }, text),
+      ),
+    ),
+    action,
+  )
+}
+
+// ---- Tabs -----------------------------------------------------------------
+const TABS = ['downloads', 'page', 'speed'] as const
+type Tab = (typeof TABS)[number]
+function show(tab: Tab, focus = false) {
+  for (const t of TABS) {
+    const b = $<HTMLButtonElement>(`#tab-${t}`)
+    const on = t === tab
+    b.setAttribute('aria-selected', String(on))
+    b.tabIndex = on ? 0 : -1
+    $(`#panel-${t}`).hidden = !on
+    if (on && focus) b.focus()
+  }
+  try {
+    localStorage.setItem('tab', tab)
+  } catch {
+    // a remembered tab is only a convenience
+  }
+}
+for (const t of TABS) $<HTMLButtonElement>(`#tab-${t}`).addEventListener('click', () => show(t))
+$('.tabs').addEventListener('keydown', (e) => {
+  const i = TABS.findIndex((t) => $(`#tab-${t}`).getAttribute('aria-selected') === 'true')
+  if (e.key === 'ArrowRight') show(TABS[(i + 1) % TABS.length]!, true)
+  else if (e.key === 'ArrowLeft') show(TABS[(i + TABS.length - 1) % TABS.length]!, true)
+  else return
+  e.preventDefault()
+})
+
+// ---- Downloads ------------------------------------------------------------
+interface Row {
+  id: string
+  name: string
+  status: string
+  written: number
+  total: number | null
+  rate: number
+  error: string | null
+  file: boolean
+}
+
+const speed = (bps: number) => `${formatSize(Math.max(0, bps))}/s`
+const ACTIVE = new Set(['running', 'queued', 'paused', 'saving'])
+
+function meta(r: Row): string {
+  const of = r.total ? `${formatSize(r.written)} of ${formatSize(r.total)}` : formatSize(r.written)
+  const pct = r.total ? `${Math.floor((r.written / r.total) * 100)}%, ` : ''
+  switch (r.status) {
+    case 'running':
+      return `${pct}${of}${r.rate > 0 ? `, ${speed(r.rate)}` : ''}`
+    case 'queued':
+      return r.written ? `Waiting, ${of}` : 'Waiting'
+    case 'paused':
+      return `Paused, ${pct}${of}`
+    case 'saving':
+      return 'Saving to your Downloads folder…'
+    case 'completed':
+      return `Done, ${formatSize(r.total ?? r.written)}`
+    case 'too-big':
+      return 'Too big for the extension: get the app, or let the browser download it.'
+    default:
+      return r.error ? `Failed: ${r.error}` : 'Failed'
+  }
+}
+
+function buttons(r: Row): [IconName, string, string][] {
+  if (r.status === 'running' || r.status === 'queued')
+    return [
+      ['pause', 'pause', 'Pause'],
+      ['x', 'cancel', 'Cancel'],
+    ]
+  if (r.status === 'paused' || r.status === 'failed')
+    return [
+      ['play', 'resume', 'Resume'],
+      ['x', 'cancel', 'Cancel'],
+    ]
+  if (r.status === 'completed' && r.file)
+    return [
+      ['arrow-square-out', 'open', 'Open'],
+      ['folder-open', 'reveal', 'Show in folder'],
+      ['x', 'remove', 'Remove from the list'],
+    ]
+  return [['x', 'remove', 'Remove from the list']]
+}
+
+let act: (id: string, action: string) => Promise<void> = async () => {}
+const rows = new Map<string, { li: HTMLLIElement; state: string }>()
+
+function render(list: Row[], rate: number) {
+  const ul = $<HTMLUListElement>('#jobs')
+  const active = list.filter((r) => ACTIVE.has(r.status))
+  const running = list.filter((r) => r.status === 'running').length
+  $('#speed-line').textContent = running
+    ? `${running} downloading, ${speed(rate)} in all`
+    : active.length
+      ? `${active.length} waiting or paused`
+      : ''
+  const count = $('#tab-count')
+  count.hidden = !active.length
+  count.textContent = String(active.length)
+  $('#jobs-empty').hidden = list.length > 0
+  const seen = new Set<string>()
+  list.forEach((r, i) => {
+    seen.add(r.id)
+    const key = `${r.status}|${r.file}`
+    let row = rows.get(r.id)
+    if (!row || row.state !== key) {
+      const li = el('li', { className: 'job' })
+      li.dataset.status = r.status
+      const actions = el('span', { className: 'job-actions' })
+      for (const [ic, action, label] of buttons(r)) {
+        const b = el('button', { type: 'button', className: 'icon-btn', title: label }, icon(ic))
+        b.setAttribute('aria-label', `${label}: ${r.name}`)
+        b.addEventListener('click', async () => {
+          b.disabled = true
+          await act(r.id, action)
+          b.disabled = false
+        })
+        actions.append(b)
+      }
+      li.append(
+        el(
+          'span',
+          { className: 'job-text' },
+          el('span', { className: 'job-name', title: r.name }, r.name),
+          el('span', { className: 'job-meta' }),
+          el('span', { className: 'bar' }, el('span', { className: 'bar-fill' })),
+        ),
+        actions,
+      )
+      if (row) row.li.replaceWith(li)
+      row = { li, state: key }
+      rows.set(r.id, row)
+    }
+    const { li } = row
+    li.querySelector('.job-meta')!.textContent = meta(r)
+    li.querySelector('.job-name')!.textContent = r.name
+    const pct = r.total
+      ? Math.min(100, (r.written / r.total) * 100)
+      : r.status === 'completed'
+        ? 100
+        : 0
+    li.querySelector<HTMLElement>('.bar-fill')!.style.width = `${pct}%`
+    if (ul.children[i] !== li) ul.insertBefore(li, ul.children[i] ?? null)
+  })
+  for (const [id, row] of rows) {
+    if (!seen.has(id)) {
+      row.li.remove()
+      rows.delete(id)
+    }
+  }
+}
+
+/** With the app: its list, a few times a second, over the popup's own host. */
+async function followApp() {
+  act = async (id, action) => {
+    const reply = (await request({ v: 1, type: 'job.action', id: Number(id), action })) as {
+      error?: string
+    } | null
+    if (reply?.error) $('#speed-line').textContent = reply.error
+    await pollApp()
+  }
+  await pollApp()
+  setInterval(() => void pollApp(), 700)
+}
+async function pollApp() {
+  const reply = (await request({ v: 1, type: 'jobs.list' })) as {
+    jobs?: Row[]
+    rate?: number
+  } | null
+  if (!reply?.jobs) return
+  render(
+    reply.jobs.map((j) => ({ ...j, id: String(j.id) })),
+    reply.rate ?? 0,
+  )
+}
+
+/** Without the app: the extension's own downloads, as they change. */
+async function followSelf() {
+  act = async (id, action) => {
+    await browser.runtime.sendMessage({ type: 'self.action', id, action })
+  }
+  const draw = (jobs: SelfJob[]) =>
+    render(
+      jobs.map((j) => ({
+        id: j.id,
+        name: j.name,
+        status: j.status,
+        written: j.written,
+        total: j.total,
+        rate: j.rate,
+        error: j.error,
+        file: j.savedId !== null,
+      })),
+      jobs.reduce((n, j) => n + (j.status === 'running' ? j.rate : 0), 0),
+    )
+  draw(readJobs((await browser.storage.local.get(KEY))[KEY]))
+  browser.storage.onChanged.addListener((c, area) => {
+    if (area === 'local' && c[KEY]) draw(readJobs(c[KEY].newValue))
+  })
+}
+
+// ---- This page ------------------------------------------------------------
 const KIND: Record<MediaItem['kind'], { word: string; icon: IconName }> = {
   video: { word: 'Video', icon: 'video-camera' },
   audio: { word: 'Audio', icon: 'music-note' },
   link: { word: 'File', icon: 'file' },
 }
 
-/** Lists the tab's videos, audio and file links (activeTab: only now, only this tab). */
 async function onThisPage() {
-  const section = $<HTMLElement>('#page')
   const list = $<HTMLUListElement>('#media')
   const said = $<HTMLParagraphElement>('#media-status')
-  const [tab] = await browser.tabs.query({ active: true, currentWindow: true })
-  if (!tab?.id || !tab.url || !/^https?:/.test(tab.url)) return
-  let items: MediaItem[] = []
-  try {
-    const [res] = await browser.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: findOnPage,
-    })
-    items = mediaList((res?.result as Parameters<typeof mediaList>[0]) ?? [], tab.url)
-  } catch {
-    return // a page the browser doesn't let extensions read
-  }
-  section.hidden = false
-  // A video page (YouTube and many more): the app finds the real video and its
-  // qualities, then downloads it over every network.
   const video = $<HTMLButtonElement>('#video')
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true })
+  if (!tab?.id || !tab.url || !/^https?:/.test(tab.url)) {
+    video.hidden = true
+    said.textContent = "This page isn't a website, so there's nothing to get here."
+    return
+  }
+  const pageUrl = tab.url
+  // A video page (YouTube and many more): the app finds the video and its
+  // qualities. It opens Fuselane if it's closed, so this can take a moment.
   video.addEventListener('click', async () => {
     video.disabled = true
-    const reply = (await ask({ v: 1, type: 'page.video', url: tab.url }).catch(() => null)) as {
+    said.textContent =
+      app.state === 'connected' ? 'Opening the video in Fuselane…' : 'Starting Fuselane…'
+    const reply = (await ask({ v: 1, type: 'page.video', url: pageUrl }).catch(() => null)) as {
       type?: string
     } | null
     if (reply?.type === 'page.video.opened') {
@@ -182,20 +394,26 @@ async function onThisPage() {
     } else {
       video.disabled = false
       said.textContent =
-        "Fuselane isn't running, or this version can't get videos yet. Open it and try again."
+        app.state === 'not-installed'
+          ? 'Getting videos needs the Fuselane app.'
+          : "Fuselane didn't answer. Open it and try again."
     }
   })
-  // A site with a feed (podcasts, blogs, releases): follow it in Fuselane, and
-  // new files download by themselves.
+  let items: MediaItem[] = []
   let feeds: FoundFeed[] = []
   try {
     const [res] = await browser.scripting.executeScript({
       target: { tabId: tab.id },
+      func: findOnPage,
+    })
+    items = mediaList((res?.result as Parameters<typeof mediaList>[0]) ?? [], pageUrl)
+    const [f] = await browser.scripting.executeScript({
+      target: { tabId: tab.id },
       func: findFeeds,
     })
-    feeds = feedList((res?.result as FoundFeed[]) ?? [], tab.url)
+    feeds = feedList((f?.result as FoundFeed[]) ?? [], pageUrl)
   } catch {
-    feeds = []
+    // a page the browser doesn't let extensions read
   }
   const feedBox = $<HTMLDivElement>('#feeds')
   for (const f of feeds) {
@@ -212,12 +430,10 @@ async function onThisPage() {
       const reply = (await ask({ v: 1, type: 'page.feed', url: f.href }).catch(() => null)) as {
         type?: string
       } | null
-      if (reply?.type === 'page.feed.opened') {
-        window.close()
-      } else {
+      if (reply?.type === 'page.feed.opened') window.close()
+      else {
         b.disabled = false
-        said.textContent =
-          "Fuselane isn't running, or this version can't follow feeds yet. Open it and try again."
+        said.textContent = "Fuselane didn't answer. Open it and try again."
       }
     })
     feedBox.append(b)
@@ -236,14 +452,9 @@ async function onThisPage() {
     button.setAttribute('aria-label', `Download ${m.name}`)
     button.addEventListener('click', async () => {
       button.disabled = true
-      const took = await offerLink(m.url, tab.url, ask, getSession, (u) =>
-        browser.downloads.download({ url: u }),
-      )
+      await browser.runtime.sendMessage({ type: 'grab', url: m.url, page: pageUrl, name: null })
       button.replaceChildren(icon('check'))
-      button.dataset.done = took ? 'app' : 'browser'
-      said.textContent = took
-        ? `${m.name} is downloading in Fuselane.`
-        : `Fuselane isn't running, so the browser is downloading ${m.name}.`
+      said.textContent = `${m.name} is on its way. It shows under Downloads.`
     })
     list.append(
       el(
@@ -254,7 +465,7 @@ async function onThisPage() {
           'span',
           { className: 'm-text' },
           el('span', { className: 'm-name', title: m.url }, m.name),
-          el('span', { className: 'm-kind' }, m.label ? `${kind.word} · ${m.label}` : kind.word),
+          el('span', { className: 'm-kind' }, m.label ? `${kind.word}, ${m.label}` : kind.word),
         ),
         button,
       ),
@@ -262,6 +473,150 @@ async function onThisPage() {
   }
 }
 
+// ---- Speed test -----------------------------------------------------------
+// The needle reads on a square-root scale to 1 Gbps, so everyday speeds use
+// most of the dial.
+const FULL_MBPS = 1000
+function needle(bps: number) {
+  const m = (Math.max(0, bps) * 8) / 1e6
+  const f = Math.min(1, Math.sqrt(m / FULL_MBPS))
+  $<HTMLElement>('#gauge-needle').style.transform = `rotate(${-90 + f * 180}deg)`
+  const fill = $<HTMLElement>('#gauge-fill')
+  fill.style.strokeDasharray = `${f * 100} 100`
+  // An empty arc would still draw its rounded end as a dot.
+  fill.style.opacity = f > 0.005 ? '1' : '0'
+  $('#gauge-value').textContent = mbps(bps)
+}
+function ticks() {
+  const g = $<HTMLElement>('#gauge-ticks')
+  for (const m of [0, 10, 50, 100, 250, 500, 1000]) {
+    const f = Math.sqrt(m / FULL_MBPS)
+    const a = Math.PI * (1 - f)
+    const x = 120 + Math.cos(a) * 82
+    const y = 130 - Math.sin(a) * 82
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'text')
+    t.setAttribute('x', x.toFixed(1))
+    t.setAttribute('y', (y + 4).toFixed(1))
+    t.setAttribute('class', 'gauge-tick')
+    t.textContent = m >= 1000 ? '1G' : String(m)
+    g.append(t)
+  }
+}
+
+function results(entries: [string, string][]) {
+  const dl = $<HTMLDListElement>('#speed-results')
+  dl.replaceChildren(...entries.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, v)]))
+  dl.hidden = !entries.length
+}
+
+let testing: AbortController | null = null
+async function runSpeedTest() {
+  const go = $<HTMLButtonElement>('#speed-go')
+  const step = $('#speed-step')
+  if (testing) {
+    testing.abort()
+    return
+  }
+  results([])
+  go.replaceChildren(icon('x'), 'Stop')
+  if (app.state === 'connected') {
+    // The app tests every network on its own, then all of them together.
+    testing = new AbortController()
+    const stop = testing
+    await request({ v: 1, type: 'speedtest.start' })
+    $('#speed-note').textContent = 'Fuselane tests each network, then all of them together.'
+    while (!stop.signal.aborted) {
+      const r = (await request({ v: 1, type: 'speedtest.state' })) as {
+        state?: {
+          running: boolean
+          phase?: string | null
+          live?: { bps: number } | null
+          run?: {
+            results: { label: string; downBps: number | null; upBps: number | null }[]
+            togetherBps: number | null
+          } | null
+        }
+      } | null
+      const s = r?.state
+      if (!s) break
+      needle(s.live?.bps ?? 0)
+      step.textContent = s.phase ?? (s.running ? 'Testing…' : 'Done.')
+      if (s.run) {
+        results([
+          ...s.run.results.map((n): [string, string] => [
+            n.label,
+            `${mbps(n.downBps)} down, ${mbps(n.upBps)} up Mbps`,
+          ]),
+          ...(s.run.togetherBps
+            ? [['All together', `${mbps(s.run.togetherBps)} Mbps`] as [string, string]]
+            : []),
+        ])
+      }
+      if (!s.running) break
+      await new Promise((r) => setTimeout(r, 250))
+    }
+  } else {
+    testing = new AbortController()
+    $('#speed-note').textContent =
+      'Without the app, the browser can only test the connection it uses.'
+    const words = { ping: 'Checking the delay…', down: 'Download speed…', up: 'Upload speed…' }
+    try {
+      const r = await speedTest((x) => {
+        needle(x.bps)
+        step.textContent = words[x.step]
+      }, testing.signal)
+      needle(r.downBps ?? 0)
+      step.textContent = 'Done.'
+      results([
+        ['Download', `${mbps(r.downBps)} Mbps`],
+        ['Upload', `${mbps(r.upBps)} Mbps`],
+        ['Delay', r.pingMs ? `${Math.round(r.pingMs)} ms` : 'unknown'],
+      ])
+    } catch {
+      step.textContent = testing.signal.aborted
+        ? 'Stopped.'
+        : "The test couldn't reach the speed server."
+    }
+  }
+  testing = null
+  go.replaceChildren(icon('gauge'), 'Test again')
+}
+$<HTMLButtonElement>('#speed-go').addEventListener('click', () => void runSpeedTest())
+
+// ---- Start ----------------------------------------------------------------
+async function load() {
+  const { rules } = await browser.storage.local.get('rules')
+  showOn(normalizeRules(rules).enabled)
+  let tab: Tab = 'downloads'
+  try {
+    const t = localStorage.getItem('tab') as Tab | null
+    if (t && TABS.includes(t)) tab = t
+  } catch {
+    // ignore
+  }
+  show(tab)
+  app = await appStatus(ask, hello())
+  void browser.runtime.sendMessage({ type: 'app-changed' }).catch(() => {})
+  status.textContent = app.text
+  chip.dataset.state = app.state
+  chip.textContent =
+    app.state === 'connected' ? 'Connected' : app.state === 'not-running' ? 'App closed' : 'No app'
+  chip.title = app.text
+  await showCards()
+  if (app.state === 'connected') {
+    openPort()
+    await followApp()
+  } else {
+    if (app.state === 'not-running') {
+      $('#jobs-empty-text').textContent =
+        'Fuselane is closed. Your next download opens it and shows up here.'
+    }
+    await followSelf()
+  }
+}
+
 fillIcons()
+ticks()
+needle(0)
 void load()
 void onThisPage()

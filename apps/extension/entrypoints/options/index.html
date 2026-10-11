@@ -17,29 +17,31 @@
 
       <form id="settings" novalidate>
         <section aria-labelledby="h-handoff">
-          <h2 id="h-handoff">Hand-off</h2>
+          <h2 id="h-handoff">Downloads</h2>
           <label class="switch">
             <input type="checkbox" id="enabled" name="enabled" role="switch" />
             <span>
-              <strong>Hand big downloads to Fuselane</strong>
-              <small>When off, every download stays in the browser.</small>
+              <strong>Fuselane downloads</strong>
+              <small
+                >On: with the Fuselane app, every download goes to it. Off: the browser downloads
+                everything itself.</small
+              >
             </span>
           </label>
           <div class="field">
-            <label for="minSize">Smallest download to hand over</label>
-            <input
-              id="minSize"
-              name="minSize"
-              inputmode="decimal"
-              autocomplete="off"
-              spellcheck="false"
-              aria-describedby="minSize-help minSize-error"
-            />
-            <p id="minSize-help" class="help">
-              Like 1&nbsp;MB, 500&nbsp;KB or 2&nbsp;GB. Downloads of unknown size are always handed
-              over.
+            <label for="selfLimit">Without the app, the extension downloads files up to</label>
+            <select id="selfLimit" name="selfLimit" aria-describedby="selfLimit-help">
+              <option value="104857600">100 MB</option>
+              <option value="262144000">250 MB</option>
+              <option value="524288000">500 MB</option>
+              <option value="1073741824">1 GB</option>
+              <option value="1610612736">1.5 GB</option>
+              <option value="2147483648">2 GB</option>
+            </select>
+            <p id="selfLimit-help" class="help">
+              Bigger files need the free Fuselane app, or can download in the browser. With the app
+              installed, it takes every download, any size.
             </p>
-            <p id="minSize-error" class="error" hidden></p>
           </div>
         </section>
 

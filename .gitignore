@@ -23,6 +23,7 @@ target/
 node_modules/
 dist/
 .output/
+.output-e2e/
 .wxt/
 .turbo/
 coverage/

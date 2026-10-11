@@ -1,14 +1,33 @@
 import { defineConfig } from 'wxt'
 
-// Fuselane's browser extension (BROWSER-EXTENSION.md): a thin capturer that hands
-// big downloads to the app through native messaging.
+// Fuselane's browser extension (BROWSER-EXTENSION.md, REVIEW-2026-10-11 D): hands
+// downloads to the app through native messaging, or downloads them itself up to
+// a limit when the app isn't installed.
 export default defineConfig({
+  // A test build goes to its own folder so it can never be zipped for a store.
+  ...(process.env.FUSELANE_E2E === '1' ? { outDir: '.output-e2e' } : {}),
+  hooks: {
+    // The link-click script is registered at run time, only after the person
+    // allows Fuselane on all sites (optional_host_permissions). WXT would add
+    // its matches as a required host permission, which means an install-time
+    // warning and current users switched off: keep it optional.
+    'build:manifestGenerated': (_wxt, manifest) => {
+      delete manifest.host_permissions
+      // Test builds only (e2e/self.spec.ts): a browser under test can't click
+      // the permission prompt, so site access is granted at load instead.
+      if (process.env.FUSELANE_E2E === '1') manifest.host_permissions = ['<all_urls>']
+    },
+  },
   manifest: ({ browser }) => ({
     name: 'Fuselane',
-    description: 'Hands big downloads to Fuselane, which splits them across all your networks.',
+    description: 'Download faster with Fuselane: it splits each download across all your networks.',
     homepage_url: 'https://fuselane.app',
     // activeTab + scripting: the popup lists the current tab's videos and file
     // links, only when opened (no access to other tabs, nothing in the background).
+    // offscreen: the extension's own downloads run in an offscreen page (the
+    // service worker can stop at any time). downloads.ui: hides the browser's
+    // download bar for downloads Fuselane takes. Neither exists in Firefox, and
+    // neither adds an install warning.
     permissions: [
       'downloads',
       'nativeMessaging',
@@ -16,6 +35,7 @@ export default defineConfig({
       'contextMenus',
       'activeTab',
       'scripting',
+      ...(browser === 'firefox' ? [] : ['offscreen', 'downloads.ui']),
     ],
     // Signed-in downloads: asked for only when the person turns them on in settings.
     optional_permissions: ['cookies'],

@@ -2,6 +2,7 @@ import { DEFAULT_RULES, normalizeRules } from '@fuselane/capture'
 import { readForm, toForm, type Field, type FormValues } from '../../lib/settings-form.ts'
 import { appStatus, browserId, mustPush, sendHandoff, settle } from '../../lib/status.ts'
 import { SESSION_PERMISSIONS, sessionAllowed } from '../../lib/session.ts'
+import { DEFAULT_LIMIT, cleanLimit } from '../../lib/route.ts'
 import './style.css'
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!
@@ -9,17 +10,28 @@ const form = $<HTMLFormElement>('#settings')
 const enabled = $<HTMLInputElement>('#enabled')
 const saved = $<HTMLParagraphElement>('#saved')
 const save = $<HTMLButtonElement>('#save')
-const FIELDS: Field[] = ['minSize', 'includeDomains', 'excludeDomains', 'extensions', 'mimeTypes']
+// With the app every download goes to it, so there's no size rule any more (minSize 0).
+const FIELDS: Field[] = ['includeDomains', 'excludeDomains', 'extensions', 'mimeTypes']
+const selfLimit = $<HTMLSelectElement>('#selfLimit')
 const input = (f: Field) => $<HTMLInputElement | HTMLTextAreaElement>(`#${f}`)
 
 // What is stored, as the form shows it; anything else is unsaved.
 let stored = ''
 const dirty = () => JSON.stringify(values()) !== stored
 
-function values(): FormValues {
-  const v = { enabled: enabled.checked } as FormValues
+function values(): FormValues & { selfLimit: string } {
+  const v = { enabled: enabled.checked, minSize: '0', selfLimit: selfLimit.value } as FormValues & {
+    selfLimit: string
+  }
   for (const f of FIELDS) v[f] = input(f).value
   return v
+}
+
+/** The nearest offered size to a stored limit. */
+function showLimit(limit: number) {
+  const options = [...selfLimit.options].map((o) => Number(o.value))
+  const best = options.reduce((a, b) => (Math.abs(b - limit) < Math.abs(a - limit) ? b : a))
+  selfLimit.value = String(best)
 }
 
 function fill(v: FormValues) {
@@ -42,9 +54,15 @@ function showErrors(errors: Partial<Record<Field, string>>) {
 const ask = (m: unknown) => browser.runtime.sendNativeMessage('app.fuselane.host', m as object)
 
 async function load() {
-  const got = await browser.storage.local.get(['rules', 'handoffPending', 'handoffSynced'])
+  const got = await browser.storage.local.get([
+    'rules',
+    'handoffPending',
+    'handoffSynced',
+    'selfLimit',
+  ])
   const rules = normalizeRules(got.rules)
   fill(toForm(rules))
+  showLimit(cleanLimit(got.selfLimit))
   stored = JSON.stringify(values())
   const status = $<HTMLParagraphElement>('#status')
   const s = await appStatus(ask, {
@@ -82,11 +100,12 @@ form.addEventListener('submit', async (e) => {
   save.disabled = true
   save.textContent = 'Saving…'
   try {
-    // The app keeps the on/off switch and the size too; tell it, or keep the
-    // change waiting for the next time it's running.
+    // The app keeps the on/off switch too; tell it, or keep the change waiting
+    // for the next time it's running.
     const delivered = await sendHandoff(ask, r.rules)
     await browser.storage.local.set({
       rules: r.rules,
+      selfLimit: cleanLimit(Number(selfLimit.value)),
       handoffPending: !delivered,
       ...(delivered ? { handoffSynced: true } : {}),
     })
@@ -107,6 +126,7 @@ form.addEventListener('submit', async (e) => {
 $('#reset').addEventListener('click', () => {
   showErrors({})
   fill(toForm(DEFAULT_RULES))
+  showLimit(DEFAULT_LIMIT)
   saved.textContent = 'Defaults restored. Save to keep them.'
   saved.dataset.state = ''
 })

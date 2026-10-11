@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fuselane: a big download</title>
+  </head>
+  <body class="decide">
+    <main id="app">
+      <header class="top">
+        <h1 class="wordmark" translate="no">
+          <svg class="mark" viewBox="0 0 512 512" aria-hidden="true">
+            <g fill="none" stroke-linecap="round" stroke-width="34">
+              <path d="M70 150 C 180 150, 220 256, 300 256" stroke="var(--lane-tide)" />
+              <path d="M70 256 L 300 256" stroke="var(--lane-volt)" />
+              <path d="M70 362 C 180 362, 220 256, 300 256" stroke="var(--lane-iris)" />
+              <path d="M300 256 L 442 256" stroke="var(--fuse)" stroke-width="46" />
+            </g>
+          </svg>
+          Fuselane
+        </h1>
+      </header>
+      <section class="card" aria-labelledby="big-title">
+        <div class="card-head">
+          <span class="card-ic"><span class="ic" data-icon="desktop"></span></span>
+          <div>
+            <p class="card-title" id="big-title">This one needs the Fuselane app</p>
+            <p class="muted small" id="big-text"></p>
+          </div>
+        </div>
+        <a id="get" class="btn btn-primary btn-block" href="#"
+          ><span class="ic" data-icon="download-simple"></span>Get the free app</a
+        >
+        <button type="button" id="browser" class="btn btn-block">
+          <span class="ic" data-icon="globe"></span>Download in the browser
+        </button>
+      </section>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

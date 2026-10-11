@@ -41,6 +41,9 @@ let context: BrowserContext
 let worker: Worker
 const big = randomBytes(3 * 1024 * 1024)
 const small = randomBytes(64 * 1024)
+const slow = randomBytes(20 * 1024 * 1024)
+const SLOW_RATE = 1024 * 1024
+let slowNext = 0
 const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex')
 
 const env = () => ({
@@ -69,7 +72,13 @@ test.beforeAll(async () => {
 
   // Files served with a size and ranges, like a real download site.
   server = createServer((req, res) => {
-    const body = req.url?.startsWith('/big') ? big : req.url?.startsWith('/small') ? small : null
+    const body = req.url?.startsWith('/big')
+      ? big
+      : req.url?.startsWith('/small')
+        ? small
+        : req.url?.startsWith('/slow')
+          ? slow
+          : null
     if (!body) return void res.writeHead(404).end()
     const name = req.url!.split('/').pop()!.split('?')[0]
     const range = /bytes=(\d+)-(\d*)/.exec(req.headers.range ?? '')
@@ -87,10 +96,38 @@ test.beforeAll(async () => {
         'Content-Range': `bytes ${start}-${end}/${body.length}`,
         'Content-Length': end - start + 1,
       })
-      return void res.end(req.method === 'HEAD' ? undefined : body.subarray(start, end + 1))
+      if (req.method === 'HEAD') return void res.end()
+      // Paced like a real server (the slow file trickles, so it's still running
+      // when the popup looks); a one-byte probe answers at once.
+      const piece = body === slow ? 32 * 1024 : 256 * 1024
+      void (async () => {
+        if (end > start) await new Promise((r) => setTimeout(r, 300))
+        for (let s = start; s <= end && !res.destroyed; s += piece) {
+          res.write(body.subarray(s, Math.min(end + 1, s + piece)))
+          // The slow file shares one pipe of about 1 MB/s, however many
+          // connections the app opens; the others just aren't instant.
+          if (body === slow) {
+            const at = Math.max(Date.now(), slowNext)
+            slowNext = at + (piece * 1000) / SLOW_RATE
+            await new Promise((r) => setTimeout(r, at - Date.now()))
+          } else await new Promise((r) => setTimeout(r, 30))
+        }
+        res.end()
+      })()
+      return
     }
     res.writeHead(200, { ...headers, 'Content-Length': body.length })
-    res.end(req.method === 'HEAD' ? undefined : body)
+    if (req.method === 'HEAD') return void res.end()
+    // Like a real server, not instant: the browser's own request is still
+    // running when the extension takes the download over.
+    void (async () => {
+      await new Promise((r) => setTimeout(r, 400))
+      for (let s = 0; s < body.length && !res.destroyed; s += 256 * 1024) {
+        res.write(body.subarray(s, s + 256 * 1024))
+        await new Promise((r) => setTimeout(r, 30))
+      }
+      res.end()
+    })()
   })
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
   base = `http://127.0.0.1:${(server.address() as { port: number }).port}`
@@ -137,7 +174,7 @@ test('a ping reaches the running app, which sends where downloads go', async () 
   }
   expect(r.type).toBe('pong')
   expect(r.app.version).toMatch(/^\d+\.\d+\.\d+/)
-  expect(r.app.handoff).toEqual({ enabled: true, minBytes: 1024 * 1024 })
+  expect(r.app.handoff.enabled).toBe(true)
 })
 
 test('the setting changes in the app, and bad values are refused', async () => {
@@ -190,21 +227,53 @@ test('a big download from the page goes to the app and arrives byte for byte', a
   expect(sha(readFileSync(file))).toBe(sha(big))
 })
 
-test('a file under the size stays in the browser (negative)', async () => {
+test('a small file goes to the app too: with the app, it takes every download', async () => {
   const page = await context.newPage()
-  const browserGot = page.waitForEvent('download', { timeout: 15_000 })
   await download(page, '/small/fuselane-e2e-small.bin')
-  const d = await browserGot
-  expect(d.suggestedFilename()).toBe('fuselane-e2e-small.bin')
-  // The app didn't take it.
-  expect(readdirSync(join(tmp, 'home/Downloads'))).not.toContain('fuselane-e2e-small.bin')
+  const file = join(tmp, 'home/Downloads/fuselane-e2e-small.bin')
+  await expect
+    .poll(() => existsSync(file) && readFileSync(file).length, { timeout: 60_000 })
+    .toBe(small.length)
+  expect(sha(readFileSync(file))).toBe(sha(small))
 })
 
-test('with hand-off off, even a big file stays in the browser (negative)', async () => {
-  await ask({ v: 1, type: 'handoff.set', enabled: false, minBytes: 2 * 1024 * 1024 })
+test("the popup lists the app's downloads live, and pauses and resumes one", async () => {
+  test.setTimeout(120_000)
+  const page = await context.newPage()
+  await download(page, '/slow/fuselane-e2e-slow.bin')
   const popup = await context.newPage()
   await popup.goto(`chrome-extension://${new URL(worker.url()).host}/popup.html`)
-  await expect(popup.getByLabel('Hand big downloads to Fuselane')).not.toBeChecked()
+  const row = popup.locator('.job', { hasText: 'fuselane-e2e-slow.bin' })
+  await expect(row).toBeVisible({ timeout: 60_000 })
+  await expect(row.locator('.job-meta')).toContainText('%', { timeout: 30_000 })
+  await expect(popup.locator('#speed-line')).toContainText('downloading')
+  await row.getByRole('button', { name: /^Pause/ }).click()
+  await expect(row.locator('.job-meta')).toContainText('Paused', { timeout: 15_000 })
+  await row.getByRole('button', { name: /^Resume/ }).click()
+  const file = join(tmp, 'home/Downloads/fuselane-e2e-slow.bin')
+  await expect
+    .poll(() => existsSync(file) && readFileSync(file).length, { timeout: 90_000 })
+    .toBe(slow.length)
+  expect(sha(readFileSync(file))).toBe(sha(slow))
+  await expect(row.locator('.job-meta')).toContainText('Done', { timeout: 15_000 })
+  await popup.close()
+})
+
+test("the speed test answers from the app (it isn't started here)", async () => {
+  const r = (await ask({ v: 1, type: 'speedtest.state' })) as {
+    type: string
+    state: { running: boolean }
+  }
+  expect(r.type).toBe('speedtest')
+  expect(r.state.running).toBe(false)
+})
+
+test('with the Fuselane switch off, even a big file stays in the browser (negative)', async () => {
+  const popup = await context.newPage()
+  await popup.goto(`chrome-extension://${new URL(worker.url()).host}/popup.html`)
+  await expect(popup.locator('#chip')).toHaveText('Connected')
+  await popup.getByRole('button', { name: 'Turn Fuselane downloads off' }).click()
+  await expect(popup.getByRole('switch', { name: 'Turn on' })).toBeVisible()
   await popup.close()
   const page = await context.newPage()
   const browserGot = page.waitForEvent('download', { timeout: 15_000 })
