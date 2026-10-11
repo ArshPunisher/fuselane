@@ -4615,6 +4615,13 @@ html[data-hidden] .orb b {
   font-size: 12px;
 }
 
+/* "Find files on this page" and "Get the video" side by side. */
+.find-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+}
+
 .page-picker {
   display: grid;
   gap: 10px;

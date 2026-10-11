@@ -841,46 +841,45 @@ export function NewDownload() {
               </p>
             )}
             {!batch && !metalink && !isMagnet(url) && /^https?:\/\/\S+$/i.test(url.trim()) && (
-              <button
-                type="button"
-                className="link-btn find-files"
-                disabled={pageBusy}
-                onClick={async () => {
-                  if (!backend) return
-                  setPageBusy(true)
-                  setError(null)
-                  try {
-                    const p = await backend.filesOnPage(url.trim())
-                    setPicked(new Set())
-                    setPage(p)
-                  } catch (err) {
-                    setError(toUiError(err))
-                  } finally {
-                    setPageBusy(false)
-                  }
-                }}
-              >
-                {pageBusy ? t('Reading the page…') : t('Find files on this page')}
-              </button>
-            )}
-            {!batch &&
-              !metalink &&
-              !isMagnet(url) &&
-              /^https?:\/\/\S+$/i.test(url.trim()) &&
-              (lastVideo?.url === url.trim() ? (
-                <button type="button" className="link-btn find-files" onClick={backToVideo}>
-                  {t('Back to video qualities')}
-                </button>
-              ) : (
+              // A page link: its files, or its video, side by side.
+              <div className="find-row">
                 <button
                   type="button"
                   className="link-btn find-files"
-                  disabled={mediaBusy}
-                  onClick={() => void getVideo(url.trim())}
+                  disabled={pageBusy}
+                  onClick={async () => {
+                    if (!backend) return
+                    setPageBusy(true)
+                    setError(null)
+                    try {
+                      const p = await backend.filesOnPage(url.trim())
+                      setPicked(new Set())
+                      setPage(p)
+                    } catch (err) {
+                      setError(toUiError(err))
+                    } finally {
+                      setPageBusy(false)
+                    }
+                  }}
                 >
-                  {mediaBusy ? t('Looking for the video…') : t('Get the video from this page')}
+                  {pageBusy ? t('Reading the page…') : t('Find files on this page')}
                 </button>
-              ))}
+                {lastVideo?.url === url.trim() ? (
+                  <button type="button" className="link-btn find-files" onClick={backToVideo}>
+                    {t('Back to video qualities')}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="link-btn find-files"
+                    disabled={mediaBusy}
+                    onClick={() => void getVideo(url.trim())}
+                  >
+                    {mediaBusy ? t('Looking for the video…') : t('Get the video from this page')}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
           {batch && count > 1 && (
             <div className="group-choice">
