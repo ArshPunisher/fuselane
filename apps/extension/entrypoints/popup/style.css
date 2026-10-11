@@ -392,10 +392,8 @@ h2 {
 
 #media {
   display: grid;
-  max-height: 248px;
   margin: 0;
   padding: 0;
-  overflow-y: auto;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-panel);
   background: var(--surface-1);
@@ -634,13 +632,12 @@ h2 {
   line-height: 16px;
 }
 
+/* The popup scrolls as one page (the browser caps its height); no panel has
+   a scroll of its own, so there's never a scroll inside a scroll. */
 .panel {
   display: grid;
   gap: 10px;
   min-height: 150px;
-  max-height: 380px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
 }
 
 /* ---------- Downloads ---------- */
