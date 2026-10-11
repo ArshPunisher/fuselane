@@ -654,6 +654,12 @@ pub struct Service {
     pending_action: Mutex<Option<Cancel>>,
     power: Mutex<PowerFn>,
     busy_elsewhere: Mutex<Option<BusyFn>>,
+    /// Shows the window and brings it to the front (set by the app).
+    to_front: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
+    /// Shows a file in its folder (set by the app; the extension's popup uses it).
+    revealer: Mutex<OpenFn>,
+    /// Each running download's latest speed (bytes/s), for the extension's popup.
+    rates: Mutex<HashMap<i64, f64>>,
     /// Seconds before a when-done action runs (tests shorten it).
     countdown: std::sync::atomic::AtomicU32,
     /// Closing the window hides it; downloads carry on from the tray.
@@ -1070,6 +1076,9 @@ impl Service {
             pending_action: Mutex::new(None),
             power: Mutex::new(Arc::new(run_power_action)),
             busy_elsewhere: Mutex::new(None),
+            to_front: Mutex::new(None),
+            revealer: Mutex::new(Arc::new(|_| {})),
+            rates: Mutex::new(HashMap::new()),
             countdown: std::sync::atomic::AtomicU32::new(COUNTDOWN),
             close_to_tray: std::sync::atomic::AtomicBool::new(close_to_tray),
             watch_clipboard: std::sync::atomic::AtomicBool::new(watch_clipboard),
@@ -1815,6 +1824,22 @@ impl Service {
     }
 
     /// Lets the app tell the queue that torrents are still busy.
+    pub fn set_revealer(&self, f: OpenFn) {
+        *lock(&self.revealer) = f;
+    }
+
+    pub fn set_to_front(&self, f: Arc<dyn Fn() + Send + Sync>) {
+        *lock(&self.to_front) = Some(f);
+    }
+
+    /// Shows the window on top: anything the browser extension sends (a download,
+    /// "Get this page's video") is something the person just asked for (B1).
+    pub fn bring_to_front(&self) {
+        if let Some(f) = lock(&self.to_front).clone() {
+            f();
+        }
+    }
+
     pub fn set_busy_elsewhere(&self, f: BusyFn) {
         *lock(&self.busy_elsewhere) = Some(f);
     }
@@ -2664,6 +2689,7 @@ impl Service {
             SnapshotFn(Arc::new(move |s: &Snapshot| {
                 let l = live(id, s, &nets);
                 me.note_rates(&l.networks);
+                lock(&me.rates).insert(id, l.rate);
                 *lock(&last) = Some(l.clone());
                 me.send(UiEvent::Live(l));
             }))

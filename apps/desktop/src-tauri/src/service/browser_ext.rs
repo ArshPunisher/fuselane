@@ -9,10 +9,11 @@
 use serde::Serialize;
 
 use fuselane_api::browsers::{self, ExtState};
-use fuselane_api::server::{Handoff, Seen};
+use fuselane_api::server::{Handoff, JobAction, Seen};
+use serde_json::{Value, json};
 
 use super::deadline::unix_now;
-use super::{Service, UiError, store_error};
+use super::{Service, UiError, lock, store_error};
 
 /// Out of the box: downloads from 1 MiB up go to the app (the extension's own
 /// default before this setting existed).
@@ -147,6 +148,86 @@ impl Service {
             .set_setting("handoff_min_bytes", &h.min_bytes.to_string())
             .map_err(store_error)?;
         Ok(h)
+    }
+}
+
+/// Finished and failed downloads the popup lists after the active ones.
+const POPUP_RECENT: usize = 30;
+
+impl Service {
+    /// The downloads for the extension's popup: everything active, then the
+    /// latest finished ones, each with its live speed; plus the combined speed.
+    pub fn extension_jobs(&self) -> Result<Value, UiError> {
+        let mut jobs = self.jobs()?;
+        let running: std::collections::HashSet<i64> = lock(&self.running).keys().copied().collect();
+        {
+            // Speeds of downloads that stopped are stale.
+            let mut rates = lock(&self.rates);
+            rates.retain(|id, _| running.contains(id));
+        }
+        let rates = lock(&self.rates).clone();
+        let active = |s: &str| matches!(s, "running" | "queued" | "paused");
+        jobs.sort_by_key(|j| {
+            (
+                !active(j.status),
+                if active(j.status) {
+                    j.position
+                } else {
+                    -j.created_at
+                },
+            )
+        });
+        let mut recent = 0;
+        let list: Vec<Value> = jobs
+            .iter()
+            .filter(|j| {
+                if active(j.status) {
+                    return true;
+                }
+                recent += 1;
+                recent <= POPUP_RECENT
+            })
+            .map(|j| {
+                json!({
+                    "id": j.id,
+                    "name": j.name,
+                    "status": j.status,
+                    "written": j.written,
+                    "total": j.total,
+                    "rate": rates.get(&j.id).copied().unwrap_or(0.0).round(),
+                    "error": j.error,
+                    "file": j.final_path.is_some(),
+                })
+            })
+            .collect();
+        let rate: f64 = rates.values().sum();
+        Ok(json!({"jobs": list, "rate": rate.round()}))
+    }
+
+    /// Does what the popup asked to download `id`.
+    pub fn extension_action(
+        self: &std::sync::Arc<Self>,
+        id: i64,
+        action: JobAction,
+    ) -> Result<(), UiError> {
+        match action {
+            JobAction::Pause => self.pause(id),
+            JobAction::Resume => self.resume(id),
+            JobAction::Cancel | JobAction::Remove => self.remove(id),
+            JobAction::Delete => self.trash_file(id),
+            JobAction::Open => {
+                let path = self.finished_file(id)?;
+                let open = lock(&self.opener).clone();
+                open(&path);
+                Ok(())
+            }
+            JobAction::Reveal => {
+                let path = self.finished_file(id)?;
+                let reveal = lock(&self.revealer).clone();
+                reveal(&path);
+                Ok(())
+            }
+        }
     }
 }
 

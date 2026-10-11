@@ -86,6 +86,38 @@ fn word(v: Option<&Value>, max: usize) -> String {
         .to_string()
 }
 
+/// What the extension's popup can do to one download.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JobAction {
+    Pause,
+    Resume,
+    /// Stop it and throw away what was downloaded.
+    Cancel,
+    /// Open the finished file.
+    Open,
+    /// Show the finished file in its folder.
+    Reveal,
+    /// Take it off the list (a finished file stays on disk).
+    Remove,
+    /// Move the finished file to the Trash and take it off the list.
+    Delete,
+}
+
+impl JobAction {
+    pub fn from_word(w: &str) -> Option<JobAction> {
+        Some(match w {
+            "pause" => JobAction::Pause,
+            "resume" => JobAction::Resume,
+            "cancel" => JobAction::Cancel,
+            "open" => JobAction::Open,
+            "reveal" => JobAction::Reveal,
+            "remove" => JobAction::Remove,
+            "delete" => JobAction::Delete,
+            _ => return None,
+        })
+    }
+}
+
 /// What the app does with requests (the desktop service, or a test double).
 pub trait Handler: Send + Sync + 'static {
     /// Takes a checked offer; Ok(job id) or a reason to hand it back.
@@ -111,6 +143,14 @@ pub trait Handler: Send + Sync + 'static {
     /// The extension's settings changed it; returns what's now in effect.
     fn set_handoff(&self, _handoff: Handoff) -> Option<Handoff> {
         None
+    }
+    /// The downloads for the extension's popup: `{"jobs": [...], "rate": bytes/s}`.
+    fn jobs(&self) -> Option<Value> {
+        None
+    }
+    /// Does `action` to download `id`; Err is a sentence for the popup.
+    fn job_action(&self, _id: i64, _action: JobAction) -> Result<(), String> {
+        Err("This version of Fuselane can't do that from the browser.".into())
     }
 }
 
@@ -213,6 +253,25 @@ pub async fn answer(handler: &dyn Handler, line: &str) -> Value {
                 None => declined(Decline::Invalid),
             };
             json!({"id": id, "result": result})
+        }
+        Some("jobs.list") => match handler.jobs() {
+            Some(list) => json!({"id": id, "result": list}),
+            None => error(&id, "unsupported", "this app can't list downloads"),
+        },
+        Some("job.action") => {
+            let params = req.get("params").cloned().unwrap_or(Value::Null);
+            let job = params.get("id").and_then(Value::as_i64).filter(|n| *n > 0);
+            let action = params
+                .get("action")
+                .and_then(Value::as_str)
+                .and_then(JobAction::from_word);
+            match (job, action) {
+                (Some(job), Some(action)) => match handler.job_action(job, action) {
+                    Ok(()) => json!({"id": id, "result": {"ok": true}}),
+                    Err(why) => error(&id, "refused", &why),
+                },
+                _ => error(&id, "bad-request", "a download id and an action are needed"),
+            }
         }
         Some(_) => error(&id, "unknown-method", "unknown method"),
         None => error(&id, "bad-request", "method is missing"),
@@ -392,6 +451,47 @@ mod tests {
         }
         fn page_feed(&self, url: String) -> bool {
             url.contains("feed")
+        }
+        fn jobs(&self) -> Option<Value> {
+            Some(json!({"jobs": [{"id": 7, "name": "a.iso"}], "rate": 1000}))
+        }
+        fn job_action(&self, id: i64, action: JobAction) -> Result<(), String> {
+            if id == 7 && action == JobAction::Pause {
+                Ok(())
+            } else {
+                Err("No download like that.".into())
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn the_popup_lists_downloads_and_acts_on_them() {
+        let list = answer(&Fake, r#"{"id":1,"method":"jobs.list"}"#).await;
+        assert_eq!(list["result"]["jobs"][0]["name"], "a.iso");
+        assert_eq!(list["result"]["rate"], 1000);
+        let ok = answer(
+            &Fake,
+            r#"{"id":2,"method":"job.action","params":{"id":7,"action":"pause"}}"#,
+        )
+        .await;
+        assert_eq!(ok["result"]["ok"], true);
+        let refused = answer(
+            &Fake,
+            r#"{"id":3,"method":"job.action","params":{"id":8,"action":"pause"}}"#,
+        )
+        .await;
+        assert_eq!(refused["error"]["message"], "No download like that.");
+        for bad in [
+            r#"{"id":4,"method":"job.action","params":{"id":7,"action":"format-disk"}}"#,
+            r#"{"id":5,"method":"job.action","params":{"id":-1,"action":"pause"}}"#,
+            r#"{"id":6,"method":"job.action","params":{"id":"7","action":"pause"}}"#,
+            r#"{"id":7,"method":"job.action"}"#,
+        ] {
+            assert_eq!(
+                answer(&Fake, bad).await["error"]["code"],
+                "bad-request",
+                "{bad}"
+            );
         }
     }
 

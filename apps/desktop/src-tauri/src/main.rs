@@ -1976,6 +1976,15 @@ fn main() {
                 for_opener.set_opener(Arc::new(move |p: &std::path::Path| {
                     let _ = handle.opener().open_path(p.to_string_lossy(), None::<&str>);
                 }));
+                let handle = app.handle().clone();
+                for_opener.set_revealer(Arc::new(move |p: &std::path::Path| {
+                    let _ = handle.opener().reveal_item_in_dir(p);
+                }));
+            }
+            // Anything the browser extension sends brings the window to the front.
+            {
+                let handle = app.handle().clone();
+                for_opener.set_to_front(Arc::new(move || show_main(&handle)));
             }
             let show = MenuItem::with_id(app, "show", "Show Fuselane", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;

@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use fuselane_api::offer::Offer;
-use fuselane_api::server::{BoxFuture, Decline, Handler, Handoff, Seen};
+use fuselane_api::server::{BoxFuture, Decline, Handler, Handoff, JobAction, Seen};
 
 use crate::service::Service;
 
@@ -20,11 +20,13 @@ pub const FEED_DRAFT: &str = "fuselane-feed:";
 impl Handler for ApiBridge {
     fn page_feed(&self, url: String) -> bool {
         self.svc.open_request(format!("{FEED_DRAFT}{url}"));
+        self.svc.bring_to_front();
         true
     }
 
     fn page_video(&self, url: String) -> bool {
         self.svc.open_request(format!("{VIDEO_DRAFT}{url}"));
+        self.svc.bring_to_front();
         true
     }
 
@@ -37,6 +39,7 @@ impl Handler for ApiBridge {
             {
                 // A magnet needs the user to pick files: open the dialog with it.
                 self.svc.open_request(offer.url);
+                self.svc.bring_to_front();
                 return Ok("open".into());
             }
             let link = offer.final_url.as_deref().unwrap_or(&offer.url);
@@ -71,7 +74,10 @@ impl Handler for ApiBridge {
                         ..Default::default()
                     },
                 )
-                .map(|id| id.to_string())
+                .map(|id| {
+                    self.svc.bring_to_front();
+                    id.to_string()
+                })
                 .map_err(|_| Decline::Unsupported)
         })
     }
@@ -90,6 +96,19 @@ impl Handler for ApiBridge {
 
     fn set_handoff(&self, handoff: Handoff) -> Option<Handoff> {
         self.svc.set_handoff(handoff).ok()
+    }
+
+    fn jobs(&self) -> Option<serde_json::Value> {
+        self.svc.extension_jobs().ok()
+    }
+
+    fn job_action(&self, id: i64, action: JobAction) -> Result<(), String> {
+        self.svc.extension_action(id, action).map_err(|e| {
+            [e.message, e.hint.unwrap_or_default()]
+                .join(" ")
+                .trim()
+                .to_string()
+        })
     }
 }
 
@@ -254,5 +273,41 @@ mod tests {
                 .any(|e| matches!(e, UiEvent::Open { target } if target == m))
         );
         assert!(!b.version().is_empty());
+    }
+
+    #[test]
+    fn what_the_extension_asks_for_brings_the_window_to_the_front() {
+        let (b, _events, _dir) = bridge();
+        let shown = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let count = shown.clone();
+        b.svc.set_to_front(Arc::new(move || {
+            count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }));
+        assert!(b.page_video("https://www.youtube.com/watch?v=x".into()));
+        assert!(b.page_feed("https://blog.example/feed.xml".into()));
+        assert_eq!(shown.load(std::sync::atomic::Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn the_popup_sees_downloads_and_can_cancel_them() {
+        let (b, _events, _dir) = bridge();
+        let id = b.svc.add("https://example.org/big.iso", None).unwrap();
+        let list = b.jobs().unwrap();
+        let first = &list["jobs"][0];
+        assert_eq!(first["id"], id);
+        assert_eq!(first["name"], "big.iso");
+        assert_eq!(first["file"], false);
+        assert_eq!(list["rate"], 0.0);
+        b.job_action(id, JobAction::Cancel).unwrap();
+        // A running download stops first, then goes.
+        for _ in 0..100 {
+            if b.jobs().unwrap()["jobs"].as_array().unwrap().is_empty() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        assert_eq!(b.jobs().unwrap()["jobs"].as_array().unwrap().len(), 0);
+        let err = b.job_action(9999, JobAction::Pause).unwrap_err();
+        assert!(!err.is_empty());
     }
 }
