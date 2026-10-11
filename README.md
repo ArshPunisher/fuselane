@@ -1,62 +1,173 @@
-<p><img src="packaging/brand/mark.svg" width="72" height="72" alt="Fuselane logo: three coloured lanes fusing into one orange line"></p>
+<div align="center">
+
+<img src="packaging/brand/mark.svg" width="88" height="88" alt="Fuselane logo: three coloured lanes fusing into one orange line">
 
 # Fuselane
 
-> Fuse every connection into one fast lane. **[Download](https://arshpunisher.github.io/fuselane/)**
+**Every internet connection you have, working on one download.**
 
-Fuselane is a cross-platform download **and upload** manager. It spreads one transfer across every internet connection the computer has: home Wi-Fi, a phone tethered over USB, Ethernet, a second ISP. You get their combined speed, with no VPN, relay server or admin rights.
+Wi-Fi, Ethernet and a phone tethered over USB, at the same time. No VPN, no relay server, no admin rights.
 
-**Status: public beta (0.1).** Bonded HTTP(S) downloads work on macOS, Windows and Linux, in a desktop app and a CLI. Torrents, bonded uploads and the browser extension come next. See [`docs/04-plan/STATUS.md`](docs/04-plan/STATUS.md).
+[![Latest release](https://img.shields.io/github/v/release/ArshPunisher/fuselane?include_prereleases&label=release&color=C2410C)](https://github.com/ArshPunisher/fuselane/releases)
+[![Downloads](https://img.shields.io/github/downloads/ArshPunisher/fuselane/total?color=C2410C)](https://github.com/ArshPunisher/fuselane/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/ArshPunisher/fuselane/ci.yml?branch=main&label=CI)](https://github.com/ArshPunisher/fuselane/actions/workflows/ci.yml)
+[![Licence](https://img.shields.io/github/license/ArshPunisher/fuselane?color=3f3f46)](LICENSE)
+<br>
+![macOS](https://img.shields.io/badge/macOS-13.3%2B-3f3f46?logo=apple&logoColor=white)
+![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-3f3f46?logo=windows&logoColor=white)
+![Linux](https://img.shields.io/badge/Linux-x64%20%7C%20arm64-3f3f46?logo=linux&logoColor=white)
+[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/nggljghjikdkigiekdciocigdnnhponl?label=Chrome&logo=googlechrome&logoColor=white&color=3f3f46)](https://chromewebstore.google.com/detail/nggljghjikdkigiekdciocigdnnhponl)
 
-## Install the beta
+**[Download](https://fuselane.app/download)** &nbsp;&nbsp;|&nbsp;&nbsp; **[Website](https://fuselane.app)** &nbsp;&nbsp;|&nbsp;&nbsp; **[Guide](https://fuselane.app/guide)** &nbsp;&nbsp;|&nbsp;&nbsp; **[FAQ](https://fuselane.app/faq)**
 
-| System | How |
-|---|---|
-| macOS 13.3+ | `curl -fsSL https://raw.githubusercontent.com/ArshPunisher/fuselane/main/packaging/macos/install.sh \| sh`, or `brew install --cask arshpunisher/tap/fuselane`, or the `.dmg` |
-| Windows 10/11 x64 | `Fuselane_<version>_windows-x64-setup.exe` |
-| Linux x64 / arm64 | `.AppImage` (x64), `.deb` or `.rpm` |
-| CLI | `fuselane-cli_<version>_<system>` |
+<br>
 
-All files are on [Releases](https://github.com/ArshPunisher/fuselane/releases) with `SHA256SUMS`. The app updates itself from a signed feed. It sends nothing else: see [PRIVACY.md](docs/PRIVACY.md).
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/shots/app-dark.webp">
+  <img src="docs/shots/app-light.webp" width="880" alt="The Fuselane window: a download split across Wi-Fi, an iPhone and Ethernet, each network's share in its own colour">
+</picture>
 
-## Code signing policy
+</div>
 
-Windows releases are to be signed through the [SignPath Foundation](https://signpath.org) (free code signing for open source; application in progress). Until then, Windows installers are unsigned and SmartScreen may warn.
-
-- Every release is built by GitHub Actions from this public repository; nothing is built or signed on a personal machine.
-- Committers and reviewers: [@ArshPunisher](https://github.com/ArshPunisher). Approver of each signed release: [@ArshPunisher](https://github.com/ArshPunisher).
-- macOS builds are ad-hoc signed; app updates are signed with the project's own update key and verified by the app before installing.
-- Privacy: the app collects no user data ([PRIVACY.md](docs/PRIVACY.md)).
+<br>
 
 ## What it does
 
-| Pillar | What it means |
-|---|---|
-| **Bonded downloads** | HTTP(S) range downloads and torrents split across every network, with resume, integrity checks and per-network limits |
-| **Bonded uploads** | Big files uploaded in parallel parts over every network to cloud storage, ending in a share link (WeTransfer-style, but faster) |
-| **Browser capture** | Chrome, Edge, Brave and Firefox extensions (Safari later) that hand downloads to Fuselane, cookies and referrer included |
-| **Everywhere** | macOS, Windows and Linux from one Rust core, with installers, signed auto-updates and a CLI (no Android app: [ADR 0010](docs/adr/0010-no-android-app.md)) |
+Fuselane splits each download into parts and fetches them over every network the computer has, so you get their combined speed. A slow network gets less work, a dead one hands its part to the others, and every file is checked when it finishes.
 
-## Documentation map
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/shots/control-dark.webp">
+        <img src="docs/shots/control-light.webp" alt="One download's networks: Wi-Fi 36%, iPhone USB 16%, Ethernet 49%, with a speed limit and a ready-by time">
+      </picture>
+      <h3>Every network at once</h3>
+      See what each network carries, cap a download's speed, or give it a time it has to be ready by.
+    </td>
+    <td width="50%" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/shots/send-dark.webp">
+        <img src="docs/shots/send-light.webp" alt="Send: nearby computers and a phone around this computer, trusted ones marked">
+      </picture>
+      <h3>Send to nearby computers</h3>
+      Files, folders, text and the clipboard go straight to other computers and phones on the same network. Works with LocalSend.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/shots/check-dark.webp">
+        <img src="docs/shots/check-light.webp" alt="Network check: download speed, latency, jitter, speed under load and DNS for each network">
+      </picture>
+      <h3>Network check</h3>
+      Why is the internet slow? Each network is measured on its own, with a report you can send your provider.
+    </td>
+    <td width="50%" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/shots/feeds-dark.webp">
+        <img src="docs/shots/feeds-light.webp" alt="Feeds: follow a podcast or a project's releases, with words to include or skip">
+      </picture>
+      <h3>Feeds</h3>
+      Follow a podcast, a project's releases or any RSS or Atom feed. New files download by themselves.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/shots/torrent.png" alt="A torrent's detail: its files, peers and which network carries each peer">
+      <h3>Torrents</h3>
+      Magnet links and .torrent files over every network, with file choice, priorities and play while it downloads.
+    </td>
+    <td width="50%" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/shots/extension-dark.png">
+        <img src="docs/shots/extension-light.png" width="300" alt="The browser extension's popup: total speed split by network, and each download as a tile">
+      </picture>
+      <h3>Browser extension</h3>
+      Downloads you start in Chrome, Edge, Brave or Firefox go to Fuselane, with the site's sign-in kept.
+    </td>
+  </tr>
+</table>
+
+Also: videos from web pages with your own [yt-dlp](https://github.com/yt-dlp/yt-dlp), hand a download to another computer halfway through, mirrors, schedules, data allowances per network, and a command-line tool.
+
+## Install
+
+| System | How |
+|---|---|
+| **macOS** 13.3+ | `brew install --cask arshpunisher/tap/fuselane`, or the `.dmg` from [Releases](https://github.com/ArshPunisher/fuselane/releases) |
+| **Windows** 10 / 11 (x64) | `Fuselane_<version>_windows-x64-setup.exe` from [Releases](https://github.com/ArshPunisher/fuselane/releases) |
+| **Linux** x64 / arm64 | `.AppImage` (x64), `.deb` or `.rpm` from [Releases](https://github.com/ArshPunisher/fuselane/releases) |
+| **Command line** | `fuselane-cli_<version>_<system>` from [Releases](https://github.com/ArshPunisher/fuselane/releases) |
+| **Browser** | [Chrome Web Store](https://chromewebstore.google.com/detail/nggljghjikdkigiekdciocigdnnhponl) (also Brave) and [Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/aeacngcllkfecpfoclekcfhpokjhijgc) |
+
+<details>
+<summary>macOS install script</summary>
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ArshPunisher/fuselane/main/packaging/macos/install.sh | sh
+```
+
+</details>
+
+Every release lists `SHA256SUMS`. The app updates itself from a signed feed and sends nothing else ([privacy](docs/PRIVACY.md)).
+
+## How it works
+
+```mermaid
+flowchart LR
+    S[(Server)] --> W[Wi-Fi]
+    S --> E[Ethernet]
+    S --> P[Phone over USB]
+    W --> F{{Fuselane}}
+    E --> F
+    P --> F
+    F --> D[Your file, checked]
+```
+
+Each network gets its own connections, pinned to that network. Parts are handed out by speed: when a network slows down it gets smaller parts, and when one drops, its unfinished part goes to the others. Nothing passes through anyone else's server, and the server sees ordinary range requests.
+
+## Build from source
+
+You need Rust (see `rust-toolchain.toml`), Node 24 and pnpm 11.
+
+```sh
+pnpm install
+pnpm --filter @fuselane/desktop tauri dev     # the desktop app
+cargo run -p fuselane-cli -- --help           # the command-line tool
+tools/check.sh                                # every check CI runs
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+
+## Signing and trust
+
+- Every release is built by GitHub Actions from this public repository. Nothing is built or signed on a personal machine.
+- macOS builds are signed with the project's own certificate (not notarized). Windows signing through the [SignPath Foundation](https://signpath.org) is in progress, so SmartScreen may warn until then.
+- App updates are signed with the project's update key and checked by the app before they install.
+- Committer, reviewer and release approver: [@ArshPunisher](https://github.com/ArshPunisher).
+
+<details>
+<summary>Documentation map</summary>
 
 | Folder | What's inside |
 |---|---|
 | [`docs/00-overview`](docs/00-overview) | Vision, users, positioning, principles, non-goals |
-| [`docs/01-research`](docs/01-research) | Plexo analysis and forensic study, market research, tech research, naming |
-| [`docs/02-product`](docs/02-product) | Plexo parity checklist, new features, lessons from Plexo |
-| [`docs/03-architecture`](docs/03-architecture) | Architecture, tech stack, engine, networking, torrent, uploads, extension, security, errors, platforms |
-| [`docs/04-plan`](docs/04-plan) | Roadmap, detailed steps, live status, open questions |
-| [`docs/05-quality`](docs/05-quality) | Testing strategy, test levels, hardware matrix |
-| [`docs/06-process`](docs/06-process) | How we work: workflow, commits, branches, releases |
-| [`docs/07-design`](docs/07-design) | Design system ("Lanes → Fuse") and motion language |
-| [`docs/adr`](docs/adr) | Architecture Decision Records |
+| [`docs/01-research`](docs/01-research) | Plexo analysis, market research, tech research, naming |
+| [`docs/02-product`](docs/02-product) | Parity checklist, new features, lessons learned |
+| [`docs/03-architecture`](docs/03-architecture) | Engine, networking, torrents, extension, security, platforms |
+| [`docs/04-plan`](docs/04-plan) | Roadmap, steps, live status |
+| [`docs/05-quality`](docs/05-quality) | Testing strategy and hardware matrix |
+| [`docs/06-process`](docs/06-process) | Workflow, commits, branches, releases |
+| [`docs/07-design`](docs/07-design) | Design system and motion |
+| [`docs/adr`](docs/adr) | Architecture decision records |
 
-Start with [`docs/00-overview/VISION.md`](docs/00-overview/VISION.md), then [`docs/04-plan/ROADMAP.md`](docs/04-plan/ROADMAP.md).
+</details>
 
-## Inspiration and originality
+## Inspiration
 
-Fuselane was inspired by [Plexo](https://github.com/anmolkapil/plexo) (MIT), which proved that multi-network downloading without a VPN is wanted. We studied its behaviour, bugs and history to learn from them. **We do not copy its code.** Fuselane is a clean-room implementation in a different language (Rust) with a different architecture. See [ADR 0005](docs/adr/0005-clean-room-policy.md).
+Fuselane was inspired by [Plexo](https://github.com/anmolkapil/plexo) (MIT), which showed that downloading over several networks without a VPN is wanted. Fuselane is a clean-room implementation in a different language (Rust) with a different design; no Plexo code is used ([ADR 0005](docs/adr/0005-clean-room-policy.md)).
 
 ## Licence
 
-[Apache-2.0](LICENSE). Fuselane is free and open source, and it uses only free services ([ADR 0009](docs/adr/0009-zero-cost-policy.md)).
+[Apache-2.0](LICENSE). Free and open source, built only on free services ([ADR 0009](docs/adr/0009-zero-cost-policy.md)). Made by [ClearCraft Labs](https://clearcraftlabs.com).
