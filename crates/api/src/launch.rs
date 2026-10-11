@@ -38,7 +38,16 @@ pub fn start_app() -> bool {
     };
     // An AppImage runs from a mount that disappears with this process.
     let exe = crate::hosts::host_exe(current, std::env::var_os("APPIMAGE").map(Into::into));
+    if is_cli(&exe) {
+        return false;
+    }
     spawn_detached(command_for(&exe)).is_ok()
+}
+
+/// The command-line tool (`fuselane`) can be the host too, for people without
+/// the app; it has no window to open, so nothing is started for it.
+pub fn is_cli(exe: &Path) -> bool {
+    bundle_of(exe).is_none() && exe.file_stem().is_some_and(|s| s == "fuselane")
 }
 
 fn spawn_detached(mut c: Command) -> std::io::Result<()> {
@@ -82,6 +91,17 @@ mod tests {
             Some(PathBuf::from("/Applications/Fuselane.app"))
         );
         assert_eq!(bundle_of(Path::new("/usr/bin/fuselane")), None);
+    }
+
+    #[test]
+    fn the_command_line_tool_is_not_an_app_to_start() {
+        assert!(is_cli(Path::new("/usr/local/bin/fuselane")));
+        assert!(is_cli(Path::new(r"C:\Tools\fuselane.exe")) || cfg!(not(windows)));
+        assert!(!is_cli(Path::new("/usr/bin/fuselane-desktop")));
+        assert!(!is_cli(Path::new(
+            "/Applications/Fuselane.app/Contents/MacOS/fuselane"
+        )));
+        assert!(!is_cli(Path::new("/opt/Fuselane.AppImage")));
     }
 
     #[cfg(target_os = "macos")]
