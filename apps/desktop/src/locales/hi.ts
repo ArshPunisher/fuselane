@@ -509,6 +509,7 @@ export const hi: Readonly<Record<string, string>> = {
     'अपना डाउनलोड फ़ोल्डर इस्तेमाल करने के लिए खाली छोड़ें।',
   'More options': 'और विकल्प',
   'Fewer options': 'कम विकल्प',
+  'Waiting for {device} to accept…': '{device} के स्वीकार करने का इंतज़ार…',
   'Arriving from {device}': '{device} से आ रहा है',
   'From {device}. What it downloaded is on its way; the rest comes from the internet now.':
     '{device} से। उसने जो डाउनलोड किया वह आ रहा है; बाकी अभी इंटरनेट से आ रहा है।',
@@ -524,7 +525,6 @@ export const hi: Readonly<Record<string, string>> = {
     'Nearby में "Everyone for 10 minutes" चुनें, या यह कंप्यूटर दिखे तो उस पर भरोसा करें।',
   'Once you trust each other, they always find each other.':
     'एक बार भरोसा कर लेने पर दोनों कंप्यूटर हमेशा एक-दूसरे को ढूंढ लेते हैं।',
-  'Waiting for {device} to take it…': '{device} के लेने का इंतज़ार…',
   'Sending {done} of {total} to {device}. It has started there already.':
     '{device} को {total} में से {done} भेज रहे हैं। वहां यह शुरू हो चुका है।',
   'Everything arrived on {device}. It carries on there; you can remove it here.':

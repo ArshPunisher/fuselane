@@ -184,6 +184,8 @@ pub struct Nearby {
     /// Hand-offs arriving (REVIEW-2026-10-11 C): which packs are expected, and
     /// where their bytes go (set by the app).
     packs: Mutex<Option<Packs>>,
+    /// When receiving progress was last shown (it's shown a few times a second).
+    progress_shown: Mutex<Option<Instant>>,
 }
 
 /// Where an expected hand-off pack's bytes go, by its file name.
@@ -306,6 +308,7 @@ impl Nearby {
             sync_busy: AtomicBool::new(false),
             sync_last: Mutex::new(None),
             packs: Mutex::new(None),
+            progress_shown: Mutex::new(None),
         });
         n.load_syncs();
         n
@@ -364,6 +367,10 @@ impl Nearby {
     /// Starts the receiver and discovery (the first time the Send page opens).
     pub async fn start(self: &Arc<Self>) -> Result<NearbyView, UiError> {
         if self.running() {
+            // Already on: ask who's around again (the Send page or the hand-off
+            // dialog opened). Computers that trust this one answer at once, even
+            // if they started after it and it hasn't announced itself since.
+            self.announce().await;
             return Ok(self.view());
         }
         let id = Identity::load_or_create(&self.state_dir).map_err(|e| {
@@ -798,21 +805,26 @@ impl Nearby {
         };
         tokio::spawn(async move {
             let my = me.info();
-            // Once bytes flow, it's no longer "asking".
+            // Once bytes flow, it's "sending"; its progress is refreshed a few
+            // times a second while it goes (not just at the 3-second tick).
             let watch = {
                 let (me, id, sent) = (me.clone(), id.clone(), sent.clone());
                 tokio::spawn(async move {
+                    let mut last = 0;
                     loop {
                         tokio::time::sleep(Duration::from_millis(300)).await;
-                        if sent.load(Ordering::Relaxed) > 0 {
-                            if let Some(o) = lock(&me.outgoing).iter_mut().find(|o| o.view.id == id)
-                                && o.view.state == "asking"
-                            {
+                        let now = sent.load(Ordering::Relaxed);
+                        if now == last {
+                            continue;
+                        }
+                        last = now;
+                        if let Some(o) = lock(&me.outgoing).iter_mut().find(|o| o.view.id == id) {
+                            if o.view.state == "asking" {
                                 o.view.state = "sending";
                             }
-                            me.publish();
-                            break;
+                            o.view.done = now.min(o.view.size);
                         }
+                        me.publish();
                     }
                 })
             };
@@ -1182,6 +1194,18 @@ impl Host for Receiver {
         let Some(n) = self.0.upgrade() else { return };
         if let Some(v) = lock(&n.incoming).get_mut(session) {
             v.done = written.max(v.done);
+        }
+        // Shown a few times a second while it arrives, not at the 3-second tick.
+        let due = {
+            let mut last = lock(&n.progress_shown);
+            let due = last.is_none_or(|t| t.elapsed() >= Duration::from_millis(300));
+            if due {
+                *last = Some(Instant::now());
+            }
+            due
+        };
+        if due {
+            n.publish();
         }
     }
 

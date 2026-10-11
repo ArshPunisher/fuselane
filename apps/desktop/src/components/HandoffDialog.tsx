@@ -38,11 +38,14 @@ export function HandoffDialog({
       setSent(null)
       setProblem(null)
       d.showModal()
-      // Nearby starts the first time it's needed (NEARBY.md).
-      if (backend && !nearby?.on) void backend.nearbyStart().catch(() => {})
+      // Nearby starts the first time it's needed (NEARBY.md); when it's on
+      // already, this asks again who's around, so trusted computers show up.
+      if (backend) void backend.nearbyStart().catch(() => {})
     }
     if (!open && d.open) d.close()
-  }, [open, backend, nearby?.on])
+    // Only when the dialog opens: refreshing on every Nearby update would loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, backend])
 
   const send = async (fingerprint: string, alias: string) => {
     if (!backend) return
@@ -165,32 +168,48 @@ function Sending({
   onCancel: (id: string) => void
   onShowAll: () => void
 }) {
+  // Accepted: nothing to decide here any more. The Send page shows it going.
+  const accepted = transfer?.state === 'sending' || transfer?.state === 'done'
+  useEffect(() => {
+    if (accepted) onShowAll()
+  }, [accepted, onShowAll])
+  if (!transfer || transfer.state === 'asking')
+    return (
+      <div className="handoff-sending handoff-waiting" role="status" aria-live="polite">
+        <span className="handoff-spinner" aria-hidden="true" />
+        <p className="dialog-text">
+          {tr('Waiting for {device} to accept…', { device: <b translate="no">{device}</b> })}
+        </p>
+        {transfer && (
+          <button type="button" className="btn" onClick={() => onCancel(transfer.id)}>
+            {t('Stop')}
+          </button>
+        )}
+      </div>
+    )
   const who = <b translate="no">{device}</b>
-  const going = !transfer || transfer.state === 'asking' || transfer.state === 'sending'
-  const pct =
-    transfer && transfer.size > 0 ? Math.min(100, (transfer.done / transfer.size) * 100) : 0
+  const going = transfer.state === 'sending'
+  const pct = transfer.size > 0 ? Math.min(100, (transfer.done / transfer.size) * 100) : 0
   return (
     <div className="handoff-sending">
       <p className="dialog-text" role="status" aria-live="polite">
-        {!transfer || transfer.state === 'asking'
-          ? tr('Waiting for {device} to take it…', { device: who })
-          : transfer.state === 'sending'
-            ? tr('Sending {done} of {total} to {device}. It has started there already.', {
-                done: <span className="num">{bytes(transfer.done)}</span>,
-                total: <span className="num">{bytes(transfer.size)}</span>,
+        {transfer.state === 'sending'
+          ? tr('Sending {done} of {total} to {device}. It has started there already.', {
+              done: <span className="num">{bytes(transfer.done)}</span>,
+              total: <span className="num">{bytes(transfer.size)}</span>,
+              device: who,
+            })
+          : transfer.state === 'done'
+            ? tr('Everything arrived on {device}. It carries on there; you can remove it here.', {
                 device: who,
               })
-            : transfer.state === 'done'
-              ? tr('Everything arrived on {device}. It carries on there; you can remove it here.', {
-                  device: who,
-                })
-              : transfer.state === 'declined'
-                ? tr('{device} said no.', { device: who })
-                : transfer.state === 'cancelled'
-                  ? t(
-                      'Sending stopped. What arrived is kept there; it gets the rest from the internet.',
-                    )
-                  : (transfer.error ?? t("It couldn't be sent."))}
+            : transfer.state === 'declined'
+              ? tr('{device} said no.', { device: who })
+              : transfer.state === 'cancelled'
+                ? t(
+                    'Sending stopped. What arrived is kept there; it gets the rest from the internet.',
+                  )
+                : (transfer.error ?? t("It couldn't be sent."))}
       </p>
       {transfer && transfer.state === 'sending' && (
         <div
@@ -205,7 +224,7 @@ function Sending({
         </div>
       )}
       <div className="handoff-actions">
-        {going && transfer && (
+        {going && (
           <button type="button" className="btn" onClick={() => onCancel(transfer.id)}>
             {t('Stop sending')}
           </button>

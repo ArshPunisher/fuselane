@@ -1265,19 +1265,17 @@ test('a paused download can continue on another computer with Fuselane', async (
   await expect(dialog.getByRole('button', { name: "Maya's MacBook Air" })).toBeVisible()
   await expect(dialog.getByRole('button', { name: 'Pixel 9' })).toHaveCount(0)
   await dialog.getByRole('button', { name: "Maya's MacBook Air" }).click()
-  // The sending shows here (C6), and can be left running.
-  const status = dialog.getByRole('status')
-  await expect(status).toContainText(
-    /Waiting for Maya's MacBook Air|Sending .* to Maya's MacBook Air/,
-  )
-  await expect(status).toContainText('Sending', { timeout: 10_000 })
-  await expect(dialog.getByRole('progressbar', { name: 'Sent' })).toBeVisible()
-  await expect(dialog.getByText('You can close this; sending goes on.')).toBeVisible()
-  await expect(status).toContainText("Everything arrived on Maya's MacBook Air", {
-    timeout: 30_000,
-  })
-  await dialog.getByRole('button', { name: 'Done' }).click()
-  await expect(dialog).toBeHidden()
+  // While the other computer decides: a loader, then (accepted) the dialog
+  // closes and the Send page shows it going.
+  await expect(dialog.getByRole('status')).toContainText("Waiting for Maya's MacBook Air to accept")
+  await expect(dialog).toBeHidden({ timeout: 10_000 })
+  await expect(page.getByRole('heading', { level: 1, name: 'Send' })).toBeVisible()
+  await expect(page.getByText('dataset-shard-0042.tar.zst').first()).toBeVisible()
+  await page.getByRole('button', { name: 'Downloads' }).first().click()
+  await page
+    .getByRole('button', { name: /dataset-shard-0042/ })
+    .first()
+    .click()
   // A running download offers no hand-off.
   await page
     .getByRole('button', { name: /ubuntu-26\.04/ })
