@@ -102,8 +102,10 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Build the extension
-        run: pnpm --filter @fuselane/extension build
+      - name: Build the extension (the store build, and the test build the self-download tests load)
+        run: |
+          pnpm --filter @fuselane/extension build
+          pnpm --filter @fuselane/extension build:e2e
       - name: Extension talks to the host
         run: |
           pnpm --filter @fuselane/extension exec playwright install --with-deps chromium
