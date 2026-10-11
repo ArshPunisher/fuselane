@@ -636,6 +636,7 @@ h2 {
    a scroll of its own, so there's never a scroll inside a scroll. */
 .panel {
   display: grid;
+  align-content: start;
   gap: 10px;
   min-height: 150px;
 }
@@ -653,20 +654,25 @@ h2 {
   display: none;
 }
 
+/* Downloads as tiles: a line above and below each. */
 .jobs {
   display: grid;
-  gap: 2px;
   margin: 0;
   padding: 0;
+  border-top: 1px solid var(--hairline);
   list-style: none;
+}
+
+.jobs:empty {
+  border-top: 0;
 }
 
 .job {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 6px 8px 10px;
-  border-radius: var(--radius-control);
+  padding: 9px 4px 9px 6px;
+  border-bottom: 1px solid var(--hairline);
   transition: background var(--dur-quick) var(--ease-out);
 }
 

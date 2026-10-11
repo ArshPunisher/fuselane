@@ -177,6 +177,7 @@ async function startSelf(url: string, pageUrl: string | null, name: string, size
   const job = newJob(url, pageUrl, name, size)
   await update((jobs) => [job, ...jobs])
   ;(await runner()).start(job, await limit())
+  void showStarted()
 }
 
 /** Browser download ids of the extension's finished files, while they save. */
@@ -252,6 +253,17 @@ async function offerItem(it: Item): Promise<boolean> {
 }
 
 /** "Too big for the extension": Get the app, or let the browser have it. */
+/**
+ * A download just started in Fuselane: the popup opens on Downloads to show it
+ * (the app stays in the background; it comes up only for things to choose).
+ */
+async function showStarted() {
+  await browser.storage.local.set({ showDownloads: Date.now() })
+  await (browser.action as unknown as { openPopup?: () => Promise<void> })
+    .openPopup?.()
+    .catch(() => {})
+}
+
 /** Files too big for the extension, each waiting for "get the app or the browser". */
 const BIG_KEY = 'bigAsks'
 type BigAsk = { url: string; name: string; size: number; at: number }
@@ -339,6 +351,7 @@ async function grab(url: string, pageUrl: string | null, name: string | null) {
       START_WAIT_MS,
     )
     if (!took) known = null
+    else void showStarted()
   } else if (r.to === 'self' || r.to === 'too-big') {
     // Size unknown until it starts: the extension stops past its limit and asks.
     await startSelf(url, pageUrl, nameFor(url, name), null)
@@ -471,7 +484,7 @@ export default defineBackground(() => {
       if (!took) {
         known = null
         await browserDownload(d.finalUrl || d.url)
-      }
+      } else void showStarted()
       return
     }
     // Otherwise hold it before deciding: deciding takes a moment, and a fast
@@ -510,7 +523,7 @@ export default defineBackground(() => {
       if (outcome === 'returned') {
         known = null // the app may have closed: ask again next time
         await showBarFor()
-      }
+      } else if (outcome === 'handed-over') void showStarted()
       return
     }
     // The extension takes it: the browser's copy goes, without a trace.

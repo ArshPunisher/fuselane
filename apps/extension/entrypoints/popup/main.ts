@@ -291,6 +291,8 @@ function buttons(r: Row): [IconName, string, string][] {
 
 let act: (id: string, action: string) => Promise<void> = async () => {}
 const rows = new Map<string, { li: HTMLLIElement; state: string }>()
+/** Pause pressed: shown at once, until the download says it has stopped. */
+const pausing = new Map<string, number>()
 
 function render(list: Row[], rate: number) {
   const ul = $<HTMLUListElement>('#jobs')
@@ -319,8 +321,14 @@ function render(list: Row[], rate: number) {
         b.setAttribute('aria-label', `${label}: ${r.name}`)
         b.addEventListener('click', async () => {
           b.disabled = true
+          if (action === 'pause') {
+            // Its connections take a moment to close: say so now.
+            pausing.set(r.id, Date.now())
+            li.querySelector('.job-meta')!.textContent = 'Pausing…'
+            for (const x of actions.querySelectorAll('button')) x.disabled = true
+          }
           await act(r.id, action)
-          b.disabled = false
+          if (action !== 'pause') b.disabled = false
         })
         actions.append(b)
       }
@@ -339,7 +347,15 @@ function render(list: Row[], rate: number) {
       rows.set(r.id, row)
     }
     const { li } = row
-    li.querySelector('.job-meta')!.textContent = meta(r)
+    const asked = pausing.get(r.id)
+    const stillPausing =
+      asked !== undefined && r.status === 'running' && Date.now() - asked < 20_000
+    if (!stillPausing && asked !== undefined) {
+      // Still running after all (the pause didn't take): its buttons work again.
+      pausing.delete(r.id)
+      for (const x of li.querySelectorAll('button')) x.disabled = false
+    }
+    li.querySelector('.job-meta')!.textContent = stillPausing ? 'Pausing…' : meta(r)
     li.querySelector('.job-name')!.textContent = r.name
     const pct = r.total
       ? Math.min(100, (r.written / r.total) * 100)
@@ -643,6 +659,12 @@ async function load() {
     if (t && TABS.includes(t)) tab = t
   } catch {
     // ignore
+  }
+  // Opened by a download that just started: straight to Downloads.
+  const started = (await browser.storage.local.get('showDownloads')).showDownloads
+  if (typeof started === 'number' && Date.now() - started < 10_000) {
+    tab = 'downloads'
+    void browser.storage.local.remove('showDownloads')
   }
   show(tab)
   // A question waiting (a file too big for the extension) shows at once,
