@@ -24,6 +24,7 @@ node_modules/
 dist/
 .output/
 .output-e2e/
+.output-local/
 .wxt/
 .turbo/
 coverage/

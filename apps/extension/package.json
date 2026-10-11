@@ -7,6 +7,7 @@
     "build": "wxt build",
     "build:firefox": "wxt build -b firefox --mv3",
     "build:e2e": "FUSELANE_E2E=1 wxt build",
+    "build:local": "FUSELANE_LOCAL=1 wxt build",
     "zip": "wxt zip && wxt zip -b firefox --mv3",
     "postinstall": "wxt prepare",
     "typecheck": "wxt prepare && tsc --noEmit",
