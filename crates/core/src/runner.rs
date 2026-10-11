@@ -987,37 +987,54 @@ pub async fn run(
                     .into(),
             )
         })?;
-    let (link, headers) = follow(
-        link,
-        &opts.networks,
-        opts.per_network_dns,
-        opts.headers,
-        Duration::from_secs(10),
-    )
-    .await?;
-    let (source, mut networks, names) =
-        connect_plan(&link, &opts.networks, opts.per_network_dns).await?;
-    if !opts.mirrors.is_empty() {
-        let notes = opts.mirror_notes.clone();
-        let note = move |m: String| {
-            if let Some(n) = &notes {
-                n.lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .push(m);
-            }
-        };
-        let mut more = mirror_lanes(
-            &source,
-            &networks,
-            &opts.mirrors,
+    // Finding where the file really is (redirects, each network's address,
+    // mirrors) asks servers first; a pause meanwhile lands at once.
+    let given_headers = opts.headers;
+    let setup = async {
+        let (link, headers) = follow(
+            link,
             &opts.networks,
             opts.per_network_dns,
-            headers.has_credentials(),
-            &note,
+            given_headers,
+            Duration::from_secs(10),
         )
-        .await;
-        networks.append(&mut more);
-    }
+        .await?;
+        let (source, mut networks, names) =
+            connect_plan(&link, &opts.networks, opts.per_network_dns).await?;
+        if !opts.mirrors.is_empty() {
+            let notes = opts.mirror_notes.clone();
+            let note = move |m: String| {
+                if let Some(n) = &notes {
+                    n.lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .push(m);
+                }
+            };
+            let mut more = mirror_lanes(
+                &source,
+                &networks,
+                &opts.mirrors,
+                &opts.networks,
+                opts.per_network_dns,
+                headers.has_credentials(),
+                &note,
+            )
+            .await;
+            networks.append(&mut more);
+        }
+        Ok::<_, StartError>((headers, source, networks, names))
+    };
+    let (headers, source, networks, names) = match opts.cancel.clone() {
+        Some(cancel) => tokio::select! {
+            r = setup => r?,
+            () = cancel.cancelled() => {
+                let _ = store.apply(id, Event::Start, None);
+                let _ = store.apply(id, Event::Pause, None);
+                return Ok(Outcome::Paused);
+            }
+        },
+        None => setup.await?,
+    };
     let sink = {
         let store = store.clone();
         CheckpointFn(Arc::new(move |cp| {

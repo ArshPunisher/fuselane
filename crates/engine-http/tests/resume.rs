@@ -315,3 +315,78 @@ async fn a_resumed_download_counts_from_what_it_had_not_from_zero() {
         "first reading {first} should be past the {secured} saved"
     );
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_pause_lands_at_once_even_while_every_connection_is_stuck() {
+    let content = Content::new(4096 * KB, 48);
+    let server = RangeServer::start(content).await.unwrap();
+    // Every response sends a little, then goes silent with the connection open.
+    server.add_rule(Rule {
+        skip: 0,
+        times: u32::MAX,
+        fault: Fault::StallAt(16 * KB),
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let cancel = Cancel::new();
+    let got_bytes = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let tuning = Tuning {
+        block_size: Some(256 * KB),
+        cancel: Some(cancel.clone()),
+        progress: Some(ProgressFn(Arc::new({
+            let got_bytes = got_bytes.clone();
+            move |w, _| {
+                if w > 0 {
+                    got_bytes.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+            }
+        }))),
+        ..Tuning::default() // idle timeout 20 s: a pause must not wait for it
+    };
+    let run = tokio::spawn({
+        let server_src = source(&server);
+        let dir = dir.path().to_path_buf();
+        async move { download_with(server_src, vec![plain(1), plain(2)], &dir, tuning, None).await }
+    });
+    while !got_bytes.load(std::sync::atomic::Ordering::Relaxed) {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    tokio::time::sleep(Duration::from_millis(200)).await; // all stuck now
+    let asked = std::time::Instant::now();
+    cancel.cancel();
+    let res = tokio::time::timeout(Duration::from_secs(10), run)
+        .await
+        .expect("pause hung")
+        .unwrap();
+    assert!(matches!(res, Err(JobError::Paused)), "{res:?}");
+    let took = asked.elapsed();
+    assert!(took < Duration::from_secs(2), "pause took {took:?}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_pause_lands_at_once_while_it_is_still_finding_the_file() {
+    let content = Content::new(1024 * KB, 49);
+    let server = RangeServer::start(content).await.unwrap();
+    // The server is busy and says "come back in 30 s": the first answer waits.
+    server.add_rule(Rule::always(Fault::Status(503, Some("30".into()))));
+    let dir = tempfile::tempdir().unwrap();
+    let cancel = Cancel::new();
+    let tuning = Tuning {
+        cancel: Some(cancel.clone()),
+        ..Tuning::default()
+    };
+    let run = tokio::spawn({
+        let server_src = source(&server);
+        let dir = dir.path().to_path_buf();
+        async move { download_with(server_src, vec![plain(1)], &dir, tuning, None).await }
+    });
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let asked = std::time::Instant::now();
+    cancel.cancel();
+    let res = tokio::time::timeout(Duration::from_secs(10), run)
+        .await
+        .expect("pause hung")
+        .unwrap();
+    assert!(matches!(res, Err(JobError::Paused)), "{res:?}");
+    let took = asked.elapsed();
+    assert!(took < Duration::from_secs(1), "pause took {took:?}");
+}

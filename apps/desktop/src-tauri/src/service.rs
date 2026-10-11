@@ -2881,7 +2881,12 @@ impl Service {
 
     async fn run(self: Arc<Self>, job: Job, cancel: Cancel, limit: Arc<fuselane_limits::JobLimit>) {
         let id = job.id;
-        let job = self.with_found_checksum(job).await;
+        // Looking for the file's checksum asks the server first; a pause meanwhile
+        // doesn't wait for that answer (the engine then stops at once).
+        let job = tokio::select! {
+            found = self.with_found_checksum(job.clone()) => found,
+            () = cancel.cancelled() => job,
+        };
         // Networks behind a sign-in page are left out (they'd serve the login page),
         // and "long downloads only" networks wait until this one proves long (B9.5).
         let (picked, held_back) = self.networks_by_use(
@@ -3633,6 +3638,43 @@ mod tests {
         );
         h.wait("paused", |h| h.job(id).status == "paused").await;
         assert!(!h.job(id).pausing);
+    }
+
+    /// A server that takes the connection and never says a word.
+    async fn silent_server() -> (std::net::SocketAddr, tokio::task::JoinHandle<()>) {
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = l.local_addr().unwrap();
+        let task = tokio::spawn(async move {
+            let mut held = Vec::new();
+            while let Ok((c, _)) = l.accept().await {
+                held.push(c);
+            }
+        });
+        (addr, task)
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_pause_lands_at_once_while_the_download_is_still_starting() {
+        for checksums in [true, false] {
+            let (addr, server) = silent_server().await;
+            let h = harness(3);
+            // On: the first wait is the checksum lookup; off: finding the file.
+            h.svc
+                .find_checksums
+                .store(checksums, std::sync::atomic::Ordering::Relaxed);
+            let id = h.svc.add(&format!("http://{addr}/f.iso"), None).unwrap();
+            h.wait("running", |h| h.job(id).status == "running").await;
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            let asked = Instant::now();
+            h.svc.pause(id).unwrap();
+            h.wait("paused", |h| h.job(id).status == "paused").await;
+            let took = asked.elapsed();
+            assert!(
+                took < Duration::from_secs(2),
+                "checksums {checksums}: pause took {took:?}"
+            );
+            server.abort();
+        }
     }
 
     #[tokio::test(flavor = "multi_thread")]

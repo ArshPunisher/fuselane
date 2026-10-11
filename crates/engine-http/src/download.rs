@@ -191,6 +191,19 @@ impl Cancel {
     pub fn is_cancelled(&self) -> bool {
         self.flag.load(Ordering::Acquire)
     }
+    /// Resolves once [`Cancel::cancel`] is called (at once if it was already).
+    pub async fn cancelled(&self) {
+        loop {
+            let woken = self.notify.notified();
+            tokio::pin!(woken);
+            // Listening before looking: a cancel between the two still wakes us.
+            woken.as_mut().enable();
+            if self.is_cancelled() {
+                return;
+            }
+            woken.await;
+        }
+    }
 }
 
 impl std::fmt::Debug for Cancel {
@@ -1158,7 +1171,16 @@ async fn run_stream(ctx: Arc<Ctx>, net: Network, stream: StreamId) {
             continue;
         };
 
-        let outcome = fetch_block(&ctx, &net, stream, work, &mut conn).await;
+        // A pause (or the end) stops this attempt at once, whatever it's waiting
+        // on: a slow network's next bytes, a connection opening, a speed limit's
+        // wait. Bytes are counted only after they're on disk, so nothing is lost.
+        let outcome = tokio::select! {
+            o = fetch_block(&ctx, &net, stream, work, &mut conn) => o,
+            () = stopped(&ctx) => {
+                conn = None;
+                Err(Outcome::Lost)
+            }
+        };
 
         // Settle the attempt.
         let (block_done, delivered) = {
@@ -1710,6 +1732,20 @@ enum Outcome {
     Failed(Failure),
 }
 
+/// Resolves once the download is told to stop (paused, cancelled, finished).
+async fn stopped(ctx: &Ctx) {
+    loop {
+        let woken = ctx.wake.notified();
+        tokio::pin!(woken);
+        // Listening before looking: a stop between the two still wakes us.
+        woken.as_mut().enable();
+        if ctx.stop.load(Ordering::Acquire) {
+            return;
+        }
+        woken.await;
+    }
+}
+
 /// Fetches `[work.from, len)` of a block; returns the attempt's rate (bytes/s).
 async fn fetch_block(
     ctx: &Arc<Ctx>,
@@ -2100,7 +2136,15 @@ pub async fn download_with(
     if networks.is_empty() {
         return Err(JobError::Unreachable("no networks selected".into()));
     }
-    let probe = probe(&src, &networks, &tuning).await?;
+    // A pause while it's still finding the file lands at once too: the first
+    // answer can take seconds on a slow or far server.
+    let probe = match &tuning.cancel {
+        Some(cancel) => tokio::select! {
+            p = probe(&src, &networks, &tuning) => p?,
+            () = cancel.cancelled() => return Err(JobError::Paused),
+        },
+        None => probe(&src, &networks, &tuning).await?,
+    };
     let splittable = probe.ranges && probe.total.is_some_and(|t| t > 0);
     let mut plan = Plan::new(probe.total, splittable, networks.len() as u32);
     if let (Some(bs), Some(total), true) = (tuning.block_size, probe.total, splittable) {
