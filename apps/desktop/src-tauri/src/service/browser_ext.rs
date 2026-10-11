@@ -206,6 +206,20 @@ impl Service {
             w.retain(|id, _| running.contains(id));
             w.clone()
         };
+        // Which networks carry each running download, and all of them together
+        // (the popup draws them as lanes).
+        let lanes = {
+            let mut l = lock(&self.live_lanes);
+            l.retain(|id, _| running.contains(id));
+            l.clone()
+        };
+        let mut networks: Vec<(String, f64)> = Vec::new();
+        for (label, _, rate) in lanes.values().flatten() {
+            match networks.iter_mut().find(|(l, _)| l == label) {
+                Some((_, r)) => *r += rate,
+                None => networks.push((label.clone(), *rate)),
+            }
+        }
         let active = |s: &str| matches!(s, "running" | "queued" | "paused");
         jobs.sort_by_key(|j| {
             (
@@ -237,20 +251,52 @@ impl Service {
                     "rate": rates.get(&j.id).copied().unwrap_or(0.0).round(),
                     "error": j.error,
                     "file": j.final_path.is_some(),
+                    "lanes": lanes.get(&j.id).map(|ls| {
+                        ls.iter()
+                            .map(|(label, bytes, _)| json!({"label": label, "bytes": bytes}))
+                            .collect::<Vec<_>>()
+                    }).unwrap_or_default(),
                 })
             })
             .collect();
         let rate: f64 = rates.values().sum();
-        Ok(json!({"jobs": list, "rate": rate.round()}))
+        let networks: Vec<Value> = networks
+            .iter()
+            .map(|(label, rate)| json!({"label": label, "rate": rate.round()}))
+            .collect();
+        Ok(json!({"jobs": list, "rate": rate.round(), "networks": networks}))
     }
 
     /// Does what the popup asked to download `id`.
+    /// The browser asked for a link already in the list, and the person wants
+    /// another copy: the same link (and browser session) as a new download.
+    pub fn download_copy(self: &Arc<Self>, id: i64) -> Result<i64, UiError> {
+        let job = self.store.get(id).map_err(|_| super::not_found(id))?;
+        let headers = lock(&self.sessions)
+            .get(&id)
+            .map(|h| h.to_pairs())
+            .unwrap_or_default();
+        let new = self.add_with(
+            &job.url,
+            Some(&job.dir.to_string_lossy()),
+            &super::AddRequest {
+                allow_duplicate: true,
+                headers,
+                mirrors: job.mirrors.clone(),
+                ..super::AddRequest::default()
+            },
+        )?;
+        self.show_job(new);
+        Ok(new)
+    }
+
     pub fn extension_action(self: &Arc<Self>, id: i64, action: JobAction) -> Result<(), UiError> {
         match action {
             JobAction::Pause => self.pause(id),
             JobAction::Resume => self.resume(id),
             JobAction::Cancel | JobAction::Remove => self.remove(id),
             JobAction::Delete => self.trash_file(id),
+            JobAction::Again => self.download_copy(id).map(|_| ()),
             JobAction::Open => {
                 let path = self.finished_file(id)?;
                 let open = lock(&self.opener).clone();

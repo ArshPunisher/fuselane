@@ -166,7 +166,7 @@ async fn handle(endpoint: &Path, msg: &[u8]) -> Value {
         Some("jobs.list") => {
             match crate::client::request(endpoint, "jobs.list", json!({}), wait).await {
                 Ok(r) => {
-                    json!({"v": 1, "type": "jobs", "jobs": r.get("jobs").cloned().unwrap_or(json!([])), "rate": r.get("rate").cloned().unwrap_or(json!(0))})
+                    json!({"v": 1, "type": "jobs", "jobs": r.get("jobs").cloned().unwrap_or(json!([])), "rate": r.get("rate").cloned().unwrap_or(json!(0)), "networks": r.get("networks").cloned().unwrap_or(json!([]))})
                 }
                 Err(e) => json!({"v": 1, "type": "jobs", "error": e}),
             }

@@ -393,6 +393,11 @@ async function startOnce(): Promise<void> {
         set({ networks: e.networks })
         return
       }
+      if (e.type === 'show') {
+        // A download from the browser started: it's the one shown now.
+        set({ view: 'transfers', selected: e.id, selectedTorrent: null })
+        return
+      }
       if (e.type === 'open' && isSendLink(e.target)) {
         // The share page's "Open in Fuselane": receive it on the Send page.
         get().openReceive(e.target)

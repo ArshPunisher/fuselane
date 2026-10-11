@@ -352,6 +352,15 @@ impl Headers {
         self.0.is_empty()
     }
 
+    /// As (name, value) pairs, to start another download with the same session
+    /// (they pass [`Headers::checked`] again).
+    pub fn to_pairs(&self) -> Vec<(String, String)> {
+        self.0
+            .iter()
+            .filter_map(|(n, v)| Some((n.as_str().to_string(), v.to_str().ok()?.to_string())))
+            .collect()
+    }
+
     /// Carries something that proves who you are (a cookie or a login).
     pub fn has_credentials(&self) -> bool {
         self.without_credentials().0.len() != self.0.len()

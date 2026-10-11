@@ -101,6 +101,8 @@ pub enum JobAction {
     Remove,
     /// Move the finished file to the Trash and take it off the list.
     Delete,
+    /// Download the same link again as a new copy (the one in the list stays).
+    Again,
 }
 
 impl JobAction {
@@ -113,6 +115,7 @@ impl JobAction {
             "reveal" => JobAction::Reveal,
             "remove" => JobAction::Remove,
             "delete" => JobAction::Delete,
+            "again" => JobAction::Again,
             _ => return None,
         })
     }

@@ -491,7 +491,15 @@ pub enum UiEvent {
     Nearby {
         view: Box<crate::nearby::NearbyView>,
     },
+    /// A download just came from the browser: the window selects it (the
+    /// window itself isn't brought up for that).
+    Show {
+        id: i64,
+    },
 }
+
+/// One network carrying a download: (label, bytes so far, speed).
+type Lane = (String, u64, f64);
 
 /// Automation settings plus where the schedule stands right now.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -686,6 +694,8 @@ pub struct Service {
     /// Bytes each running download has written, live (the saved figure lags by
     /// up to a checkpoint); for the extension's popup.
     live_written: Mutex<HashMap<i64, (u64, Option<u64>)>>,
+    /// Each running download's networks, live.
+    live_lanes: Mutex<HashMap<i64, Vec<Lane>>>,
     /// Seconds before a when-done action runs (tests shorten it).
     countdown: std::sync::atomic::AtomicU32,
     /// Closing the window hides it; downloads carry on from the tray.
@@ -1121,6 +1131,7 @@ impl Service {
             revealer: Mutex::new(Arc::new(|_| {})),
             rates: Mutex::new(HashMap::new()),
             live_written: Mutex::default(),
+            live_lanes: Mutex::default(),
             countdown: std::sync::atomic::AtomicU32::new(COUNTDOWN),
             close_to_tray: std::sync::atomic::AtomicBool::new(close_to_tray),
             watch_clipboard: std::sync::atomic::AtomicBool::new(watch_clipboard),
@@ -1198,6 +1209,12 @@ impl Service {
             l(e.clone());
         }
         emit(e);
+    }
+
+    /// The window selects download `id` (one that just came from the browser).
+    pub fn show_job(&self, id: i64) {
+        self.publish_jobs();
+        self.send(UiEvent::Show { id });
     }
 
     fn publish_jobs(&self) {
@@ -2913,6 +2930,14 @@ impl Service {
                 me.note_rates(&l.networks);
                 lock(&me.rates).insert(id, l.rate);
                 lock(&me.live_written).insert(id, (l.written, l.total));
+                lock(&me.live_lanes).insert(
+                    id,
+                    l.networks
+                        .iter()
+                        .filter(|n| !n.dead || n.bytes > 0)
+                        .map(|n| (n.label.clone(), n.bytes, n.rate))
+                        .collect(),
+                );
                 *lock(&last) = Some(l.clone());
                 me.send(UiEvent::Live(l));
             }))

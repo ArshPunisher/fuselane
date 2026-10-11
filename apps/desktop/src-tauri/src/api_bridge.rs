@@ -82,7 +82,10 @@ impl Handler for ApiBridge {
                 )
                 // It carries on in the background; the extension's popup shows it
                 // starting. The window comes up only when the person has to choose.
-                .map(|id| id.to_string())
+                .map(|id| {
+                    self.svc.show_job(id);
+                    id.to_string()
+                })
                 .map_err(|_| Decline::Unsupported)
         })
     }

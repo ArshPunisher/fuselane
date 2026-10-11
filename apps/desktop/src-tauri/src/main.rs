@@ -1632,6 +1632,7 @@ fn watch_for_shell(app: tauri::AppHandle, svc: &Arc<Service>) {
             | UiEvent::WhenDoneCancelled
             | UiEvent::Update { .. }
             | UiEvent::Nearby { .. }
+            | UiEvent::Show { .. }
             | UiEvent::Automation { .. } => {}
             UiEvent::Live(l) => {
                 w.live(l);

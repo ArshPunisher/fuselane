@@ -142,6 +142,8 @@ export type UiEvent =
   | { type: 'nearby'; view: NearbyView }
   | { type: 'netCheck'; view: NetCheckView }
   | { type: 'speedLive'; live: SpeedLive | null }
+  /** A download just came from the browser: select it. */
+  | { type: 'show'; id: number }
 
 /** A device on the network (Nearby, B8.11). */
 export interface DeviceView {
