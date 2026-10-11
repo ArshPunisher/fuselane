@@ -4,7 +4,7 @@
 
 ## Now
 
-- **Phase:** **P4 beta**: **`v0.1.0-beta.10` published 2026-10-10** (verified: checksums, universal binary, self-test incl. Nearby, update feed for 4 platforms, Homebrew cask; site redeployed to fuselane.app; Search Console verified with the sitemap submitted; extension 0.2.0 submitted to the Chrome Web Store). Remaining before 1.0: the real-hardware checklist (needs a phone and other computers), two weeks of 24 h soaks, Windows signing, store listings.
+- **Phase:** **P4 beta**: **`v0.1.0-beta.12` being released 2026-10-11** (see the log); earlier: **`v0.1.0-beta.10` published 2026-10-10** (verified: checksums, universal binary, self-test incl. Nearby, update feed for 4 platforms, Homebrew cask; site redeployed to fuselane.app; Search Console verified with the sitemap submitted; extension 0.2.0 submitted to the Chrome Web Store). Remaining before 1.0: the real-hardware checklist (needs a phone and other computers), two weeks of 24 h soaks, Windows signing, store listings.
 - **P3 done (tested, committed):**
   - Engine snapshots for the UI (per-network bytes, rates, streams; 180 ring ticks with fill, owner, in-flight).
   - `core::runner`: one job runner shared by the CLI and the desktop app (link checks, network choice, Happy Eyeballs connects, store bookkeeping, plain-language errors). `core::home`: one shared download list.
@@ -26,6 +26,14 @@
 - **Environment:** Rust via rustup (`source ~/.cargo/env`), cargo-nextest, cargo-deny, actionlint (Homebrew), Node 24, pnpm 11, Playwright WebKit + Chromium, gh logged in as ArshPunisher. macOS has no `timeout` command. Screen recording is granted (capture a window with `screencapture -l<id>`; find the id with a CGWindowList script); clicking is not (no Accessibility), so drive the real window with `FUSELANE_DEV_ADD=<url>` in debug builds. macOS notifications only work from a bundle: `pnpm --filter @fuselane/desktop tauri build --debug --bundles app`, then run `target/debug/bundle/macos/Fuselane.app/Contents/MacOS/fuselane-desktop`.
 
 ## Log
+
+### 2026-10-11, night (owner asleep; extension on Edge, Extension page, beta.12)
+- **Bug:** Fuselane's extension from the Edge Add-ons store has its own id, which the host manifest didn't allow, so Edge kept every download (owner saw it on another PC). Both store ids are allowed now (BROWSER-EXTENSION.md §2).
+- **Extension page in the app** (BROWSER-EXTENSION.md §7): which browsers are here and whether the extension is connected, added, turned off or missing (read from profile files, read-only); Add to <browser> opens that browser at its store page, Turn on at its extensions page; first-run step and a Downloads banner. Where browser downloads go (everything / small files stay / none) is the app's setting; pings carry it to the extension, `handoff.set` brings changes back, and a change made while the app is closed (or before 0.3.0) is kept.
+- **Extension 0.3.0:** popup in the app's look (tokens, Geist, Phosphor), Get the app / Open Fuselane cards, Firefox 140+.
+- **ClearCraft Labs** as publisher (bundle, winget, Flatpak), Made by in About, site footer and JSON-LD.
+- **Tests:** whole chain with the real app (`apps/extension/e2e/app.spec.ts`, opt-in with FUSELANE_DESKTOP): a 3 MB download handed over and SHA-256 checked, plus negatives. Negative CLI run against a hostile server found a raw debug dump in "every network failed" (fixed). CodeRabbit: 3 findings (pending change lost, upgrade overwriting the old switch, size menu), all fixed.
+- **Noted, not fixed:** Settings shifts as some settings load (a mouse click can miss; the welcome test now presses Enter). A body cut short with no range support says "en1 got no answer" rather than "the connection dropped".
 
 ### 2026-10-10, startup problems (worktree `wt/startup`, not merged)
 
