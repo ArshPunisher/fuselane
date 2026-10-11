@@ -13,12 +13,12 @@ P0 Foundations ─► P1 Risk spikes ─► P2 Core + CLI ─► P3 Desktop app 
 | **P0 Foundations** | Everything needed to start building | Repo, docs, toolchains, empty workspace that builds on 3 OSes, CI skeleton (L0/L1 on all 3 OSes), free accounts (public GitHub repo, SignPath application, Cloudflare free tier) | CI green on macOS, Windows and Linux with an empty workspace |
 | **P1 Risk spikes** | Remove the unknowns that could change the architecture | 8 throwaway spikes (below), each with a written result | Every spike answered; ADRs 0002/0006/0007 accepted or replaced |
 | **P2 Core + CLI** | A correct, bonded HTTP download engine you can use from the terminal | `netif`, `transport`, `storage`, `limits`, `engine-http`, `core`, `api`, `testkit`, `netlab`; `fuselane get/ls/pause/resume` | L0–L3 green; edge cases ≥ 90%; chaos clean; ≥ 85% of the summed link speed in netlab |
-| **P3 Desktop app** | Plexo parity for HTTP downloads, in a great UI | Tauri app: list, new download, detail, complete and error screens, networks, limits, tray, notifications, settings | Parity checklist §1, 3–9 ticked for HTTP; L4 smoke and axe clean |
+| **P3 Desktop app** | Baseline HTTP downloads, in a great UI | Tauri app: list, new download, detail, complete and error screens, networks, limits, tray, notifications, settings | Baseline checklist §1, 3–9 ticked for HTTP; L4 smoke and axe clean |
 | **P4 Beta 0.1** | Ship to real users with no terminal commands | Free signing (SignPath, ad-hoc), install script, Homebrew tap, auto-update, landing page, release workflow | L5 on release builds; updater e2e; real-hardware matrix |
 | **P5 Torrents (0.2)** | Torrents with per-network peers | `engine-torrent`, magnet/file input, file picker, peers view, optional seeding | Torrent gates |
 | **P6 Fuse Send (0.3)** | Send any file directly to someone, over every network, with a link; no cloud | `send` crate, encrypting storage, link page, send UI | Two real machines on different networks transfer a 5 GB file; S7 reachability recorded |
 | **P7 Browser extension (0.4)** | Downloads captured from the browser | WXT extension, native-messaging host + installer registration, pairing fallback | Extension gates; store submissions |
-| **P8 Power features (0.5–0.9)** | Daily-use parity with IDM, beyond Plexo | Scheduler, checksums, mirrors, proxy, categories, search, throttle detection, remote API, i18n | Per-feature gates |
+| **P8 Power features (0.5–0.9)** | Daily-use parity with IDM | Scheduler, checksums, mirrors, proxy, categories, search, throttle detection, remote API, i18n | Per-feature gates |
 | **P9 1.0 launch** | Stable, documented, distributed | Soak, performance pass, docs, winget/Homebrew/Flathub, store listings, launch | All gates; 2 weeks with no P0/P1 bugs |
 | ~~P10 Android~~ | Dropped ([ADR 0010](../adr/0010-no-android-app.md)) | – | – |
 

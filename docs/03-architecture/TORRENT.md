@@ -1,6 +1,6 @@
 # Torrent engine (`crates/engine-torrent`)
 
-Decision: [ADR 0006](../adr/0006-torrent-engine.md). Use a mature engine and don't write BitTorrent ourselves (L-67; Plexo learned this in 5404d92).
+Decision: [ADR 0006](../adr/0006-torrent-engine.md). Use a mature engine and don't write BitTorrent ourselves (L-67).
 
 ## Engine: librqbit 9.x
 
@@ -20,7 +20,7 @@ librqbit ──(proxy_url = socks5://127.0.0.1:<random port>, auth token)──�
 ```
 
 - The SOCKS server listens only on loopback with username/password auth, so other local apps can't use it.
-- **Choosing a network:** start with the network that has the fewest peers. Once throughput is known, weight the choice by each network's measured download rate (+ over Plexo's fewest-peers rule). Respect `AtLimit`/`Off` states, and give an `Unreachable` network one dial at a time.
+- **Choosing a network:** start with the network that has the fewest peers. Once throughput is known, weight the choice by each network's measured download rate (better than fewest peers alone). Respect `AtLimit`/`Off` states, and give an `Unreachable` network one dial at a time.
 - **Turn off what bypasses the proxy** until it can be pinned: uTP, UPnP/NAT-PMP, LSD, web seeds. DHT and UDP trackers may run on the default network (they're light); spike S5 measures this.
 - **Incoming peers:** listen on all interfaces; attribute each one to a network by its socket's local address (L-71).
 - **Unreachable rule:** a network is marked `Unreachable` after 5 dials with no answer and 60 s without one, if it has no peers and another network does.

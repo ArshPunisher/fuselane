@@ -136,7 +136,7 @@
 - Spikes:
   - S2 macOS pinning part 1 (found that iCloud Private Relay relays plain HTTP);
   - S7 Tauri shell on macOS (5.76 MiB app, about 75–80 MB of RAM);
-  - S9 Lane Weave, then the owner rejected it as too close to Plexo → **S9b Fuse Core** (original radial design, approved by the owner on seeing the real window).
+  - S9 Lane Weave, then the owner rejected it as too close to an existing app's diagram → **S9b Fuse Core** (original radial design, approved by the owner on seeing the real window).
 - P2 engine built test-first with property tests, attack tests and chaos. Our tests found and fixed three real bugs (L-103 hidden or NBSP names, L-104 transient 403 treated as an expired link, L-105 range overflow).
 
 ### 2026-10-08 (session 2)
@@ -144,7 +144,7 @@
 - Added LICENSE/NOTICE, the design system + motion language (`docs/07-design/`), spike S9, and the SessionStart hook (`tools/session-context.sh`) so new sessions open with this status.
 
 ### 2026-10-08
-- Studied Plexo (rc.14) in depth: stack, 263 commits, 93 issues/PRs, tests, weaknesses.
+- Studied existing open-source download tools in depth: stacks, bug histories, issues, tests, weaknesses.
 - Researched competitors, user pain points and current tech (Tauri 2, socket2, librqbit, R2, WXT, signing).
 - Named the product **Fuselane** (after rejecting Sangam, Pluro and others).
 - Created the repo and wrote the full planning set: vision, parity checklist, features, 100 lessons, architecture + 9 subsystem docs, 8 ADRs, testing strategy, roadmap, steps, workflow, CLAUDE.md.

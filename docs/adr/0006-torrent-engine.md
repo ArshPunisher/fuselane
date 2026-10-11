@@ -9,4 +9,4 @@ We need each peer pinned to a network. librqbit (pure Rust) binds the whole sess
 v1: librqbit with `proxy_url` pointing at an in-process, authenticated loopback SOCKS5 server, which chooses a network for each CONNECT and dials through `transport::Pinner`. uTP, UPnP, LSD and web seeds stay off. v2: upstream a connector hook. Plan C: libtorrent via cxx.
 
 ## Consequences
-TCP-only peers at first (like Plexo). An extra local hop per peer (measured in S5). No C++ toolchain.
+TCP-only peers at first. An extra local hop per peer (measured in S5). No C++ toolchain.

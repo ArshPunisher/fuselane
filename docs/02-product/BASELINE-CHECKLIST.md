@@ -1,8 +1,8 @@
-# Plexo parity checklist
+# Baseline checklist
 
-Every user-facing feature Plexo rc.14 has. Fuselane must match each one (**=**) or do better (**+**) by the phase shown. Tick an item only when it is implemented **and** covered by a test. Phase numbers refer to [`../04-plan/ROADMAP.md`](../04-plan/ROADMAP.md).
+What a multi-network download manager is expected to do. Fuselane must match each one (**=**) or do better (**+**) by the phase shown. Tick an item only when it is implemented **and** covered by a test. Phase numbers refer to [`../04-plan/ROADMAP.md`](../04-plan/ROADMAP.md).
 
-Source of truth for Plexo's behaviour: [`../01-research/plexo-forensics.md`](../01-research/plexo-forensics.md) Part 1. This is *behaviour* parity only; nothing is copied from Plexo's code ([ADR 0005](../adr/0005-clean-room-policy.md)).
+This is *behaviour* only; no other project's code is used ([ADR 0005](../adr/0005-clean-room-policy.md)).
 
 Legend: `[ ]` todo · `[x]` done and tested · **=** match · **+** better · Ph = phase
 
@@ -10,7 +10,7 @@ Legend: `[ ]` todo · `[x]` done and tested · **=** match · **+** better · Ph
 
 ## 1. Direct HTTP(S) downloads
 
-| ✓ | Feature (Plexo behaviour) | = / + | Fuselane | Ph |
+| ✓ | Baseline feature | = / + | Fuselane | Ph |
 |---|---|---|---|---|
 | [ ] | Probe with `Range: bytes=0-0`; range support only if the server answers 206 | + | Same, plus `If-Range` on every segment and `Accept-Encoding: identity` | 2 |
 | [ ] | Size from Content-Range; a `416 bytes */0` is a valid empty file | = | | 2 |
@@ -51,8 +51,8 @@ Legend: `[ ]` todo · `[x]` done and tested · **=** match · **+** better · Ph
 | [ ] | Uploads to peers on every network | = | | 5 |
 | [ ] | Per-peer rows: client name, speeds, bytes, share | = | | 5 |
 | [ ] | Bytes credited to networks once a piece is verified | = | | 5 |
-| [ ] | — (Plexo has no seeding after completion) | + | Optional seeding with a ratio/time limit, off by default | 5 |
-| [ ] | — (Plexo has no uTP, UPnP, PEX or LSD) | + | Per-interface where possible; UPnP per gateway | 5+ |
+| [ ] | — (no seeding after completion is the usual baseline) | + | Optional seeding with a ratio/time limit, off by default | 5 |
+| [ ] | — (baseline: no uTP, UPnP, PEX or LSD) | + | Per-interface where possible; UPnP per gateway | 5+ |
 
 ## 3. Queue
 
@@ -61,7 +61,7 @@ Legend: `[ ]` todo · `[x]` done and tested · **=** match · **+** better · Ph
 | [ ] | Downloads at once: default 2, range 1–8 | = | | 2 |
 | [ ] | FIFO queue; a resumed download goes to the front | = | | 2 |
 | [ ] | Queued time counts as paused time | = | | 2 |
-| [ ] | — (Plexo can't reorder the queue) | + | Drag to reorder, "move to top", priorities | 3 |
+| [ ] | — (baseline: the queue can't be reordered) | + | Drag to reorder, "move to top", priorities | 3 |
 
 ## 4. Downloads list and history
 
@@ -73,7 +73,7 @@ Legend: `[ ]` todo · `[x]` done and tested · **=** match · **+** better · Ph
 | [ ] | Row actions: Pause, Resume, Fix link, Retry, Download again | = | | 3 |
 | [ ] | Multi-select toolbar: Pause / Resume / Retry / Remove / Cancel… / Move to Trash… | = | | 3 |
 | [ ] | Confirmations for destructive actions | = | | 3 |
-| [ ] | History survives restart (Plexo caps it at 500) | + | SQLite, no small cap, searchable | 3 |
+| [ ] | History survives restart (baseline: capped at 500) | + | SQLite, no small cap, searchable | 3 |
 | [ ] | "Missing" marker when a finished file was moved or deleted | = | | 3 |
 | [ ] | Reveal in Finder/folder | = | | 3 |
 | [ ] | Trash only the files the download created | = | | 3 |
@@ -105,7 +105,7 @@ Legend: `[ ]` todo · `[x]` done and tested · **=** match · **+** better · Ph
 | [ ] | Data allowance per network per day/week/month (local time, weeks start Monday) | + | Configurable reset day/time, upload bytes counted separately | 2 |
 | [ ] | Reset usage / Remove limits (with confirmation) | = | | 3 |
 | [ ] | Usage kept across restarts | = | | 2 |
-| [ ] | — (no per-download limit in Plexo) | + | Per-download speed limit | 8 |
+| [ ] | — (baseline: no per-download limit) | + | Per-download speed limit | 8 |
 | [ ] | — | + | Throttle detection (for example 64 kbps after a cap) and automatic move to other networks | 8 |
 
 ## 7. Networks

@@ -1,6 +1,6 @@
 # Design system: "Lanes → Fuse"
 
-> 2026-10-08: the signature visual is now the **Fuse Core** (radial ring + satellites + comets), replacing the Lane Weave after the owner's review found the Weave too close to Plexo's diagram. See [spike S9b](../04-plan/spikes/S9b-fuse-core.md).
+> 2026-10-08: the signature visual is now the **Fuse Core** (radial ring + satellites + comets), replacing the Lane Weave after the owner's review found the Weave too close to an existing app's diagram. See [spike S9b](../04-plan/spikes/S9b-fuse-core.md).
 
 Status: **direction approved by the owner (2026-10-08): "fully responsive UI with amazing colour, aesthetic, graphics and motion"**. This is the source of truth for every surface: the desktop app, extension popup, share page, landing site. Motion has its own doc: [MOTION.md](MOTION.md). Implementation lands in `packages/ui` during P3.
 
@@ -104,7 +104,7 @@ Semantic colours always come with an icon and words; never a bare coloured dot.
 
 ## 7. Signature graphics (all driven by real engine data)
 
-**Originality rule:** a signature visual must not share its composition with Plexo's UI (left-to-right merge diagram, square block grid, bottom-stacked throughput area). Check before building, and again in review.
+**Originality rule:** a signature visual must not share its composition with other apps' UI (left-to-right merge diagram, square block grid, bottom-stacked throughput area). Check before building, and again in review.
 
 | Graphic | Where | What it shows |
 |---|---|---|

@@ -4,7 +4,7 @@
 
 ## Rules and tests
 
-- Lessons relied on (`L-xx`, docs/02-product/LESSONS-FROM-PLEXO.md):
+- Lessons relied on (`L-xx`, docs/02-product/LESSONS.md):
 - Edge-case tests added (`EC-xxx`):
 - Test level(s) (docs/05-quality/TESTING.md): L1 / L2 / L3 / L4 / L5
 
@@ -23,4 +23,4 @@
 ## Docs
 
 - [ ] Design doc / ADR updated if a decision changed
-- [ ] STEPS.md / PARITY-CHECKLIST.md ticked, STATUS.md updated
+- [ ] STEPS.md / BASELINE-CHECKLIST.md ticked, STATUS.md updated

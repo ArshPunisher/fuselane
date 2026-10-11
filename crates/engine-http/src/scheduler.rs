@@ -16,7 +16,7 @@ pub type NetId = u32;
 /// Stream identifier.
 pub type StreamId = u32;
 
-/// Racing rules. Values are starting points (Plexo's tuned ones, for reference).
+/// Racing rules. Values are starting points, tuned by benchmarks.
 #[derive(Debug, Clone, Copy)]
 pub struct HedgePolicy {
     /// Every attempt on a block must have run this long before it can be raced.

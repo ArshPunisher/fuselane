@@ -1,6 +1,6 @@
 # HTTP download engine (`crates/engine-http`, `crates/storage`)
 
-The engine must satisfy every rule in [`../02-product/LESSONS-FROM-PLEXO.md`](../02-product/LESSONS-FROM-PLEXO.md) §1–7. The constants below are **starting values** (Plexo's tuned ones, as a reference point); our network-lab benchmarks will tune them, and every one lives in a single `Tuning` struct.
+The engine must satisfy every rule in [`../02-product/LESSONS.md`](../02-product/LESSONS.md) §1–7. The constants below are **starting values**; our network-lab benchmarks will tune them, and every one lives in a single `Tuning` struct.
 
 ## 1. Pipeline
 
@@ -44,7 +44,7 @@ probe → plan → claim staging file → run (scheduler + streams) → verify �
    - Prefer another network.
    - Pick the block with the largest ETA.
    - The hedge starts at the block's frontier and writes the same bytes to the same offsets; the first to finish wins and the others are aborted as `lost`.
-3. **Split (new, + over Plexo):** if a block's remaining size is at least 4 MiB and its holder is much slower, split off the tail as a new pending block instead of hedging. This is decided by the same pure function and property-tested.
+3. **Split (new):** if a block's remaining size is at least 4 MiB and its holder is much slower, split off the tail as a new pending block instead of hedging. This is decided by the same pure function and property-tested.
 4. Starts are interleaved across networks (L-23).
 
 Property tests: every byte is covered exactly once by completed blocks; no deadlock (some stream always has work while blocks remain); hedges never exceed their caps; when both a split and a hedge are possible, the result is the same either way.
@@ -65,7 +65,7 @@ Each stream holds one keep-alive connection on its network and loops: pick work 
 ## 6. Requests and checking responses (L-01–L-08)
 
 - Headers: `Range: bytes=a-b`, `If-Range: <etag or last-modified>`, `Accept-Encoding: identity`, `User-Agent: Fuselane/<ver>`, plus the forwarded cookies, Referer and auth when the job came from the extension.
-- Follow redirects per request, keeping Range and the network pin (Plexo c2e9281).
+- Follow redirects per request, keeping Range and the network pin.
 - Accept a response only if:
   - it is a 206 with Content-Range starting exactly at `a` and not past `b`, and the body is exactly `b−a+1` bytes (cut and fail an overrun); **or**
   - it is a 200 when `a == 0` and the job is single-stream.
@@ -81,7 +81,7 @@ Each stream holds one keep-alive connection on its network and loops: pick work 
 | 401/403/404/410 | Strike. If every network gets it, the job becomes `Failed{LinkExpired}` → "Fix link". If only some networks do, mark them `Blocked` (IP-locked). |
 | Wrong range or short body | Strike; after 5 in a row the stream retires |
 | Version changed | Sample up to 8 × 16 KiB of bytes on disk: same → accept the new version; different → fail and discard |
-| Write error ENOSPC/EDQUOT | **Pause the job immediately** with "Not enough space" (+ over Plexo's 5 strikes) |
+| Write error ENOSPC/EDQUOT | **Pause the job immediately** with "Not enough space" (not after 5 retry strikes) |
 | Write error EIO/EROFS | Pause with a drive message |
 | Sleep/wake, address change | Refresh the affected connections; not a failure |
 | Connector explains (`LaneTrouble`, e.g. a proxy refusing the login) | Shown on the download once per network. Lasting: that network stops for this download. Otherwise retried like a connection error |

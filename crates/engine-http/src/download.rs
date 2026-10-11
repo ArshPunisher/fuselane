@@ -2268,7 +2268,7 @@ pub async fn download_with(
         })
         .collect();
     let n_blocks = blocks.len();
-    // Non-splittable downloads run one stream on the first network (L-84 in Plexo's list).
+    // Non-splittable downloads run one stream on the first network (L-84).
     let networks: Vec<Network> = if splittable {
         networks
     } else {

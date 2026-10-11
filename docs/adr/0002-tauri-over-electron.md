@@ -3,7 +3,7 @@
 - Date: 2026-10-08
 
 ## Context
-Plexo uses Electron: 80–150 MB installers, 150–300 MB idle RAM, and it still needed FFI (koffi) for socket options. A download manager runs in the background for hours.
+Electron means 80–150 MB installers, 150–300 MB idle RAM, and it still needs FFI (koffi) for socket options. A download manager runs in the background for hours.
 
 ## Decision
 Use Tauri 2 (2.12.x) with a React 19 + Vite + Tailwind 4 UI. The Rust core runs in the same process.

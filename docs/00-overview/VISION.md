@@ -12,7 +12,7 @@
    - IDM is Windows-only and paid.
    - Motrix and aria2 are unmaintained.
    - FDM and JDownloader had their sites compromised.
-   - Plexo proved bonding is wanted (about 1.5k stars in 3 weeks), but it's unsigned, download-only and has no browser capture.
+   - Open-source bonding tools have shown it's wanted, but they're unsigned, download-only and have no browser capture.
 4. **Mobile data caps are daily** (India: 1.5–2 GB/day packs that drop to 64 kbps, reset at midnight, often with unlimited 5G that can be tethered). People need a tool that uses exactly what's left today, before it expires.
 
 ## Who it's for
@@ -64,11 +64,11 @@
 
 ## Positioning against alternatives
 
-| | Fuselane | Plexo | IDM | Speedify | WeTransfer |
-|---|---|---|---|---|---|
-| Bonded downloads | ✅ | ✅ | ❌ | ✅ (VPN) | – |
-| Bonded uploads + share links | ✅ | ❌ | ❌ | ✅ (VPN, no links) | ❌ (one link) |
-| Browser capture | ✅ | ❌ | ✅ | – | – |
-| macOS / Windows / Linux | ✅ | ✅ | Windows only | ✅ | Web |
-| Signed + auto-update | ✅ (free signing, ADR 0009) | ❌ | ✅ | ✅ | – |
-| Price | Free and open source (Apache-2.0) | Free | ₹2,390 lifetime | $90/yr | Free 3 GB/mo |
+| | Fuselane | IDM | Speedify | WeTransfer |
+|---|---|---|---|---|
+| Bonded downloads | ✅ | ❌ | ✅ (VPN) | – |
+| Bonded uploads + share links | ✅ | ❌ | ✅ (VPN, no links) | ❌ (one link) |
+| Browser capture | ✅ | ✅ | – | – |
+| macOS / Windows / Linux | ✅ | Windows only | ✅ | Web |
+| Signed + auto-update | ✅ (free signing, ADR 0009) | ✅ | ✅ | – |
+| Price | Free and open source (Apache-2.0) | ₹2,390 lifetime | $90/yr | Free 3 GB/mo |

@@ -9,10 +9,10 @@
 4. Build  The smallest change that makes it pass, on all three OSes
 5. Check  tools/check.sh (all gates, fails loudly); push; CI green on macOS, Windows, Linux
 6. Commit Small, focused commits (see §3), each one building and passing
-7. Record Tick the step in STEPS.md (and PARITY-CHECKLIST.md if it applies), update STATUS.md
+7. Record Tick the step in STEPS.md (and BASELINE-CHECKLIST.md if it applies), update STATUS.md
 ```
 
-**Never** write code ahead of the design. **Never** tick a box without a test. **Never** copy Plexo code (ADR 0005).
+**Never** write code ahead of the design. **Never** tick a box without a test. **Never** copy another project's code (ADR 0005).
 
 ## 2. Branches
 

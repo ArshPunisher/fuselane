@@ -53,7 +53,7 @@ Versions are current as of 2026-10-08 (from [`../01-research/tech-research.md`](
 
 | Option | Why not |
 |---|---|
-| **Electron** (what Plexo uses) | 80–150 MB installers, 150–300 MB idle RAM, and native socket options need FFI hacks (koffi) anyway |
+| **Electron** | 80–150 MB installers, 150–300 MB idle RAM, and native socket options need FFI hacks (koffi) anyway |
 | Wails (Go) | v3 still in beta; a smaller plugin ecosystem; the Go core is fine, but Rust has better crates for TLS, torrent and FFI to Android |
 | Flutter desktop | Weaker desktop-native feel (tray, menus); the UI can't be shared with the extension or the share page |
 | Slint / native UI ×3 | 3× the UI cost, or a niche toolkit; reconsider native macOS later |
@@ -61,4 +61,4 @@ Versions are current as of 2026-10-08 (from [`../01-research/tech-research.md`](
 | HTTP/3 for v1 | Little benefit for downloads; reqwest's support is unstable. Revisit after 1.0. |
 | WebTorrent / Node | Not in a Rust core |
 | Any hosted storage (S3, R2) for sharing | Costs grow with users; ADR 0011 chose direct transfer |
-| JSON state files | Plexo's corruption and reset problems; no migrations or queries |
+| JSON state files | Prone to corruption and silent resets; no migrations or queries |

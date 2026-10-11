@@ -1,6 +1,6 @@
 # Multi-interface download/upload app: technology research
 
-> Research note (2026-10-08): written while the project was unnamed. Example names in the layouts and manifests below were changed to Fuselane. Every other mention of "Plexo" refers to the open-source project we studied (github.com/anmolkapil/plexo).
+> Research note (2026-10-08): written while the project was unnamed. Example names in the layouts and manifests below were changed to Fuselane.
 
 Date: 2026-10-08. Versions were pulled live from crates.io, npm and GitHub on this date. Where a claim comes from reading crate source, the file is named. Items marked **(verify)** come from memory or secondary sources and should be checked before you rely on them.
 

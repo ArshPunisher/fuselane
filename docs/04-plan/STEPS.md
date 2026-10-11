@@ -1,6 +1,6 @@
 # Step-by-step plan
 
-Every step is small enough for **one focused commit, or a short PR of a few commits**, and names its test. Tick a step only when its test exists and passes on all three OSes (unless the step says otherwise). `L-xx` = the rule from [LESSONS-FROM-PLEXO](../02-product/LESSONS-FROM-PLEXO.md) the step must follow. `EC-xxx` = the edge-case test ID.
+Every step is small enough for **one focused commit, or a short PR of a few commits**, and names its test. Tick a step only when its test exists and passes on all three OSes (unless the step says otherwise). `L-xx` = the rule from [LESSONS](../02-product/LESSONS.md) the step must follow. `EC-xxx` = the edge-case test ID.
 
 ---
 

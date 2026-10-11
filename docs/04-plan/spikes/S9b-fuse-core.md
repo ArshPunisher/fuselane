@@ -5,9 +5,9 @@
 
 ## Why S9 was replaced
 
-The owner reviewed S9 (2026-10-08): the "curves merging into one line" Weave reads as **a copy of Plexo's combine diagram**, and a worse one, because the thick tube backgrounds look heavy where Plexo's plain dashed lines look cleaner. The owner asked for an original design, researched and better than Plexo's. S9 is kept as history only.
+The owner reviewed S9 (2026-10-08): the "curves merging into one line" Weave reads as **a copy of an existing app's merge diagram**, and a worse one, because the thick tube backgrounds look heavy. The owner asked for an original design, researched and better. S9 is kept as history only.
 
-**New rule (DESIGN-SYSTEM §7):** a signature visual must not share its composition with Plexo's UI (left-to-right merge diagram, square block grid, bottom-stacked throughput area).
+**New rule (DESIGN-SYSTEM §7):** a signature visual must not share its composition with other apps' UI (left-to-right merge diagram, square block grid, bottom-stacked throughput area).
 
 ## Research and influences
 
@@ -18,7 +18,7 @@ Orbit and satellite UI patterns ([shadcn orbits](https://www.shadcn.io/backgroun
 - **The file is a ring of 180 block ticks.**
   - It fills in the real scheduler's order (lowest pending block first).
   - Each tick grows radially while in flight, and settles in the colour of the network that fetched it, with a brief white flash.
-  - The ring becomes a record of who fetched what. It replaces Plexo-style square grids.
+  - The ring becomes a record of who fetched what. It replaces square block grids.
 - **Each network is a satellite** on a fine dotted orbit:
   - a core dot plus a 12-dot orb spinning at a speed proportional to its throughput;
   - offline: the orb breaks apart and greys out, and the core becomes hollow.

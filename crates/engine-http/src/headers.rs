@@ -446,7 +446,7 @@ mod tests {
                 last: 19
             })
         );
-        // A server capping ranges (Plexo 9918671): shorter is acceptable, the rest is refetched.
+        // A server capping ranges: shorter is acceptable, the rest is refetched.
         assert_eq!(
             check_range_response(0, 39, Some(40), 206, Some("bytes 0-9/40"), Some(10)),
             Ok(Accepted { first: 0, last: 9 })

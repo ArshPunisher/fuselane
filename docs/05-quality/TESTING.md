@@ -16,7 +16,7 @@ Principle: **every risk has a test at the cheapest level that can catch it**, an
 | **L7 Performance** | Benchmarks: throughput with 1/2/3 links in netlab, CPU per Gbit, UI push cost at 10k blocks, scheduler cost | criterion, netlab | Nightly; a regression > 10% fails | – |
 | **L8 Real hardware** | Wi-Fi + phone USB tether (iPhone and Android) + Ethernet on real macOS, Windows and Linux machines; 5G tether; HDD vs SSD | Manual checklist, scripted CLI runs | End of each phase, before each release | – |
 
-## 2. Harness rules (from Plexo's lessons)
+## 2. Harness rules (from the lessons)
 
 - Every completed file is checked with **SHA-256** against the source (L-90).
 - **Invariant checker** runs on every engine event: bytes covered at most once, block states legal, no stream holds two blocks, totals add up (L-90).
@@ -76,7 +76,7 @@ Record results (speeds, issues) in `docs/05-quality/HARDWARE-RESULTS.md` with da
 
 ## 6. Edge-case catalogue
 
-All 120 edge cases in [`../01-research/plexo-forensics.md`](../01-research/plexo-forensics.md) Part 3–5 §B.3 become test IDs `EC-001 … EC-120`, plus Plexo's untested gaps (Part 6 §5) as `EC-2xx`:
+The engine edge cases from our research become test IDs `EC-001 … EC-120`, plus known untested gaps as `EC-2xx`:
 
 - EC-201 429 + Retry-After as an HTTP date
 - EC-202 HTTPS with a certificate error, SNI

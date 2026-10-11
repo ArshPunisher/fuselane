@@ -15,7 +15,7 @@
 
 | Metric | Result | Target |
 |---|---|---|
-| Release `.app` size | **5.76 MiB** (fonts included) | < 20 MB (Plexo's Electron build: 100 MB+) |
+| Release `.app` size | **5.76 MiB** (fonts included) | < 20 MB (typical Electron builds: 100 MB+) |
 | App process memory (physical footprint) | **31–34 MB** | – |
 | WebContent process memory | **42 MB** (deltas) / **49 MB** (full 10k array every tick) | – |
 | Total | **~75–80 MB** | < 120 MB idle including webview |

@@ -12,7 +12,7 @@ Crates: `netif` (discover + watch) and `transport` (pin + resolve + connect + pr
 
 **Filter (L-60):** drop loopback, link-local only (169.254/16, fe80::/10), interfaces with no gateway, and **virtual adapters by default**: Hyper-V vEthernet, WSL, VMware, VirtualBox, Docker bridges, TAP/TUN, utun. VPN tunnels are shown in an "Other" section, off by default.
 
-**Stable id:** derived from the MAC address or adapter GUID, so renames and colours survive reboots and device renumbering. Plexo used the device name, which changes (en5 → en6).
+**Stable id:** derived from the MAC address or adapter GUID, so renames and colours survive reboots and device renumbering. The device name alone isn't stable: it changes (en5 → en6).
 
 **Change events (L-63):**
 
@@ -45,7 +45,7 @@ The pinned `std::net::TcpStream` is converted to tokio and wrapped as a `tower::
 
 ## 3. One HTTP client per network
 
-- One hyper `Client` per `(network, origin)`, using HTTP/1.1 keep-alive with several connections (segmented downloads), so each stream pays DNS, TCP and TLS once (Plexo 5a2358c).
+- One hyper `Client` per `(network, origin)`, using HTTP/1.1 keep-alive with several connections (segmented downloads), so each stream pays DNS, TCP and TLS once.
 - **System proxy settings are ignored** on these clients unless the user configures a proxy per network (L-66). Tested with `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY` set (`crates/core/tests/system_proxy.rs`).
 - A stale pooled socket the server closed gets one immediate retry on a fresh socket.
 

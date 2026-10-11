@@ -3,7 +3,7 @@
 - Date: 2026-10-08
 
 ## Context
-Plexo used JSON files: never fsynced, a corrupt file silently reset data, old download formats were deleted instead of migrated, and the whole manifest was rewritten every checkpoint.
+JSON state files are a known trap: never fsynced, a corrupt file silently resets data, old download formats get deleted instead of migrated, and the whole manifest is rewritten every checkpoint.
 
 ## Decision
 Use one SQLite database (rusqlite, bundled, WAL) for jobs, block progress, upload parts, history, networks, usage and settings. Numbered migrations, tested against fixtures from every release. Corruption is detected and reported, never hidden.

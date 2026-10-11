@@ -1,4 +1,4 @@
-//! Download-manager automation, as pure decisions (IDM parity, PARITY-CHECKLIST
+//! Download-manager automation, as pure decisions (IDM parity, BASELINE-CHECKLIST
 //! §3): a daily schedule window, what to do once everything has finished, keeping
 //! the computer awake, and sorting finished files into folders by type.
 

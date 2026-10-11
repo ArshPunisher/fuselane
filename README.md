@@ -153,7 +153,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 | Folder | What's inside |
 |---|---|
 | [`docs/00-overview`](docs/00-overview) | Vision, users, positioning, principles, non-goals |
-| [`docs/01-research`](docs/01-research) | Plexo analysis, market research, tech research, naming |
+| [`docs/01-research`](docs/01-research) | Market research, tech research, naming |
 | [`docs/02-product`](docs/02-product) | Parity checklist, new features, lessons learned |
 | [`docs/03-architecture`](docs/03-architecture) | Engine, networking, torrents, extension, security, platforms |
 | [`docs/04-plan`](docs/04-plan) | Roadmap, steps, live status |
@@ -166,7 +166,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
 ## Inspiration
 
-Fuselane was inspired by [Plexo](https://github.com/anmolkapil/plexo) (MIT), which showed that downloading over several networks without a VPN is wanted. Fuselane is a clean-room implementation in a different language (Rust) with a different design; no Plexo code is used ([ADR 0005](docs/adr/0005-clean-room-policy.md)).
+Fuselane was inspired by open-source download managers and network tools. It's an original implementation in Rust with its own design; no other project's code is used ([ADR 0005](docs/adr/0005-clean-room-policy.md)).
 
 ## Licence
 

@@ -2,7 +2,7 @@
 //!
 //! Bytes are counted into meters as they arrive; rates are read only on the
 //! engine tick, over a rolling window with a 1 s minimum. Never from the gaps
-//! between socket events (that's what made Plexo's early speeds jump around).
+//! between socket events (measuring only at socket events makes speeds jump around).
 
 use std::collections::VecDeque;
 

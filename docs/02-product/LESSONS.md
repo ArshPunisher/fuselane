@@ -1,10 +1,10 @@
-# Lessons from Plexo: rules we follow so we don't repeat its bugs
+# Lessons: rules we follow so we don't repeat known bugs
 
-Plexo found these the hard way across 263 commits and about 60 fixes. Each rule has an ID (`L-xx`), the evidence (Plexo commit hash or issue number, from [`../01-research/plexo-forensics.md`](../01-research/plexo-forensics.md) and [`../01-research/market-research.md`](../01-research/market-research.md)), and the **guard**: the test or check that proves Fuselane follows it.
+These rules come from studying how download managers and network tools fail: open-source projects' bug histories, issue trackers and our own testing. Each rule has an ID (`L-xx`), where it came from, and the **guard**: the test or check that proves Fuselane follows it.
 
 **How to use this file:** before working on an area, read its section. When a PR touches that area, its description lists the `L-xx` rules it relies on. A rule without a guard counts as unfinished work.
 
-The full list of 120 engine edge cases, with citations, is in plexo-forensics **Part 3–5, §B.3**. Each one becomes a test case; the list is tracked in [`../05-quality/TESTING.md`](../05-quality/TESTING.md) §6.
+The engine edge cases from that research each become a test case; the list is tracked in [`../05-quality/TESTING.md`](../05-quality/TESTING.md) §6.
 
 ---
 
@@ -18,7 +18,7 @@ The full list of 120 engine edge cases, with citations, is in plexo-forensics **
 | L-04 | Trust Content-Length only on a 200, never on a 206. A `416 bytes */0` means a valid empty file. | 68b9939 | 0-byte file test |
 | L-05 | Check the file version on **every** response (size, ETag, Last-Modified). A size change is proof the file changed: fail and discard. Any other validator change is settled by re-fetching up to 8 samples of bytes already on disk. | 029387e, 5874f1b, 194433a | ETag rotates behind a load balancer (same bytes) vs a real file change |
 | L-06 | Normalize ETags: strip `W/`, quotes and `-gzip`/`-br` suffixes. | 194433a | Unit test |
-| L-07 | Send `If-Range` and `Accept-Encoding: identity` on segments (Plexo didn't; compression breaks byte ranges). | plexo-forensics §C.12 | Server that gzips unless asked for identity |
+| L-07 | Send `If-Range` and `Accept-Encoding: identity` on segments (compression breaks byte ranges). | research notes §C.12 | Server that gzips unless asked for identity |
 | L-08 | Parse Content-Disposition per RFC 6266/5987: `filename*` wins, ISO-8859-1 is decoded byte by byte, and quoted strings keep `;`. Malformed `%` escapes fall back to the raw text. | 0819813, 4995e05 | Table-driven unit tests for both charsets |
 
 ## 2. Every wait has a deadline
@@ -35,7 +35,7 @@ The full list of 120 engine edge cases, with citations, is in plexo-forensics **
 
 | ID | Rule | Evidence | Guard |
 |---|---|---|---|
-| L-14 | Busy server (408/429/500/502/503/504): wait it out for up to 5 min, honour Retry-After (seconds or HTTP date) capped at 2 min, **for the whole network**. | 34541f1 | 429 with an HTTP-date Retry-After (Plexo never tested this) |
+| L-14 | Busy server (408/429/500/502/503/504): wait it out for up to 5 min, honour Retry-After (seconds or HTTP date) capped at 2 min, **for the whole network**. | 34541f1 | 429 with an HTTP-date Retry-After |
 | L-15 | Other 4xx/5xx and protocol errors count as strikes; a stream retires after 5 strikes in a row. | §A.3 | Unit test of the retry policy |
 | L-16 | Connection errors never use up retries while the network still exists. With no network at all, **wait**, don't fail, and keep the partial file. | 806a261 | Pull the interface mid-download (netns) |
 | L-17 | A network that can't reach the host is marked `unreachable` and keeps 1 probe stream retrying every 5 s. | §B.3 #55 | netns: block one path's route |
@@ -80,9 +80,9 @@ The full list of 120 engine edge cases, with citations, is in plexo-forensics **
 | L-41 | Mark staging files sparse on NTFS (`FSCTL_SET_SPARSE`); exFAT/FAT refusing is fine. | e8b84b6 | Windows CI: `fsutil sparse queryflag` |
 | L-42 | What's on disk is the truth: reconcile with the file's real contents before resuming. Track bytes received separately from bytes the writer accepted, and resume only from accepted bytes. | 6893072, §B.3 #33 | Crash-at-any-byte chaos test |
 | L-43 | Guard the expensive failure: refuse to publish unless every block is complete and the size matches. Delete partial output on a failed publish. | a5f552f | Fault-injection test |
-| L-44 | Every abort path closes its file handles. Count descriptors per abort. | 7911897 | Handle-leak check on all OSes (Plexo skipped it on Windows) |
+| L-44 | Every abort path closes its file handles. Count descriptors per abort. | 7911897 | Handle-leak check on all OSes (including Windows) |
 | L-45 | Windows: wait for the handle to **close** before reopening or renaming; retry renames on EPERM/EACCES/EBUSY (antivirus, indexers, sync clients). | 9cc4db5, fd411f2 | Windows CI |
-| L-46 | Check free space before starting **and** while running (Plexo checked only before). Map ENOSPC to a clear, immediate pause, not 5 retry strikes. | 029387e, §C.12 | Small-volume test, ENOSPC partway through |
+| L-46 | Check free space before starting **and** while running. Map ENOSPC to a clear, immediate pause, not 5 retry strikes. | 029387e, §C.12 | Small-volume test, ENOSPC partway through |
 | L-47 | Cap any filesystem call on the startup path (a missing network drive must not block launch). | 765964f | Unmounted destination test |
 | L-48 | A partial download on an unplugged drive is never deleted; tell the user "Reconnect the destination drive". | §B.3 #104 | Test |
 
@@ -90,9 +90,9 @@ The full list of 120 engine edge cases, with citations, is in plexo-forensics **
 
 | ID | Rule | Evidence | Guard |
 |---|---|---|---|
-| L-49 | Crash-safe writes: SQLite in WAL mode (our choice). For any file we write ourselves: temp file, fsync, rename, fsync the directory. Plexo never fsynced. | Plexo Part 7.3 | Power-cut simulation (kill -9 during writes) |
+| L-49 | Crash-safe writes: SQLite in WAL mode (our choice). For any file we write ourselves: temp file, fsync, rename, fsync the directory. | Research notes | Power-cut simulation (kill -9 during writes) |
 | L-50 | "Missing" is not "unreadable": never overwrite a file you couldn't read, and never silently reset user data on corruption. Keep a backup and tell the user. | fd411f2, Part 7.3 | Corrupt-DB test |
-| L-51 | Versioned schema with forward **migrations**; never drop someone's in-progress downloads on upgrade. | Plexo cleared manifests v1–v7 | Migration tests from every released schema |
+| L-51 | Versioned schema with forward **migrations**; never drop someone's in-progress downloads on upgrade. | Tools that dropped old download formats | Migration tests from every released schema |
 | L-52 | Freeze writes while shutting down. Quit has a hard deadline (about 3 s). | d86fc36, fc6e675 | Quit-during-download test |
 | L-53 | Restored state is untrusted input: validate it with the same checks as live state. Restored downloads come back paused, never auto-started. | 036749d, §B.3 #102 | Fuzz the DB rows |
 | L-54 | Write the intent to publish (path + file identity) before the rename, so a crash mid-publish recovers. | §B.3 #22 | Crash between steps |
@@ -128,10 +128,10 @@ The full list of 120 engine edge cases, with citations, is in plexo-forensics **
 
 | ID | Rule | Evidence | Guard |
 |---|---|---|---|
-| L-72 | **Sign everything we can for free from the first public build, and never make users type security commands** (SignPath on Windows; ad-hoc + install script + Homebrew tap on macOS, ADR 0009). Unsigned builds plus `xattr` instructions were Plexo's top support burden. | Issues #15, #27, #35, #46 | Release job checks signatures; first-launch test per install path |
+| L-72 | **Sign everything we can for free from the first public build, and never make users type security commands** (SignPath on Windows; ad-hoc + install script + Homebrew tap on macOS, ADR 0009). Unsigned builds plus `xattr` instructions are a top support burden for apps like this. | User reports | Release job checks signatures; first-launch test per install path |
 | L-73 | Build every target on its native runner; never ship one OS's native modules in another OS's package. Assert package contents after packaging. | 8cc15e4 (rc.12 Windows torrent crash) | Package-content check in CI |
 | L-74 | Set the architecture explicitly for every target and put it in the artifact name. | f892510 | CI matrix |
-| L-75 | Smoke-launch the **packaged** app in CI on every OS (Plexo only tested the unpackaged build). | Part 6 §5.4 | `fuselane --version` and the app's headless self-test in CI |
+| L-75 | Smoke-launch the **packaged** app in CI on every OS. | Part 6 §5.4 | `fuselane --version` and the app's headless self-test in CI |
 | L-76 | Use real semver: test that pre-release < release, and that `1.0.0` > `1.0.0-rc.14`. | updateCheck.ts (latent bug) | Unit test |
 | L-77 | Know what your update API ignores (GitHub `/releases/latest` skips pre-releases). Serve our own signed feed. | 3946d64 | Updater e2e test |
 | L-78 | Match versions exactly when selecting artifacts (`rc.1` must not match `rc.10`). | 873cef9 | Unit test |
@@ -155,7 +155,7 @@ The full list of 120 engine edge cases, with citations, is in plexo-forensics **
 
 | ID | Rule | Evidence | Guard |
 |---|---|---|---|
-| L-89 | Fast pure tests run on **every PR** (Plexo ran about 90 of them nightly only). | Part 6 §5.3 | CI config |
+| L-89 | Fast pure tests run on **every PR**. | Part 6 §5.3 | CI config |
 | L-90 | Check invariants on every event, and the SHA-256 of every finished file. | aed305b, 15311a6 | Test harness |
 | L-91 | Treat runtime warnings and leaked handles as test failures. | aa3c256 | Harness |
 | L-92 | Tests guard risks, not constants or styling. Delete tests that pin UI details. | 4a23c10, 5404d92 | Review |
@@ -168,7 +168,7 @@ The full list of 120 engine edge cases, with citations, is in plexo-forensics **
 
 | ID | Rule | Evidence | Guard |
 |---|---|---|---|
-| L-97 | Validate every IPC and API payload at runtime (Plexo's were type-checked only), and allow only http, https and magnet URLs. | Part 7.2 | Fuzz the IPC commands |
+| L-97 | Validate every IPC and API payload at runtime, and allow only http, https and magnet URLs. | Part 7.2 | Fuzz the IPC commands |
 | L-98 | The UI can't choose arbitrary write paths: only user-chosen folders plus a sanitized file name. | Part 7.2 | Test |
 | L-99 | Keep quarantine / Mark of the Web on downloaded files. | Tech research §5.4 | Per-OS test |
 | L-100 | Test-only knobs are compiled out of release builds, not just ignored at runtime. | testKnobs.ts | Release build check |

@@ -1,10 +1,10 @@
-# Fuselane features beyond Plexo
+# Fuselane features beyond the baseline
 
-Parity with Plexo is tracked in [PARITY-CHECKLIST.md](PARITY-CHECKLIST.md). This file lists what Fuselane adds. Priority: **P0** = needed for 1.0, **P1** = 1.x, **P2** = later. Ph = roadmap phase. Evidence is in [`../01-research/market-research.md`](../01-research/market-research.md).
+The baseline is tracked in [BASELINE-CHECKLIST.md](BASELINE-CHECKLIST.md). This file lists what Fuselane adds. Priority: **P0** = needed for 1.0, **P1** = 1.x, **P2** = later. Ph = roadmap phase. Evidence is in [`../01-research/market-research.md`](../01-research/market-research.md).
 
 ## A. Fuse Send: direct sharing over every network (P0, Phase 6) — *the main thing that sets us apart*
 
-Validated by Plexo issue #58 and WeTransfer/Smash free-tier limits. No cloud and no plans: files go straight from the sender to the receiver ([`../03-architecture/FUSE-SEND.md`](../03-architecture/FUSE-SEND.md), [ADR 0011](../adr/0011-fuse-send-p2p.md)).
+Validated by users asking for upload bonding and by WeTransfer/Smash free-tier limits. No cloud and no plans: files go straight from the sender to the receiver ([`../03-architecture/FUSE-SEND.md`](../03-architecture/FUSE-SEND.md), [ADR 0011](../adr/0011-fuse-send-p2p.md)).
 
 | Feature | P |
 |---|---|
@@ -21,7 +21,7 @@ Validated by Plexo issue #58 and WeTransfer/Smash free-tier limits. No cloud and
 
 ## B. Browser capture (P0, Phase 7)
 
-Design in [`../03-architecture/BROWSER-EXTENSION.md`](../03-architecture/BROWSER-EXTENSION.md). Plexo's PR #18 for this is still unmerged.
+Design in [`../03-architecture/BROWSER-EXTENSION.md`](../03-architecture/BROWSER-EXTENSION.md).
 
 | Feature | P |
 |---|---|

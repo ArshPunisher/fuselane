@@ -37,7 +37,7 @@ It runs everything CI runs: rustfmt, clippy, the Rust tests, cargo-deny, shellch
 - **Small, focused commits** with [conventional](https://www.conventionalcommits.org) messages and a scope: `fix(engine-http): ...`, `feat(desktop): ...`. The body says why.
 - **Tests with the change.** A fix comes with a test that fails without it.
 - **Every UI string in Hindi too** (`apps/desktop/src/locales/`), and checked at the smallest window size (360 x 560), in light and dark, and with reduced motion.
-- **No copied code from Plexo** or other projects with incompatible licences ([ADR 0005](docs/adr/0005-clean-room-policy.md)).
+- **No code copied from other projects** ([ADR 0005](docs/adr/0005-clean-room-policy.md)).
 - **No paid services.** Fuselane runs only on free ones ([ADR 0009](docs/adr/0009-zero-cost-policy.md)).
 
 The pull request template asks what you checked and on which systems. [`docs/06-process/WORKFLOW.md`](docs/06-process/WORKFLOW.md) has the full workflow.
