@@ -21,11 +21,14 @@ cask "fuselane" do
   desc "Download one file over every network you have at once"
   homepage "https://fuselane.app"
 
+  # The app updates itself (signed feed), so brew upgrade leaves it alone.
+  auto_updates true
   depends_on macos: :ventura
 
   app "Fuselane.app"
 
-  # Open source and ad-hoc signed, not notarized (no paid Apple account, by policy).
+  # Open source, signed with the project's own certificate, not notarized (no paid
+  # Apple account, by policy).
   postflight_steps do
     run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{appdir}}/Fuselane.app"]
   end
