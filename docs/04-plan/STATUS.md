@@ -27,6 +27,12 @@
 
 ## Log
 
+### 2026-10-13, Chrome Web Store rejected extension 0.4.0 (extension 0.4.1)
+
+- **Rejected** 2026-10-13, reference "Blue Zinc": "Facilitating unauthorised access to or download of copyrighted content or media, specifically, YouTube." Google says the feature can't come back, so an appeal is pointless.
+- **Done:** extension 0.4.1 drops it. The popup no longer reads a page's `<video>`/`<audio>` players, has no "Get this page's video" button, never sends `page.video`/`page.peek`, and has no video-site list; the context menu is on links only. The popup's "This page" keeps file links and feeds. Store copy (`apps/extension/STORE.md`), privacy policy and BROWSER-EXTENSION.md updated; screenshot 2 re-rendered from the real tabbed popup. Videos from pages stay an app-only feature (the app's `page.video` API is unchanged).
+- **Next (owner):** upload `apps/extension/.output/fuselaneextension-0.4.1-chrome.zip`, paste the new description from STORE.md, replace screenshot 2, Submit for review. Edge and Firefox listings still carry 0.4.0 with the video button: update them the same way.
+
 ### 2026-10-11, night (owner asleep; extension on Edge, Extension page, beta.12)
 - **Bug:** Fuselane's extension from the Edge Add-ons store has its own id, which the host manifest didn't allow, so Edge kept every download (owner saw it on another PC). Both store ids are allowed now (BROWSER-EXTENSION.md §2).
 - **Extension page in the app** (BROWSER-EXTENSION.md §7): which browsers are here and whether the extension is connected, added, turned off or missing (read from profile files, read-only); Add to <browser> opens that browser at its store page, Turn on at its extensions page; first-run step and a Downloads banner. Where browser downloads go (everything / small files stay / none) is the app's setting; pings carry it to the extension, `handoff.set` brings changes back, and a change made while the app is closed (or before 0.3.0) is kept.
