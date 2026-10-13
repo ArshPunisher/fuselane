@@ -5,7 +5,7 @@
 // and a built extension (`pnpm --filter @fuselane/extension build`).
 // Usage: node apps/extension/store/render.mjs   (writes into apps/extension/store/out)
 import { readFileSync, mkdirSync } from 'node:fs'
-import { chromium } from '../../site/node_modules/@playwright/test/index.mjs'
+import { chromium } from '@playwright/test'
 
 const here = new URL('./', import.meta.url).pathname
 const root = new URL('../../../', import.meta.url).pathname
@@ -76,6 +76,9 @@ async function popupShot() {
   })
   await p.goto('http://popup.local/popup.html')
   await p.waitForTimeout(900)
+  // The "This page" tab: the page's file links (0.4.1: files only, no videos).
+  await p.click('#tab-page')
+  await p.waitForTimeout(500)
   const png = await p.screenshot()
   await p.close()
   return png.toString('base64')
@@ -118,11 +121,11 @@ await frame(
   { width: 860 },
 )
 
-// 2. The popup: the page's videos and files, one click away.
+// 2. The popup: the page's files, one click away.
 await frame(
   'screenshot-2-from-the-browser',
   'Big downloads go <em>straight to Fuselane</em>',
-  "One click gets the page's video, or any file on it. Anything the app can't take stays in the browser, so nothing is lost.",
+  "Files linked on the page, one click away. Anything the app can't take stays in the browser, so nothing is lost.",
   await popupShot(),
   { width: 360, center: true },
 )
