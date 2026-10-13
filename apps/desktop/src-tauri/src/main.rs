@@ -11,6 +11,7 @@ mod battery;
 mod browser_open;
 mod feeds;
 mod flatpak;
+mod helpers;
 mod media;
 mod native;
 mod nearby;
@@ -1724,6 +1725,7 @@ fn watch_for_shell(app: tauri::AppHandle, svc: &Arc<Service>) {
             | UiEvent::Networks { .. }
             | UiEvent::WhenDoneCancelled
             | UiEvent::Update { .. }
+            | UiEvent::ToolSetup { .. }
             | UiEvent::Nearby { .. }
             | UiEvent::Show { .. }
             | UiEvent::Automation { .. } => {}

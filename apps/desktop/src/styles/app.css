@@ -7469,6 +7469,33 @@ html[data-hidden] .orb b {
   text-align: center;
 }
 
+.video-loader-setup {
+  display: grid;
+  gap: 10px;
+  width: min(100%, 320px);
+}
+
+/* Bytes of the helpers fetched so far; scaleX so only the compositor works. */
+.setup-bar {
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--ink) 10%, transparent);
+  overflow: hidden;
+}
+
+.setup-bar span {
+  display: block;
+  height: 100%;
+  background: var(--fuse);
+  transform-origin: left center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .setup-bar span {
+    transition: transform 240ms ease-out;
+  }
+}
+
 .video-loader-rows {
   display: grid;
   gap: 4px;

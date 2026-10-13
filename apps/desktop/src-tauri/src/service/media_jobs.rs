@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use fuselane_core::Status;
 
 use super::{AddRequest, JobView, Service, UiError, lock};
+use crate::helpers::{HelperError, Tool};
 use crate::media::{self, MediaInfo, Plan};
 
 /// Links from yt-dlp expire; a choice is used within this time or asked again.
@@ -72,27 +73,132 @@ impl Sound {
 
 pub(super) type Probes = HashMap<String, (Instant, String, HashMap<String, Plan>)>;
 
-fn need_yt_dlp() -> UiError {
-    UiError::new(
-        "needs-yt-dlp",
-        "Videos from pages need the free yt-dlp tool, which isn't installed.",
-        Some(if cfg!(target_os = "macos") {
-            "Install it with Homebrew (brew install yt-dlp), then try again."
-        } else if cfg!(windows) {
-            "Install it with winget (winget install yt-dlp), then try again."
-        } else {
-            "Install it from your package manager (yt-dlp), then try again."
-        }),
-    )
+/// How to install yt-dlp by hand, for the rare computer Fuselane can't set
+/// it up on by itself.
+fn by_hand() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "Install it with Homebrew (brew install yt-dlp), then try again."
+    } else if cfg!(windows) {
+        "Install it with winget (winget install yt-dlp), then try again."
+    } else {
+        "Install it from your package manager (yt-dlp), then try again."
+    }
+}
+
+/// What the window says when yt-dlp couldn't be set up. Only shown after
+/// Fuselane really tried; each one offers Try again.
+fn setup_error(e: &HelperError) -> UiError {
+    match e {
+        HelperError::NoBuild => UiError::new(
+            "needs-yt-dlp",
+            "Videos from pages need the free yt-dlp tool, and Fuselane can't set it up on this computer by itself.",
+            Some(by_hand()),
+        ),
+        HelperError::Download(_) => UiError::new(
+            "tools-download",
+            "Fuselane couldn't download yt-dlp, the free tool it uses to read video pages.",
+            Some("Check that this computer is online, then press Try again. It's needed only once."),
+        ),
+        HelperError::Damaged => UiError::new(
+            "tools-damaged",
+            "The yt-dlp download didn't match its published checksum, so Fuselane didn't use it.",
+            Some("Press Try again in a few minutes. If it keeps happening, report a problem."),
+        ),
+        HelperError::Disk(_) => UiError::new(
+            "tools-disk",
+            "Fuselane couldn't save yt-dlp in its folder.",
+            Some("Make some free space on this computer, then press Try again."),
+        ),
+        HelperError::WontRun(_) => UiError {
+            code: "tools-blocked",
+            message: "yt-dlp was downloaded but won't run on this computer. Security software may be blocking it.".into(),
+            hint: Some(format!(
+                "Allow it in your security software and press Try again. Or: {}",
+                by_hand()
+            )),
+        },
+    }
+}
+
+/// The helpers one page lookup uses.
+struct VideoTools {
+    yt_dlp: std::path::PathBuf,
+    /// Fuselane's own copy (it can update itself and gets deno).
+    managed: bool,
+    ffmpeg: Option<std::path::PathBuf>,
+    deno: Option<std::path::PathBuf>,
+}
+
+impl VideoTools {
+    /// Options Fuselane adds for its own yt-dlp: deno for YouTube's checks.
+    fn extra(&self) -> Vec<String> {
+        match (&self.deno, self.managed) {
+            (Some(d), true) => vec![
+                "--js-runtimes".into(),
+                format!("deno:{}", d.to_string_lossy()),
+            ],
+            _ => vec![],
+        }
+    }
 }
 
 impl Service {
     pub fn media_tools(&self) -> MediaTools {
         let show = |p: Option<std::path::PathBuf>| p.map(|p| p.to_string_lossy().into_owned());
+        let h = self.helpers();
         MediaTools {
-            yt_dlp: show(media::find("yt-dlp")),
-            ffmpeg: show(media::find("ffmpeg")),
+            yt_dlp: show(h.locate(Tool::YtDlp)),
+            ffmpeg: show(h.locate(Tool::Ffmpeg)),
         }
+    }
+
+    /// The helpers in use (Fuselane's own, or ones the person installed).
+    pub(crate) fn helpers(&self) -> Arc<crate::helpers::Helpers> {
+        lock(&self.helpers).clone()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_helpers(&self, h: crate::helpers::Helpers) {
+        *lock(&self.helpers) = Arc::new(h);
+    }
+
+    /// yt-dlp to read the page with, plus ffmpeg and deno when they can be
+    /// had. Whatever is missing is fetched now, all at once; only a missing
+    /// yt-dlp stops the lookup (without ffmpeg, HD isn't offered; without
+    /// deno, yt-dlp still reads most pages).
+    async fn video_tools(&self) -> Result<VideoTools, UiError> {
+        let h = self.helpers();
+        let have_yt = h.locate(Tool::YtDlp);
+        // A copy the person installed is used as they set it up.
+        let wants_deno = have_yt.is_none() || h.managed(Tool::YtDlp).is_some();
+        let (yt, ffmpeg, deno) = tokio::join!(
+            async {
+                match have_yt {
+                    Some(p) => Ok(p),
+                    None => h.install(Tool::YtDlp).await,
+                }
+            },
+            async {
+                match h.locate(Tool::Ffmpeg) {
+                    Some(p) => Some(p),
+                    None => h.install(Tool::Ffmpeg).await.ok(),
+                }
+            },
+            async {
+                match h.managed(Tool::Deno) {
+                    Some(p) => Some(p),
+                    None if wants_deno => h.install(Tool::Deno).await.ok(),
+                    None => None,
+                }
+            },
+        );
+        let yt_dlp = yt.map_err(|e| setup_error(&e))?;
+        Ok(VideoTools {
+            managed: h.managed(Tool::YtDlp).as_deref() == Some(yt_dlp.as_path()),
+            yt_dlp,
+            ffmpeg,
+            deno,
+        })
     }
 
     /// What a page offers (titles and qualities); nothing is downloaded.
@@ -129,28 +235,48 @@ impl Service {
     }
 
     async fn look_up_media(&self, url: &str) -> Result<MediaInfo, UiError> {
-        let yt = media::find("yt-dlp").ok_or_else(need_yt_dlp)?;
-        let json = media::probe(&yt, url).await.map_err(|why| {
+        let mut tools = self.video_tools().await?;
+        let json = match media::probe(&tools.yt_dlp, &tools.extra(), url).await {
+            Ok(json) => Ok(json),
+            // An old yt-dlp is the usual reason a video page won't read: update
+            // Fuselane's own copy, or fetch one next to the person's (theirs may
+            // be an old one from a package manager), then ask once more.
+            Err(why) if media::may_be_stale(&why) && self.newer_yt_dlp(&tools).await => {
+                tools = self.video_tools().await?;
+                media::probe(&tools.yt_dlp, &tools.extra(), url).await
+            }
+            Err(why) => Err(why),
+        }
+        .map_err(|why| {
             UiError::new(
                 "no-media",
                 format!("No video found there: {why}."),
                 Some("Paste the link of the video's own page."),
             )
         })?;
-        let (info, plans) =
-            media::plans_from(&json, media::find("ffmpeg").is_some()).ok_or_else(|| {
-                UiError::new(
-                    "no-media",
-                    "That page's video can't be downloaded in parts (it streams in pieces only).",
-                    None,
-                )
-            })?;
+        let (info, plans) = media::plans_from(&json, tools.ffmpeg.is_some()).ok_or_else(|| {
+            UiError::new(
+                "no-media",
+                "That page's video can't be downloaded in parts (it streams in pieces only).",
+                None,
+            )
+        })?;
         let mut probes = lock(&self.media_probes);
         probes.retain(|_, (at, _, _)| at.elapsed() < FRESH);
         probes.insert(url.to_string(), (Instant::now(), info.title.clone(), plans));
         drop(probes);
         lock(&self.media_seen).insert(url.to_string(), (Instant::now(), info.clone()));
         Ok(info)
+    }
+
+    /// Gets a newer yt-dlp than the one that just failed. True when there is one.
+    async fn newer_yt_dlp(&self, tools: &VideoTools) -> bool {
+        let h = self.helpers();
+        if tools.managed {
+            h.update_yt_dlp().await
+        } else {
+            h.can_fetch(Tool::YtDlp) && h.install(Tool::YtDlp).await.is_ok()
+        }
     }
 
     /// Adds the chosen quality: one download, or video and audio as a group
@@ -375,6 +501,7 @@ impl Service {
             return;
         }
         let mut keep = vec![];
+        let mut fetching = false;
         for j in joins {
             let (v, a) = (self.store.get(j.video), self.store.get(j.audio));
             let Ok(v) = v else {
@@ -391,10 +518,34 @@ impl Service {
             let (Some(vp), Some(ap)) = (v.final_path.clone(), a.final_path.clone()) else {
                 continue;
             };
-            let Some(ffmpeg) = media::find("ffmpeg") else {
+            let helpers = self.helpers();
+            let Some(ffmpeg) = helpers.locate(Tool::Ffmpeg) else {
+                // Fetch ffmpeg (once), then come back to join; the item shows
+                // "joining" meanwhile. Only if that fails are the parts kept apart.
+                if helpers.can_fetch(Tool::Ffmpeg)
+                    && !self
+                        .ffmpeg_gave_up
+                        .load(std::sync::atomic::Ordering::SeqCst)
+                {
+                    keep.push(j);
+                    if !fetching {
+                        fetching = true;
+                        let me = self.clone();
+                        tokio::spawn(async move {
+                            let got = me.helpers().install(Tool::Ffmpeg).await;
+                            me.ffmpeg_gave_up
+                                .store(got.is_err(), std::sync::atomic::Ordering::SeqCst);
+                            me.join_finished();
+                            me.ffmpeg_gave_up
+                                .store(false, std::sync::atomic::Ordering::SeqCst);
+                            me.publish_jobs();
+                        });
+                    }
+                    continue;
+                }
                 let _ = self.store.set_error(
                     v.id,
-                    "Saved as separate video and audio: install ffmpeg to join them next time.",
+                    "Saved as separate video and audio: ffmpeg, which joins them, couldn't be set up. Check that this computer is online.",
                     "join",
                 );
                 continue;

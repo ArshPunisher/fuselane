@@ -9,6 +9,7 @@ import type {
   MediaInfo,
   PageFiles,
   PreviewView,
+  ToolSetup,
   UiError,
 } from '../lib/types'
 import { FilePicker } from './FilePicker'
@@ -99,6 +100,9 @@ export function NewDownload() {
   // The page being looked up (B3: the loader shows at once), and the last
   // qualities found, so Back can return to them without a new search (B4).
   const [videoLook, setVideoLook] = useState<string | null>(null)
+  // The page whose lookup failed, for Try again.
+  const lastLook = useRef<string | null>(null)
+  const toolSetup = useApp((s) => s.toolSetup)
   const [lastVideo, setLastVideo] = useState<{ url: string; info: MediaInfo } | null>(null)
   const [chosen, setChosen] = useState<Set<number>>(new Set())
   const [finding, setFinding] = useState(false)
@@ -311,6 +315,7 @@ export function NewDownload() {
   /** Looks a video page up and shows its qualities (B10.4). */
   async function getVideo(link: string) {
     if (!backend) return
+    lastLook.current = link
     // A new page never shows the previous one's video, not even for a moment (B2).
     const mine = ++lookup.current
     setMedia(null)
@@ -468,7 +473,7 @@ export function NewDownload() {
               <X size={18} aria-hidden />
             </button>
           </header>
-          <VideoLoader url={videoLook} />
+          <VideoLoader url={videoLook} setup={toolSetup} />
           <footer className="dialog-foot">
             <button
               type="button"
@@ -546,7 +551,7 @@ export function NewDownload() {
           {media.hdNeedsFfmpeg && (
             <p className="field-help">
               {t(
-                'Higher qualities need the free ffmpeg tool to join video and sound. Install it and look the page up again.',
+                "Higher qualities need ffmpeg to join video and sound, and it couldn't be set up just now. Look the page up again to try once more.",
               )}
             </p>
           )}
@@ -1218,10 +1223,26 @@ export function NewDownload() {
               </ul>
             </div>
           )}
-          {otherError && (
-            <p className="field-error" role="alert">
-              {otherError.message} {otherError.hint}
-            </p>
+          {otherError && TOOL_ERRORS.has(otherError.code) && lastLook.current ? (
+            <div className="inline-note" role="alert">
+              <p>
+                {otherError.message} {otherError.hint}
+              </p>
+              <button
+                type="button"
+                className="btn"
+                disabled={mediaBusy}
+                onClick={() => lastLook.current && void getVideo(lastLook.current)}
+              >
+                {t('Try again')}
+              </button>
+            </div>
+          ) : (
+            otherError && (
+              <p className="field-error" role="alert">
+                {otherError.message} {otherError.hint}
+              </p>
+            )
           )}
           <footer className="dialog-foot">
             <button
@@ -1282,11 +1303,20 @@ export function NewDownload() {
   )
 }
 
+/** Errors from setting up yt-dlp: each offers Try again (helpers.rs). */
+const TOOL_ERRORS = new Set([
+  'needs-yt-dlp',
+  'tools-download',
+  'tools-damaged',
+  'tools-disk',
+  'tools-blocked',
+])
+
 /**
  * While yt-dlp reads the page (B3): three tilted rings orbiting in the brand
  * colour, the page's site, and rows shaped like the qualities to come.
  */
-function VideoLoader({ url }: { url: string }) {
+function VideoLoader({ url, setup }: { url: string; setup: ToolSetup | null }) {
   let site = url
   try {
     site = new URL(url).hostname.replace(/^www\./, '')
@@ -1301,12 +1331,41 @@ function VideoLoader({ url }: { url: string }) {
         <span className="vl-ring vl-ring-c" />
         <span className="vl-core" />
       </div>
-      <p className="video-loader-text" role="status">
-        <span>{t('Looking at the video…')}</span>
-        <span className="muted" translate="no">
-          {site}
-        </span>
-      </p>
+      {setup ? (
+        // The first video ever: Fuselane fetches its helpers (helpers.rs).
+        <div className="video-loader-setup">
+          <p className="video-loader-text">
+            {/* Announced once; the bar below carries the numbers (no chatty live region). */}
+            <span role="status">{t('Getting the video tools ready (only the first time)…')}</span>
+            <span className="muted num">
+              {setup.total > 0
+                ? t('{done} of {total}', { done: bytes(setup.done), total: bytes(setup.total) })
+                : bytes(setup.done)}
+            </span>
+          </p>
+          <div
+            className="setup-bar"
+            role="progressbar"
+            aria-label={t('Video tools')}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={setup.total > 0 ? Math.round((100 * setup.done) / setup.total) : 0}
+          >
+            <span
+              style={{
+                transform: `scaleX(${setup.total > 0 ? Math.min(1, setup.done / setup.total) : 0})`,
+              }}
+            />
+          </div>
+        </div>
+      ) : (
+        <p className="video-loader-text" role="status">
+          <span>{t('Looking at the video…')}</span>
+          <span className="muted" translate="no">
+            {site}
+          </span>
+        </p>
+      )}
       <div className="video-loader-rows" aria-hidden="true">
         <span />
         <span />

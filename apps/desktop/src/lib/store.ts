@@ -21,6 +21,7 @@ import type {
   NetView,
   UiError,
   UpdateInfo,
+  ToolSetup,
   UpdateProgress,
   WhenDone,
 } from './types'
@@ -67,6 +68,8 @@ interface State {
   updateDismissed: boolean
   /** Set while the update downloads or installs. */
   updateProgress: UpdateProgress | null
+  /** Video helpers being fetched (yt-dlp, ffmpeg, deno), or null. */
+  toolSetup: ToolSetup | null
   /** Why the last update attempt failed, with what to do. */
   updateError: UiError | null
   selected: number | null
@@ -164,6 +167,7 @@ export const useApp = create<State>((set, get) => ({
   update: null,
   updateDismissed: false,
   updateProgress: null,
+  toolSetup: null,
   updateError: null,
   selected: null,
   view: 'transfers',
@@ -439,6 +443,10 @@ async function startOnce(): Promise<void> {
       }
       if (e.type === 'netCheck') {
         set({ netCheck: e.view })
+        return
+      }
+      if (e.type === 'toolSetup') {
+        set({ toolSetup: e.setup.tools.length > 0 ? e.setup : null })
         return
       }
       if (e.type === 'speedLive') {

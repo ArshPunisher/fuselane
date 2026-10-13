@@ -302,15 +302,31 @@ export const hiBackend: Readonly<Record<string, string>> = {
 
   // ==== Videos from pages, Metalink ====
   'That choice has expired. Look the page up again.': 'यह विकल्प पुराना हो गया। पेज फिर से खोजें।',
-  'Saved as separate video and audio: install ffmpeg to join them next time.':
-    'वीडियो और ऑडियो अलग-अलग सेव हुए: अगली बार उन्हें जोड़ने के लिए ffmpeg इंस्टॉल करें।',
+  "Saved as separate video and audio: ffmpeg, which joins them, couldn't be set up. Check that this computer is online.":
+    'वीडियो और ऑडियो अलग-अलग सेव हुए: उन्हें जोड़ने वाला ffmpeg सेट नहीं हो सका। देखें कि यह कंप्यूटर ऑनलाइन है।',
   '{why}; the video and audio are kept as they are.':
     '{why}, वीडियो और ऑडियो जैसे थे वैसे ही रखे गए हैं।',
   "ffmpeg couldn't join them": 'ffmpeg उन्हें जोड़ नहीं सका',
   "ffmpeg couldn't make an MP3 (its MP3 encoder may be missing)":
     'ffmpeg MP3 नहीं बना सका (शायद उसका MP3 एनकोडर नहीं है)',
-  "Videos from pages need the free yt-dlp tool, which isn't installed.":
-    'पेज से वीडियो लेने के लिए मुफ़्त yt-dlp टूल चाहिए, जो इंस्टॉल नहीं है।',
+  "Videos from pages need the free yt-dlp tool, and Fuselane can't set it up on this computer by itself.":
+    'पेज से वीडियो लेने के लिए मुफ़्त yt-dlp टूल चाहिए, और Fuselane इसे इस कंप्यूटर पर ख़ुद सेट नहीं कर सकता।',
+  "Fuselane couldn't download yt-dlp, the free tool it uses to read video pages.":
+    'Fuselane yt-dlp डाउनलोड नहीं कर सका, वह मुफ़्त टूल जिससे वह वीडियो पेज पढ़ता है।',
+  "Check that this computer is online, then press Try again. It's needed only once.":
+    'देखें कि यह कंप्यूटर ऑनलाइन है, फिर "फिर से कोशिश करें" दबाएं। यह सिर्फ़ एक बार चाहिए।',
+  "The yt-dlp download didn't match its published checksum, so Fuselane didn't use it.":
+    'yt-dlp का डाउनलोड उसके प्रकाशित चेकसम से मेल नहीं खाया, इसलिए Fuselane ने उसे इस्तेमाल नहीं किया।',
+  'Press Try again in a few minutes. If it keeps happening, report a problem.':
+    'कुछ मिनट बाद "फिर से कोशिश करें" दबाएं। अगर ऐसा होता रहे, तो समस्या की रिपोर्ट करें।',
+  "Fuselane couldn't save yt-dlp in its folder.":
+    'Fuselane yt-dlp को अपने फ़ोल्डर में सेव नहीं कर सका।',
+  'Make some free space on this computer, then press Try again.':
+    'इस कंप्यूटर पर कुछ जगह ख़ाली करें, फिर "फिर से कोशिश करें" दबाएं।',
+  "yt-dlp was downloaded but won't run on this computer. Security software may be blocking it.":
+    'yt-dlp डाउनलोड हो गया, पर इस कंप्यूटर पर नहीं चलता। शायद कोई सुरक्षा सॉफ़्टवेयर उसे रोक रहा है।',
+  'Allow it in your security software and press Try again. Or: {next}':
+    'इसे अपने सुरक्षा सॉफ़्टवेयर में अनुमति दें और "फिर से कोशिश करें" दबाएं। या: {next}',
   'Install it with Homebrew (brew install yt-dlp), then try again.':
     'इसे Homebrew से इंस्टॉल करें (brew install yt-dlp), फिर से कोशिश करें।',
   'Install it with winget (winget install yt-dlp), then try again.':

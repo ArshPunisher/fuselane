@@ -475,6 +475,10 @@ pub enum UiEvent {
         shares: Vec<crate::sends::ShareView>,
         receives: Vec<crate::sends::ReceiveView>,
     },
+    /// yt-dlp, ffmpeg or deno being fetched for videos from pages.
+    ToolSetup {
+        setup: crate::helpers::SetupView,
+    },
     /// The app's own update downloading or installing (B8.4).
     Update {
         progress: crate::update::UpdateProgress,
@@ -732,6 +736,10 @@ pub struct Service {
     media_seen: Mutex<HashMap<String, (std::time::Instant, crate::media::MediaInfo)>>,
     /// One yt-dlp lookup per page at a time: a second ask waits for the first.
     media_lookups: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    /// yt-dlp, ffmpeg and deno, fetched by Fuselane when they're needed.
+    helpers: Mutex<Arc<crate::helpers::Helpers>>,
+    /// ffmpeg couldn't be set up just now: joins waiting for it give up.
+    ffmpeg_gave_up: std::sync::atomic::AtomicBool,
     /// Bytes per network per day, for the last two months (B10.5).
     daily: Mutex<Vec<daily::DayUse>>,
     /// Networks outside their hours at the last tick (B10.6).
@@ -750,6 +758,19 @@ impl std::fmt::Debug for Service {
             .field("default_dir", &self.default_dir)
             .finish_non_exhaustive()
     }
+}
+
+/// The app keeps its helpers in `<home>/tools`. Tests never download: their
+/// helpers live in a folder of their own and a fetch always fails, unless a
+/// test swaps in its own (`Service::set_helpers`).
+fn default_helpers() -> crate::helpers::Helpers {
+    #[cfg(not(test))]
+    return crate::helpers::Helpers::for_app();
+    #[cfg(test)]
+    crate::helpers::Helpers::new(
+        std::env::temp_dir().join(format!("fuselane-test-tools-{}", std::process::id())),
+        Arc::new(|_| Box::pin(async { Err("tests don't download helpers".to_string()) })),
+    )
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -1097,6 +1118,8 @@ impl Service {
             media_probes: Mutex::default(),
             media_seen: Mutex::default(),
             media_lookups: Mutex::default(),
+            helpers: Mutex::new(Arc::new(default_helpers())),
+            ffmpeg_gave_up: std::sync::atomic::AtomicBool::new(false),
             daily: Mutex::new(daily_saved),
             hours_closed: Mutex::new(None),
             outages: Mutex::new(saved_outages),
@@ -1162,6 +1185,12 @@ impl Service {
     /// Where events go (the window's channel). Replaces any earlier subscriber.
     pub fn subscribe(self: &Arc<Self>, emit: Emit) {
         *lock(&self.emit) = emit;
+        let me = Arc::downgrade(self);
+        self.helpers().on_progress(Arc::new(move |setup| {
+            if let Some(s) = me.upgrade() {
+                s.send(UiEvent::ToolSetup { setup });
+            }
+        }));
         self.publish_jobs();
         self.subscribed
             .store(true, std::sync::atomic::Ordering::SeqCst);
@@ -3565,6 +3594,91 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn without_yt_dlp_and_offline_the_lookup_says_what_to_do_and_offers_try_again() {
+        let h = harness(3);
+        let offline: crate::helpers::Fetch =
+            Arc::new(|_| Box::pin(async { Err("no network".to_string()) }));
+        let tools = tempfile::tempdir().unwrap();
+        h.svc.set_helpers(
+            crate::helpers::Helpers::new(tools.path().to_path_buf(), offline).with_table(
+                Arc::new(|t| crate::helpers::source_for(t, "linux", "x86_64")),
+                crate::helpers::tests::nothing_installed(),
+            ),
+        );
+        let e = h
+            .svc
+            .media_info("https://www.youtube.com/watch?v=offline")
+            .await
+            .unwrap_err();
+        assert_eq!(e.code, "tools-download");
+        assert!(!e.message.contains("winget") && !e.message.contains("brew"));
+        assert!(e.hint.unwrap().contains("Try again"));
+    }
+
+    /// The reported bug (2026-10-14): with no yt-dlp installed, "Get the video"
+    /// said to install it with winget. Now it's fetched and used at once.
+    #[cfg(unix)]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_missing_yt_dlp_is_fetched_by_itself_and_reads_the_page() {
+        let h = harness(3);
+        let src = tempfile::tempdir().unwrap();
+        let page = src.path().join("page.json");
+        std::fs::write(
+            &page,
+            serde_json::json!({"title": "Bunny", "extractor_key": "Youtube", "formats": [
+                {"ext": "mp4", "vcodec": "avc1", "acodec": "none", "height": 1080,
+                 "protocol": "https", "url": "https://v.example/137", "filesize": 2000000},
+                {"ext": "m4a", "vcodec": "none", "acodec": "mp4a", "abr": 128.0,
+                 "protocol": "https", "url": "https://v.example/140", "filesize": 1000000}
+            ]})
+            .to_string(),
+        )
+        .unwrap();
+        // One fake program stands in for yt-dlp, ffmpeg and deno.
+        let tool = crate::helpers::tests::script(
+            src.path(),
+            &format!(
+                r#"case "$1" in -J) cat '{}';; *) echo 1;; esac"#,
+                page.display()
+            ),
+        );
+        let count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let tools = tempfile::tempdir().unwrap();
+        h.svc.set_helpers(
+            crate::helpers::Helpers::new(
+                tools.path().to_path_buf(),
+                crate::helpers::tests::serve(tool.clone(), count.clone()),
+            )
+            .with_table(
+                crate::helpers::tests::table(&tool, crate::helpers::Archive::Raw),
+                crate::helpers::tests::nothing_installed(),
+            ),
+        );
+        let info = h
+            .svc
+            .media_info("https://www.youtube.com/watch?v=bunny")
+            .await
+            .unwrap();
+        let labels: Vec<_> = info.options.iter().map(|o| o.label.as_str()).collect();
+        assert_eq!(
+            labels,
+            ["1080p", "Audio only", "Audio (MP3)"],
+            "HD via the fetched ffmpeg"
+        );
+        assert_eq!(
+            count.load(std::sync::atomic::Ordering::SeqCst),
+            3,
+            "yt-dlp, ffmpeg, deno"
+        );
+        let t = h.svc.media_tools();
+        assert!(
+            t.yt_dlp
+                .unwrap()
+                .starts_with(&*tools.path().to_string_lossy())
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn the_extension_sees_bytes_as_they_arrive_not_at_each_checkpoint() {
         let server = RangeServer::start(Content::new(4 * 1024 * KB, 99))
             .await
@@ -4642,6 +4756,76 @@ mod tests {
         assert_eq!(h.job(ids[0]).group_id, None, "a single file now");
         assert_eq!(h.job(ids[0]).sound, None);
         assert_eq!(h.job(ids[0]).status, "completed");
+    }
+
+    /// No ffmpeg anywhere: it's fetched when the parts are done, then they're
+    /// joined (it used to say "install ffmpeg to join them next time").
+    #[cfg(unix)]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn without_ffmpeg_the_parts_wait_for_a_fetched_one_and_are_joined() {
+        let src = tempfile::tempdir().unwrap();
+        // A stand-in ffmpeg: writes "joined" to the last argument (the output).
+        let tool = crate::helpers::tests::script(
+            src.path(),
+            r#"[ "$1" = -version ] && { echo ffmpeg; exit 0; }; for a; do out=$a; done; echo joined > "$out""#,
+        );
+        let tools = tempfile::tempdir().unwrap();
+        let count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let h = harness(3);
+        h.svc.set_helpers(
+            crate::helpers::Helpers::new(
+                tools.path().to_path_buf(),
+                crate::helpers::tests::serve(tool.clone(), count.clone()),
+            )
+            .with_table(
+                crate::helpers::tests::table(&tool, crate::helpers::Archive::Raw),
+                crate::helpers::tests::nothing_installed(),
+            ),
+        );
+        let server = RangeServer::start(Content::new(1024, 1)).await.unwrap();
+        server.serve_file("/v.mp4", vec![7u8; 20_000]);
+        server.serve_file("/a.m4a", vec![9u8; 5_000]);
+        let base = format!("http://{}", server.addr());
+        let stream = |path: &str, ext: &str| crate::media::Stream {
+            url: format!("{base}{path}"),
+            ext: ext.into(),
+            headers: vec![],
+            size: None,
+        };
+        lock(&h.svc.media_probes).insert(
+            "https://video.example/fetch".into(),
+            (
+                Instant::now(),
+                "Fetched".into(),
+                HashMap::from([(
+                    "v90".to_string(),
+                    crate::media::Plan {
+                        video: stream("/v.mp4", "mp4"),
+                        audio: Some(stream("/a.m4a", "m4a")),
+                        out_ext: "mp4".into(),
+                        label: "90p".into(),
+                        mp3: false,
+                    },
+                )]),
+            ),
+        );
+        let ids = h
+            .svc
+            .media_add("https://video.example/fetch", "v90", None)
+            .unwrap();
+        h.wait("joined with the fetched ffmpeg", |h| {
+            h.svc.jobs().unwrap().len() == 1
+                && h.job(ids[0]).status == "completed"
+                && h.job(ids[0])
+                    .final_path
+                    .as_deref()
+                    .is_some_and(|p| p.ends_with("Fetched (90p).mp4"))
+        })
+        .await;
+        let joined = PathBuf::from(h.job(ids[0]).final_path.unwrap());
+        assert_eq!(std::fs::read_to_string(joined).unwrap(), "joined\n");
+        assert_eq!(count.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(h.job(ids[0]).error, None);
     }
 
     #[tokio::test(flavor = "multi_thread")]

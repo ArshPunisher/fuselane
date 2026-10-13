@@ -452,8 +452,11 @@ export const hi: Readonly<Record<string, string>> = {
     '{site}, {duration}। हर नेटवर्क से एक साथ डाउनलोड होगा।',
   '{site}. Downloads over every network at once.': '{site}। हर नेटवर्क से एक साथ डाउनलोड होगा।',
   Quality: 'क्वालिटी',
-  'Higher qualities need the free ffmpeg tool to join video and sound. Install it and look the page up again.':
-    'ऊंची क्वालिटी के लिए वीडियो और आवाज़ जोड़ने वाला मुफ़्त ffmpeg टूल चाहिए। इसे इंस्टॉल करके पेज फिर से देखें।',
+  "Higher qualities need ffmpeg to join video and sound, and it couldn't be set up just now. Look the page up again to try once more.":
+    'ऊंची क्वालिटी के लिए वीडियो और आवाज़ जोड़ने को ffmpeg चाहिए, जो अभी सेट नहीं हो सका। एक बार और कोशिश के लिए पेज फिर से खोजें।',
+  'Video tools': 'वीडियो के टूल',
+  'Getting the video tools ready (only the first time)…':
+    'वीडियो के टूल तैयार हो रहे हैं (सिर्फ़ पहली बार)…',
   'Adding…': 'जोड़ रहे हैं…',
   'Files on the page': 'पेज पर फ़ाइलें',
   '{n} file. Pick what to download; more than one stay together as a group.':
@@ -1158,10 +1161,10 @@ export const hi: Readonly<Record<string, string>> = {
   'Checked in {when}': 'आखिरी बार {when} जुड़ा',
   'Open {browser} once so it can check in.': '{browser} एक बार खोलें, ताकि यह जुड़ सके।',
   'Add to {browser}': '{browser} में जोड़ें',
+  Add: 'जोड़ें',
   'Turn on': 'चालू करें',
   'Add the extension and downloads from your browser come here by themselves.':
     'एक्सटेंशन जोड़ें, फिर ब्राउज़र के डाउनलोड अपने आप यहां आएंगे।',
-  Add: 'जोड़ें',
   'Turn on in {browser}': '{browser} में चालू करें',
   'Not now': 'अभी नहीं',
   'Made by ClearCraft Labs': 'ClearCraft Labs ने बनाया',

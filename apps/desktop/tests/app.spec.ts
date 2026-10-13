@@ -1398,12 +1398,36 @@ test('an HD video whose sound is lost offers to get it again or save without sou
   await expect(detail.getByRole('button', { name: 'Open' })).toBeVisible()
 })
 
-test('without yt-dlp a video page says what to install', async ({ page }) => {
-  await page.goto('/?empty=1&ytdlp=0')
+test('without yt-dlp the first video page fetches the tools, then shows the qualities', async ({
+  page,
+}) => {
+  // The reported bug (2026-10-14): "install it with winget" instead of just working.
+  await page.goto('/?empty=1&ytdlp=0&setupStep=150')
   const dialog = await openDialog(page)
   await dialog.getByLabel('Link').fill('https://www.youtube.com/watch?v=aqz-KE-bpKQ')
   await dialog.getByRole('button', { name: 'Get the video from this page' }).click()
-  await expect(dialog.getByRole('alert')).toContainText('brew install yt-dlp')
+  const look = page.getByRole('dialog', { name: 'Get the video' })
+  await expect(look.getByRole('status')).toContainText('Getting the video tools ready')
+  await expect(look).toContainText(/MB of 108\sMB/)
+  await expect(look.getByRole('progressbar', { name: 'Video tools' })).toBeVisible()
+  await expect(look.getByRole('radio', { name: /1080p/ })).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByText(/winget|brew install/)).toHaveCount(0)
+})
+
+test('when the tools cannot be fetched, the error says why and Try again works', async ({
+  page,
+}) => {
+  await page.goto('/?empty=1&ytdlp=offline')
+  const dialog = await openDialog(page)
+  await dialog.getByLabel('Link').fill('https://www.youtube.com/watch?v=aqz-KE-bpKQ')
+  await dialog.getByRole('button', { name: 'Get the video from this page' }).click()
+  const alert = dialog.getByRole('alert')
+  await expect(alert).toContainText("couldn't download yt-dlp")
+  await expect(alert).toContainText('online')
+  await alert.getByRole('button', { name: 'Try again' }).click()
+  await expect(
+    page.getByRole('dialog', { name: 'Get the video' }).getByRole('radio', { name: /1080p/ }),
+  ).toBeVisible()
 })
 
 test('a network can be used only at certain hours', async ({ page }) => {

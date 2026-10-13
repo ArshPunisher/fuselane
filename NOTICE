@@ -2,3 +2,19 @@ Fuselane
 Copyright 2026 The Fuselane Authors
 
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Helper programs fetched at run time (not distributed with Fuselane)
+--------------------------------------------------------------------
+The first time someone gets a video from a web page, Fuselane downloads these
+programs from their projects' own releases, at pinned versions checked against
+pinned SHA-256 hashes, into its app-data folder (apps/desktop/src-tauri/src/helpers.rs).
+They are separate programs that Fuselane runs; none of their code is part of
+Fuselane, and Fuselane's installers and packages do not contain them.
+
+- yt-dlp 2026.08.19, https://github.com/yt-dlp/yt-dlp (The Unlicense)
+- deno 2.9.7, https://github.com/denoland/deno (MIT License)
+- FFmpeg 9.0.2, https://ffmpeg.org (static builds configured with --enable-gpl
+  --enable-version3, so GPL version 3; source at https://ffmpeg.org/download.html)
+  - macOS and Linux: builds by Martin Riedl, https://ffmpeg.martin-riedl.de
+  - Windows: "essentials" build by Gyan Doshi, https://www.gyan.dev/ffmpeg/builds/
+    (mirror: https://github.com/GyanD/codexffmpeg)

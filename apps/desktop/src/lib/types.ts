@@ -142,6 +142,8 @@ export type UiEvent =
   | { type: 'nearby'; view: NearbyView }
   | { type: 'netCheck'; view: NetCheckView }
   | { type: 'speedLive'; live: SpeedLive | null }
+  /** yt-dlp, ffmpeg or deno being fetched for videos from pages. */
+  | { type: 'toolSetup'; setup: ToolSetup }
   /** A download just came from the browser: select it. */
   | { type: 'show'; id: number }
 
@@ -620,6 +622,13 @@ export interface MediaInfo {
   options: { id: string; label: string; detail: string; size: number | null }[]
   /** HD needs ffmpeg to join video and audio. */
   hdNeedsFfmpeg: boolean
+}
+
+/** Helpers being fetched the first time a video page is read (empty `tools` when done). */
+export interface ToolSetup {
+  tools: string[]
+  done: number
+  total: number
 }
 
 export interface MediaTools {

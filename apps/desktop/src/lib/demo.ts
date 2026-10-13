@@ -211,6 +211,8 @@ export function createDemoBackend(params: URLSearchParams): Backend {
   let clock = 0
   let updateCancelled = false
   let listener: ((e: UiEvent) => void) | null = null
+  // The demo's helpers (?ytdlp=0 / offline): fetched on the first video lookup.
+  let toolsFetched = false
   const torrents = createDemoTorrents(params, () => (e) => listener?.(e))
   const sends = createDemoSends(params, () => (e) => listener?.(e))
   const nearby = createDemoNearby(params, () => (e) => listener?.(e))
@@ -995,18 +997,34 @@ export function createDemoBackend(params: URLSearchParams): Backend {
       emitJobs()
     },
     mediaTools: async () => ({
-      ytDlp: params.get('ytdlp') === '0' ? null : '/opt/homebrew/bin/yt-dlp',
+      ytDlp: params.get('ytdlp') && !toolsFetched ? null : '/opt/homebrew/bin/yt-dlp',
       ffmpeg: '/opt/homebrew/bin/ffmpeg',
     }),
     mediaInfo: async (url) => {
       // ?mediaDelay=ms: yt-dlp taking its time, to see the loader.
       await new Promise((r) => setTimeout(r, Number(params.get('mediaDelay') ?? 300)))
-      if (params.get('ytdlp') === '0')
+      // ?ytdlp=0: no yt-dlp yet, so Fuselane fetches its helpers first (helpers.rs);
+      // ?ytdlp=offline: and that fetch fails (Try again works, as when back online).
+      if (params.get('ytdlp') === 'offline' && !toolsFetched) {
+        toolsFetched = true
         throw err(
-          'needs-yt-dlp',
-          "Videos from pages need the free yt-dlp tool, which isn't installed.",
-          'Install it with Homebrew (brew install yt-dlp), then try again.',
+          'tools-download',
+          "Fuselane couldn't download yt-dlp, the free tool it uses to read video pages.",
+          "Check that this computer is online, then press Try again. It's needed only once.",
         )
+      }
+      if (params.get('ytdlp') === '0' && !toolsFetched) {
+        const total = 108 * MB
+        for (let done = 0; done <= total; done += total / 12) {
+          listener?.({
+            type: 'toolSetup',
+            setup: { tools: ['yt-dlp', 'ffmpeg', 'deno'], done, total },
+          })
+          await new Promise((r) => setTimeout(r, Number(params.get('setupStep') ?? 250)))
+        }
+        listener?.({ type: 'toolSetup', setup: { tools: [], done: 0, total: 0 } })
+        toolsFetched = true
+      }
       if (url.includes('nomedia'))
         throw err('no-media', 'No video found there: unsupported URL.', null)
       return {

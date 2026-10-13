@@ -89,7 +89,7 @@ Fuselane splits each download into parts and fetches them over every network the
   </tr>
 </table>
 
-Also: videos from web pages with your own [yt-dlp](https://github.com/yt-dlp/yt-dlp), hand a download to another computer halfway through, mirrors, schedules, data allowances per network, and a command-line tool.
+Also: videos from web pages (Fuselane fetches [yt-dlp](https://github.com/yt-dlp/yt-dlp) and ffmpeg for you the first time), hand a download to another computer halfway through, mirrors, schedules, data allowances per network, and a command-line tool.
 
 ## Install
 

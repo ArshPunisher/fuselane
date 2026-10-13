@@ -1,8 +1,8 @@
-//! Video and audio from pages (B10.4). Fuselane never bundles a site-specific
-//! downloader: when the person has the free yt-dlp installed, it's asked only
-//! for a page's real media links; Fuselane's engine then downloads them over
-//! every network. ffmpeg, when installed, joins separate video and audio into
-//! one file without re-encoding.
+//! Video and audio from pages (B10.4). yt-dlp is asked only for a page's real
+//! media links; Fuselane's engine then downloads them over every network.
+//! ffmpeg joins separate video and audio into one file without re-encoding.
+//! Neither is bundled in the app: Fuselane fetches pinned, checked copies the
+//! first time they're needed (`helpers.rs`), or uses ones the person installed.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -318,13 +318,20 @@ pub fn plans_from(
 }
 
 /// Asks yt-dlp about a page (never downloads with it). The link is passed
-/// after `--`, so it can't be read as an option.
-pub async fn probe(yt_dlp: &Path, url: &str) -> Result<serde_json::Value, String> {
-    let run = tokio::process::Command::new(yt_dlp)
-        .args(["-J", "--no-playlist", "--no-warnings", "--", url])
-        .kill_on_drop(true)
-        .output();
-    let out = tokio::time::timeout(Duration::from_secs(60), run)
+/// after `--`, so it can't be read as an option. `extra` comes from Fuselane
+/// (which JavaScript runtime to use), never from the page.
+pub async fn probe(
+    yt_dlp: &Path,
+    extra: &[String],
+    url: &str,
+) -> Result<serde_json::Value, String> {
+    let mut cmd = tokio::process::Command::new(yt_dlp);
+    cmd.args(["-J", "--no-playlist", "--no-warnings"])
+        .args(extra)
+        .args(["--", url])
+        .kill_on_drop(true);
+    crate::helpers::no_window(&mut cmd);
+    let out = tokio::time::timeout(Duration::from_secs(60), cmd.output())
         .await
         .map_err(|_| "the page took too long to read".to_string())?
         .map_err(|e| format!("yt-dlp couldn't start ({e})"))?;
@@ -345,9 +352,32 @@ pub async fn probe(yt_dlp: &Path, url: &str) -> Result<serde_json::Value, String
     serde_json::from_slice(&out.stdout).map_err(|_| "yt-dlp's answer couldn't be read".into())
 }
 
+/// Whether a failed read may be an out-of-date yt-dlp (sites change and old
+/// versions stop reading them) rather than a page with no video at all, so a
+/// newer yt-dlp is worth a try.
+pub fn may_be_stale(why: &str) -> bool {
+    let w = why.to_ascii_lowercase();
+    ![
+        "unsupported url",
+        "private video",
+        "video unavailable",
+        "is not available",
+        "has been removed",
+        "page took too long",
+        "unable to download webpage",
+        "name or service not known",
+        "getaddrinfo",
+        "timed out",
+    ]
+    .iter()
+    .any(|s| w.contains(s))
+}
+
 /// Joins video and audio into `out` without re-encoding.
 pub fn join(ffmpeg: &Path, video: &Path, audio: &Path, out: &Path) -> Result<(), String> {
-    let status = std::process::Command::new(ffmpeg)
+    let mut cmd = std::process::Command::new(ffmpeg);
+    crate::helpers::no_window_std(&mut cmd);
+    let status = cmd
         .args(["-hide_banner", "-loglevel", "error", "-y", "-i"])
         .arg(video)
         .arg("-i")
@@ -365,7 +395,9 @@ pub fn join(ffmpeg: &Path, video: &Path, audio: &Path, out: &Path) -> Result<(),
 
 /// Turns any audio (or a video's sound) into an MP3 at good quality.
 pub fn to_mp3(ffmpeg: &Path, input: &Path, out: &Path) -> Result<(), String> {
-    let status = std::process::Command::new(ffmpeg)
+    let mut cmd = std::process::Command::new(ffmpeg);
+    crate::helpers::no_window_std(&mut cmd);
+    let status = cmd
         .args(["-hide_banner", "-loglevel", "error", "-y", "-i"])
         .arg(input)
         .args(["-vn", "-codec:a", "libmp3lame", "-q:a", "2"])
@@ -448,6 +480,22 @@ mod tests {
         ]});
         assert!(plans_from(&j, true).is_none());
         assert!(plans_from(&serde_json::json!({"title": "no formats"}), true).is_none());
+    }
+
+    #[test]
+    fn only_failures_a_newer_yt_dlp_could_fix_ask_for_one() {
+        assert!(may_be_stale(
+            "[youtube] abc: Sign in to confirm you're not a bot"
+        ));
+        assert!(may_be_stale("[youtube] abc: nsig extraction failed"));
+        assert!(may_be_stale("it found no video there"));
+        assert!(!may_be_stale("Unsupported URL: https://example.com/"));
+        assert!(!may_be_stale("[youtube] abc: Private video. Sign in"));
+        assert!(!may_be_stale("[youtube] abc: Video unavailable"));
+        assert!(!may_be_stale("the page took too long to read"));
+        assert!(!may_be_stale(
+            "Unable to download webpage: <urlopen error [Errno 8] nodename nor servname>"
+        ));
     }
 
     #[test]
