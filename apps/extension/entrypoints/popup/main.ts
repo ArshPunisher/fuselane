@@ -1,6 +1,6 @@
 import { formatSize, normalizeRules } from '@fuselane/capture'
 import { appStatus, browserId, sendHandoff, type Status } from '../../lib/status.ts'
-import { findOnPage, mediaList, worthPeeking, type MediaItem } from '../../lib/media.ts'
+import { findOnPage, mediaList, type MediaItem } from '../../lib/media.ts'
 import { feedList, findFeeds, type FoundFeed } from '../../lib/feeds.ts'
 import { KEY, readJobs, type SelfJob } from '../../lib/selfjobs.ts'
 import { cleanLimit } from '../../lib/route.ts'
@@ -10,7 +10,7 @@ import './style.css'
 
 // The popup (REVIEW-2026-10-11 D): the Fuselane switch, the downloads (the
 // app's, or the extension's own when there's no app) with their buttons and
-// the combined speed, this page's video and files, and a speed test.
+// the combined speed, this page's files and feeds, and a speed test.
 
 const HOST = 'app.fuselane.host'
 const DOWNLOAD_PAGE = 'https://fuselane.app/download/?ref=extension'
@@ -609,15 +609,12 @@ async function followSelf() {
 
 // ---- This page ------------------------------------------------------------
 const KIND: Record<MediaItem['kind'], { word: string; icon: IconName }> = {
-  video: { word: 'Video', icon: 'video-camera' },
-  audio: { word: 'Audio', icon: 'music-note' },
   link: { word: 'File', icon: 'file' },
 }
 
 async function onThisPage() {
   const list = $<HTMLUListElement>('#media')
   const said = $<HTMLParagraphElement>('#media-status')
-  const video = $<HTMLButtonElement>('#video')
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true })
   if (!tab?.id || !tab.url || !/^https?:/.test(tab.url)) {
     $('#page-card').hidden = true
@@ -627,25 +624,6 @@ async function onThisPage() {
   const pageUrl = tab.url
   $('#page-title').textContent = tab.title || new URL(pageUrl).hostname
   $('#page-site').textContent = new URL(pageUrl).hostname.replace(/^www\./, '')
-  // A video page (YouTube and many more): the app finds the video and its
-  // qualities. It opens Fuselane if it's closed, so this can take a moment.
-  video.addEventListener('click', async () => {
-    video.disabled = true
-    said.textContent =
-      app.state === 'connected' ? 'Opening the video in Fuselane…' : 'Starting Fuselane…'
-    const reply = (await ask({ v: 1, type: 'page.video', url: pageUrl }).catch(() => null)) as {
-      type?: string
-    } | null
-    if (reply?.type === 'page.video.opened') {
-      window.close()
-    } else {
-      video.disabled = false
-      said.textContent =
-        app.state === 'not-installed'
-          ? 'Getting videos needs the Fuselane app.'
-          : "Fuselane didn't answer. Open it and try again."
-    }
-  })
   let items: MediaItem[] = []
   let feeds: FoundFeed[] = []
   try {
@@ -662,14 +640,6 @@ async function onThisPage() {
   } catch {
     // a page the browser doesn't let extensions read
   }
-  // A video page and the app running: it starts reading the page now, so the
-  // qualities are ready (or nearly) when "Get this page's video" is pressed (B3).
-  // Never starts the app: a closed app isn't opened just for a look.
-  if (worthPeeking(pageUrl, items))
-    void appKnown.then((a) => {
-      if (a.state === 'connected')
-        void ask({ v: 1, type: 'page.peek', url: pageUrl }).catch(() => {})
-    })
   const feedBox = $<HTMLDivElement>('#feeds')
   for (const f of feeds) {
     const b = el(
@@ -694,7 +664,7 @@ async function onThisPage() {
     feedBox.append(b)
   }
   if (!items.length) {
-    said.textContent = 'No videos or file links here.'
+    said.textContent = 'No file links here.'
     return
   }
   for (const m of items) {

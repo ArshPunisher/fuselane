@@ -1,15 +1,13 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { MAX_ITEMS, mediaList, worthPeeking, type Found } from '../lib/media.ts'
+import { MAX_ITEMS, mediaList, type Found } from '../lib/media.ts'
 
-const PAGE = 'https://videos.example.org/watch/42'
+const PAGE = 'https://files.example.org/downloads/42'
 
-test('media and file links are listed, media first, each once', () => {
+test('file links are listed in page order, each once', () => {
   const found: Found[] = [
     { url: '/files/talk.pdf', kind: 'link', label: ' Slides (PDF) ' },
-    { url: 'https://cdn.example.org/v/talk.mp4', kind: 'video', label: 'The talk' },
-    { url: 'https://cdn.example.org/v/talk.mp4#t=10', kind: 'video', label: 'The talk' },
-    { url: 'https://cdn.example.org/a/talk%20audio.m4a', kind: 'audio', label: '' },
+    { url: '/files/talk.pdf#page=2', kind: 'link', label: 'Slides' },
     { url: '/about', kind: 'link', label: 'About' },
     { url: 'https://example.org/download/app.dmg?x=1', kind: 'link', label: 'Mac' },
   ]
@@ -17,23 +15,21 @@ test('media and file links are listed, media first, each once', () => {
   assert.deepEqual(
     list.map((m) => [m.kind, m.name]),
     [
-      ['video', 'talk.mp4'],
-      ['audio', 'talk audio.m4a'],
       ['link', 'talk.pdf'],
       ['link', 'app.dmg'],
     ],
   )
-  assert.equal(list[2]!.url, 'https://videos.example.org/files/talk.pdf')
-  assert.equal(list[2]!.label, 'Slides (PDF)')
+  assert.equal(list[0]!.url, 'https://files.example.org/files/talk.pdf')
+  assert.equal(list[0]!.label, 'Slides (PDF)')
 })
 
 test('streams and non-web links are left out', () => {
   const found: Found[] = [
-    { url: 'blob:https://videos.example.org/1234', kind: 'video', label: '' },
-    { url: 'data:video/mp4;base64,AAAA', kind: 'video', label: '' },
+    { url: 'blob:https://files.example.org/1234', kind: 'link', label: 'x.zip' },
+    { url: 'data:application/zip;base64,AAAA', kind: 'link', label: '' },
     { url: 'javascript:void(0)', kind: 'link', label: 'x.zip' },
     { url: 'mailto:me@example.org', kind: 'link', label: '' },
-    { url: 'http://[bad', kind: 'video', label: '' },
+    { url: 'http://[bad', kind: 'link', label: '' },
   ]
   assert.deepEqual(mediaList(found, PAGE), [])
 })
@@ -45,15 +41,4 @@ test('a page full of links is capped', () => {
     label: '',
   }))
   assert.equal(mediaList(found, PAGE).length, MAX_ITEMS)
-})
-
-test('the app starts reading a page early only on video sites or pages with a video', () => {
-  assert.equal(worthPeeking('https://www.youtube.com/watch?v=x', []), true)
-  assert.equal(worthPeeking('https://m.youtube.com/shorts/x', []), true)
-  assert.equal(worthPeeking('https://youtu.be/x', []), true)
-  assert.equal(worthPeeking('https://example.org/blog', []), false)
-  assert.equal(worthPeeking('https://notyoutube.com/x', []), false)
-  assert.equal(worthPeeking('https://example.org/talk', [{ kind: 'video' }]), true)
-  assert.equal(worthPeeking('https://example.org/talk', [{ kind: 'link' }]), false)
-  assert.equal(worthPeeking('chrome://extensions', [{ kind: 'video' }]), false)
 })

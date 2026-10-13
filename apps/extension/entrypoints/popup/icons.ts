@@ -10,7 +10,6 @@ import gear from '@phosphor-icons/core/assets/regular/gear.svg?raw'
 import musicNote from '@phosphor-icons/core/assets/regular/music-note.svg?raw'
 import power from '@phosphor-icons/core/assets/regular/power.svg?raw'
 import rss from '@phosphor-icons/core/assets/regular/rss.svg?raw'
-import videoCamera from '@phosphor-icons/core/assets/regular/video-camera.svg?raw'
 import globe from '@phosphor-icons/core/assets/regular/globe.svg?raw'
 import pause from '@phosphor-icons/core/assets/fill/pause-fill.svg?raw'
 import play from '@phosphor-icons/core/assets/fill/play-fill.svg?raw'
@@ -39,7 +38,6 @@ const ICONS = {
   'music-note': musicNote,
   power,
   rss,
-  'video-camera': videoCamera,
   globe,
   pause,
   play,

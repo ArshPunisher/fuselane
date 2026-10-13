@@ -36,8 +36,8 @@ export default defineConfig({
     name: 'Fuselane',
     description: 'Download faster with Fuselane: it splits each download across all your networks.',
     homepage_url: 'https://fuselane.app',
-    // activeTab + scripting: the popup lists the current tab's videos and file
-    // links, only when opened (no access to other tabs, nothing in the background).
+    // activeTab + scripting: the popup lists the current tab's file links and
+    // feeds, only when opened (no access to other tabs, nothing in the background).
     // offscreen: the extension's own downloads run in an offscreen page (the
     // service worker can stop at any time). downloads.ui: hides the browser's
     // download bar for downloads Fuselane takes. Neither exists in Firefox, and

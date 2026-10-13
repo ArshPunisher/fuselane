@@ -901,7 +901,7 @@ h2 {
   height: 15px;
 }
 
-/* This page: what it is, and the video in one tap. */
+/* This page: what it is, its feeds and file links. */
 .page-card {
   display: grid;
   grid-template-columns: 56px minmax(0, 1fr);

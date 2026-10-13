@@ -464,7 +464,7 @@ export default defineBackground(() => {
     browser.contextMenus.create({
       id: 'fuselane-download',
       title: 'Download with Fuselane',
-      contexts: ['link', 'video', 'audio'],
+      contexts: ['link'],
     })
   })
 
@@ -618,7 +618,7 @@ export default defineBackground(() => {
   })
 
   browser.contextMenus.onClicked.addListener(async (info) => {
-    const url = info.linkUrl ?? info.srcUrl
+    const url = info.linkUrl
     if (info.menuItemId !== 'fuselane-download' || !url) return
     await grab(url, info.pageUrl ?? null, null)
   })
