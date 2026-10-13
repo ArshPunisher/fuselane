@@ -674,10 +674,12 @@ export function NearbyPanel() {
   const nearby = useApp((s) => s.nearby)
   const backend = useApp((s) => s.backend)
   const act = useApp((s) => s.act)
-  // Nearby starts the first time the Send page is shown (NEARBY.md).
+  // Nearby starts the first time the Send page is shown (NEARBY.md). Each
+  // later visit asks who's around again (and listens on the networks there are
+  // now), so a computer that came along since shows without a restart.
   useEffect(() => {
-    if (backend && !nearby?.on) void act((b) => b.nearbyStart())
-  }, [backend, nearby?.on, act])
+    if (backend) void act((b) => b.nearbyStart())
+  }, [backend, act])
   const over = useDropOnDevice()
   const transfers = useMemo(() => nearby?.transfers ?? [], [nearby?.transfers])
   if (!nearby)

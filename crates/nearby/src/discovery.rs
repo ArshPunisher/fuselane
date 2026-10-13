@@ -45,23 +45,47 @@ impl Discovery {
         })
     }
 
-    /// Sends `a` on every joined network.
+    /// The local addresses this listener joined the group on.
+    pub fn ifaces(&self) -> &[Ipv4Addr] {
+        &self.ifaces
+    }
+
+    /// Sends `a` on every joined network. A network whose address has gone
+    /// (Wi-Fi changed, the computer slept) is skipped rather than stopping the
+    /// others; an error only when it went out on none.
     pub async fn announce(&self, a: &Announcement) -> std::io::Result<()> {
         let body = serde_json::to_vec(a).map_err(std::io::Error::other)?;
         let to = SocketAddr::V4(SocketAddrV4::new(MULTICAST, self.port));
         let sock = socket2::SockRef::from(&self.sock);
+        let mut last = None;
+        let mut sent = false;
         for ip in &self.ifaces {
-            sock.set_multicast_if_v4(ip)?;
-            let _ = self.sock.send_to(&body, to).await;
+            if let Err(e) = sock.set_multicast_if_v4(ip) {
+                last = Some(e);
+                continue;
+            }
+            match self.sock.send_to(&body, to).await {
+                Ok(_) => sent = true,
+                Err(e) => last = Some(e),
+            }
         }
-        Ok(())
+        match last {
+            Some(e) if !sent => Err(e),
+            _ => Ok(()),
+        }
     }
 
-    /// The next valid announcement and where it came from.
+    /// The next valid announcement and where it came from. Windows reports an
+    /// earlier send's ICMP "port unreachable" as a reset on the next receive;
+    /// that says nothing about this socket, so listening goes on.
     pub async fn recv(&self) -> std::io::Result<(SocketAddr, Announcement)> {
         let mut buf = vec![0u8; 64 * 1024];
         loop {
-            let (n, from) = self.sock.recv_from(&mut buf).await?;
+            let (n, from) = match self.sock.recv_from(&mut buf).await {
+                Ok(x) => x,
+                Err(e) if passing(&e) => continue,
+                Err(e) => return Err(e),
+            };
             if let Ok(a) = proto::parse_announcement(&buf[..n]) {
                 return Ok((from, a));
             }
@@ -70,5 +94,28 @@ impl Discovery {
 
     pub fn default_port() -> u16 {
         PORT
+    }
+}
+
+/// Receive errors that don't mean the socket is broken.
+fn passing(e: &std::io::Error) -> bool {
+    use std::io::ErrorKind::{ConnectionRefused, ConnectionReset, Interrupted, WouldBlock};
+    matches!(
+        e.kind(),
+        ConnectionReset | ConnectionRefused | Interrupted | WouldBlock
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_reset_from_an_earlier_send_does_not_stop_listening() {
+        use std::io::{Error, ErrorKind};
+        assert!(passing(&Error::from(ErrorKind::ConnectionReset)));
+        assert!(passing(&Error::from(ErrorKind::Interrupted)));
+        assert!(!passing(&Error::from(ErrorKind::NotConnected)));
+        assert!(!passing(&Error::other("socket closed")));
     }
 }

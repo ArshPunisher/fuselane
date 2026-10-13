@@ -135,10 +135,20 @@ async fn call(
     Ok((status, body))
 }
 
+/// How long an introduction may take in all. The other side checks who we are
+/// by connecting back (up to 6 s), so this leaves room for that, but a device
+/// that takes the connection and never answers can't hold anyone up.
+const REGISTER_FOR: Duration = Duration::from_secs(15);
+
 /// Introduces this device to `t` and returns who it says it is.
 pub async fn register(me: &DeviceInfo, t: &Target) -> Result<DeviceInfo, SendError> {
     let body = serde_json::to_vec(me).map_err(|e| SendError::Failed(e.to_string()))?;
-    let (status, reply) = call(t, "/api/localsend/v2/register", full(body), None).await?;
+    let (status, reply) = tokio::time::timeout(
+        REGISTER_FOR,
+        call(t, "/api/localsend/v2/register", full(body), None),
+    )
+    .await
+    .map_err(|_| SendError::Unreachable)??;
     if !status.is_success() {
         return Err(SendError::Refused(status.as_u16()));
     }

@@ -153,6 +153,17 @@ pub struct Nearby {
     identity: Mutex<Option<Identity>>,
     server: tokio::sync::Mutex<Option<Server>>,
     discovery: tokio::sync::Mutex<Option<Arc<Discovery>>>,
+    /// The addresses the discovery listener was set up for, and the task that
+    /// listens. Both are checked every tick: a new or changed network (Wi-Fi
+    /// joined after launch, a wake from sleep) or a listener that stopped gets a
+    /// fresh one, instead of hearing nothing until the app restarts.
+    discovery_on: Mutex<Option<Vec<Ipv4Addr>>>,
+    listener: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    /// One check at a time (the tick and an opening Send page can meet).
+    refreshing: tokio::sync::Mutex<()>,
+    /// One start at a time (the app's own start for trusted computers and the
+    /// Send page opening can meet; two would each start a receiver).
+    starting: tokio::sync::Mutex<()>,
     port: AtomicU64,
     everyone_until: Mutex<Option<Instant>>,
     devices: Mutex<HashMap<String, Seen>>,
@@ -285,6 +296,10 @@ impl Nearby {
             identity: Mutex::new(None),
             server: tokio::sync::Mutex::new(None),
             discovery: tokio::sync::Mutex::new(None),
+            discovery_on: Mutex::new(None),
+            listener: Mutex::new(None),
+            refreshing: tokio::sync::Mutex::new(()),
+            starting: tokio::sync::Mutex::new(()),
             port: AtomicU64::new(0),
             everyone_until: Mutex::new(None),
             devices: Mutex::new(HashMap::new()),
@@ -366,10 +381,14 @@ impl Nearby {
 
     /// Starts the receiver and discovery (the first time the Send page opens).
     pub async fn start(self: &Arc<Self>) -> Result<NearbyView, UiError> {
+        let _one = self.starting.lock().await;
         if self.running() {
             // Already on: ask who's around again (the Send page or the hand-off
             // dialog opened). Computers that trust this one answer at once, even
             // if they started after it and it hasn't announced itself since.
+            if self.refresh_discovery().await {
+                self.publish();
+            }
             self.announce().await;
             return Ok(self.view());
         }
@@ -393,17 +412,60 @@ impl Nearby {
         self.port
             .store(u64::from(server.addr.port()), Ordering::Relaxed);
         *self.server.lock().await = Some(server);
-        match Discovery::start(&(self.addrs)(), self.discovery_port) {
+        self.refresh_discovery().await;
+        self.publish();
+        Ok(self.view())
+    }
+
+    /// Makes sure discovery listens on this computer's networks as they are
+    /// now. The first start can come before Wi-Fi is up (Nearby starts with
+    /// the app when a computer is trusted), the address can change while the
+    /// app runs (another network, a wake from sleep), and a listener can stop
+    /// on an error: each of those used to leave Nearby deaf until a restart.
+    /// Returns whether discovery is listening anew (false when nothing changed
+    /// or the new setup failed; the next tick tries again).
+    async fn refresh_discovery(self: &Arc<Self>) -> bool {
+        let _one = self.refreshing.lock().await;
+        let mut now = (self.addrs)();
+        now.sort_unstable();
+        now.dedup();
+        let listening = lock(&self.listener)
+            .as_ref()
+            .is_some_and(|h| !h.is_finished());
+        if listening && lock(&self.discovery_on).as_deref() == Some(now.as_slice()) {
+            return false;
+        }
+        if !listening
+            && now.is_empty()
+            && lock(&self.discovery_on).as_deref() == Some(now.as_slice())
+        {
+            return false; // still no network: nothing new to try
+        }
+        if let Some(old) = lock(&self.listener).take() {
+            old.abort();
+        }
+        *self.discovery.lock().await = None;
+        *lock(&self.discovery_on) = Some(now.clone());
+        let started = if now.is_empty() {
+            Err(std::io::Error::other(
+                "this computer isn't on Wi-Fi or Ethernet",
+            ))
+        } else {
+            Discovery::start(&now, self.discovery_port)
+        };
+        let ok = started.is_ok();
+        match started {
             Ok(d) => {
                 let d = Arc::new(d);
                 *self.discovery.lock().await = Some(d.clone());
                 let me = Arc::downgrade(self);
-                tokio::spawn(async move {
+                *lock(&self.listener) = Some(tokio::spawn(async move {
                     while let Ok((from, a)) = d.recv().await {
                         let Some(me) = me.upgrade() else { break };
-                        me.heard(from, a).await;
+                        me.heard(from, a);
                     }
-                });
+                }));
+                *lock(&self.problem) = None;
             }
             Err(e) => {
                 *lock(&self.problem) = Some(format!(
@@ -411,12 +473,13 @@ impl Nearby {
                 ));
             }
         }
-        self.publish();
-        Ok(self.view())
+        ok
     }
 
     /// An announcement arrived: list the device, and answer it when it may see us.
-    async fn heard(self: &Arc<Self>, from: SocketAddr, a: fuselane_nearby::proto::Announcement) {
+    /// The answer goes out on its own task: a device that's slow to reply (or
+    /// never does) mustn't stop this computer hearing everyone else.
+    fn heard(self: &Arc<Self>, from: SocketAddr, a: fuselane_nearby::proto::Announcement) {
         if a.info.fingerprint.eq_ignore_ascii_case(&self.fingerprint()) {
             return; // ourselves
         }
@@ -437,7 +500,9 @@ impl Nearby {
                 addr,
                 fingerprint: (!fp.is_empty()).then_some(fp),
             };
-            let _ = fuselane_nearby::client::register(&me, &t).await;
+            tokio::spawn(async move {
+                let _ = fuselane_nearby::client::register(&me, &t).await;
+            });
         }
     }
 
@@ -445,6 +510,9 @@ impl Nearby {
     pub async fn set_everyone(self: &Arc<Self>, on: bool) -> NearbyView {
         *lock(&self.everyone_until) = on.then(|| Instant::now() + EVERYONE_FOR);
         if on {
+            if self.running() {
+                self.refresh_discovery().await;
+            }
             self.announce().await;
         }
         self.publish();
@@ -468,7 +536,10 @@ impl Nearby {
         if !self.running() {
             return;
         }
-        if self.everyone().is_some() {
+        // A network that came or changed since the last look: listen there,
+        // and say hello when trusted computers (or everyone) may see this one.
+        let fresh = self.refresh_discovery().await;
+        if self.everyone().is_some() || (fresh && self.has_trusted()) {
             self.announce().await;
         }
         lock(&self.devices).retain(|_, d| d.at.elapsed() < FORGET_AFTER);
@@ -1403,6 +1474,17 @@ mod tests {
     }
 
     async fn side(name: &str) -> Side {
+        side_on(
+            name,
+            Arc::new(Vec::new),
+            54_000 + (std::process::id() % 900) as u16,
+        )
+        .await
+    }
+
+    /// A side whose networks the test decides (and its own discovery port, so
+    /// other tests' sides don't hear it).
+    async fn side_on(name: &str, addrs: Addrs, discovery_port: u16) -> Side {
         let state = tempfile::tempdir().unwrap();
         let inbox = tempfile::tempdir().unwrap();
         let store = Arc::new(fuselane_core::Store::open(&state.path().join("db")).unwrap());
@@ -1410,10 +1492,10 @@ mod tests {
             store,
             state.path().to_path_buf(),
             inbox.path().to_path_buf(),
-            Arc::new(Vec::new),
+            addrs,
             Arc::new(|_| {}),
             name.into(),
-            54_000 + (std::process::id() % 900) as u16,
+            discovery_port,
         );
         n.start().await.unwrap();
         Side {
@@ -1709,6 +1791,96 @@ mod tests {
             n.phone_text(Some("late".into())).await.unwrap_err().code,
             "nearby-phone"
         );
+    }
+
+    /// The networks a test side has, changed as the test goes.
+    fn networks() -> (Arc<Mutex<Vec<Ipv4Addr>>>, Addrs) {
+        let now = Arc::new(Mutex::new(Vec::new()));
+        let read = now.clone();
+        (now, Arc::new(move || lock(&read).clone()))
+    }
+
+    /// Whether this machine can join the group on loopback at all (some CI
+    /// runners can't); checked on a port of its own.
+    fn loopback_multicast() -> bool {
+        let port = 54_700 + (std::process::id() % 90) as u16;
+        Discovery::start(&[Ipv4Addr::LOCALHOST], port).is_ok()
+    }
+
+    fn listening(n: &Nearby) -> bool {
+        lock(&n.listener).as_ref().is_some_and(|h| !h.is_finished())
+    }
+
+    /// The reported bug: Nearby started before the network was up (it starts
+    /// with the app when a computer is trusted) or the network changed, and the
+    /// other computer didn't show until Fuselane was quit and opened again.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_network_that_comes_after_nearby_started_is_listened_on() {
+        let port = 54_900 + (std::process::id() % 90) as u16;
+        let (net_a, addrs_a) = networks();
+        let (net_b, addrs_b) = networks();
+        let a = side_on("Maya's MacBook Air", addrs_a, port).await;
+        let b = side_on("STUDIO-PC", addrs_b, port).await;
+        // No network yet: said plainly, and nothing listens.
+        assert!(a.n.view().problem.is_some_and(|p| p.contains("Wi-Fi")));
+        assert!(!listening(&a.n));
+        a.n.tick().await;
+        assert!(!listening(&a.n), "still no network: nothing to listen on");
+
+        // The network comes: the next tick listens there, with no restart.
+        *lock(&net_a) = vec![Ipv4Addr::LOCALHOST];
+        *lock(&net_b) = vec![Ipv4Addr::LOCALHOST];
+        a.n.tick().await;
+        b.n.tick().await;
+        if !loopback_multicast() {
+            eprintln!("skipped: this machine has no multicast on loopback");
+            return;
+        }
+        assert!(
+            listening(&a.n) && listening(&b.n),
+            "listening after the tick"
+        );
+        assert_eq!(
+            lock(&a.n.discovery_on).as_deref(),
+            Some([Ipv4Addr::LOCALHOST].as_slice())
+        );
+        assert!(a.n.view().problem.is_none(), "the old problem is cleared");
+
+        // And it hears: b turns on Everyone, a lists b.
+        b.n.set_everyone(true).await;
+        let fb = b.n.fingerprint();
+        let mut heard = false;
+        for _ in 0..120 {
+            if a.n.view().devices.iter().any(|d| d.fingerprint == fb) {
+                heard = true;
+                break;
+            }
+            b.n.tick().await; // re-announces while visible to everyone
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        if !heard {
+            eprintln!("skipped: loopback multicast didn't deliver here");
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_listener_that_stopped_is_started_again() {
+        let port = 54_800 + (std::process::id() % 90) as u16;
+        let (_net, addrs) = networks();
+        *lock(&_net) = vec![Ipv4Addr::LOCALHOST];
+        let a = side_on("Maya's MacBook Air", addrs, port).await;
+        if !loopback_multicast() {
+            eprintln!("skipped: this machine has no multicast on loopback");
+            return;
+        }
+        assert!(listening(&a.n));
+        // The listener stops (an error on the socket, the computer slept).
+        lock(&a.n.listener).as_ref().unwrap().abort();
+        until("the listener to stop", || !listening(&a.n)).await;
+        a.n.tick().await;
+        assert!(listening(&a.n), "the next tick listens again");
+        // Nothing changed and it's listening: the tick leaves it alone.
+        assert!(!a.n.refresh_discovery().await);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
