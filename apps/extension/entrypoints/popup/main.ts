@@ -2,6 +2,7 @@ import { formatSize, normalizeRules } from '@fuselane/capture'
 import { appStatus, browserId, sendHandoff, type Status } from '../../lib/status.ts'
 import { findOnPage, mediaList, type MediaItem } from '../../lib/media.ts'
 import { feedList, findFeeds, type FoundFeed } from '../../lib/feeds.ts'
+import { canOpenPage, openPageOutcome } from '../../lib/pageopen.ts'
 import { KEY, readJobs, type SelfJob } from '../../lib/selfjobs.ts'
 import { cleanLimit } from '../../lib/route.ts'
 import { DIAL_STOPS, dialFraction, mbps, speedTest } from '../../lib/speed.ts'
@@ -616,7 +617,7 @@ async function onThisPage() {
   const list = $<HTMLUListElement>('#media')
   const said = $<HTMLParagraphElement>('#media-status')
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true })
-  if (!tab?.id || !tab.url || !/^https?:/.test(tab.url)) {
+  if (!tab?.id || !canOpenPage(tab.url)) {
     $('#page-card').hidden = true
     said.textContent = "This page isn't a website, so there's nothing to get here."
     return
@@ -624,6 +625,23 @@ async function onThisPage() {
   const pageUrl = tab.url
   $('#page-title').textContent = tab.title || new URL(pageUrl).hostname
   $('#page-site').textContent = new URL(pageUrl).hostname.replace(/^www\./, '')
+  // Every web page, whatever the site (L-127): the app's New download dialog
+  // opens with the link and offers what the app can get from it. It starts the
+  // app if it's closed, so this can take a moment.
+  const open = $<HTMLButtonElement>('#open-page')
+  open.addEventListener('click', async () => {
+    open.disabled = true
+    said.textContent =
+      app.state === 'connected' ? 'Opening the page in Fuselane…' : 'Starting Fuselane…'
+    const reply = await ask({ v: 1, type: 'page.open', url: pageUrl }).catch(() => null)
+    const outcome = openPageOutcome(reply, app.state)
+    if (outcome.close) {
+      window.close()
+      return
+    }
+    open.disabled = false
+    said.textContent = outcome.text
+  })
   let items: MediaItem[] = []
   let feeds: FoundFeed[] = []
   try {

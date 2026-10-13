@@ -45,6 +45,14 @@ impl Handler for ApiBridge {
         });
     }
 
+    fn page_open(&self, url: String) -> bool {
+        // A plain link draft: New download opens with it, offering the page's
+        // files and (B10.4) its video, as for a pasted link.
+        self.svc.open_request(url);
+        self.svc.bring_to_front();
+        true
+    }
+
     fn page_video(&self, url: String) -> bool {
         self.svc.open_request(format!("{VIDEO_DRAFT}{url}"));
         self.svc.bring_to_front();
@@ -359,7 +367,27 @@ mod tests {
         }));
         assert!(b.page_video("https://www.youtube.com/watch?v=x".into()));
         assert!(b.page_feed("https://blog.example/feed.xml".into()));
-        assert_eq!(shown.load(std::sync::atomic::Ordering::SeqCst), 2);
+        assert!(b.page_open("https://example.org/watch?v=x".into()));
+        assert_eq!(shown.load(std::sync::atomic::Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn a_page_opened_from_the_popup_fills_new_download_with_its_link() {
+        // A plain link, not a video draft: the dialog offers what it can get
+        // from the page, as for a pasted link (L-127).
+        let (b, events, _dir) = bridge();
+        let page = "https://www.youtube.com/watch?v=aqz-KE-bpKQ";
+        assert!(b.page_open(page.into()));
+        let opened: Vec<String> = events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|e| match e {
+                UiEvent::Open { target } => Some(target.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(opened, [page]);
     }
 
     #[tokio::test]

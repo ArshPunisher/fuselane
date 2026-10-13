@@ -9,7 +9,7 @@ Built with WXT 0.21 (MV3) for Chrome, Edge, Brave and Opera, and Firefox. Safari
 | Automatic capture | `downloads.onCreated` (+ `onDeterminingFilename` on Chromium) → match rules → `downloads.cancel` + `erase` → send to the app |
 | Rules | Minimum size (default 1 MB), extensions, include/exclude domains, MIME types. Holding **Alt** while clicking skips capture (a content-script click listener). |
 | Context menu | "Download with Fuselane" on links; "Send to Fuselane share link" (P1) |
-| Popup | App status (connected or not), a capture on/off switch, and **On this page**: the tab's links to files and its feeds (via `activeTab` + `scripting`, only when the popup opens), each with Download (to the app, or the browser if the app can't take it). Since 0.4.1 the extension never reads a page's `<video>`/`<audio>` players and never hands a video page to the app: the Chrome Web Store rejected 0.4.0 for that (policy on downloading media from sites such as YouTube). Videos from pages stay an app-only feature |
+| Popup | App status (connected or not), a capture on/off switch, and **On this page**: the tab's links to files and its feeds (via `activeTab` + `scripting`, only when the popup opens), each with Download (to the app, or the browser if the app can't take it). Since 0.4.1 the extension never reads a page's `<video>`/`<audio>` players and never decides by itself that a page is a video page (it hands a page's link over only when the person presses Open this page in Fuselane): the Chrome Web Store rejected 0.4.0 for that (policy on downloading media from sites such as YouTube). Videos from pages stay an app-only feature. **Open this page in Fuselane** (2026-10-14, L-127) is on every web page, whatever the site: it sends only the tab's link (`page.open`), and the app's New download dialog opens with it, offering the page's files and, from the app, its video. The extension never looks at what the page is, so nothing in it is about video sites |
 | Auth forwarding | `cookies.getAll({url})` **plus partitioned cookies** (`partitionKey`), Referer, User-Agent, Accept-Language; auth headers captured with `webRequest.onSendHeaders` (`extraHeaders`), held only in `storage.session` |
 | Things it must not capture | `blob:` and `data:` URLs, POST-initiated downloads and single-use tokens: let the browser handle these |
 
@@ -39,6 +39,16 @@ Built with WXT 0.21 (MV3) for Chrome, Edge, Brave and Opera, and Firefox. Safari
 { "v": 1, "type": "download.accepted", "jobId": "…" }
 { "v": 1, "type": "download.declined", "reason": "ip_locked|unsupported|user_cancelled", "fallback": "browser" }
 ```
+
+```jsonc
+// popup → app (This page). Any http(s) page; the host starts the app if it's closed.
+{ "v": 1, "type": "page.open", "url": "https://…" }
+// app → popup: New download is open with the link. An app from before 2026-10-14
+// answers download.declined with reason "invalid" (unknown type): the popup asks for an update.
+{ "v": 1, "type": "page.open.opened" }
+```
+
+`page.video` and `page.peek` stay in the app for older extensions (0.4.0 and earlier); 0.4.1 and later never send them.
 
 The extension **pauses** the browser's download while it asks. When the app accepts, the browser's copy is cancelled and erased; when it declines, or doesn't answer within 3 s, the browser's download is **resumed**, so the user never loses one and keeps the browser's own session.
 

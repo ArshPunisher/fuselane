@@ -135,6 +135,13 @@ pub trait Handler: Send + Sync + 'static {
     /// A video page open in the browser, worth reading before it's asked for
     /// (the popup opened on it): the app looks it up quietly, no window.
     fn page_peek(&self, _url: String) {}
+    /// A page the person wants to open in the app (the extension's "Open this
+    /// page in Fuselane"): New download opens with the page's link, where the
+    /// app offers what it can get from it. The extension never says what the
+    /// page is. False when it can't.
+    fn page_open(&self, _url: String) -> bool {
+        false
+    }
     /// A feed the person wants to follow (the extension's "Follow this site's
     /// feed"): the app opens Feeds with it. False when it can't.
     fn page_feed(&self, _url: String) -> bool {
@@ -263,6 +270,20 @@ pub async fn answer(handler: &dyn Handler, line: &str) -> Value {
                 Some(url) => {
                     if handler.page_video(url) {
                         json!({"v": 1, "type": "page.video.opened"})
+                    } else {
+                        declined(Decline::Unsupported)
+                    }
+                }
+                None => declined(Decline::Invalid),
+            };
+            json!({"id": id, "result": result})
+        }
+        Some("page.open") => {
+            let params = req.get("params").cloned().unwrap_or(Value::Null);
+            let result = match page_url(&params) {
+                Some(url) => {
+                    if handler.page_open(url) {
+                        json!({"v": 1, "type": "page.open.opened"})
                     } else {
                         declined(Decline::Unsupported)
                     }
@@ -514,6 +535,9 @@ mod tests {
         fn page_feed(&self, url: String) -> bool {
             url.contains("feed")
         }
+        fn page_open(&self, url: String) -> bool {
+            !url.contains("refused")
+        }
         fn jobs(&self) -> Option<Value> {
             Some(json!({"jobs": [{"id": 7, "name": "a.iso"}], "rate": 1000}))
         }
@@ -630,6 +654,37 @@ mod tests {
         assert_eq!(bad["result"]["reason"], "invalid");
         let missing = answer(&Fake, r#"{"id":4,"method":"page.video"}"#).await;
         assert_eq!(missing["result"]["reason"], "invalid");
+    }
+
+    #[tokio::test]
+    async fn any_web_page_opens_in_the_app_and_other_links_are_refused() {
+        // Any site: the extension doesn't judge what the page is (L-127).
+        for url in [
+            "https://www.youtube.com/watch?v=x",
+            "https://example.org/downloads/",
+            "http://intranet.local/page",
+        ] {
+            let req = json!({"id": 1, "method": "page.open", "params": {"url": url}});
+            let ok = answer(&Fake, &req.to_string()).await;
+            assert_eq!(ok["result"]["type"], "page.open.opened", "{url}");
+        }
+        let no = answer(
+            &Fake,
+            r#"{"id":2,"method":"page.open","params":{"url":"https://example.org/refused"}}"#,
+        )
+        .await;
+        assert_eq!(no["result"]["reason"], "unsupported");
+        for bad in [
+            r#"{"id":3,"method":"page.open","params":{"url":"javascript:alert(1)"}}"#,
+            r#"{"id":4,"method":"page.open","params":{"url":"file:///etc/passwd"}}"#,
+            r#"{"id":5,"method":"page.open"}"#,
+        ] {
+            assert_eq!(
+                answer(&Fake, bad).await["result"]["reason"],
+                "invalid",
+                "{bad}"
+            );
+        }
     }
 
     const OFFER: &str = r#"{"v":1,"type":"download.offer","url":"https://example.org/big.iso"}"#;

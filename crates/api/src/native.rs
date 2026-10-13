@@ -124,6 +124,11 @@ async fn handle(endpoint: &Path, msg: &[u8]) -> Value {
                 Err(_) => decline("unsupported"),
             }
         }
+        // The popup's "Open this page in Fuselane": starts the app if it's closed.
+        Some("page.open") => match ask(endpoint, "page.open", v, wait).await {
+            Ok(reply) => reply,
+            Err(_) => decline("unsupported"),
+        },
         Some("page.video") => match ask(endpoint, "page.video", v, wait).await {
             Ok(reply) => reply,
             Err(_) => decline("unsupported"),
