@@ -47,6 +47,37 @@ test('each browser shows its state and the one thing to do next', async ({ page 
   await expect(edge.getByRole('button')).toHaveCount(0)
 })
 
+test('buttons say Add, and pills and buttons each line up in one column', async ({ page }) => {
+  for (const width of [360, 800, 1440]) {
+    await page.setViewportSize({ width, height: 800 })
+    const list = await openPage(page)
+    // The short label is what shows; the name still says which browser.
+    const add = list.getByRole('button', { name: 'Add to Microsoft Edge' })
+    await expect(add).toHaveText('Add')
+    await expect(list.getByRole('button', { name: 'Turn on in Firefox' })).toBeVisible()
+    const boxes = await list.locator('.ext-browser').evaluateAll((rows) =>
+      rows.map((r) => {
+        const chip = r.querySelector('.ext-chip')!.getBoundingClientRect()
+        const action = r.querySelector('.ext-browser-action')!.getBoundingClientRect()
+        const btn = r.querySelector('.ext-browser-action .btn')
+        return {
+          chip: Math.round(chip.left),
+          action: [Math.round(action.left), Math.round(action.right)],
+          button: btn ? Math.round(btn.getBoundingClientRect().width) : null,
+          clipped: btn ? btn.scrollWidth > btn.clientWidth : false,
+        }
+      }),
+    )
+    expect(new Set(boxes.map((b) => b.chip)).size, `pills at ${width}px`).toBe(1)
+    expect(new Set(boxes.map((b) => b.action.join())).size, `buttons at ${width}px`).toBe(1)
+    const widths = boxes.flatMap((b) => (b.button === null ? [] : [b.button]))
+    expect(widths.length).toBe(2)
+    expect(new Set(widths).size, `same width at ${width}px`).toBe(1)
+    expect(boxes.some((b) => b.clipped)).toBe(false)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  }
+})
+
 test('where browser downloads go: everything to Fuselane, or none', async ({ page }) => {
   await openPage(page)
   const group = page.getByRole('radiogroup', { name: 'Where browser downloads go' })

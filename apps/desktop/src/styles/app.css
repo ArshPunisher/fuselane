@@ -7180,6 +7180,11 @@ html[data-hidden] .orb b {
 /* ---------- Browser extension page ---------- */
 
 .ext-browsers {
+  /* Fixed widths, not auto: each row is its own grid, so only fixed tracks line
+     the pills and buttons up in one column down the list. Sized for the longest
+     label (English and Hindi). */
+  --ext-chip-col: 7.25rem;
+  --ext-action-col: 7.5rem;
   display: grid;
   margin: 0;
   padding: 0;
@@ -7209,10 +7214,20 @@ html[data-hidden] .orb b {
 
 .ext-browser {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) var(--ext-chip-col) var(--ext-action-col);
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
+}
+
+.ext-browser-action {
+  display: grid;
+}
+
+.ext-browser-action .btn {
+  width: 100%;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .ext-browser + .ext-browser {
@@ -7244,6 +7259,7 @@ html[data-hidden] .orb b {
 }
 
 .ext-chip {
+  justify-self: start;
   gap: 4px;
   padding: 2px 9px;
 }
@@ -7256,10 +7272,6 @@ html[data-hidden] .orb b {
 .ext-chip[data-state='off'] {
   border-color: color-mix(in oklch, var(--warning) 55%, transparent);
   color: var(--warning);
-}
-
-.ext-browser-action:empty {
-  display: none;
 }
 
 .ext-browsers.compact .ext-browser {
@@ -7359,13 +7371,35 @@ html[data-hidden] .orb b {
   outline-offset: 2px;
 }
 
+/* Narrow windows: the name gets the room, the pill moves under it (still one
+   column), and the button keeps its own column on the right. */
 @media (max-width: 639px) {
   .ext-browser {
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) var(--ext-action-col);
+    row-gap: 6px;
+  }
+
+  .ext-browser-ic,
+  .ext-browser-action {
+    grid-row: 1 / span 2;
+  }
+
+  .ext-browser-ic {
+    align-self: start;
+  }
+
+  .ext-browser-text {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .ext-chip {
+    grid-column: 2;
+    grid-row: 2;
   }
 
   .ext-browser-action {
-    grid-column: 2 / -1;
+    grid-column: 3;
   }
 }
 

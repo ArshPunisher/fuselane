@@ -72,14 +72,25 @@ function BrowserRow({
         )}
         {status.label}
       </span>
+      {/* Always rendered, even empty, so every row keeps the same columns. */}
       <div className="ext-browser-action">
         {b.extension === 'missing' && (
-          <button type="button" className="btn btn-primary" onClick={() => onOpen('store')}>
-            {t('Add to {browser}', { browser: b.name })}
+          <button
+            type="button"
+            className="btn btn-primary"
+            aria-label={t('Add to {browser}', { browser: b.name })}
+            onClick={() => onOpen('store')}
+          >
+            {t('Add')}
           </button>
         )}
         {b.extension === 'off' && (
-          <button type="button" className="btn" onClick={() => onOpen('extensions')}>
+          <button
+            type="button"
+            className="btn"
+            aria-label={t('Turn on in {browser}', { browser: b.name })}
+            onClick={() => onOpen('extensions')}
+          >
             {t('Turn on')} <ArrowSquareOut size={14} aria-hidden />
           </button>
         )}

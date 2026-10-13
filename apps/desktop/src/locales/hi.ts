@@ -1161,6 +1161,7 @@ export const hi: Readonly<Record<string, string>> = {
   'Turn on': 'चालू करें',
   'Add the extension and downloads from your browser come here by themselves.':
     'एक्सटेंशन जोड़ें, फिर ब्राउज़र के डाउनलोड अपने आप यहां आएंगे।',
+  Add: 'जोड़ें',
   'Turn on in {browser}': '{browser} में चालू करें',
   'Not now': 'अभी नहीं',
   'Made by ClearCraft Labs': 'ClearCraft Labs ने बनाया',
