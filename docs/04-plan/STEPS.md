@@ -174,7 +174,8 @@ The owner asked for more built-in features that cost nothing to run (no paid tie
 - [x] B10.3 Shared folders between your own computers over Nearby (no cloud)
 - [x] B10.6 Hours per network: use a network only between set times every day (a night plan); running downloads move over when a window opens or closes
 - [x] B10.5 Data used: bytes per network per day for two months, this month's total per network and a 30-day chart
-- [x] B10.4 Video and audio from pages: hand pages to a yt-dlp the person installs (detected, never bundled), downloads run over every network
+- [x] B10.4 Video and audio from pages: hand pages to yt-dlp, downloads run over every network
+- [x] B10.4b Helpers set themselves up (owner's report 2026-10-14, Windows asked for `winget install yt-dlp`): the first video page fetches pinned, SHA-256-checked yt-dlp, ffmpeg and deno into the app-data folder with progress (`helpers.rs`); a copy the person installed still works; Fuselane's yt-dlp updates itself when a page fails; errors only when setup really failed, with Try again
 - [x] B10.7 Text on the phone page: a phone without the app sends text or a link to this computer's clipboard, and copies text this computer offers
 - [x] B10.8 Feeds: follow an RSS or Atom feed (podcasts, release files, nightly builds); new files download by themselves, with words to include or skip; torrent items wait to be opened, or start by themselves when the feed allows it
 - [x] B10.9 Watch folder: .torrent files, Metalinks and .txt lists of links put in a chosen folder start by themselves, then are renamed .added or .failed (works with media tools' "torrent blackhole")

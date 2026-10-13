@@ -27,6 +27,15 @@
 
 ## Log
 
+### 2026-10-14, owner's bug reports (not committed, not released)
+
+- **Videos from pages set themselves up (L-128, STEPS B10.4b).** On Windows "Get the video from this page" said to run `winget install yt-dlp`. Now the first video page fetches yt-dlp, ffmpeg (join video and sound, MP3) and deno (YouTube's JavaScript checks) itself: pinned versions with pinned SHA-256s, over every network, into `<app data>/tools`, with a progress bar in the Get the video dialog (`apps/desktop/src-tauri/src/helpers.rs`). Nothing is added to the installers, so signing, notarization, portable, Homebrew and Flatpak are unaffected. A copy the person installed still works; Fuselane's yt-dlp runs `-U` (at most hourly) when a page fails to read, and an old system yt-dlp gets a fresh Fuselane copy next to it. Errors only after a real attempt (offline, checksum, disk, blocked by security software), each with Try again. ffmpeg missing when parts finish: fetched, then joined. Helpers no longer flash a console window on Windows. Licences in NOTICE; threat T17 in SECURITY.md. Verified on this Mac with the real downloads (`cargo test -p fuselane-desktop -- --ignored the_real_helpers`: all three fetched and checked, a real YouTube page read with 1080p offered, 33 s).
+- **Send → Nearby showed other computers only after a restart (L-126).** Discovery read the network addresses once at start, one receive error ended it, one gone address stopped all announcing, a slow device stalled the loop. It now follows the networks every tick, survives Windows reset errors, and the Send page asks again on each visit.
+- **Extension popup on YouTube (Edge, Windows) had no video button (L-127).** Not a bug: 0.4.1 removed it for the Chrome Web Store. New policy-neutral "Open this page in Fuselane" on every page (`page.open`), which opens New download with the link, where Get the video works.
+- **Extension page:** browser rows say Add (aria-label "Add to Chrome"), pills and buttons each in one aligned column at every width.
+- **Next:** a release of the app (all three fixes and `page.open` live in the app) and extension 0.4.2 to every store after it (STORE.md copy for the new button). Test on a real Windows PC: first video lookup (download, Defender/SmartScreen on yt-dlp.exe, no console flash), two-computer Nearby, Edge popup. Add `NSLocalNetworkUsageDescription` to the macOS Info.plist and consider a Windows Firewall rule for Nearby (port 53317).
+- **Known gaps:** helper downloads don't count toward data allowances or speed limits (same as the app's own update download); SECURITY T7 says downloads get quarantine/Zone.Identifier marks, but nothing sets them yet.
+
 ### 2026-10-13, Chrome Web Store rejected extension 0.4.0 (extension 0.4.1)
 
 - **Rejected** 2026-10-13, reference "Blue Zinc": "Facilitating unauthorised access to or download of copyrighted content or media, specifically, YouTube." Google says the feature can't come back, so an appeal is pointless.
