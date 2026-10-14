@@ -39,6 +39,9 @@ Small files download in the extension itself; for big ones it offers the free ap
 ★ Files on the page, one click away
 Open the toolbar button to see the links to files on the page you're on (installers, disk images, archives, PDFs and more) and send any of them to Fuselane.
 
+★ Open any page in Fuselane
+Press "Open this page in Fuselane" in the toolbar popup, and the app opens with the page's link, ready for you to choose what to download from it.
+
 ★ Follow a site's feed
 On a podcast, blog or project page with a feed, the toolbar button follows it in Fuselane, and new episodes and releases download by themselves.
 
@@ -64,6 +67,10 @@ Fuselane is for files you have the right to download. This extension does not do
 Get the app: https://fuselane.app/
 
 Privacy: the extension sends nothing to the internet. It only talks to the Fuselane app on your own computer. No account, no tracking, no ads.
+
+## What's new (0.4.2)
+
+New "Open this page in Fuselane" button in the toolbar popup: it sends the tab's link to the Fuselane app, which opens its New download window with it. The extension only passes the link; it doesn't read the page for this.
 
 ## Single purpose (Chrome)
 
