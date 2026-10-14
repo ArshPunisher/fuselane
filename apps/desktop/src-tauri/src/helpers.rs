@@ -680,9 +680,11 @@ fn engine_fetch() -> Fetch {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    #[cfg(unix)]
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     /// A fake fetch that "downloads" `file` and counts how often it's asked.
+    #[cfg(unix)]
     pub(crate) fn serve(file: PathBuf, count: Arc<AtomicUsize>) -> Fetch {
         Arc::new(move |job: FetchJob| {
             let (file, count) = (file.clone(), count.clone());
@@ -699,6 +701,7 @@ pub(crate) mod tests {
         })
     }
 
+    #[cfg(unix)]
     fn hex(b: [u8; 32]) -> &'static str {
         Box::leak(
             b.iter()
@@ -709,6 +712,7 @@ pub(crate) mod tests {
     }
 
     /// A table where every tool comes from `file` (its real hash), as `archive`.
+    #[cfg(unix)]
     pub(crate) fn table(file: &Path, archive: Archive) -> Table {
         let sha = hex(sha256_file(file).unwrap());
         Arc::new(move |_| {
