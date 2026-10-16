@@ -4,7 +4,7 @@
 
 ## Now
 
-- **Phase:** **P4 beta**: **`v0.1.0-beta.15` being released 2026-10-14** (video tools set up by themselves on every system, Open this page in Fuselane, Send shows devices at once); earlier: **`v0.1.0-beta.14`** 2026-10-12 (`fuselane update`, plain `brew upgrade`); **`v0.1.0-beta.13`** 2026-10-12 (extension takes every download with a live popup, instant pause, hand-offs that start at once, a lasting Mac signature; the website moved to its own private repo, fuselane-site); earlier: **`v0.1.0-beta.12`** 2026-10-11; **`v0.1.0-beta.10` published 2026-10-10** (verified: checksums, universal binary, self-test incl. Nearby, update feed for 4 platforms, Homebrew cask; site redeployed to fuselane.app; Search Console verified with the sitemap submitted; extension 0.2.0 submitted to the Chrome Web Store). Remaining before 1.0: the real-hardware checklist (needs a phone and other computers), two weeks of 24 h soaks, Windows signing, store listings.
+- **Phase:** **P4 beta**: **`v0.1.0-beta.16` being released 2026-10-16** (Send batches, video auto-open, rustls fix); earlier: **`v0.1.0-beta.15`** 2026-10-14 (video tools set up by themselves on every system, Open this page in Fuselane, Send shows devices at once); earlier: **`v0.1.0-beta.14`** 2026-10-12 (`fuselane update`, plain `brew upgrade`); **`v0.1.0-beta.13`** 2026-10-12 (extension takes every download with a live popup, instant pause, hand-offs that start at once, a lasting Mac signature; the website moved to its own private repo, fuselane-site); earlier: **`v0.1.0-beta.12`** 2026-10-11; **`v0.1.0-beta.10` published 2026-10-10** (verified: checksums, universal binary, self-test incl. Nearby, update feed for 4 platforms, Homebrew cask; site redeployed to fuselane.app; Search Console verified with the sitemap submitted; extension 0.2.0 submitted to the Chrome Web Store). Remaining before 1.0: the real-hardware checklist (needs a phone and other computers), two weeks of 24 h soaks, Windows signing, store listings.
 - **P3 done (tested, committed):**
   - Engine snapshots for the UI (per-network bytes, rates, streams; 180 ring ticks with fill, owner, in-flight).
   - `core::runner`: one job runner shared by the CLI and the desktop app (link checks, network choice, Happy Eyeballs connects, store bookkeeping, plain-language errors). `core::home`: one shared download list.
@@ -26,6 +26,13 @@
 - **Environment:** Rust via rustup (`source ~/.cargo/env`), cargo-nextest, cargo-deny, actionlint (Homebrew), Node 24, pnpm 11, Playwright WebKit + Chromium, gh logged in as ArshPunisher. macOS has no `timeout` command. Screen recording is granted (capture a window with `screencapture -l<id>`; find the id with a CGWindowList script); clicking is not (no Accessibility), so drive the real window with `FUSELANE_DEV_ADD=<url>` in debug builds. macOS notifications only work from a bundle: `pnpm --filter @fuselane/desktop tauri build --debug --bundles app`, then run `target/debug/bundle/macos/Fuselane.app/Contents/MacOS/fuselane-desktop`.
 
 ## Log
+
+### 2026-10-16, Send batches, video auto-open, rustls (released as beta.16)
+
+- **Send groups a phone selection into one tile.** The phone page sends a batch id, index and totals; `nearby.rs` groups, orders newest first (`order()`), and cancel/clear accept a batch id. A cancelled batch also makes the phone page answer later files with 409, so the phone stops instead of reopening the tile (found by CodeRabbit, test `a_cancelled_selection_refuses_the_files_the_phone_has_not_started`). UI: `BatchTile`, `nearbyGroups.ts`, Hindi strings with running wording.
+- **Video pages open straight in Get the video.** `api_bridge.rs` `is_video_page` sends `fuselane-video:<url>` for a single YouTube/Vimeo video page. The extension is unchanged (0.4.2 stays the approved build), so the store listing stays neutral.
+- **`cargo deny` was failing on main** (RUSTSEC-2026-0346 to 0349, rustls); `cargo update -p rustls` to 0.23.46 fixes it.
+- Gate on merged main: `tools/check.sh` all green (407 UI tests passed, 1 skipped). Not tested on real hardware: a YouTube click via the extension and a multi-file send from a real phone. Known gaps: one failed file in a PC-to-PC session fails the whole session; transfers are not kept after a restart.
 
 ### 2026-10-14, owner's bug reports (not committed, not released)
 
