@@ -13,6 +13,10 @@ ignore = [
   # u8 (SharedRb<Heap<u8>>, stream_tx.rs), and Fuselane turns uTP off (ADR 0006).
   # Remove once librqbit moves to ringbuf >= 0.5.2.
   { id = "RUSTSEC-2026-0293", reason = "unreachable: ringbuf holds u8 in librqbit-utp; uTP disabled" },
+  # zip 4.6.1 was yanked after advisories about extract() (symlinks, permissions). It is only
+  # used by tauri-plugin-updater 2.13.2 to unpack our own signature-verified update bundles.
+  # Fuselane's own zip use is on 9.x. Remove once tauri-plugin-updater moves off zip 4.
+  { crate = "zip@4.6.1", reason = "yanked; only unpacks our signed update bundles inside tauri-plugin-updater" },
 ]
 
 [licenses]
