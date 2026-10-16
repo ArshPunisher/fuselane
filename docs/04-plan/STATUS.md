@@ -4,7 +4,7 @@
 
 ## Now
 
-- **Phase:** **P4 beta**: **`v0.1.0-beta.16` being released 2026-10-16** (Send batches, video auto-open, rustls fix); earlier: **`v0.1.0-beta.15`** 2026-10-14 (video tools set up by themselves on every system, Open this page in Fuselane, Send shows devices at once); earlier: **`v0.1.0-beta.14`** 2026-10-12 (`fuselane update`, plain `brew upgrade`); **`v0.1.0-beta.13`** 2026-10-12 (extension takes every download with a live popup, instant pause, hand-offs that start at once, a lasting Mac signature; the website moved to its own private repo, fuselane-site); earlier: **`v0.1.0-beta.12`** 2026-10-11; **`v0.1.0-beta.10` published 2026-10-10** (verified: checksums, universal binary, self-test incl. Nearby, update feed for 4 platforms, Homebrew cask; site redeployed to fuselane.app; Search Console verified with the sitemap submitted; extension 0.2.0 submitted to the Chrome Web Store). Remaining before 1.0: the real-hardware checklist (needs a phone and other computers), two weeks of 24 h soaks, Windows signing, store listings.
+- **Phase:** **P4 beta**: **`v0.1.0-beta.17` being released 2026-10-16** (Send batches, video auto-open, rustls and zip security updates; beta.16 was built but never published); earlier: **`v0.1.0-beta.15`** 2026-10-14 (video tools set up by themselves on every system, Open this page in Fuselane, Send shows devices at once); earlier: **`v0.1.0-beta.14`** 2026-10-12 (`fuselane update`, plain `brew upgrade`); **`v0.1.0-beta.13`** 2026-10-12 (extension takes every download with a live popup, instant pause, hand-offs that start at once, a lasting Mac signature; the website moved to its own private repo, fuselane-site); earlier: **`v0.1.0-beta.12`** 2026-10-11; **`v0.1.0-beta.10` published 2026-10-10** (verified: checksums, universal binary, self-test incl. Nearby, update feed for 4 platforms, Homebrew cask; site redeployed to fuselane.app; Search Console verified with the sitemap submitted; extension 0.2.0 submitted to the Chrome Web Store). Remaining before 1.0: the real-hardware checklist (needs a phone and other computers), two weeks of 24 h soaks, Windows signing, store listings.
 - **P3 done (tested, committed):**
   - Engine snapshots for the UI (per-network bytes, rates, streams; 180 ring ticks with fill, owner, in-flight).
   - `core::runner`: one job runner shared by the CLI and the desktop app (link checks, network choice, Happy Eyeballs connects, store bookkeeping, plain-language errors). `core::home`: one shared download list.
@@ -27,11 +27,12 @@
 
 ## Log
 
-### 2026-10-16, Send batches, video auto-open, rustls (released as beta.16)
+### 2026-10-16, Send batches, video auto-open, rustls, zip 9 (released as beta.17)
 
 - **Send groups a phone selection into one tile.** The phone page sends a batch id, index and totals; `nearby.rs` groups, orders newest first (`order()`), and cancel/clear accept a batch id. A cancelled batch also makes the phone page answer later files with 409, so the phone stops instead of reopening the tile (found by CodeRabbit, test `a_cancelled_selection_refuses_the_files_the_phone_has_not_started`). UI: `BatchTile`, `nearbyGroups.ts`, Hindi strings with running wording.
 - **Video pages open straight in Get the video.** `api_bridge.rs` `is_video_page` sends `fuselane-video:<url>` for a single YouTube/Vimeo video page. The extension is unchanged (0.4.2 stays the approved build), so the store listing stays neutral.
 - **`cargo deny` was failing on main** (RUSTSEC-2026-0346 to 0349, rustls); `cargo update -p rustls` to 0.23.46 fixes it.
+- **zip yanked (beta.16 never published).** The maintainers yanked every zip up to 9.0.2 (extract() advisories), so `cargo deny` failed in CI on the beta.16 build. Desktop now uses zip 9.0.4; zip 9 drops a leading root in `enclosed_name`, so `unpack.rs` refuses absolute and drive-letter names itself (test `hostile_paths_are_refused_and_leave_nothing_behind` caught it). `tauri-plugin-updater` 2.13.2 still pulls the yanked zip 4.6.1; allowed in `deny.toml` with the reason (it only opens our signed update bundles). Remove when the updater moves on. Released as beta.17.
 - Gate on merged main: `tools/check.sh` all green (407 UI tests passed, 1 skipped). Not tested on real hardware: a YouTube click via the extension and a multi-file send from a real phone. Known gaps: one failed file in a PC-to-PC session fails the whole session; transfers are not kept after a restart.
 
 ### 2026-10-14, owner's bug reports (not committed, not released)
