@@ -82,6 +82,39 @@ pub struct TransferView {
     pub path: Option<String>,
     /// A text message instead of a file (B10.2): what it says.
     pub text: Option<String>,
+    /// When it appeared: later is newer. Orders the list (newest selection on
+    /// top) and never changes, so rows don't jump as progress updates.
+    pub seq: u64,
+    /// The selection this file belongs to (a phone sending many files at once);
+    /// the UI shows one tile for all of them.
+    pub batch: Option<String>,
+    /// Its 0-based place in the selection.
+    pub batch_index: u32,
+    /// How many files and bytes the whole selection holds.
+    pub batch_files: u32,
+    pub batch_bytes: u64,
+}
+
+/// Puts transfers in list order: the newest selection first, and inside one
+/// selection the order it was picked in. A file with no batch is a selection of
+/// one. Incoming sessions live in a hash map, so without this their order was
+/// random and a second batch landed among the first one's rows.
+pub fn order(transfers: &mut [TransferView]) {
+    let mut first: HashMap<String, u64> = HashMap::new();
+    let key = |t: &TransferView| t.batch.clone().unwrap_or_else(|| t.id.clone());
+    for t in transfers.iter() {
+        let e = first.entry(key(t)).or_insert(t.seq);
+        *e = (*e).min(t.seq);
+    }
+    transfers.sort_by(|a, b| {
+        let (ka, kb) = (key(a), key(b));
+        first[&kb]
+            .cmp(&first[&ka])
+            .then_with(|| ka.cmp(&kb))
+            .then(a.batch_index.cmp(&b.batch_index))
+            .then(a.seq.cmp(&b.seq))
+            .then_with(|| a.id.cmp(&b.id))
+    });
 }
 
 /// A file offered to the phone page.
@@ -170,6 +203,8 @@ pub struct Nearby {
     trusted: Mutex<Vec<Trusted>>,
     pending: Mutex<Option<Pending>>,
     next_request: AtomicU64,
+    /// Hands out each transfer's list position (see `TransferView::seq`).
+    seq: AtomicU64,
     outgoing: Mutex<Vec<Out>>,
     incoming: Mutex<HashMap<String, TransferView>>,
     problem: Mutex<Option<String>>,
@@ -306,6 +341,7 @@ impl Nearby {
             trusted: Mutex::new(trusted),
             pending: Mutex::new(None),
             next_request: AtomicU64::new(1),
+            seq: AtomicU64::new(1),
             outgoing: Mutex::new(Vec::new()),
             incoming: Mutex::new(HashMap::new()),
             problem: Mutex::new(None),
@@ -553,6 +589,11 @@ impl Nearby {
         }
     }
 
+    /// The next list position; only ever grows.
+    fn next_seq(&self) -> u64 {
+        self.seq.fetch_add(1, Ordering::Relaxed)
+    }
+
     pub fn view(&self) -> NearbyView {
         let trusted = lock(&self.trusted).clone();
         let mut devices: Vec<DeviceView> = lock(&self.devices)
@@ -578,6 +619,7 @@ impl Nearby {
             .map(|o| o.view.clone())
             .collect();
         transfers.extend(lock(&self.incoming).values().cloned());
+        order(&mut transfers);
         NearbyView {
             on: self.running(),
             me: self.alias.clone(),
@@ -708,6 +750,7 @@ impl Nearby {
             done: 0,
             state: "asking",
             text: Some(text.to_string()),
+            seq: self.next_seq(),
             ..TransferView::default()
         };
         lock(&self.outgoing).push(Out {
@@ -864,6 +907,8 @@ impl Nearby {
                 error: None,
                 path: None,
                 text: None,
+                seq: self.next_seq(),
+                ..TransferView::default()
             },
             sent: sent.clone(),
             cancel: cancel.clone(),
@@ -945,11 +990,31 @@ impl Nearby {
             o.cancel.store(true, Ordering::Relaxed);
             return;
         }
-        let receiving = lock(&self.incoming)
-            .get(id)
-            .is_some_and(|v| v.state == "receiving");
-        if receiving && let Some(server) = self.server.lock().await.as_ref() {
-            server.cancel(id);
+        // An id may name one transfer or a whole selection from a phone.
+        let live: Vec<(String, bool)> = lock(&self.incoming)
+            .iter()
+            .filter(|(k, v)| {
+                v.state == "receiving" && (k.as_str() == id || v.batch.as_deref() == Some(id))
+            })
+            .map(|(k, v)| (k.clone(), v.batch.is_some()))
+            .collect();
+        // Files of a phone selection that haven't started yet have no row to
+        // cancel: stop the selection itself so the phone's next uploads are
+        // refused (a batch id only matches rows that came from a phone).
+        let is_phone_batch = lock(&self.incoming)
+            .values()
+            .any(|v| v.batch.as_deref() == Some(id));
+        if is_phone_batch && let Some(page) = self.phone.lock().await.as_ref() {
+            page.cancel(id);
+        }
+        for (key, from_phone) in live {
+            if from_phone {
+                if let Some(page) = self.phone.lock().await.as_ref() {
+                    page.cancel(&key);
+                }
+            } else if let Some(server) = self.server.lock().await.as_ref() {
+                server.cancel(&key);
+            }
         }
     }
 
@@ -957,7 +1022,8 @@ impl Nearby {
     pub fn clear(&self, id: &str) -> NearbyView {
         lock(&self.outgoing)
             .retain(|o| o.view.id != id || matches!(o.view.state, "asking" | "sending"));
-        lock(&self.incoming).retain(|k, v| k != id || v.state == "receiving");
+        lock(&self.incoming)
+            .retain(|k, v| (k != id && v.batch.as_deref() != Some(id)) || v.state == "receiving");
         self.publish();
         self.view()
     }
@@ -1256,6 +1322,8 @@ impl Host for Receiver {
                 error: None,
                 path: None,
                 text: None,
+                seq: n.next_seq(),
+                ..TransferView::default()
             },
         );
         n.publish();
@@ -1288,14 +1356,9 @@ impl Host for Receiver {
             .or_insert_with(|| TransferView {
                 id: session.to_string(),
                 direction: "in",
-                device: String::new(),
-                name: String::new(),
-                size: 0,
-                done: 0,
                 state: "receiving",
-                error: None,
-                path: None,
-                text: None,
+                seq: n.next_seq(),
+                ..TransferView::default()
             });
         // One file: its saved name (it may have been numbered). Several: the folder.
         if !v.name.ends_with(" files") {
@@ -1328,6 +1391,7 @@ impl Host for Receiver {
                 done: text.len() as u64,
                 state: "done",
                 text: Some(text.to_string()),
+                seq: n.next_seq(),
                 ..TransferView::default()
             },
         );
@@ -1403,8 +1467,21 @@ impl fuselane_nearby::web::PageHost for PhoneHost {
                 error: None,
                 path: None,
                 text: None,
+                seq: n.next_seq(),
+                ..TransferView::default()
             },
         );
+        n.publish();
+    }
+
+    fn batch(&self, id: &str, batch: &str, index: u32, files: u32, bytes: u64) {
+        let Some(n) = self.0.upgrade() else { return };
+        if let Some(v) = lock(&n.incoming).get_mut(id) {
+            v.batch = Some(batch.to_string());
+            v.batch_index = index;
+            v.batch_files = files;
+            v.batch_bytes = bytes;
+        }
         n.publish();
     }
 
@@ -1428,6 +1505,7 @@ impl fuselane_nearby::web::PageHost for PhoneHost {
                         .unwrap_or_default();
                     v.path = Some(p.display().to_string());
                 }
+                Err(why) if why == "cancelled" => v.state = "cancelled",
                 Err(why) => {
                     v.state = "failed";
                     v.error = Some(format!("It didn't arrive: {why}."));
@@ -1451,6 +1529,7 @@ impl fuselane_nearby::web::PageHost for PhoneHost {
                 done: text.len() as u64,
                 state: "done",
                 text: Some(text.to_string()),
+                seq: n.next_seq(),
                 ..TransferView::default()
             },
         );
@@ -1528,6 +1607,80 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(25)).await;
         }
         panic!("timed out waiting for {what}");
+    }
+
+    fn row(id: &str, seq: u64, batch: Option<&str>, index: u32) -> TransferView {
+        TransferView {
+            id: id.into(),
+            seq,
+            batch: batch.map(String::from),
+            batch_index: index,
+            ..TransferView::default()
+        }
+    }
+
+    #[test]
+    fn the_newest_selection_is_on_top_and_each_keeps_its_own_order() {
+        // Rows arrive from a hash map: any order. Two phone selections, a
+        // lone file between them, and a later one.
+        let mut v = vec![
+            row("b2", 9, Some("B"), 2),
+            row("a1", 2, Some("A"), 1),
+            row("solo", 5, None, 0),
+            row("b0", 7, Some("B"), 0),
+            row("a0", 1, Some("A"), 0),
+            row("c0", 12, None, 0),
+            row("b1", 8, Some("B"), 1),
+            row("a2", 3, Some("A"), 2),
+        ];
+        order(&mut v);
+        let ids: Vec<String> = v.iter().map(|t| t.id.clone()).collect();
+        assert_eq!(ids, ["c0", "b0", "b1", "b2", "solo", "a0", "a1", "a2"]);
+        // Stable: ordering again, or from another starting order, is the same.
+        v.reverse();
+        order(&mut v);
+        assert_eq!(v.iter().map(|t| t.id.clone()).collect::<Vec<_>>(), ids);
+    }
+
+    #[test]
+    fn a_batch_keeps_its_place_when_progress_changes_a_row() {
+        let mut v = vec![row("x0", 1, Some("X"), 0), row("y0", 2, Some("Y"), 0)];
+        order(&mut v);
+        v[1].done = 99;
+        v[1].state = "done";
+        order(&mut v);
+        assert_eq!(v[0].id, "y0");
+        assert_eq!(v[1].id, "x0");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn files_a_phone_sends_together_share_a_batch_and_cancel_as_one() {
+        use fuselane_nearby::web::PageHost;
+        let n = side("Desk").await.n;
+        let host = PhoneHost(Arc::downgrade(&n));
+        for i in 0..3u32 {
+            let id = format!("f{i}");
+            host.receiving(&id, &format!("{i}.jpg"), 10);
+            host.batch(&id, "sel1", i, 3, 30);
+        }
+        host.receiving("later", "z.jpg", 5);
+        let v = n.view().transfers;
+        let ids: Vec<&str> = v.iter().map(|t| t.id.as_str()).collect();
+        assert_eq!(ids, ["later", "f0", "f1", "f2"]);
+        assert!(v[1..].iter().all(|t| t.batch.as_deref() == Some("sel1")
+            && t.batch_files == 3
+            && t.batch_bytes == 30));
+        // Finished rows go away together by the batch id; the live one stays.
+        host.received("f0", Ok(PathBuf::from("/x/0.jpg")));
+        host.received("f1", Err("cancelled".into()));
+        host.received("f2", Err("the connection dropped".into()));
+        let v = n.view().transfers;
+        assert_eq!(v[2].state, "cancelled");
+        assert_eq!(v[3].state, "failed");
+        n.clear("sel1");
+        let v = n.view().transfers;
+        assert_eq!(v.len(), 1);
+        assert_eq!(v[0].id, "later");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

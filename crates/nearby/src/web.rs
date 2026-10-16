@@ -4,7 +4,7 @@
 //! who saw the QR code can open it. The phone sends files to this computer and
 //! saves files offered to it. Nothing here is reachable without the token.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -25,6 +25,10 @@ pub trait PageHost: Send + Sync + 'static {
     fn received(&self, id: &str, result: Result<PathBuf, String>);
     /// Text typed or pasted on the phone (B10.7).
     fn text(&self, _text: &str) {}
+    /// The file `id` is one of a selection: its batch token, its 0-based place in
+    /// it, and how many files and bytes the whole selection holds (so the app can
+    /// show one tile with an overall bar, not one per file).
+    fn batch(&self, _id: &str, _batch: &str, _index: u32, _files: u32, _bytes: u64) {}
 }
 
 /// A file offered to the phone.
@@ -43,6 +47,8 @@ struct Shared<H> {
     offers: Mutex<Vec<Offer>>,
     /// Text offered to the phone, with a number that changes with it.
     note: Mutex<(u64, Option<String>)>,
+    /// Uploads the person stopped on this computer; the body loop checks it.
+    stopped: Mutex<HashSet<String>>,
     host: Arc<H>,
 }
 
@@ -52,6 +58,7 @@ pub struct PhonePage {
     pub token: String,
     offers: Arc<dyn Fn(Vec<Offer>) + Send + Sync>,
     note: Arc<dyn Fn(Option<String>) + Send + Sync>,
+    stop: Arc<dyn Fn(&str) + Send + Sync>,
     task: tokio::task::JoinHandle<()>,
 }
 
@@ -295,8 +302,31 @@ impl<H: PageHost> Shared<H> {
         else {
             return plain(StatusCode::LENGTH_REQUIRED, "The file's size is missing.");
         };
+        let batch = q.get("batch").filter(|b| !b.is_empty() && b.len() <= 64);
+        // The person cancelled this whole selection: files the phone has not
+        // started yet must not begin (they would reopen the tile).
+        if batch.is_some_and(|b| {
+            self.stopped
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .contains(b)
+        }) {
+            let _ = http_body_util::Limited::new(req.into_body(), 1 << 20)
+                .collect()
+                .await;
+            return plain(
+                StatusCode::CONFLICT,
+                "The computer cancelled this transfer.",
+            );
+        }
         let id = random_token();
         self.host.receiving(&id, &clean, size);
+        if let Some(b) = batch {
+            let num = |k: &str| q.get(k).and_then(|v| v.parse::<u64>().ok()).unwrap_or(0);
+            let files = num("n").clamp(1, u32::MAX as u64) as u32;
+            let index = (num("i") as u32).min(files - 1);
+            self.host.batch(&id, b, index, files, num("bytes"));
+        }
         let part = self
             .inbox
             .join(format!(".{clean}.{}.fuselane-part", &id[..8]));
@@ -323,7 +353,12 @@ impl<H: PageHost> Shared<H> {
             Err(why) => {
                 let _ = std::fs::remove_file(&part);
                 self.host.received(&id, Err(why.clone()));
-                plain(StatusCode::BAD_REQUEST, &why)
+                let said = if why == "cancelled" {
+                    "The computer stopped this file."
+                } else {
+                    why.as_str()
+                };
+                plain(StatusCode::BAD_REQUEST, said)
             }
         }
     }
@@ -348,6 +383,14 @@ impl<H: PageHost> Shared<H> {
             .await
             .map_err(|_| "the phone stopped sending".to_string())?
         {
+            if self
+                .stopped
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .remove(id)
+            {
+                return Err("cancelled".into());
+            }
             let frame = frame.map_err(|_| "the connection dropped".to_string())?;
             let Ok(data) = frame.into_data() else {
                 continue;
@@ -422,6 +465,7 @@ impl PhonePage {
             computer,
             offers: Mutex::new(Vec::new()),
             note: Mutex::new((0, None)),
+            stopped: Mutex::new(HashSet::new()),
             host,
         });
         let note = {
@@ -433,6 +477,16 @@ impl PhonePage {
                     .unwrap_or_else(std::sync::PoisonError::into_inner);
                 *n = (n.0 + 1, t);
             }) as Arc<dyn Fn(Option<String>) + Send + Sync>
+        };
+        let stop = {
+            let shared = shared.clone();
+            Arc::new(move |id: &str| {
+                shared
+                    .stopped
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .insert(id.to_string());
+            }) as Arc<dyn Fn(&str) + Send + Sync>
         };
         let setter = {
             let shared = shared.clone();
@@ -462,6 +516,7 @@ impl PhonePage {
             token,
             offers: setter,
             note,
+            stop,
             task,
         })
     }
@@ -474,6 +529,12 @@ impl PhonePage {
     /// Replaces the files offered to the phone.
     pub fn offer(&self, offers: Vec<Offer>) {
         (self.offers)(offers);
+    }
+
+    /// Stops the upload `id` from the computer's side: its body is dropped and
+    /// the phone is told it was cancelled.
+    pub fn cancel(&self, id: &str) {
+        (self.stop)(id);
     }
 
     /// Offers text to the phone (`None` takes it away).
@@ -522,20 +583,30 @@ const status = document.getElementById('status')
 function size(n){const u=['B','KB','MB','GB'];let i=0;while(n>=1024&&i<3){n/=1024;i++}return (i?n.toFixed(1):n)+' '+u[i]}
 document.getElementById('pick').addEventListener('change', async (e) => {
   const files = [...e.target.files]
+  if (!files.length) return
   status.hidden = false
-  for (const f of files) {
-    status.innerHTML = '<p>Sending <b></b></p><progress max="1" value="0"></progress>'
-    status.querySelector('b').textContent = f.name
-    const bar = status.querySelector('progress')
+  // One selection is one batch: the computer shows it as a single tile, and so
+  // does this page (an overall bar, not one row per file).
+  const batch = Math.random().toString(36).slice(2, 12) + Date.now().toString(36)
+  const total = files.reduce((n, f) => n + f.size, 0)
+  let before = 0
+  status.innerHTML = '<p id="sendline"></p><progress max="1" value="0" aria-labelledby="sendline"></progress>'
+  const line = status.querySelector('p')
+  const bar = status.querySelector('progress')
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i]
+    line.textContent = files.length === 1 ? 'Sending ' + f.name : 'Sending ' + (i + 1) + ' of ' + files.length + ' files'
     const ok = await new Promise((done) => {
       const x = new XMLHttpRequest()
-      x.open('POST', base + '/upload?name=' + encodeURIComponent(f.name))
-      x.upload.onprogress = (p) => { if (p.lengthComputable) bar.value = p.loaded / p.total }
+      const q = '?name=' + encodeURIComponent(f.name) + '&batch=' + batch + '&i=' + i + '&n=' + files.length + '&bytes=' + total
+      x.open('POST', base + '/upload' + q)
+      x.upload.onprogress = (p) => { if (p.lengthComputable) bar.value = total ? (before + p.loaded) / total : 1 }
       x.onload = () => done(x.status === 200 ? '' : x.responseText || 'It didn’t arrive.')
       x.onerror = () => done('The computer can’t be reached. Is Fuselane still open?')
       x.send(f)
     })
-    if (ok) { status.textContent = ok; return }
+    if (ok) { status.textContent = (i ? i + ' of ' + files.length + ' files sent. ' : '') + ok; e.target.value = ''; return }
+    before += f.size
   }
   status.textContent = files.length === 1 ? 'Sent. It’s in the computer’s downloads folder.' : files.length + ' files sent.'
   e.target.value = ''
@@ -546,8 +617,12 @@ async function refresh(){
     if (!r.ok) return
     const list = await r.json()
     const box = document.getElementById('files')
-    if (!list.length) return
-    box.replaceChildren(...list.map((f) => {
+    if (!list.length) {
+      const none = document.createElement('p'); none.className = 'mute'
+      none.textContent = 'Nothing yet. Files the computer offers show up here.'
+      return box.replaceChildren(none)
+    }
+    const rows = (list) => list.map((f) => {
       const row = document.createElement('div'); row.className = 'item'
       const t = document.createElement('div')
       const n = document.createElement('div'); n.className = 'name'; n.textContent = f.name
@@ -556,7 +631,13 @@ async function refresh(){
       const a = document.createElement('a'); a.className = 'save'; a.textContent = 'Save'
       a.href = base + '/file/' + encodeURIComponent(f.id); a.download = f.name
       row.append(t, a); return row
-    }))
+    })
+    if (list.length <= 8) return box.replaceChildren(...rows(list))
+    // Hundreds of files stay one tidy line until opened.
+    const open = box.querySelector('details')?.open
+    const d = document.createElement('details'); d.open = !!open
+    const sm = document.createElement('summary'); sm.textContent = list.length + ' files waiting'
+    d.append(sm, ...rows(list)); box.replaceChildren(d)
   } catch {}
 }
 const say = document.getElementById('say'), said = document.getElementById('said')

@@ -202,3 +202,66 @@ async fn text_goes_both_ways_and_stays_small() {
     let third = read(http(&page, &get(&format!("{base}/text")), b"").await.1);
     assert_eq!(third["text"], serde_json::Value::Null);
 }
+
+type Seen = (String, String, u32, u32, u64);
+
+#[derive(Default)]
+struct Batches(Mutex<Vec<Seen>>);
+
+impl PageHost for Batches {
+    fn receiving(&self, _: &str, _: &str, _: u64) {}
+    fn progress(&self, _: &str, _: u64) {}
+    fn received(&self, _: &str, _: Result<PathBuf, String>) {}
+    fn batch(&self, id: &str, batch: &str, index: u32, files: u32, bytes: u64) {
+        self.0
+            .lock()
+            .unwrap()
+            .push((id.into(), batch.into(), index, files, bytes));
+    }
+}
+
+#[tokio::test]
+async fn files_sent_in_one_selection_say_which_batch_and_how_big_it_is() {
+    let inbox = tempfile::tempdir().unwrap();
+    let host = Arc::new(Batches::default());
+    let page = PhonePage::start(host.clone(), inbox.path().to_path_buf(), "Mac".into())
+        .await
+        .unwrap();
+    let base = format!("/p/{}", page.token);
+    for (i, name) in ["a.jpg", "b.jpg"].iter().enumerate() {
+        let head = format!(
+            "POST {base}/upload?name={name}&batch=sel9&i={i}&n=451&bytes=9000 HTTP/1.1\r\nHost: x\r\nContent-Length: 4\r\nConnection: close\r\n\r\n"
+        );
+        assert_eq!(http(&page, &head, b"data").await.0, 200);
+    }
+    // No batch parameter: nothing reported, so it's a tile of its own.
+    let head = post(&format!("{base}/upload?name=c.jpg"), 4);
+    assert_eq!(http(&page, &head, b"data").await.0, 200);
+    let got = host.0.lock().unwrap().clone();
+    assert_eq!(got.len(), 2);
+    assert_eq!(
+        (got[1].1.as_str(), got[1].2, got[1].3, got[1].4),
+        ("sel9", 1, 451, 9000)
+    );
+}
+
+#[tokio::test]
+async fn a_cancelled_selection_refuses_the_files_the_phone_has_not_started() {
+    let inbox = tempfile::tempdir().unwrap();
+    let host = Arc::new(Batches::default());
+    let page = PhonePage::start(host.clone(), inbox.path().to_path_buf(), "Mac".into())
+        .await
+        .unwrap();
+    let base = format!("/p/{}", page.token);
+    let upload = |name: &str, batch: &str| {
+        format!(
+            "POST {base}/upload?name={name}&batch={batch}&i=0&n=3&bytes=12 HTTP/1.1\r\nHost: x\r\nContent-Length: 4\r\nConnection: close\r\n\r\n"
+        )
+    };
+    assert_eq!(http(&page, &upload("a.jpg", "selA"), b"data").await.0, 200);
+    page.cancel("selA");
+    // The same selection is refused; another selection is not.
+    assert_eq!(http(&page, &upload("b.jpg", "selA"), b"data").await.0, 409);
+    assert_eq!(http(&page, &upload("c.jpg", "selB"), b"data").await.0, 200);
+    assert_eq!(host.0.lock().unwrap().len(), 2);
+}
