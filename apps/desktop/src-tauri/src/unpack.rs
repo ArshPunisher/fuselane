@@ -187,8 +187,17 @@ fn unzip(archive: &Path, work: &Path, limits: Limits) -> Result<(), String> {
         if entry.encrypted() {
             return Err("it is password-protected; unpack it yourself".into());
         }
-        let Some(rel) = entry.enclosed_name().as_deref().and_then(safe_relative) else {
-            return Err(format!("it holds an unsafe path ({})", entry.name()));
+        let raw = entry.name().unwrap_or_default();
+        // zip 9 quietly drops a leading root from `enclosed_name`; we still refuse absolute
+        // and drive-letter names outright, like the tar path does.
+        let absolute = raw.starts_with(['/', '\\']) || raw.as_bytes().get(1) == Some(&b':');
+        let rel = if absolute {
+            None
+        } else {
+            entry.enclosed_name().as_deref().and_then(safe_relative)
+        };
+        let Some(rel) = rel else {
+            return Err(format!("it holds an unsafe path ({raw})"));
         };
         // Links in zips are stored as files with a link mode; never recreate them.
         if entry.is_symlink() {
