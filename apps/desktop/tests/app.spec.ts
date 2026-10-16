@@ -1362,6 +1362,23 @@ test('a new video page never shows the previous one, and Back returns to the qua
   await expect(pick).toContainText('Sintel')
 })
 
+test('a video page opened from the popup that cannot be read shows why, and Back keeps the link', async ({
+  page,
+}) => {
+  await page.goto('/?empty=1')
+  await expect(page.getByText('Nothing downloading yet')).toBeVisible()
+  const link = 'https://www.youtube.com/watch?v=nomedia'
+  await page.evaluate(
+    (l) =>
+      (window as unknown as { __demoOpen: (t: string) => void }).__demoOpen(`fuselane-video:${l}`),
+    link,
+  )
+  // The lookup's own error shows in New download, with the link still filled.
+  const plain = page.getByRole('dialog', { name: 'New download' })
+  await expect(plain).toContainText('No video found there')
+  await expect(plain.getByLabel('Link')).toHaveValue(link)
+})
+
 test('an HD video is one item that gets its sound and is joined', async ({ page }) => {
   await page.goto('/?empty=1&speed=50')
   const dialog = await openDialog(page)

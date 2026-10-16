@@ -30,6 +30,55 @@ pub const VIDEO_DRAFT: &str = "fuselane-video:";
 /// Drafts starting with this open Feeds with the feed's address (B10.8).
 pub const FEED_DRAFT: &str = "fuselane-feed:";
 
+/// True for a link to one video's own page on a site the app knows, so the
+/// popup's "Open this page" can look it up at once. Deliberately narrow: every
+/// other page keeps the plain New download dialog, where the person chooses.
+pub fn is_video_page(link: &str) -> bool {
+    let Some((scheme, rest)) = link.trim().split_once("://") else {
+        return false;
+    };
+    if !scheme.eq_ignore_ascii_case("http") && !scheme.eq_ignore_ascii_case("https") {
+        return false;
+    }
+    let (authority, tail) = rest.split_once('/').unwrap_or((rest, ""));
+    if authority.contains('@') {
+        return false;
+    }
+    let host = authority
+        .split(':')
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let host = host.strip_prefix("www.").unwrap_or(&host);
+    let (path, query) = tail.split_once('?').unwrap_or((tail, ""));
+    let path = path.split('#').next().unwrap_or("");
+    let query = query.split('#').next().unwrap_or("");
+    let has_id = |seg: &str| !seg.is_empty();
+    match host {
+        "youtube.com" | "m.youtube.com" | "music.youtube.com" => {
+            if path == "watch" {
+                query
+                    .split('&')
+                    .any(|p| p.strip_prefix("v=").is_some_and(has_id))
+            } else {
+                ["shorts/", "live/"].iter().any(|p| {
+                    path.strip_prefix(p)
+                        .is_some_and(|id| has_id(id.trim_end_matches('/')))
+                })
+            }
+        }
+        "youtu.be" => has_id(path.trim_end_matches('/')) && !path.contains('/'),
+        "vimeo.com" => {
+            !path.is_empty()
+                && path
+                    .trim_end_matches('/')
+                    .chars()
+                    .all(|c| c.is_ascii_digit())
+        }
+        _ => false,
+    }
+}
+
 impl Handler for ApiBridge {
     fn page_feed(&self, url: String) -> bool {
         self.svc.open_request(format!("{FEED_DRAFT}{url}"));
@@ -46,9 +95,14 @@ impl Handler for ApiBridge {
     }
 
     fn page_open(&self, url: String) -> bool {
-        // A plain link draft: New download opens with it, offering the page's
-        // files and (B10.4) its video, as for a pasted link.
-        self.svc.open_request(url);
+        // A page the app knows to be a video page goes straight to the qualities
+        // (Back returns to New download with the link filled); any other page is
+        // a plain link draft, offering its files and video as for a pasted link.
+        if is_video_page(&url) {
+            self.svc.open_request(format!("{VIDEO_DRAFT}{url}"));
+        } else {
+            self.svc.open_request(url);
+        }
         self.svc.bring_to_front();
         true
     }
@@ -376,7 +430,7 @@ mod tests {
         // A plain link, not a video draft: the dialog offers what it can get
         // from the page, as for a pasted link (L-127).
         let (b, events, _dir) = bridge();
-        let page = "https://www.youtube.com/watch?v=aqz-KE-bpKQ";
+        let page = "https://example.org/some/page";
         assert!(b.page_open(page.into()));
         let opened: Vec<String> = events
             .lock()
@@ -388,6 +442,48 @@ mod tests {
             })
             .collect();
         assert_eq!(opened, [page]);
+    }
+
+    #[test]
+    fn a_known_video_page_opened_from_the_popup_goes_straight_to_the_qualities() {
+        let (b, events, _dir) = bridge();
+        let page = "https://www.youtube.com/watch?v=aqz-KE-bpKQ";
+        assert!(b.page_open(page.into()));
+        let opened: Vec<String> = events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|e| match e {
+                UiEvent::Open { target } => Some(target.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(opened, [format!("{VIDEO_DRAFT}{page}")]);
+    }
+
+    #[test]
+    fn only_a_single_known_video_page_counts_as_one() {
+        for yes in [
+            "https://www.youtube.com/watch?v=abc&t=3",
+            "https://youtube.com/shorts/abc",
+            "https://youtu.be/abc",
+            "https://vimeo.com/12345",
+        ] {
+            assert!(is_video_page(yes), "{yes}");
+        }
+        for no in [
+            "https://www.youtube.com/",
+            "https://www.youtube.com/@chan",
+            "https://www.youtube.com/playlist?list=PL1",
+            "https://example.org/watch?v=abc",
+            "https://notyoutube.com/watch?v=abc",
+            "https://youtube.com@evil.example/watch?v=abc",
+            "https://vimeo.com/channels/staffpicks",
+            "https://example.org/clip.mp4",
+            "ftp://youtube.com/watch?v=abc",
+        ] {
+            assert!(!is_video_page(no), "{no}");
+        }
     }
 
     #[tokio::test]
