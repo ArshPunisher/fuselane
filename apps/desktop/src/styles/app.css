@@ -3888,6 +3888,40 @@ select.prio[data-level='skip'] {
   gap: 4px;
 }
 
+.activity-batch {
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+}
+
+.batch-toggle {
+  justify-self: start;
+  margin-top: 2px;
+}
+
+.batch-files {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 2px;
+  max-height: 280px;
+  margin: 0;
+  padding: 4px 0 0;
+  overflow-y: auto;
+  list-style: none;
+  font-size: 12px;
+}
+
+.batch-files li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.batch-file-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .activity-empty {
   padding: 4px 2px;
 }

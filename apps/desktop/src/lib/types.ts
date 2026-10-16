@@ -191,6 +191,14 @@ export interface NearbyTransfer {
   path: string | null
   /** A text message instead of a file: the text. */
   text: string | null
+  /** When it appeared; later is newer. Never changes. */
+  seq: number
+  /** The selection it belongs to (many files sent together), or null. */
+  batch: string | null
+  batchIndex: number
+  /** How many files and bytes the whole selection holds (0 when not in one). */
+  batchFiles: number
+  batchBytes: number
 }
 
 /** The phone page while it's on (B8.12). */

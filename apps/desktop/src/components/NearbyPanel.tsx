@@ -18,6 +18,7 @@ import {
 import { useApp } from '../lib/store'
 import { bytes } from '../lib/format'
 import { intlLocale, mark, t, tb, tn, tr } from '../lib/i18n'
+import { groupTransfers, type ActivityRow } from '../lib/nearbyGroups'
 import type {
   DeviceView,
   NearbyRequest,
@@ -376,6 +377,125 @@ function Transfer({ x }: { x: NearbyTransfer }) {
   )
 }
 
+/** Files shown at a time inside an opened selection (it can hold thousands). */
+const PAGE = 100
+
+/**
+ * Many files sent together are one tile: "Sending 23 of 451 files" and one bar
+ * for all the bytes. Opening it lists the files, a page at a time.
+ */
+function BatchTile({ row }: { row: Extract<ActivityRow, { kind: 'batch' }> }) {
+  const act = useApp((s) => s.act)
+  const [open, setOpen] = useState(false)
+  const [shown, setShown] = useState(PAGE)
+  const running = row.state === 'asking' || row.state === 'sending' || row.state === 'receiving'
+  const pct = row.bytes ? Math.min(1, row.done / row.bytes) : 0
+  const out = row.direction === 'out'
+  const title =
+    row.state === 'done'
+      ? t(out ? 'Sent {n} files' : 'Received {n} files', { n: row.files })
+      : running
+        ? t(out ? 'Sending {done} of {total} files' : 'Receiving {done} of {total} files', {
+            done: row.filesDone,
+            total: row.files,
+          })
+        : t('Stopped after {done} of {total} files', { done: row.filesDone, total: row.files })
+  const name = t('{n} files', { n: row.files })
+  const first = row.items.find((x) => x.error)?.error ?? null
+  const items = open ? row.items.slice(0, shown) : []
+  return (
+    <li className="activity activity-batch" data-state={row.state} data-dir={row.direction}>
+      <span className="activity-ic" aria-hidden>
+        <Ring value={row.state === 'done' ? 1 : running ? pct : null} size={38} />
+        {row.state === 'done' ? (
+          <Check size={16} weight="bold" className="done-check" />
+        ) : out ? (
+          <PaperPlaneTilt size={16} />
+        ) : (
+          <DownloadSimple size={16} />
+        )}
+      </span>
+      <span className="activity-text">
+        <span className="activity-name" title={title}>
+          {title}
+        </span>
+        <span className="activity-meta">
+          {tr(out ? 'To {device}.' : 'From {device}.', {
+            device: <span translate="no">{row.device}</span>,
+          })}{' '}
+          {first ? tb(first) : null}
+          {running && row.bytes > 0 && (
+            <span>
+              {' '}
+              {tr('{done} of {total}', {
+                done: <span className="num">{bytes(row.done)}</span>,
+                total: <span className="num">{bytes(row.bytes)}</span>,
+              })}
+            </span>
+          )}
+        </span>
+        {running && (
+          <span
+            className="activity-bar"
+            role="progressbar"
+            aria-label={title}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(pct * 100)}
+          >
+            <span style={{ width: `${pct * 100}%` }} />
+          </span>
+        )}
+        <button
+          className="btn btn-ghost btn-sm batch-toggle"
+          aria-expanded={open}
+          onClick={() => setOpen((o) => !o)}
+        >
+          {open ? t('Hide files') : t('Show files')}
+        </button>
+      </span>
+      <span className="activity-actions">
+        {running ? (
+          <button
+            className="btn btn-ghost btn-sm"
+            aria-label={t('Cancel {name}', { name })}
+            onClick={() => act((b) => b.nearbyCancel(row.key))}
+          >
+            {t('Cancel')}
+          </button>
+        ) : (
+          <button
+            className="icon-btn"
+            aria-label={t('Clear {name}', { name })}
+            onClick={() => act((b) => b.nearbyClear(row.key))}
+          >
+            <X size={16} aria-hidden />
+          </button>
+        )}
+      </span>
+      {open && (
+        <ul className="batch-files">
+          {items.map((x) => (
+            <li key={x.id} data-state={x.state}>
+              <span className="batch-file-name" translate="no" title={x.name}>
+                {x.name}
+              </span>
+              <span className="muted">{x.error ? tb(x.error) : t(STATE_WORD[x.state])}</span>
+            </li>
+          ))}
+          {row.items.length > shown && (
+            <li>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShown((n) => n + PAGE)}>
+                {t('Show more')}
+              </button>
+            </li>
+          )}
+        </ul>
+      )}
+    </li>
+  )
+}
+
 /**
  * Text between your devices (B10.2): send what you copied, or type something.
  * A trusted Fuselane computer puts it on its clipboard; LocalSend shows it.
@@ -682,6 +802,7 @@ export function NearbyPanel() {
   }, [backend, act])
   const over = useDropOnDevice()
   const transfers = useMemo(() => nearby?.transfers ?? [], [nearby?.transfers])
+  const rows = useMemo(() => groupTransfers(transfers), [transfers])
   if (!nearby)
     return <div className="sk sk-line" aria-busy="true" aria-label={t('Looking for devices')} />
   return (
@@ -715,9 +836,13 @@ export function NearbyPanel() {
             <p className="muted activity-empty">{t('Nothing sent or received yet.')}</p>
           ) : (
             <ul className="activity-list">
-              {transfers.map((x) => (
-                <Transfer key={x.id} x={x} />
-              ))}
+              {rows.map((r) =>
+                r.kind === 'one' ? (
+                  <Transfer key={r.key} x={r.x} />
+                ) : (
+                  <BatchTile key={r.key} row={r} />
+                ),
+              )}
             </ul>
           )}
         </section>

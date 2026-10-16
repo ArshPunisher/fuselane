@@ -1860,6 +1860,40 @@ test.describe('Nearby', () => {
     await expect(radar.locator('.beam')).toHaveCount(0)
   })
 
+  test('many files sent together are one tile with one overall bar, newest selection on top', async ({
+    page,
+  }) => {
+    await openNearby(page)
+    const batch = (id: string, n: number) =>
+      page.evaluate(
+        ([id, n]) =>
+          (
+            window as unknown as { __demoPhoneBatch: (i: string, n: number, mb: number) => void }
+          ).__demoPhoneBatch(id as string, n as number, 2),
+        [id, n] as const,
+      )
+    await batch('first', 451)
+    const list = page.getByRole('complementary', { name: 'Activity' }).locator('.activity')
+    await expect(list).toHaveCount(1)
+    const tile = list.first()
+    await expect(tile).toContainText('Receiving 226 of 451 files')
+    await expect(tile.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '50')
+    // A second selection lands on top and the first keeps its place.
+    await batch('second', 3)
+    await expect(list).toHaveCount(2)
+    await expect(list.first()).toContainText('of 3 files')
+    await expect(list.nth(1)).toContainText('of 451 files')
+    // Opening it lists files in selection order, a page at a time.
+    await list.nth(1).getByRole('button', { name: 'Show files' }).click()
+    const files = list.nth(1).locator('.batch-files li')
+    await expect(files.first()).toContainText('IMG_0001.jpg')
+    await expect(files.nth(1)).toContainText('IMG_0002.jpg')
+    expect(await files.count()).toBeLessThanOrEqual(101)
+    // Cancelling the selection stops all of it with one button.
+    await list.nth(1).getByRole('button', { name: 'Cancel 451 files' }).click()
+    await expect(list.nth(1)).toHaveAttribute('data-state', 'cancelled')
+  })
+
   test('files dropped on a device lift it, then go to it', async ({ page }) => {
     await openNearby(page)
     const ravi = page.getByRole('button', { name: "Send files to Ravi's ThinkPad" })

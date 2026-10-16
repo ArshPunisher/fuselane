@@ -75,6 +75,9 @@ export function createDemoNearby(params: URLSearchParams, emit: () => (e: UiEven
   const drops = new Set<(e: FileDrop) => void>()
   let everyoneUntil = 0
   let next = 1
+  let seq = 1
+  /** The fields every transfer carries that only batches fill in. */
+  const plain = () => ({ seq: seq++, batch: null, batchIndex: 0, batchFiles: 0, batchBytes: 0 })
   const clone = (): NearbyView => structuredClone(view)
   const send = () => {
     view.everyoneFor =
@@ -152,6 +155,7 @@ export function createDemoNearby(params: URLSearchParams, emit: () => (e: UiEven
       const t: NearbyTransfer = {
         id: `out-${next++}`,
         direction: 'out',
+        ...plain(),
         device: d.alias,
         name: paths.length === 1 ? (paths[0]?.split('/').pop() ?? '') : `${paths.length} files`,
         size: 2.4 * 1024 * MB,
@@ -219,6 +223,7 @@ export function createDemoNearby(params: URLSearchParams, emit: () => (e: UiEven
       view.transfers.unshift({
         id: `text-${next++}`,
         direction: 'out',
+        ...plain(),
         device: d.alias,
         name: body.split('\n')[0]!.slice(0, 80),
         size: body.length,
@@ -239,6 +244,7 @@ export function createDemoNearby(params: URLSearchParams, emit: () => (e: UiEven
         view.transfers.unshift({
           id: `text-in-${next++}`,
           direction: 'in',
+          ...plain(),
           device: r.alias,
           name: r.text.split('\n')[0]!.slice(0, 80),
           size: r.text.length,
@@ -257,6 +263,7 @@ export function createDemoNearby(params: URLSearchParams, emit: () => (e: UiEven
         const t: NearbyTransfer = {
           id: `in-${next++}`,
           direction: 'in',
+          ...plain(),
           device: r.alias,
           name: r.files.length === 1 ? (r.files[0] ?? '') : `${r.files.length} files`,
           size: r.total,
@@ -281,14 +288,16 @@ export function createDemoNearby(params: URLSearchParams, emit: () => (e: UiEven
       return clone()
     },
     nearbyCancel: async (id: string) => {
-      const t = view.transfers.find((x) => x.id === id)
-      if (t && (t.state === 'asking' || t.state === 'sending' || t.state === 'receiving')) {
-        t.state = 'cancelled'
+      for (const t of view.transfers) {
+        if (t.id !== id && t.batch !== id) continue
+        if (t.state === 'asking' || t.state === 'sending' || t.state === 'receiving') {
+          t.state = 'cancelled'
+        }
       }
       send()
     },
     nearbyClear: async (id: string) => {
-      view.transfers = view.transfers.filter((t) => t.id !== id)
+      view.transfers = view.transfers.filter((t) => t.id !== id && t.batch !== id)
       send()
       return clone()
     },
@@ -300,6 +309,30 @@ export function createDemoNearby(params: URLSearchParams, emit: () => (e: UiEven
         for (const f of drops) f(e)
       }
       return () => drops.delete(cb)
+    },
+    /** Test hook: a phone sends `n` files as one selection (batch `id`). */
+    phoneBatch: (id: string, n: number, mb: number) => {
+      const start = seq
+      for (let i = 0; i < n; i++)
+        view.transfers.push({
+          id: `${id}-${i}`,
+          direction: 'in',
+          device: 'A phone (browser)',
+          name: `IMG_${String(i + 1).padStart(4, '0')}.jpg`,
+          size: mb * MB,
+          done: i < n / 2 ? mb * MB : 0,
+          state: i < n / 2 ? 'done' : 'receiving',
+          error: null,
+          path: null,
+          text: null,
+          seq: start + i,
+          batch: id,
+          batchIndex: i,
+          batchFiles: n,
+          batchBytes: n * mb * MB,
+        })
+      seq = start + n
+      send()
     },
     nearbyPhone: async (on: boolean) => {
       view.phone = on
@@ -330,5 +363,6 @@ export function createDemoNearby(params: URLSearchParams, emit: () => (e: UiEven
       return clone()
     },
   }
+  ;(window as unknown as { __demoPhoneBatch?: unknown }).__demoPhoneBatch = methods.phoneBatch
   return { methods, send }
 }
