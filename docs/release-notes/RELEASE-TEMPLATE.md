@@ -1,6 +1,6 @@
 Fuselane downloads one file over every network you have at once (Wi-Fi, Ethernet, a USB-tethered phone) and fuses the parts into one file.
 
-This is a **beta**. Please report problems at https://github.com/ArshPunisher/fuselane/issues.
+Please report problems with **Settings → Report a problem**, or at https://github.com/ArshPunisher/fuselane/issues.
 
 ## Install
 
