@@ -1,0 +1,28 @@
+# Maintainer: ClearCraft Labs <https://github.com/ArshPunisher/fuselane>
+# Written by packaging/aur/update-pkgbuild.sh from the v1.0.0 release. Don't edit by hand.
+
+pkgname=fuselane-bin
+pkgver=1.0.0
+pkgrel=1
+pkgdesc='Download manager that uses every network at once (Wi-Fi, Ethernet, a tethered phone)'
+arch=('x86_64' 'aarch64')
+url='https://fuselane.app'
+license=('Apache-2.0')
+depends=('gtk3' 'webkit2gtk-4.1' 'libayatana-appindicator' 'hicolor-icon-theme')
+provides=('fuselane')
+conflicts=('fuselane')
+options=('!strip' '!debug')
+source_x86_64=("fuselane-$pkgver-x86_64.deb::https://github.com/ArshPunisher/fuselane/releases/download/v$pkgver/Fuselane_${pkgver}_linux-x64.deb")
+source_aarch64=("fuselane-$pkgver-aarch64.deb::https://github.com/ArshPunisher/fuselane/releases/download/v$pkgver/Fuselane_${pkgver}_linux-arm64.deb")
+sha256sums_x86_64=('8519402a4285af2d756ea68868c1d5e92562e095c3f2c4b9aceda1a42e040a0a')
+sha256sums_aarch64=('92f2a803f4af5e4e4742355fa0255b78f4b4532fc356faa7aefeea9f99293ad9')
+
+package() {
+  # makepkg unpacks the .deb itself; the files are in data.tar.*.
+  bsdtar -xf data.tar.* -C "$pkgdir"
+  # Tauri puts the 256 px icon in "256x256@2"; move it where icon themes look.
+  install -Dm644 "$pkgdir/usr/share/icons/hicolor/256x256@2/apps/fuselane-desktop.png" \
+    "$pkgdir/usr/share/icons/hicolor/256x256/apps/fuselane-desktop.png"
+  rm -r "$pkgdir/usr/share/icons/hicolor/256x256@2"
+  chmod 755 "$pkgdir/usr/bin/fuselane-desktop"
+}

@@ -1,0 +1,22 @@
+pkgbase = fuselane-bin
+	pkgdesc = Download manager that uses every network at once (Wi-Fi, Ethernet, a tethered phone)
+	pkgver = 1.0.0
+	pkgrel = 1
+	url = https://fuselane.app
+	arch = x86_64
+	arch = aarch64
+	license = Apache-2.0
+	depends = gtk3
+	depends = webkit2gtk-4.1
+	depends = libayatana-appindicator
+	depends = hicolor-icon-theme
+	provides = fuselane
+	conflicts = fuselane
+	options = !strip
+	options = !debug
+	source_x86_64 = fuselane-1.0.0-x86_64.deb::https://github.com/ArshPunisher/fuselane/releases/download/v1.0.0/Fuselane_1.0.0_linux-x64.deb
+	sha256sums_x86_64 = 8519402a4285af2d756ea68868c1d5e92562e095c3f2c4b9aceda1a42e040a0a
+	source_aarch64 = fuselane-1.0.0-aarch64.deb::https://github.com/ArshPunisher/fuselane/releases/download/v1.0.0/Fuselane_1.0.0_linux-arm64.deb
+	sha256sums_aarch64 = 92f2a803f4af5e4e4742355fa0255b78f4b4532fc356faa7aefeea9f99293ad9
+
+pkgname = fuselane-bin
