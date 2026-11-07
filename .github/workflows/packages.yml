@@ -1,0 +1,67 @@
+name: Packages
+
+# Tests the Chocolatey and AUR packages in packaging/ on real Windows and Arch
+# Linux before they are pushed to those stores (README.md in each folder):
+# Chocolatey packs, installs from the folder, runs the installed app's self-test
+# and uninstalls; the AUR package's .SRCINFO must match makepkg's, it builds,
+# installs, passes namcap and the installed app's self-test.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [packaging/chocolatey/**, packaging/aur/**, .github/workflows/packages.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  chocolatey:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Pack, install, self-test, uninstall
+        shell: pwsh
+        working-directory: packaging/chocolatey/fuselane
+        run: |
+          choco pack fuselane.nuspec --out "$env:RUNNER_TEMP"
+          choco install fuselane --source "$env:RUNNER_TEMP" -y --no-progress
+          if ($LASTEXITCODE -ne 0) { throw "choco install failed ($LASTEXITCODE)" }
+          $key = Get-ChildItem HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall, HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall |
+            Get-ItemProperty | Where-Object { $_.DisplayName -like 'Fuselane*' } | Select-Object -First 1
+          if (-not $key) { throw 'Fuselane is not in the installed programs list' }
+          "Installed: $($key.DisplayName) $($key.DisplayVersion) in $($key.InstallLocation)"
+          $exe = Get-ChildItem -Path $key.InstallLocation.Trim('"') -Filter 'fuselane-desktop.exe' -Recurse | Select-Object -First 1
+          if (-not $exe) { throw 'fuselane-desktop.exe not found' }
+          & $exe.FullName --self-test
+          if ($LASTEXITCODE -ne 0) { throw "self-test failed ($LASTEXITCODE)" }
+          choco uninstall fuselane -y --no-progress
+          if ($LASTEXITCODE -ne 0) { throw "choco uninstall failed ($LASTEXITCODE)" }
+          if (Test-Path $exe.FullName) { throw 'uninstall left fuselane-desktop.exe behind' }
+
+  aur:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build tools and a user for makepkg
+        run: |
+          pacman -Syu --noconfirm --needed base-devel namcap gtk3 webkit2gtk-4.1 libayatana-appindicator hicolor-icon-theme
+          useradd -m builder
+          cp -r packaging/aur/fuselane-bin /home/builder/pkg
+          chown -R builder /home/builder/pkg
+      - name: .SRCINFO matches the PKGBUILD
+        working-directory: /home/builder/pkg
+        run: su builder -c 'makepkg --printsrcinfo' | diff -u .SRCINFO -
+      - name: Build, check, install
+        working-directory: /home/builder/pkg
+        run: |
+          namcap PKGBUILD
+          su builder -c 'makepkg --noconfirm'
+          pacman -U --noconfirm ./fuselane-bin-*.pkg.tar.zst
+          namcap ./fuselane-bin-*.pkg.tar.zst
+          pacman -Ql fuselane-bin
+      - name: Self-test of the installed app
+        run: su builder -c 'fuselane-desktop --self-test'
