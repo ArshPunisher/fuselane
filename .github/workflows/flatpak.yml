@@ -1,0 +1,67 @@
+name: Flatpak
+
+# Builds the Flatpak from packaging/flatpak on a real Linux machine, runs
+# Flathub's own checks (flatpak-builder-lint on the manifest and the built
+# repository, appstreamcli on the metainfo), the packaged app's self-test inside
+# the sandbox, and takes a screenshot of the window. Run it before every Flathub
+# pull request (packaging/flatpak/README.md, "Submit to Flathub").
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [packaging/flatpak/**, .github/workflows/flatpak.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Flatpak, the Flathub remote and the builder
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -yq flatpak xvfb imagemagick xdotool dbus-x11 desktop-file-utils
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive flathub org.flatpak.Builder
+      - name: Check the files
+        working-directory: packaging/flatpak
+        run: |
+          git clone --depth 1 https://github.com/flathub/shared-modules.git
+          flatpak run --command=flatpak-builder-lint org.flatpak.Builder manifest app.fuselane.Fuselane.yml
+          flatpak run --command=appstreamcli org.flatpak.Builder validate --no-net app.fuselane.Fuselane.metainfo.xml
+          desktop-file-validate app.fuselane.Fuselane.desktop
+      - name: Build and install
+        working-directory: packaging/flatpak
+        run: |
+          flatpak run org.flatpak.Builder --user --install --install-deps-from=flathub \
+            --force-clean --repo=repo build-dir app.fuselane.Fuselane.yml
+      - name: Check the built repository
+        working-directory: packaging/flatpak
+        run: flatpak run --command=flatpak-builder-lint org.flatpak.Builder repo repo
+      - name: Self-test inside the sandbox
+        run: dbus-run-session -- flatpak run app.fuselane.Fuselane --self-test
+      - name: Screenshot of the window
+        run: |
+          mkdir -p shots
+          # Fails unless Fuselane's own window shows up and is captured. The inner
+          # script runs in its own shell, so its $ stays unexpanded here.
+          # shellcheck disable=SC2016
+          xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh -ec '
+            flatpak run app.fuselane.Fuselane > shots/app.log 2>&1 &
+            app=$!
+            win=$(timeout 90 xdotool search --sync --onlyvisible --name "^Fuselane$" | head -n1)
+            [ -n "$win" ] || { echo "no Fuselane window"; exit 1; }
+            sleep 10
+            kill -0 "$app" || { echo "Fuselane exited"; exit 1; }
+            import -window "$win" shots/window.png
+            kill "$app" || true'
+          test -s shots/window.png
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: flatpak-shots
+          path: shots
