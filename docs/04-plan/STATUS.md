@@ -27,6 +27,12 @@
 
 ## Log
 
+### 2026-11-07, stores after 1.0.0
+
+- **winget:** PR microsoft/winget-pkgs#474317 (`New package: ArshPunisher.Fuselane version 1.0.0`), CLA signed by the owner's account; waits for Microsoft's validation and a moderator. Manifests in `packaging/winget/manifests/.../1.0.0`.
+- **Flathub:** manifest on 1.0.0 (`--own-name` dropped, screenshots pinned to the tag). New `.github/workflows/flatpak.yml` builds it on Linux: lint (manifest, metainfo, desktop file, repository), the packaged self-test inside the sandbox (byte-exact over 2 networks) and a window screenshot all pass. The submission branch is pushed to `ArshPunisher/flathub` `add-fuselane`; **the owner opens the PR by hand** against `new-pr`: Flathub's rules forbid AI-made submission PRs and ask for a video of the app on Linux and disclosure of AI-written packaging.
+- **Homebrew:** cask on 1.0.0. Chocolatey, AUR and Snap need the owner's own accounts.
+
 ### 2026-11-07, 1.0.0, the first stable release
 
 - The owner asked for a stable release and chose **1.0.0** over 0.1.0, knowing the 1.0 gates (real-hardware checklist, 24 h soaks, Windows signing, store listings) are still open; they're listed as known limits in `docs/release-notes/v1.0.0.md`.
