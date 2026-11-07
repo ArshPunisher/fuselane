@@ -1785,7 +1785,7 @@ checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
 
 [[package]]
 name = "fuselane-api"
-version = "0.1.0-beta.17"
+version = "0.1.0-beta.18"
 dependencies = [
  "dirs 6.0.0",
  "libc",
@@ -1799,7 +1799,7 @@ dependencies = [
 
 [[package]]
 name = "fuselane-cli"
-version = "0.1.0-beta.17"
+version = "0.1.0-beta.18"
 dependencies = [
  "clap",
  "dirs 6.0.0",
@@ -1816,7 +1816,7 @@ dependencies = [
 
 [[package]]
 name = "fuselane-core"
-version = "0.1.0-beta.17"
+version = "0.1.0-beta.18"
 dependencies = [
  "dirs 6.0.0",
  "fuselane-engine-http",
@@ -1837,7 +1837,7 @@ dependencies = [
 
 [[package]]
 name = "fuselane-desktop"
-version = "0.1.0-beta.17"
+version = "0.1.0-beta.18"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -1890,7 +1890,7 @@ dependencies = [
 
 [[package]]
 name = "fuselane-engine-http"
-version = "0.1.0-beta.17"
+version = "0.1.0-beta.18"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -1911,7 +1911,7 @@ dependencies = [
 
 [[package]]
 name = "fuselane-engine-torrent"
-version = "0.1.0-beta.17"
+version = "0.1.0-beta.18"
 dependencies = [
  "anyhow",
  "fuselane-limits",
@@ -1929,14 +1929,14 @@ dependencies = [
 
 [[package]]
 name = "fuselane-limits"
-version = "0.1.0-beta.17"
+version = "0.1.0-beta.18"
 dependencies = [
  "proptest",
 ]
 
 [[package]]
 name = "fuselane-nearby"
-version = "0.1.0-beta.17"
+version = "0.1.0-beta.18"
 dependencies = [
  "bytes",
  "fuselane-storage",
@@ -1959,7 +1959,7 @@ dependencies = [
 
 [[package]]
 name = "fuselane-netif"
-version = "0.1.0-beta.17"
+version = "0.1.0-beta.18"
 dependencies = [
  "core-foundation 0.9.4",
  "if-addrs",
@@ -1970,7 +1970,7 @@ dependencies = [
 
 [[package]]
 name = "fuselane-rpc"
-version = "0.1.0-beta.17"
+version = "0.1.0-beta.18"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -1985,7 +1985,7 @@ dependencies = [
 
 [[package]]
 name = "fuselane-send"
-version = "0.1.0-beta.17"
+version = "0.1.0-beta.18"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -2005,7 +2005,7 @@ dependencies = [
 
 [[package]]
 name = "fuselane-storage"
-version = "0.1.0-beta.17"
+version = "0.1.0-beta.18"
 dependencies = [
  "libc",
  "proptest",
@@ -2016,7 +2016,7 @@ dependencies = [
 
 [[package]]
 name = "fuselane-testkit"
-version = "0.1.0-beta.17"
+version = "0.1.0-beta.18"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -2031,7 +2031,7 @@ dependencies = [
 
 [[package]]
 name = "fuselane-transport"
-version = "0.1.0-beta.17"
+version = "0.1.0-beta.18"
 dependencies = [
  "base64 0.22.1",
  "fuselane-netif",
