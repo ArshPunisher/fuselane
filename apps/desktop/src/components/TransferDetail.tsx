@@ -407,6 +407,8 @@ export function RemoveButton({ job, compact = false }: { job: JobView; compact?:
   const [open, setOpen] = useState(false)
   const done = job.status === 'completed'
   const where = job.finalPath ?? `${job.dir}/${job.name}`
+  // Its file is already gone: nothing to keep or trash, so it just leaves the list.
+  const ask = () => (job.missing ? void act((b) => b.remove(job.id)) : setOpen(true))
   return (
     <>
       {compact ? (
@@ -414,12 +416,12 @@ export function RemoveButton({ job, compact = false }: { job: JobView; compact?:
           className="icon-btn row-action"
           aria-label={t('Remove {name}', { name: job.name })}
           title={t('Remove')}
-          onClick={() => setOpen(true)}
+          onClick={ask}
         >
           <Trash size={16} aria-hidden />
         </button>
       ) : (
-        <button className="btn btn-ghost" onClick={() => setOpen(true)}>
+        <button className="btn btn-ghost" onClick={ask}>
           <Trash size={16} aria-hidden />
           {t('Remove')}
         </button>

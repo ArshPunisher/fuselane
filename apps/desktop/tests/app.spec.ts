@@ -383,6 +383,17 @@ test('a finished file that was deleted says so and can be downloaded again', asy
   await expect(detail.getByRole('button', { name: 'Pause' })).toBeVisible()
 })
 
+test("a missing file's bin icon just takes it off the list, with no question", async ({ page }) => {
+  await page.goto('/?missing=1')
+  const row = page.locator('li.row', { hasText: 'Blender-5.1-macos-arm64.dmg' })
+  await expect(row.locator('.row-state')).toHaveText('File missing')
+  await row.hover()
+  await row.getByRole('button', { name: 'Remove Blender-5.1-macos-arm64.dmg' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(row).toHaveCount(0)
+  await expect(page.getByText('no longer at')).toHaveCount(0)
+})
+
 test('a waiting download says why and can start now', async ({ page }) => {
   await page.goto('/?queued=1')
   await page.getByText('fedora-44-workstation.iso').click()

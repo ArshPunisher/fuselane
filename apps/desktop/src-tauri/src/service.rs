@@ -2822,7 +2822,16 @@ impl Service {
     /// Moves a finished download's file to the Trash (Recycle Bin) and removes it
     /// from the list. Never deletes outright, so a slip can be undone.
     pub fn trash_file(self: &Arc<Self>, id: i64) -> Result<(), UiError> {
-        let path = self.finished_file(id)?;
+        let path = match self.finished_file(id) {
+            Ok(p) => p,
+            // Already gone from the disk: what was asked (no file, not listed) is done.
+            Err(e) if e.code == "file-missing" => {
+                runner::remove(&self.store, id).map_err(|_| not_found(id))?;
+                self.publish_jobs();
+                return Ok(());
+            }
+            Err(e) => return Err(e),
+        };
         trash::delete(&path).map_err(|e| {
             UiError::new(
                 "trash-failed",
@@ -3489,6 +3498,18 @@ mod tests {
         assert_eq!(h.svc.trash_file(id).unwrap_err().code, "not-finished");
         assert_eq!(h.job(id).status, "paused", "still listed");
         assert_eq!(h.svc.trash_file(9999).unwrap_err().code, "not-found");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn trashing_a_file_that_is_already_gone_just_removes_it() {
+        let server = RangeServer::start(Content::new(64 * KB, 22)).await.unwrap();
+        let h = harness(1);
+        let id = h.svc.add(&link(&server), None).unwrap();
+        h.wait("finished", |h| h.job(id).status == "completed")
+            .await;
+        std::fs::remove_file(h.job(id).final_path.unwrap()).unwrap();
+        h.svc.trash_file(id).unwrap();
+        assert!(h.svc.store.get(id).is_err(), "off the list, no error");
     }
 
     #[test]
