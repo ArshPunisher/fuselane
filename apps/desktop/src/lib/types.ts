@@ -64,7 +64,7 @@ export interface JobView {
   /** Finished, but its file is no longer where it was saved. */
   missing: boolean
   /** A video with separate sound: getting it, joining them, or the sound is missing. */
-  sound: 'getting' | 'joining' | 'missing' | null
+  sound: 'getting' | 'joining' | 'converting' | 'missing' | null
   /** Arriving from another computer (a hand-off): who from, and how much has come. */
   arriving: ArrivingView | null
 }

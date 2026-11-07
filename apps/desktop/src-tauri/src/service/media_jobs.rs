@@ -56,6 +56,8 @@ pub enum Sound {
     Getting,
     /// Both parts are done and ffmpeg is joining them.
     Joining,
+    /// A download is being turned into an MP3.
+    Converting,
     /// The sound part is gone or failed for good: get it again, or keep the
     /// video without sound.
     Missing,
@@ -66,6 +68,7 @@ impl Sound {
         match self {
             Sound::Getting => "getting",
             Sound::Joining => "joining",
+            Sound::Converting => "converting",
             Sound::Missing => "missing",
         }
     }
@@ -503,6 +506,11 @@ impl Service {
         let mut keep = vec![];
         let mut fetching = false;
         for j in joins {
+            // Already being made (an MP3 stays saved until it's done): once only.
+            if lock(&self.joining).contains_key(&j.video) {
+                keep.push(j);
+                continue;
+            }
             let (v, a) = (self.store.get(j.video), self.store.get(j.audio));
             let Ok(v) = v else {
                 continue; // the video was removed: nothing to join
@@ -551,8 +559,12 @@ impl Service {
                 continue;
             };
             let me = self.clone();
-            if !j.mp3 {
-                lock(&self.joining).insert(j.video, j.audio);
+            lock(&self.joining).insert(j.video, j.audio);
+            // An MP3 stays in the saved list until it's made: if Fuselane closes
+            // midway, it's made again on the next start instead of leaving the
+            // download's .m4a beside a half-written .mp3.
+            if j.mp3 {
+                keep.push(j.clone());
             }
             tokio::task::spawn_blocking(move || {
                 let dir = vp
@@ -560,11 +572,28 @@ impl Service {
                     .map(std::path::Path::to_path_buf)
                     .unwrap_or_default();
                 let out = super::free_name(&dir, &j.name);
+                // Written under a hidden name, then renamed: an unfinished file is
+                // never seen (or left) under the real one.
+                let part = dir.join(format!(
+                    ".{}",
+                    out.file_name()
+                        .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
+                ));
                 let made = if j.mp3 {
-                    media::to_mp3(&ffmpeg, &vp, &out)
+                    media::to_mp3(&ffmpeg, &vp, &part)
                 } else {
-                    media::join(&ffmpeg, &vp, &ap, &out)
-                };
+                    media::join(&ffmpeg, &vp, &ap, &part)
+                }
+                .and_then(|()| {
+                    std::fs::rename(&part, &out)
+                        .map_err(|e| format!("the finished file couldn't be named ({e})"))
+                });
+                if made.is_err() {
+                    let _ = std::fs::remove_file(&part);
+                }
+                if j.mp3 {
+                    me.edit_joins(|joins| joins.retain(|x| x.video != j.video));
+                }
                 match made {
                     Ok(()) => {
                         let size = std::fs::metadata(&out).map_or(0, |m| m.len());

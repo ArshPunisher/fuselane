@@ -1334,15 +1334,23 @@ impl Service {
         for v in &mut views {
             if let Some(j) = joins.get(&v.id) {
                 media_jobs::merge_sound(v, j, parts.get(&j.audio));
-            } else if joining.contains_key(&v.id) {
+            } else if let Some(a) = joining.get(&v.id) {
                 v.status = "running";
-                v.sound = Some(media_jobs::Sound::Joining.word());
+                v.sound = Some(
+                    if *a == v.id {
+                        media_jobs::Sound::Converting
+                    } else {
+                        media_jobs::Sound::Joining
+                    }
+                    .word(),
+                );
             }
         }
         let hidden: std::collections::HashSet<i64> = joins
             .values()
             .map(|j| j.audio)
-            .chain(joining.values().copied())
+            // An MP3 being made is its own sound part: it stays in the list.
+            .chain(joining.iter().filter(|(v, a)| v != a).map(|(_, a)| *a))
             .collect();
         views.retain(|v| !hidden.contains(&v.id));
         views
@@ -5003,6 +5011,18 @@ mod tests {
         assert!(
             !mp3.with_extension("m4a").exists(),
             "the original is cleaned up"
+        );
+        let left: Vec<_> = std::fs::read_dir(mp3.parent().unwrap())
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.ends_with(".mp3") || n.ends_with(".m4a"))
+            .collect();
+        assert_eq!(left, ["A song.mp3"], "one file, no hidden part left");
+        assert_eq!(
+            h.svc.store.setting("media_joins").ok().flatten().as_deref(),
+            Some("[]"),
+            "the MP3 is no longer pending"
         );
     }
 

@@ -544,6 +544,7 @@ export const hi: Readonly<Record<string, string>> = {
   'Save without sound': 'बिना आवाज़ के सेव करें',
   'Getting the sound…': 'आवाज़ आ रही है…',
   'Joining video and sound…': 'वीडियो और आवाज़ जोड़ रहे हैं…',
+  'Making the MP3…': 'MP3 बना रहे हैं…',
   'No sound yet': 'अभी आवाज़ नहीं',
   'Back to video qualities': 'वीडियो क्वालिटी पर वापस',
   'Looking at the video…': 'वीडियो देख रहे हैं…',

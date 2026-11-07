@@ -20,6 +20,7 @@ export function statusWord(s: JobStatus): string {
 export function soundWord(job: Pick<JobView, 'sound'>): string | null {
   if (job.sound === 'getting') return t('Getting the sound…')
   if (job.sound === 'joining') return t('Joining video and sound…')
+  if (job.sound === 'converting') return t('Making the MP3…')
   if (job.sound === 'missing') return t('No sound yet')
   return null
 }
