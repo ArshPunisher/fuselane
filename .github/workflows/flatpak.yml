@@ -44,7 +44,7 @@ jobs:
             build-dir app.fuselane.Fuselane.yml
           # Flathub's own build stores the screenshots in the repository; do the same
           # so the repository lint below checks what Flathub will check.
-          ostree commit --repo=repo --canonical-permissions --branch=screenshots/x86_64 build-dir/screenshots
+          ostree commit --repo=repo --canonical-permissions --branch=screenshots/x86_64 build-dir/files/share/app-info/media
       - name: Check the built repository
         working-directory: packaging/flatpak
         run: flatpak run --command=flatpak-builder-lint org.flatpak.Builder repo repo
