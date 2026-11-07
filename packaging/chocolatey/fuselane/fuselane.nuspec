@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Written by packaging/chocolatey/update-package.sh from the v1.0.0 release. Don't edit by hand. -->
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>fuselane</id>
+    <version>1.0.0</version>
+    <packageSourceUrl>https://github.com/ArshPunisher/fuselane/tree/main/packaging/chocolatey</packageSourceUrl>
+    <owners>ClearCraft Labs</owners>
+    <title>Fuselane</title>
+    <authors>ClearCraft Labs</authors>
+    <projectUrl>https://fuselane.app</projectUrl>
+    <iconUrl>https://raw.githubusercontent.com/ArshPunisher/fuselane/v1.0.0/apps/desktop/src-tauri/icons/128x128.png</iconUrl>
+    <copyright>Copyright 2026 ClearCraft Labs</copyright>
+    <licenseUrl>https://github.com/ArshPunisher/fuselane/blob/main/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <projectSourceUrl>https://github.com/ArshPunisher/fuselane</projectSourceUrl>
+    <docsUrl>https://fuselane.app/faq/</docsUrl>
+    <bugTrackerUrl>https://github.com/ArshPunisher/fuselane/issues</bugTrackerUrl>
+    <tags>fuselane download-manager downloader torrent bonding multi-network tethering foss</tags>
+    <summary>Downloads over every network at once</summary>
+    <description><![CDATA[Fuselane spreads one download across every internet connection the computer has: home Wi-Fi, a phone tethered over USB, Ethernet, a second ISP. You get their combined speed, with no VPN, relay server or admin rights.
+
+It resumes interrupted downloads, checks finished files against the SHA-256 a site publishes, downloads torrents over every network, and sends files to other computers on your network. It collects no user data.
+
+Fuselane updates itself (signed updates); `choco upgrade fuselane` works too.
+]]></description>
+    <releaseNotes>https://github.com/ArshPunisher/fuselane/releases/tag/v1.0.0</releaseNotes>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>
