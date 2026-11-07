@@ -47,7 +47,13 @@ jobs:
           ostree commit --repo=repo --canonical-permissions --branch=screenshots/x86_64 build-dir/files/share/app-info/media
       - name: Check the built repository
         working-directory: packaging/flatpak
-        run: flatpak run --command=flatpak-builder-lint org.flatpak.Builder repo repo
+        # Fails on every error except the two about copying images to Flathub's
+        # media server, which only Flathub's own build does.
+        run: |
+          out=$(flatpak run --command=flatpak-builder-lint org.flatpak.Builder repo repo || true)
+          echo "$out"
+          left=$(echo "$out" | jq -r '(.errors // [])[] | select(. != "appstream-external-screenshot-url" and . != "appstream-remote-icon-not-mirrored")')
+          [ -z "$left" ] || { echo "lint errors: $left"; exit 1; }
       - name: Self-test inside the sandbox
         run: dbus-run-session -- flatpak run app.fuselane.Fuselane --self-test
       - name: Screenshot of the window
