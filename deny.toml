@@ -13,10 +13,12 @@ ignore = [
   # u8 (SharedRb<Heap<u8>>, stream_tx.rs), and Fuselane turns uTP off (ADR 0006).
   # Remove once librqbit moves to ringbuf >= 0.5.2.
   { id = "RUSTSEC-2026-0293", reason = "unreachable: ringbuf holds u8 in librqbit-utp; uTP disabled" },
-  # zip 4.6.1 was yanked after advisories about extract() (symlinks, permissions). It is only
-  # used by tauri-plugin-updater 2.13.2 to unpack our own signature-verified update bundles.
-  # Fuselane's own zip use is on 9.x. Remove once tauri-plugin-updater moves off zip 4.
-  { crate = "zip@4.6.1", reason = "yanked; only unpacks our signed update bundles inside tauri-plugin-updater" },
+  # zbus 5 (D-Bus on Linux: notifications, opener, single instance, our own portal calls)
+  # depends on these; the advisories are "unmaintained", not vulnerabilities, and zbus 5 is
+  # the latest. Remove once zbus moves off them.
+  { id = "RUSTSEC-2026-0370", reason = "unmaintained zvariant, via zbus 5 (latest) for D-Bus on Linux" },
+  { id = "RUSTSEC-2026-0371", reason = "unmaintained zbus_names, via zbus 5 (latest) for D-Bus on Linux" },
+  { id = "RUSTSEC-2026-0372", reason = "unmaintained zvariant_derive, via zbus 5 (latest) for D-Bus on Linux" },
 ]
 
 [licenses]
