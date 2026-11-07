@@ -24,7 +24,7 @@ jobs:
       - name: Flatpak, the Flathub remote and the builder
         run: |
           sudo apt-get update -q
-          sudo apt-get install -yq flatpak xvfb imagemagick xdotool dbus-x11 desktop-file-utils
+          sudo apt-get install -yq flatpak ostree xvfb imagemagick xdotool dbus-x11 desktop-file-utils
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak install --user -y --noninteractive flathub org.flatpak.Builder org.gnome.Platform//51 org.gnome.Sdk//51
       - name: Check the files
@@ -40,7 +40,11 @@ jobs:
           # Its own D-Bus session: the runner has none, and flatpak inside the
           # builder needs one ("Cannot autolaunch D-Bus without X11 $DISPLAY").
           dbus-run-session -- flatpak run org.flatpak.Builder --user --install --install-deps-from=flathub \
-            --force-clean --repo=repo build-dir app.fuselane.Fuselane.yml
+            --force-clean --repo=repo --mirror-screenshots-url=https://dl.flathub.org/media/ \
+            build-dir app.fuselane.Fuselane.yml
+          # Flathub's own build stores the screenshots in the repository; do the same
+          # so the repository lint below checks what Flathub will check.
+          ostree commit --repo=repo --canonical-permissions --branch=screenshots/x86_64 build-dir/screenshots
       - name: Check the built repository
         working-directory: packaging/flatpak
         run: flatpak run --command=flatpak-builder-lint org.flatpak.Builder repo repo
