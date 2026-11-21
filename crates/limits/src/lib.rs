@@ -391,6 +391,29 @@ impl Usage {
         }
     }
 
+    /// Moves the counter to a different period (the person set an allowance, or
+    /// changed its reset day) and rebuilds the bytes from the per-day history: the
+    /// days from the new period's first day up to `today`. Rolling the old counter
+    /// instead would zero it, forgetting bytes that belong to the new period, or
+    /// keep bytes from before it began.
+    pub fn rebase(
+        &mut self,
+        period: Period,
+        today: Date,
+        days: impl IntoIterator<Item = (Date, u64)>,
+    ) {
+        let start = period_start(period, today);
+        let bytes = days
+            .into_iter()
+            .filter(|(d, _)| *d >= start && *d <= today)
+            .fold(0u64, |a, (_, b)| a.saturating_add(b));
+        *self = Usage {
+            period,
+            start,
+            bytes,
+        };
+    }
+
     pub fn reached(&self, allowance: Option<u64>) -> bool {
         allowance.is_some_and(|a| self.bytes >= a)
     }
@@ -445,6 +468,36 @@ mod tests {
         assert_eq!(u.bytes, 500);
         u.add(1, d(2026, 11, 15));
         assert_eq!(u.bytes, 1);
+    }
+
+    /// Setting an allowance (or moving its reset day) mid-cycle keeps the bytes that
+    /// belong to the new cycle instead of starting from zero.
+    #[test]
+    fn changing_the_reset_day_rebuilds_the_count_from_the_daily_history() {
+        let history = [
+            (d(2026, 11, 1), 100),
+            (d(2026, 11, 2), 200),
+            (d(2026, 11, 3), 300),
+            (d(2026, 11, 5), 400),
+        ];
+        // Counted from the 1st (no allowance yet), then the person picks day 3.
+        let mut u = Usage::new(Period::MonthFrom(1), d(2026, 11, 5));
+        u.bytes = 1_000;
+        u.rebase(Period::MonthFrom(3), d(2026, 11, 6), history);
+        assert_eq!((u.start, u.bytes), (d(2026, 11, 3), 700));
+        // The old behaviour: rolling forgot all of it.
+        let mut old = Usage::new(Period::MonthFrom(1), d(2026, 11, 5));
+        old.bytes = 1_000;
+        old.period = Period::MonthFrom(3);
+        old.roll(d(2026, 11, 6));
+        assert_eq!(old.bytes, 0);
+        // A later reset day than today belongs to last month's cycle.
+        let mut u = Usage::new(Period::MonthFrom(1), d(2026, 11, 5));
+        u.rebase(Period::MonthFrom(20), d(2026, 11, 6), history);
+        assert_eq!((u.start, u.bytes), (d(2026, 10, 20), 1_000));
+        // Days after today (a clock set back) and before the cycle don't count.
+        u.rebase(Period::MonthFrom(3), d(2026, 11, 4), history);
+        assert_eq!(u.bytes, 300);
     }
 
     #[test]
