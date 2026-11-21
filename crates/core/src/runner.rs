@@ -1091,7 +1091,12 @@ pub async fn run(
     // Any publish record found now is left over from an earlier run: this run writes its own
     // when it gets there. Kept, it could later pass a half-overwritten partial file (the
     // staging file is preallocated to its full size) off as a finished one.
-    let _ = store.clear_publish_intent(id);
+    store.clear_publish_intent(id).map_err(|_| {
+        StartError::Setup(
+            "Fuselane couldn't update its download list. Check that its data folder is writable, then try again."
+                .into(),
+        )
+    })?;
     // Finding where the file really is (redirects, each network's address,
     // mirrors) asks servers first; a pause meanwhile lands at once.
     let given_headers = opts.headers;
@@ -1151,8 +1156,11 @@ pub async fn run(
     let intent = {
         let store = store.clone();
         PublishFn(Arc::new(move |from, to, size| {
+            // Absolute, so recovery finds them whatever folder the next start runs from.
+            let abs =
+                |p: &std::path::Path| std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf());
             store
-                .set_publish_intent(id, from, to, size)
+                .set_publish_intent(id, &abs(from), &abs(to), size)
                 .map_err(std::io::Error::other)
         }))
     };
@@ -1711,6 +1719,47 @@ mod tests {
             fuselane_testkit::sha256_file(&report.path).unwrap(),
             content.sha256(),
             "and the file is the whole one"
+        );
+    }
+
+    /// The record is absolute even when the download's folder was given relative to where
+    /// the program ran, so a later start from another folder still finds the files.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_publish_record_holds_absolute_paths() {
+        use fuselane_testkit::{Content, RangeServer};
+        let server = RangeServer::start(Content::new(20_000, 33)).await.unwrap();
+        let link = format!("http://{}{}", server.addr(), server.path());
+        let here = tempfile::tempdir_in(".").unwrap();
+        let relative = PathBuf::from(here.path().file_name().unwrap());
+        assert!(relative.is_relative());
+        let db = tempfile::tempdir().unwrap();
+        let store = Arc::new(Store::open(&db.path().join("jobs.db")).unwrap());
+        let side = rusqlite::Connection::open(db.path().join("jobs.db")).unwrap();
+        side.execute_batch(
+            "CREATE TABLE told (f TEXT, t TEXT);
+             CREATE TRIGGER told_it AFTER UPDATE OF publish_from ON jobs
+             WHEN NEW.publish_from IS NOT NULL
+             BEGIN INSERT INTO told VALUES (NEW.publish_from, NEW.publish_to); END;",
+        )
+        .unwrap();
+        let id = store.create(&link, &relative).unwrap();
+        let out = run(
+            store.clone(),
+            id,
+            &link,
+            relative,
+            None,
+            RunOptions::default(),
+        )
+        .await
+        .unwrap();
+        assert!(matches!(out, Outcome::Completed { .. }), "{out:?}");
+        let (f, t): (String, String) = side
+            .query_row("SELECT f, t FROM told", [], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap();
+        assert!(
+            std::path::Path::new(&f).is_absolute() && std::path::Path::new(&t).is_absolute(),
+            "{f} {t}"
         );
     }
 

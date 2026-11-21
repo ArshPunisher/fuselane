@@ -491,13 +491,17 @@ mod tests {
             std::fs::create_dir(&locked).unwrap();
             std::fs::write(locked.join("a.bin.fuselane"), b"abcd").unwrap();
             std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+            // A privileged user (root in a container) can read it anyway: nothing to test.
+            let enforced = std::fs::read_dir(&locked).is_err();
             let r = finish_publish(&locked.join("a.bin.fuselane"), &locked.join("a.bin"), 4);
             std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
-            assert!(r.is_err(), "{r:?}");
-            assert!(
-                locked.join("a.bin.fuselane").exists(),
-                "nothing was touched"
-            );
+            if enforced {
+                assert!(r.is_err(), "{r:?}");
+                assert!(
+                    locked.join("a.bin.fuselane").exists(),
+                    "nothing was touched"
+                );
+            }
         }
     }
 
