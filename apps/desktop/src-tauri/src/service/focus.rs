@@ -63,16 +63,20 @@ impl Service {
 
     /// Called when a download's run ends: if it was the focused one, the rest go on.
     pub(super) fn focus_ended(self: &Arc<Self>, id: i64) {
+        // Read the schedule before taking `focus`, never while holding it: the
+        // schedule takes `schedule_paused` then `running`, and the queue takes
+        // `running` then `focus`, so waiting here would close a lock cycle.
+        let schedule_paused = lock(&self.schedule_paused).contains(&id);
+        let still_queued = self
+            .store
+            .get(id)
+            .is_ok_and(|j| j.status == Status::Queued && !schedule_paused);
         let mut focus = lock(&self.focus);
         if *focus != Some(id) {
             return;
         }
         // Still queued (a retry, a schedule pause), so it keeps going first.
-        if self
-            .store
-            .get(id)
-            .is_ok_and(|j| j.status == Status::Queued && !lock(&self.schedule_paused).contains(&id))
-        {
+        if still_queued {
             return;
         }
         *focus = None;

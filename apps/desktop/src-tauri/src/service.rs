@@ -3425,6 +3425,40 @@ mod tests {
         }
     }
 
+    /// `focus_ended` must not wait for `schedule_paused` while holding `focus`:
+    /// the schedule takes `schedule_paused` then `running`, and the queue takes
+    /// `running` then `focus`, so holding `focus` there closed a three-way cycle
+    /// that could freeze the app for good.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn ending_focus_never_holds_focus_while_waiting_for_the_schedule() {
+        let h = harness(3);
+        // Added for later (paused), then queued in the store without the queue
+        // starting it: the state focus_ended checks the schedule for.
+        let later = AddRequest {
+            start_at: Some(4_000_000_000),
+            ..AddRequest::default()
+        };
+        let id = h
+            .svc
+            .add_with("http://127.0.0.1:9/f.bin", None, &later)
+            .unwrap();
+        h.svc.store.apply(id, Event::Resume, None).unwrap();
+        assert_eq!(h.job(id).status, "queued");
+        *lock(&h.svc.focus) = Some(id);
+        let held = lock(&h.svc.schedule_paused); // the schedule is mid-change
+        let svc = h.svc.clone();
+        let ender = std::thread::spawn(move || svc.focus_ended(id));
+        std::thread::sleep(Duration::from_millis(200));
+        // While focus_ended waits for the schedule, `focus` must stay free.
+        let free = h.svc.focus.try_lock().is_ok();
+        drop(held);
+        ender.join().unwrap();
+        assert!(
+            free,
+            "focus_ended held `focus` while waiting for `schedule_paused`"
+        );
+    }
+
     /// The app's 5-second ticker is a plain OS thread (main.rs): a start time that
     /// comes due there must start the download, not panic with "no reactor
     /// running" and leave the job stuck as running.
