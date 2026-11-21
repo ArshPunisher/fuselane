@@ -13,6 +13,7 @@ browser.runtime.onMessage.addListener((m: unknown, sender) => {
     job?: SelfJob
     limit?: number
     id?: string
+    keep?: string[]
   }
   if (msg.target !== 'offscreen') return
   if (msg.cmd === 'start' && msg.job && typeof msg.limit === 'number')
@@ -20,4 +21,5 @@ browser.runtime.onMessage.addListener((m: unknown, sender) => {
   else if (msg.cmd === 'pause' && msg.id) runner.pause(msg.id)
   else if (msg.cmd === 'cancel' && msg.id) void runner.cancel(msg.id)
   else if (msg.cmd === 'saved' && msg.id) void runner.saved(msg.id)
+  else if (msg.cmd === 'sweep' && Array.isArray(msg.keep)) void runner.sweep(msg.keep)
 })

@@ -4,7 +4,7 @@
 // which saves it through the browser's downloads. It reports events only; the
 // background keeps the records (offscreen pages have no storage API).
 import { FileChanged, TooBig, probe, run, split, type Part } from './fetcher.ts'
-import type { SelfJob } from './selfjobs.ts'
+import { orphanedParts, type SelfJob } from './selfjobs.ts'
 
 export type RunnerEvent =
   | {
@@ -185,7 +185,24 @@ export function createRunner(emit: (e: RunnerEvent) => void) {
         a.why = 'cancel'
         a.stop.abort(new Error('cancelled'))
       } else {
+        const url = blobs.get(id)
+        if (url) URL.revokeObjectURL(url)
+        blobs.delete(id)
         await removeFile(id)
+      }
+    },
+    /**
+     * Deletes every private file whose job isn't in `keep` (and isn't running here):
+     * what a failed save or a removed job left behind in the browser profile.
+     */
+    async sweep(keep: string[]) {
+      const root = await navigator.storage.getDirectory()
+      const names: string[] = []
+      for await (const name of (root as unknown as { keys(): AsyncIterable<string> }).keys()) {
+        names.push(name)
+      }
+      for (const name of orphanedParts(names, new Set([...keep, ...active.keys()]))) {
+        await root.removeEntry(name).catch(() => {})
       }
     },
     /** The browser saved the file: the private copy and its link can go. */
