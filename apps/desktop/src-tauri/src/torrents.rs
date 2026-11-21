@@ -1228,8 +1228,9 @@ impl Torrents {
                 completed: e.torrent.is_none().then(|| e.last.clone()),
             })
             .collect();
-        drop(entries);
-        // Ones still waiting to come back stay saved exactly as they were.
+        // `entries` stays locked until the list is written: a restore moves a
+        // torrent from `waiting` to `entries` under this lock, so the snapshot
+        // never misses it, and an older save can't overwrite a newer one.
         let mut saved = saved;
         for w in self
             .waiting
@@ -1302,7 +1303,9 @@ impl Torrents {
             }
             if let Some(done) = s.completed {
                 let id = s.id.clone();
-                self.entries.lock().await.push(Entry {
+                // Listed and no longer waiting in one step (see `save`).
+                let mut entries = self.entries.lock().await;
+                entries.push(Entry {
                     torrent: None,
                     starved: false,
                     finished_at: None,
@@ -1337,7 +1340,9 @@ impl Torrents {
             {
                 Ok(t) => {
                     let last = view_of(&t, s.added_at, 0);
-                    self.entries.lock().await.push(Entry {
+                    // Listed and no longer waiting in one step (see `save`).
+                    let mut entries = self.entries.lock().await;
+                    entries.push(Entry {
                         torrent: Some(t),
                         starved: false,
                         finished_at: None,
