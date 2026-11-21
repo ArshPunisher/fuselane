@@ -2412,6 +2412,10 @@ pub async fn download_with(
     }
 
     // The supervisor: tick the controller until every stream has finished.
+    // Written down at once, so the list knows its partial file before the first periodic
+    // checkpoint: a kill in the first seconds then resumes into it instead of starting over
+    // beside it and leaving a whole-size partial file behind.
+    emit_checkpoint(&ctx).await;
     let mut last_checkpoint = Instant::now();
     let mut snap_ticker =
         tokio::time::interval(tuning.snapshot_every.max(Duration::from_millis(16)));

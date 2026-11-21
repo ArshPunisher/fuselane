@@ -477,3 +477,72 @@ fn a_save_a_crash_cut_short_is_finished_when_the_list_is_opened() {
     let again = fuselane_in(home.path(), &["ls"]);
     assert!(!String::from_utf8_lossy(&again.stderr).contains("finished saving"));
 }
+
+/// A download killed before its first periodic checkpoint used to leave its staging file
+/// unknown to the list: resume started over beside it, finished as `file (1).bin` and left
+/// the whole-size partial file behind. The staging file is now recorded as soon as it exists.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn kill_9_before_the_first_checkpoint_resumes_into_the_same_partial_file() {
+    let content = Content::new(2_000_000, 53);
+    let server = RangeServer::start(content).await.unwrap();
+    server.add_rule(Rule {
+        skip: 1,
+        times: u32::MAX,
+        fault: Fault::Throttle(150_000),
+    });
+    let home = tempfile::tempdir().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let url = format!("http://{}{}", server.addr(), server.path());
+    let mut child = Command::new(env!("CARGO_BIN_EXE_fuselane"))
+        .env("FUSELANE_HOME", home.path())
+        // No periodic checkpoint will come in this test: only the first one counts.
+        .env("FUSELANE_CHECKPOINT_MS", "3600000")
+        .args([
+            "get",
+            &url,
+            "-o",
+            dir.path().to_str().unwrap(),
+            "-n",
+            LOOPBACK,
+            "-q",
+            "-s",
+            "2",
+        ])
+        .spawn()
+        .unwrap();
+    let db = home.path().join("jobs.db");
+    let mut known = false;
+    for _ in 0..200 {
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        if let Ok(store) = fuselane_core::Store::open(&db)
+            && let Ok(jobs) = store.list()
+            && jobs.first().is_some_and(|j| j.staging_path.is_some())
+        {
+            known = true;
+            break;
+        }
+    }
+    child.kill().unwrap(); // SIGKILL
+    let _ = child.wait();
+    assert!(known, "the list never learned where the partial file is");
+
+    let (h, d) = (home.path().to_path_buf(), dir.path().to_path_buf());
+    let out = tokio::task::spawn_blocking(move || {
+        fuselane_in(&h, &["resume", "last", "-n", LOOPBACK, "-q"])
+    })
+    .await
+    .unwrap();
+    assert!(
+        out.status.success(),
+        "resume failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let mut names: Vec<String> = std::fs::read_dir(&d)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    assert_eq!(names, ["file.bin"], "a partial file or a (1) copy was left");
+    assert_eq!(sha256_file(&d.join("file.bin")).unwrap(), content.sha256());
+}
