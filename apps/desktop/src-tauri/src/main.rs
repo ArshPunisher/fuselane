@@ -1000,11 +1000,7 @@ async fn download_update(
         });
     }
     let bytes = match fetched {
-        Ok(report) => {
-            let bytes = std::fs::read(&report.path).map_err(|e| failed(e.to_string()))?;
-            update::verify(&bytes, &update.signature, &pubkey, &update.version).map_err(failed)?;
-            bytes
-        }
+        Ok(report) => std::fs::read(&report.path).map_err(|e| failed(e.to_string()))?,
         Err(why) => {
             // The plugin's download is a single connection, but it works where the
             // engine couldn't (for example a proxy only the system knows about).
@@ -1028,6 +1024,16 @@ async fn download_update(
         }
     };
     let _ = std::fs::remove_dir_all(&dir);
+    // One gate for both ways of downloading: the plugin's own download checks the signature
+    // but not the version rules or the signing time (SECURITY.md T1).
+    update::verify(
+        &bytes,
+        &update.signature,
+        &pubkey,
+        &update.version,
+        &update.current_version,
+    )
+    .map_err(failed)?;
     Ok(bytes)
 }
 

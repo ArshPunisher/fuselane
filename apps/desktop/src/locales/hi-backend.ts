@@ -631,6 +631,16 @@ export const hiBackend: Readonly<Record<string, string>> = {
   "you're offline": 'आप ऑफ़लाइन हैं',
   "The update couldn't be installed: {e}": 'अपडेट इंस्टॉल नहीं हो सका: {e}',
   "There's no update to install.": 'इंस्टॉल करने के लिए कोई अपडेट नहीं है।',
+  "version {announced} isn't newer than the {current} that is running":
+    'संस्करण {announced}, चल रहे {current} से नया नहीं है',
+  "version {announced} can't be compared with the {current} that is running":
+    'संस्करण {announced} की तुलना चल रहे {current} से नहीं हो सकती',
+  "the update was signed before this version of Fuselane was made, so it's an older release":
+    'अपडेट पर इस संस्करण के बनने से पहले दस्तख़त हुए थे, यानी यह पुराना रिलीज़ है',
+  "the update's signature doesn't say which version it is":
+    'अपडेट के हस्ताक्षर में यह नहीं लिखा कि वह कौन-सा संस्करण है',
+  'the update was signed for version {signed}, but {announced} was announced':
+    'अपडेट संस्करण {signed} के लिए साइन हुआ था, पर {announced} बताया गया',
   "There's no newer version to install ({why}).":
     'इंस्टॉल करने के लिए कोई नया संस्करण नहीं है ({why})।',
   "Couldn't download the update: {why}.": 'अपडेट डाउनलोड नहीं हो सका: {why}।',

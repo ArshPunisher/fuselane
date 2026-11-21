@@ -37,20 +37,24 @@ pub fn signed_version(trusted_comment: &str) -> Option<&str> {
         .find_map(|field| field.strip_prefix("version:"))
 }
 
+/// One way to read a version, for every comparison: whitespace and one leading `v` dropped,
+/// build metadata ignored. None if it isn't semver.
+fn parse_version(v: &str) -> Option<semver::Version> {
+    let v = v.trim();
+    let mut parsed = semver::Version::parse(v.strip_prefix('v').unwrap_or(v)).ok()?;
+    parsed.build = semver::BuildMetadata::EMPTY;
+    Some(parsed)
+}
+
 /// Refuses an update that isn't newer than the running app (semver, build metadata ignored).
-/// The feed's own say-so is not enough: a replayed old feed or an old signed package must
-/// never roll the app back or reinstall what it already is (SECURITY.md T1). A version that
-/// can't be read on either side counts as not newer.
+/// The feed's own say-so is not enough: a replayed old feed must never roll the app back or
+/// reinstall what it already is (SECURITY.md T1). A version that can't be read on either side
+/// counts as not newer. (The feed's version is unsigned: `verify` also demands the version
+/// inside the signature, so an old genuine package can't be passed off under a made-up number.)
 pub fn ensure_newer(current: &str, announced: &str) -> Result<(), String> {
-    let parse = |v: &str| {
-        semver::Version::parse(v.trim().trim_start_matches('v')).map(|mut v| {
-            v.build = semver::BuildMetadata::EMPTY;
-            v
-        })
-    };
-    match (parse(current), parse(announced)) {
-        (Ok(cur), Ok(new)) if new > cur => Ok(()),
-        (Ok(_), Ok(_)) => Err(format!(
+    match (parse_version(current), parse_version(announced)) {
+        (Some(cur), Some(new)) if new > cur => Ok(()),
+        (Some(_), Some(_)) => Err(format!(
             "version {announced} isn't newer than the {current} that is running"
         )),
         _ => Err(format!(
@@ -60,32 +64,53 @@ pub fn ensure_newer(current: &str, announced: &str) -> Result<(), String> {
 }
 
 fn same_version(signed: &str, announced: &str) -> bool {
-    match (
-        semver::Version::parse(signed.trim_start_matches('v')),
-        semver::Version::parse(announced.trim_start_matches('v')),
-    ) {
-        (Ok(a), Ok(b)) => a == b,
-        _ => signed == announced,
-    }
+    matches!((parse_version(signed), parse_version(announced)), (Some(a), Some(b)) if a == b)
 }
 
-/// Checks `bytes` against the release signature and public key (both base64, as
-/// in the update feed and tauri.conf.json), and that a version recorded in the
-/// signature is the one the feed announced. The same rules as the updater plugin.
-pub fn verify(bytes: &[u8], signature: &str, pubkey: &str, announced: &str) -> Result<(), String> {
+/// The rules for the version a signature carries: it must have one (the release pipeline
+/// always writes it), it must be the one the feed announced, and it must be newer than the
+/// running app. The feed's own version is unsigned, so without this an old genuine package could
+/// be served under a made-up newer number and rolled back to (SECURITY.md T1).
+pub fn check_signed_version(
+    trusted_comment: &str,
+    announced: &str,
+    current: &str,
+) -> Result<(), String> {
+    let signed = signed_version(trusted_comment)
+        .ok_or("the update's signature doesn't say which version it is")?;
+    if !same_version(signed, announced) {
+        return Err(format!(
+            "the update was signed for version {signed}, but {announced} was announced"
+        ));
+    }
+    ensure_newer(current, signed)
+}
+
+/// Checks `bytes` against the release signature and public key (both base64, as in the
+/// update feed and tauri.conf.json): the same minisign rules as the updater plugin. Returns
+/// the signature's trusted comment, which the signature covers.
+fn verify_signature(bytes: &[u8], signature: &str, pubkey: &str) -> Result<String, String> {
     let key = minisign_verify::PublicKey::decode(&decode(pubkey, "update key")?)
         .map_err(|e| format!("the update key can't be read: {e}"))?;
     let sig = minisign_verify::Signature::decode(&decode(signature, "update signature")?)
         .map_err(|e| format!("the update signature can't be read: {e}"))?;
     key.verify(bytes, &sig, true)
         .map_err(|_| "the downloaded update isn't signed by Fuselane's release key".to_string())?;
-    // Only trusted after verify(): the global signature covers the comment.
-    match signed_version(sig.trusted_comment()) {
-        Some(v) if !same_version(v, announced) => Err(format!(
-            "the update was signed for version {v}, but {announced} was announced"
-        )),
-        _ => Ok(()),
-    }
+    Ok(sig.trusted_comment().to_string())
+}
+
+/// The one gate every downloaded update passes: signed by the release key, and for the version
+/// the feed announced, which must be newer than `current`, the running app's.
+pub fn verify(
+    bytes: &[u8],
+    signature: &str,
+    pubkey: &str,
+    announced: &str,
+    current: &str,
+) -> Result<(), String> {
+    // Only trusted after the signature checks out: it covers the comment.
+    let comment = verify_signature(bytes, signature, pubkey)?;
+    check_signed_version(&comment, announced, current)
 }
 
 /// Turns byte counts into a steady speed for the banner and limits how often
@@ -156,21 +181,21 @@ mod tests {
 
     #[test]
     fn a_signed_update_passes_and_anything_else_fails() {
-        assert_eq!(verify(PAYLOAD, SIG, KEY, "0.1.0-beta.8"), Ok(()));
+        assert!(verify_signature(PAYLOAD, SIG, KEY).is_ok());
         // One byte changed: refused.
         let mut tampered = PAYLOAD.to_vec();
         tampered[0] ^= 1;
         assert!(
-            verify(&tampered, SIG, KEY, "0.1.0-beta.8")
+            verify_signature(&tampered, SIG, KEY)
                 .unwrap_err()
                 .contains("isn't signed")
         );
         // Signed by a different key (the real release key): refused.
         let release_key = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQxOUE3RThGOUJFNTU3ODIKUldTQ1YrV2JqMzZhMFhnQmppRXB4TkpGTkt0Z0Jna3NFWnVWYlU2NFhnYUhORlVVUHE0VXprV2wK";
-        assert!(verify(PAYLOAD, SIG, release_key, "0.1.0-beta.8").is_err());
+        assert!(verify_signature(PAYLOAD, SIG, release_key).is_err());
         // Garbage in either field is an error, not a panic.
-        assert!(verify(PAYLOAD, "not base64!", KEY, "1").is_err());
-        assert!(verify(PAYLOAD, SIG, "bm90IGEga2V5", "1").is_err());
+        assert!(verify_signature(PAYLOAD, "not base64!", KEY).is_err());
+        assert!(verify_signature(PAYLOAD, SIG, "bm90IGEga2V5").is_err());
     }
 
     /// T1: a feed (or anyone in front of it) must not be able to roll the app back, or
@@ -217,7 +242,58 @@ mod tests {
         assert_eq!(signed_version("timestamp:1\tfile:x"), None);
         assert!(same_version("v0.1.0-beta.8", "0.1.0-beta.8"));
         assert!(!same_version("0.1.0-beta.7", "0.1.0-beta.8"));
-        assert!(same_version("weird", "weird"));
+        // Anything that isn't a version on either side is not "the same".
+        assert!(!same_version("weird", "weird"));
+        // Whitespace and build metadata don't make two versions differ, as in ensure_newer.
+        assert!(same_version(" v1.0.2+ci.42 ", "1.0.2"));
+    }
+
+    /// T1: a genuine old package re-served under a made-up newer version number. The version
+    /// inside the signature can't be forged, so that is the one that counts.
+    #[test]
+    fn the_version_inside_the_signature_decides() {
+        let tc = |v: &str| format!("timestamp:1795291375\tfile:Fuselane.app.tar.gz\tversion:{v}");
+        // The honest case.
+        assert_eq!(check_signed_version(&tc("1.0.2"), "1.0.2", "1.0.1"), Ok(()));
+        assert_eq!(
+            check_signed_version(&tc("v1.0.2"), "1.0.2", "1.0.1"),
+            Ok(())
+        );
+        // The attack: the old signed package (1.0.0) under a feed that says 9.9.9.
+        let why = check_signed_version(&tc("1.0.0"), "9.9.9", "1.0.1").unwrap_err();
+        assert!(why.contains("signed for version 1.0.0"), "{why}");
+        // The feed honest about an old package: not newer, so refused all the same.
+        assert!(check_signed_version(&tc("1.0.0"), "1.0.0", "1.0.1").is_err());
+        assert!(check_signed_version(&tc("1.0.1"), "1.0.1", "1.0.1").is_err());
+        // A signature that doesn't say which version it is can't be trusted to be a new one.
+        let why = check_signed_version("timestamp:1\tfile:x", "9.9.9", "1.0.1").unwrap_err();
+        assert!(why.contains("doesn't say which version"), "{why}");
+        // The whole gate: a validly signed package without a version is refused.
+        let why = verify(PAYLOAD, SIG, KEY, "9.9.9", "1.0.1").unwrap_err();
+        assert!(why.contains("doesn't say which version"), "{why}");
+        // And a tampered one is refused before the version is even read.
+        let mut tampered = PAYLOAD.to_vec();
+        tampered[0] ^= 1;
+        assert!(
+            verify(&tampered, SIG, KEY, "9.9.9", "1.0.1")
+                .unwrap_err()
+                .contains("isn't signed")
+        );
+    }
+
+    #[test]
+    fn the_feed_and_the_check_read_versions_the_same_way() {
+        assert!(ensure_newer("1.0.1", " v1.0.2 ").is_ok());
+        assert!(ensure_newer("1.0.1+build.1", "1.0.2").is_ok());
+        assert!(ensure_newer("1.0.1+build.1", "1.0.1+build.2").is_err());
+        assert!(
+            ensure_newer("1.0.1", "vv1.0.2").is_err(),
+            "one v, not any number"
+        );
+        assert!(
+            ensure_newer("1.0.1", "1.0.2-rc.1").is_ok(),
+            "semver: later than 1.0.1"
+        );
     }
 
     /// The real thing: the published package from the live feed, fetched with
@@ -250,13 +326,28 @@ mod tests {
         .unwrap();
         let bytes = std::fs::read(&got.path).unwrap();
         assert_eq!(
-            verify(&bytes, p["signature"].as_str().unwrap(), key, version),
+            verify(
+                &bytes,
+                p["signature"].as_str().unwrap(),
+                key,
+                version,
+                "0.0.0"
+            ),
             Ok(())
         );
         let mut bad = bytes.clone();
         let mid = bad.len() / 2;
         bad[mid] ^= 0xff;
-        assert!(verify(&bad, p["signature"].as_str().unwrap(), key, version).is_err());
+        assert!(
+            verify(
+                &bad,
+                p["signature"].as_str().unwrap(),
+                key,
+                version,
+                "0.0.0"
+            )
+            .is_err()
+        );
     }
 
     #[test]
