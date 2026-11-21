@@ -18,6 +18,10 @@ ignore = [
   # the latest. Remove once zbus moves off them.
   { id = "RUSTSEC-2026-0370", reason = "unmaintained zvariant, via zbus 5 (latest) for D-Bus on Linux" },
   { id = "RUSTSEC-2026-0371", reason = "unmaintained zbus_names, via zbus 5 (latest) for D-Bus on Linux" },
+  # chrono is "unmaintained" (no vulnerability). librqbit-dht depends on it, and the app
+  # uses it for local dates (12 places). Replacing it in the app means a new dependency
+  # (time or jiff), which waits for the owner's OK; librqbit must move first anyway.
+  { id = "RUSTSEC-2026-0543", reason = "unmaintained chrono, via librqbit-dht and app date formatting" },
   { id = "RUSTSEC-2026-0372", reason = "unmaintained zvariant_derive, via zbus 5 (latest) for D-Bus on Linux" },
 ]
 
