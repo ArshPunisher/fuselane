@@ -308,39 +308,49 @@ impl Sends {
                 })
             })
             .await;
-            let result: Result<(Prepared, Torrent), String> = match prepared {
+            let result = match prepared {
                 Err(_) => Err("Preparing stopped unexpectedly. Try again.".into()),
                 Ok(Err(e)) => Err(e.to_string()),
                 Ok(Ok(p)) => match me.engine().await {
                     Err(e) => Err(e.message),
                     Ok(engine) => match share::seed(&engine, &p, &path).await {
                         Err(e) => Err(e.to_string()),
-                        Ok(t) => {
-                            if let Err(e) = me.remember(&path, &p) {
-                                eprintln!("fuselane: couldn't save the share: {e}");
-                            }
-                            Ok((p, t))
-                        }
+                        Ok(t) => Ok((p, t, engine)),
                     },
                 },
             };
-            {
+            let stopped = {
                 let mut shares = me.shares.lock().await;
-                if let Some(s) = shares.iter_mut().find(|s| s.view.id == id) {
-                    match result {
-                        Ok((p, t)) => {
-                            s.view.id = hex(&p.link.info_hash);
-                            s.view.link = Some(p.link.url());
-                            s.view.state = "sharing";
-                            s.view.prepared = 1.0;
-                            s.torrent = Some(t);
+                match shares.iter_mut().find(|s| s.view.id == id) {
+                    // Stopped while preparing: it must not share on unseen, or be
+                    // saved for the next launch.
+                    None => result.ok().map(|(_, t, engine)| (t, engine)),
+                    Some(s) => {
+                        let result = result.map(|(p, t, _)| {
+                            if let Err(e) = me.remember(&path, &p) {
+                                eprintln!("fuselane: couldn't save the share: {e}");
+                            }
+                            (p, t)
+                        });
+                        match result {
+                            Ok((p, t)) => {
+                                s.view.id = hex(&p.link.info_hash);
+                                s.view.link = Some(p.link.url());
+                                s.view.state = "sharing";
+                                s.view.prepared = 1.0;
+                                s.torrent = Some(t);
+                            }
+                            Err(m) => {
+                                s.view.state = "failed";
+                                s.view.error = Some(m);
+                            }
                         }
-                        Err(m) => {
-                            s.view.state = "failed";
-                            s.view.error = Some(m);
-                        }
+                        None
                     }
                 }
+            };
+            if let Some((t, engine)) = stopped {
+                let _ = engine.remove(t, false).await;
             }
             me.refresh_busy().await;
             me.publish().await;
@@ -962,6 +972,35 @@ mod tests {
         again.restore().await;
         assert!(again.views().await.0.is_empty());
         assert_eq!(a.sends.stop(&share.id).await.unwrap_err().code, "not-found");
+    }
+
+    /// Stopped while still preparing: once preparing finishes it must not start
+    /// seeding or be saved (it used to share on, unseen, and come back after a
+    /// restart).
+    #[tokio::test(flavor = "multi_thread")]
+    async fn stopping_a_share_while_it_prepares_never_shares_it() {
+        let tmp = tempfile::tempdir().unwrap();
+        let a = side(tmp.path());
+        let file = a.root.join("big.bin");
+        std::fs::write(&file, payload(8_000_000)).unwrap();
+        let temp = a.sends.send(file.to_str().unwrap()).await.unwrap();
+        a.sends.stop(&temp).await.unwrap();
+        // Let preparing finish in the background.
+        for _ in 0..200 {
+            if !a.sends.busy.load(Ordering::Relaxed) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert!(a.sends.views().await.0.is_empty(), "still listed");
+        assert!(a.sends.saved().is_empty(), "saved for the next launch");
+        let again = reopen(&a.store, &a.root);
+        again.restore().await;
+        assert!(
+            again.views().await.0.is_empty(),
+            "came back after a restart"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
