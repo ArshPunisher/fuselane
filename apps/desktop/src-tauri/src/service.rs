@@ -1020,7 +1020,7 @@ impl Service {
     ) -> Result<Arc<Service>, UiError> {
         // A publish a crash cut short is finished first, so that file isn't left paused as
         // if it were half-done (L-54).
-        store.recover_publishes().map_err(store_error)?;
+        let recovered = store.recover_publishes().map_err(store_error)?;
         store.recover_interrupted().map_err(store_error)?;
         // Saved limits come back on launch; a damaged value is ignored, not fatal.
         let limiter = Arc::new(Limiter::default());
@@ -1186,6 +1186,23 @@ impl Service {
             let _ = svc.persist_prefs(&net_prefs, net_prefs.clone());
         }
         svc.apply_proxies();
+        // The jobs a crash cut short just now get what any finished download gets once it is
+        // saved: replacing the file it was meant to replace, and sorting by type. (Not
+        // "open it" or "unpack": nobody is waiting for those at launch.)
+        let mut any = false;
+        for (id, saved) in recovered {
+            let Ok(job) = svc.store.get(id) else {
+                continue;
+            };
+            if let (true, Some(path), Some(total)) = (saved, job.final_path.clone(), job.total) {
+                let path = svc.replace_if_asked(id, &path, total);
+                svc.sort_finished(id, &job.dir, &path, total);
+                any = true;
+            }
+        }
+        if any {
+            svc.join_finished();
+        }
         Ok(svc)
     }
 
@@ -5674,6 +5691,45 @@ mod tests {
         h.wait("c", |h| h.job(c).status == "completed").await;
         assert!(h.dir.path().join("folder.bin").is_dir());
         assert!(h.job(c).final_path.unwrap().ends_with("folder (1).bin"));
+    }
+
+    /// L-54: a download a crash left between its rename and the list is finished at start-up,
+    /// and then gets what any finished download gets: here, replacing the old file it was
+    /// meant to replace.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_save_a_crash_cut_short_still_replaces_the_old_file_it_was_meant_to() {
+        let dir = tempfile::tempdir().unwrap();
+        let old = dir.path().join("report.bin");
+        std::fs::write(&old, b"the old one").unwrap();
+        let (from, to) = (
+            dir.path().join("report (1).bin.fuselane"),
+            dir.path().join("report (1).bin"),
+        );
+        let id = {
+            let store = Store::open(&dir.path().join("jobs.db")).unwrap();
+            let id = store
+                .create_with(
+                    "https://example.invalid/report.bin",
+                    dir.path(),
+                    &fuselane_core::NewJob {
+                        name: Some("report.bin".into()),
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            store.set_replace_existing(id, true).unwrap();
+            store.apply(id, Event::Start, None).unwrap();
+            store.set_publish_intent(id, &from, &to, 7).unwrap();
+            std::fs::write(&to, b"the new").unwrap(); // renamed; the list never heard
+            id
+        };
+        let store = Store::open(&dir.path().join("jobs.db")).unwrap();
+        let svc = Service::new(store, dir.path().to_path_buf()).unwrap();
+        let job = svc.store.get(id).unwrap();
+        assert_eq!(job.status, Status::Completed);
+        assert_eq!(job.final_path.as_deref(), Some(old.as_path()), "{job:?}");
+        assert_eq!(std::fs::read(&old).unwrap(), b"the new");
+        assert!(!to.exists(), "no leftover (1) copy");
     }
 
     #[tokio::test(flavor = "multi_thread")]
