@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChartBar } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
-import { bytes, rateText } from '../lib/format'
+import { bytes, rateText, usedBytes } from '../lib/format'
 import { assignLanes, netTitle } from '../lib/lanes'
 import type { AllowanceView, UsageHistory } from '../lib/types'
 import { intlLocale, t } from '../lib/i18n'
@@ -96,7 +96,7 @@ function Spark({ values }: { values: number[] }) {
 /** "1.4 GB" that counts up when it changes. */
 function Amount({ value, className }: { value: number; className: string }) {
   const v = useEased(value)
-  return <span className={`num ${className}`}>{bytes(Math.max(0, Math.round(v)))}</span>
+  return <span className={`num ${className}`}>{usedBytes(Math.max(0, Math.round(v)))}</span>
 }
 
 /**
@@ -224,14 +224,14 @@ export function DataUsed() {
           <span className="use-kicker">{t('This month')}</span>
           <Amount value={monthTotal} className="use-big" />
           <span className="muted">
-            {t('{size} today', { size: bytes(Math.round(todayTotal)) })}
+            {t('{size} today', { size: usedBytes(Math.round(todayTotal)) })}
           </span>
           <div className="use-share" role="img" aria-label={t('Share of each network this month')}>
             {shown.map((x) => (
               <span
                 key={x.name}
                 style={{ flexGrow: x.month, background: laneOf(x.name) }}
-                title={`${label(x.name)}: ${bytes(Math.round(x.month))}`}
+                title={`${label(x.name)}: ${usedBytes(Math.round(x.month))}`}
               />
             ))}
           </div>
@@ -278,7 +278,7 @@ export function DataUsed() {
           <h3>{t('Last {n} days', { n: days.length })}</h3>
           <span className="muted num">
             {hovered
-              ? `${dayLabel(hovered.day, { weekday: 'short', day: 'numeric', month: 'short' })}: ${bytes(Math.round(dayTotal(hovered)))}`
+              ? `${dayLabel(hovered.day, { weekday: 'short', day: 'numeric', month: 'short' })}: ${usedBytes(Math.round(dayTotal(hovered)))}`
               : t('About {size} a day', { size: bytes(Math.round(average)) })}
           </span>
         </div>
@@ -345,7 +345,7 @@ export function DataUsed() {
               </header>
               <Amount value={x.month} className="use-card-big" />
               <span className="muted">
-                {t('{size} today', { size: bytes(Math.round(x.today)) })}
+                {t('{size} today', { size: usedBytes(Math.round(x.today)) })}
               </span>
               {share !== null && limit !== null && a ? (
                 <div className="use-allow" data-near={share >= 0.8 || undefined}>
@@ -354,7 +354,7 @@ export function DataUsed() {
                   </span>
                   <span className="muted">
                     {t('{used} of {limit}, resets {date}', {
-                      used: bytes(Math.round(x.month)),
+                      used: usedBytes(Math.round(x.month)),
                       limit: bytes(limit),
                       date: dayLabel(a.resetsOn, { day: 'numeric', month: 'short' }),
                     })}
