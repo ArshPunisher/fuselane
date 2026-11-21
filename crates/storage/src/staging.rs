@@ -185,49 +185,67 @@ pub enum Finished {
 }
 
 /// Finishes a publish after a crash (L-54): `from` is the staging file, `to` the final name
-/// and `size` the finished size, as written down before the rename. A final file of that size
-/// is taken as the result; else a staging file of that size is renamed, never over something
-/// else (the next free name then); else there is nothing to finish.
+/// and `size` the finished size, as written down before the rename. With the staging file
+/// gone, a final file of that size is the result (the rename had happened). With a staging
+/// file of that size still there, it is renamed, never over something else (the next free
+/// name then). Anything else is nothing to finish.
+///
+/// A folder that can't be reached (an unplugged drive, no permission) or a file that can't be
+/// looked at is an error, not "nothing to finish": the caller keeps its record and tries again
+/// when the drive is back (L-48, L-50).
 pub fn finish_publish(from: &Path, to: &Path, size: u64) -> io::Result<Finished> {
-    let len = |p: &Path| {
-        std::fs::symlink_metadata(p)
-            .ok()
-            .filter(|m| m.is_file())
-            .map(|m| m.len())
-    };
-    let dir = to.parent().unwrap_or_else(|| Path::new("."));
-    if len(to) == Some(size) && len(from).is_none() {
-        // The rename happened; its directory entry may not have reached the disk yet.
-        sync_dir(dir);
-        return Ok(Finished::AlreadyThere(to.to_path_buf()));
-    }
-    if len(from) != Some(size) {
-        // No staging file to rename: a final file of the right size still counts.
-        return Ok(if len(to) == Some(size) {
-            sync_dir(dir);
-            Finished::AlreadyThere(to.to_path_buf())
-        } else {
-            Finished::Missing
-        });
-    }
-    let name = to
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("download");
-    for n in 0..=MAX_COLLISIONS {
-        let target = if n == 0 {
-            to.to_path_buf()
-        } else {
-            dir.join(numbered(name, n))
-        };
-        if target.symlink_metadata().is_ok() {
-            continue;
+    let dir = to
+        .parent()
+        .filter(|d| !d.as_os_str().is_empty())
+        .ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "the final path has no folder")
+        })?;
+    std::fs::metadata(dir)?;
+    // None: not there. Some(None): there, but not a regular file. Some(Some(n)): a file of n bytes.
+    let look = |p: &Path| -> io::Result<Option<Option<u64>>> {
+        match std::fs::symlink_metadata(p) {
+            Ok(m) if m.is_file() => Ok(Some(Some(m.len()))),
+            Ok(_) => Ok(Some(None)),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e),
         }
-        rename_with_retry(from, &target)?;
-        sync_dir(dir);
-        return Ok(Finished::Renamed(target));
+    };
+    match look(from)? {
+        None => {
+            if look(to)? == Some(Some(size)) {
+                // The rename happened; its directory entry may not have reached the disk yet.
+                sync_dir(dir);
+                Ok(Finished::AlreadyThere(to.to_path_buf()))
+            } else {
+                Ok(Finished::Missing)
+            }
+        }
+        // Still there but not whole: the rename did not happen and there is no finished file.
+        Some(len) if len != Some(size) => Ok(Finished::Missing),
+        Some(_) => {
+            let name = to
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("download");
+            for n in 0..=MAX_COLLISIONS {
+                let target = if n == 0 {
+                    to.to_path_buf()
+                } else {
+                    dir.join(numbered(name, n))
+                };
+                if look(&target)?.is_some() {
+                    continue;
+                }
+                rename_with_retry(from, &target)?;
+                sync_dir(dir);
+                return Ok(Finished::Renamed(target));
+            }
+            Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "every free name next to the file is taken",
+            ))
+        }
     }
-    Ok(Finished::Missing)
 }
 
 #[cfg(unix)]
@@ -452,6 +470,57 @@ mod tests {
         std::fs::write(&from, b"abc").unwrap();
         std::fs::remove_file(&to).unwrap();
         assert_eq!(finish_publish(&from, &to, 4).unwrap(), Finished::Missing);
+    }
+
+    /// An unplugged drive, or a folder that can't be read, is not "nothing to finish": the
+    /// journal must survive for a start when the drive is back (L-48, L-50).
+    #[test]
+    fn a_missing_or_unreadable_folder_is_an_error_not_a_missing_file() {
+        let d = tmp();
+        let gone = d.path().join("USB");
+        let err = finish_publish(&gone.join("a.bin.fuselane"), &gone.join("a.bin"), 4).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::NotFound);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let locked = d.path().join("locked");
+            std::fs::create_dir(&locked).unwrap();
+            std::fs::write(locked.join("a.bin.fuselane"), b"abcd").unwrap();
+            std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+            let r = finish_publish(&locked.join("a.bin.fuselane"), &locked.join("a.bin"), 4);
+            std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
+            assert!(r.is_err(), "{r:?}");
+            assert!(
+                locked.join("a.bin.fuselane").exists(),
+                "nothing was touched"
+            );
+        }
+    }
+
+    /// The staging file still being there means the rename did not happen, so a file of the
+    /// right size under the final name is not ours to claim.
+    #[test]
+    fn a_file_under_the_final_name_is_not_claimed_while_the_staging_file_is_wrong() {
+        let d = tmp();
+        let (from, to) = (d.path().join("a.bin.fuselane"), d.path().join("a.bin"));
+        std::fs::write(&from, b"abc").unwrap(); // not the finished size
+        std::fs::write(&to, b"abcd").unwrap(); // somebody else's, by chance the same size
+        assert_eq!(finish_publish(&from, &to, 4).unwrap(), Finished::Missing);
+        assert!(from.exists() && to.exists(), "neither is touched");
+    }
+
+    #[test]
+    fn running_out_of_free_names_is_an_error_not_a_missing_file() {
+        let d = tmp();
+        let (from, to) = (d.path().join("a.bin.fuselane"), d.path().join("a.bin"));
+        std::fs::write(&from, b"abcd").unwrap();
+        std::fs::write(&to, b"x").unwrap();
+        for n in 1..=MAX_COLLISIONS {
+            std::fs::write(d.path().join(numbered("a.bin", n)), b"x").unwrap();
+        }
+        let err = finish_publish(&from, &to, 4).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
+        assert!(from.exists());
     }
 
     #[cfg(unix)]
