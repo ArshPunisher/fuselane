@@ -12,6 +12,7 @@ mod browser_open;
 mod feeds;
 mod flatpak;
 mod helpers;
+mod instance;
 mod media;
 mod native;
 mod nearby;
@@ -1745,6 +1746,28 @@ fn watch_for_shell(app: tauri::AppHandle, svc: &Arc<Service>) {
     }));
 }
 
+/// Another Fuselane is running on this data folder: give it this launch's
+/// arguments (a magnet, a .torrent, a fuselane:// link) and exit without opening
+/// the download list. The single-instance plugin does the hand-over and exits.
+fn hand_over(context: tauri::Context<tauri::Wry>) {
+    if cfg!(debug_assertions) {
+        // Debug builds don't register the plugin (see below): just say why.
+        eprintln!("fuselane: another Fuselane is already running on this data folder.");
+        return;
+    }
+    let mut single_instance = tauri_plugin_single_instance::Builder::new();
+    if let Some(id) = flatpak::id() {
+        single_instance = single_instance.dbus_id(id);
+    }
+    let result = tauri::Builder::default()
+        .plugin(single_instance.build())
+        .run(context);
+    // The plugin exits once it has handed over; reaching here means it couldn't.
+    if let Err(e) = result {
+        eprintln!("fuselane: couldn't reach the running Fuselane: {e}");
+    }
+}
+
 fn open_service() -> Result<Arc<Service>, startup::Failure> {
     let store = fuselane_core::open_default().map_err(startup::Failure::Open)?;
     if let Some(aside) = &store.recovered_from {
@@ -1896,6 +1919,21 @@ fn main() {
     }
     // Made once: the macro embeds the bundle's Info.plist, which can't be done twice.
     let context = tauri::generate_context!();
+    // Only one Fuselane runs the download list: a second launch must not open it
+    // (that ran crash recovery and paused the running Fuselane's downloads).
+    let _instance = match fuselane_core::home::home().map(|h| instance::claim(&h)) {
+        Ok(Ok(instance::Instance::Mine(lock))) => Some(lock),
+        Ok(Ok(instance::Instance::Elsewhere)) => {
+            hand_over(context);
+            return;
+        }
+        // No data folder or no lock: the store's own checks decide, as before.
+        Ok(Err(e)) => {
+            eprintln!("fuselane: couldn't check for another Fuselane: {e}");
+            None
+        }
+        Err(_) => None,
+    };
     let svc = match open_service() {
         Ok(s) => s,
         Err(failure) => {
