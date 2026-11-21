@@ -185,6 +185,10 @@ function liar(
     startShift?: number
     totalShift?: number
     changeAfter?: number
+    /** Answer every range with an unknown total (`bytes a-b/*`). */
+    unknownTotal?: boolean
+    /** From this call on, the file's Last-Modified is this instead. */
+    dateAfter?: { calls: number; value: string }
   } = {},
 ): FetchFn & { seen: Headers[] } {
   const seen: Headers[] = []
@@ -200,6 +204,7 @@ function liar(
     const headers: Record<string, string> = {}
     if (how.etag) headers.etag = how.etag
     if (how.lastModified) headers['last-modified'] = how.lastModified
+    if (how.dateAfter && calls > how.dateAfter.calls) headers['last-modified'] = how.dateAfter.value
     // The file was replaced: the validator no longer matches, so a server that
     // honours If-Range sends the whole new file with a 200.
     if (how.changeAfter !== undefined && calls > how.changeAfter && h.get('if-range')) {
@@ -210,7 +215,7 @@ function liar(
       status: 206,
       headers: {
         ...headers,
-        'content-range': `bytes ${shown}-${end}/${FILE.length + (how.totalShift ?? 0)}`,
+        'content-range': `bytes ${shown}-${end}/${how.unknownTotal ? '*' : FILE.length + (how.totalShift ?? 0)}`,
       },
     })
   }) as FetchFn & { seen: Headers[] }
@@ -228,7 +233,9 @@ test('the probe keeps the strong ETag, or the date when the ETag is weak', async
     'u',
     liar({ etag: 'W/"abc"', lastModified: 'Mon, 01 Jan 2026 00:00:00 GMT' }),
   )
-  assert.equal(weak.validator, 'Mon, 01 Jan 2026 00:00:00 GMT')
+  // A date is kept apart from an ETag: it's never sent as If-Range (RFC 9110
+  // 13.1.5), only compared with each answer's own date.
+  assert.equal(weak.validator, 'date:Mon, 01 Jan 2026 00:00:00 GMT')
   assert.equal((await probe('u', liar())).validator, null)
 })
 
@@ -302,4 +309,61 @@ test('a file replaced during a pause is noticed on resume, not mixed in', async 
     s.out.every((b) => b === 0),
     'no byte of the new file was written into the old parts',
   )
+})
+
+test('a date never goes out as If-Range, but a changed date is still caught', async () => {
+  const f = liar({
+    lastModified: 'Mon, 01 Jan 2026 00:00:00 GMT',
+    dateAfter: { calls: 1, value: 'Tue, 02 Jan 2026 00:00:00 GMT' },
+  })
+  await assert.rejects(
+    run({
+      url: 'u',
+      parts: split(FILE.length, 3),
+      total: FILE.length,
+      validator: 'date:Mon, 01 Jan 2026 00:00:00 GMT',
+      fetchFn: f,
+      write: async () => {},
+      signal: new AbortController().signal,
+      tries: 1,
+    }),
+    FileChanged,
+  )
+  for (const h of f.seen) assert.equal(h.get('if-range'), null)
+})
+
+test('an unknown total is fine when the ETag pins the file', async () => {
+  const s = sink()
+  await run({
+    url: 'u',
+    parts: split(FILE.length, 3),
+    total: FILE.length,
+    validator: '"v1"',
+    fetchFn: liar({ etag: '"v1"', unknownTotal: true }),
+    write: s.write,
+    signal: new AbortController().signal,
+    tries: 1,
+  })
+  assert.deepEqual(s.out, FILE)
+})
+
+test('a job saved by 0.4.2 with a bare date is still checked as a date', async () => {
+  const f = liar({
+    lastModified: 'Mon, 01 Jan 2026 00:00:00 GMT',
+    dateAfter: { calls: 1, value: 'Tue, 02 Jan 2026 00:00:00 GMT' },
+  })
+  await assert.rejects(
+    run({
+      url: 'u',
+      parts: split(FILE.length, 3),
+      total: FILE.length,
+      validator: 'Mon, 01 Jan 2026 00:00:00 GMT',
+      fetchFn: f,
+      write: async () => {},
+      signal: new AbortController().signal,
+      tries: 1,
+    }),
+    FileChanged,
+  )
+  for (const h of f.seen) assert.equal(h.get('if-range'), null)
 })

@@ -83,11 +83,23 @@ export class FileChanged extends Error {
   }
 }
 
+/**
+ * What pins the file's version: its strong ETag, or else its Last-Modified as
+ * `date:<value>`. Only an ETag is sent as If-Range: RFC 9110 13.1.5 forbids an
+ * HTTP-date there unless the date is strong, which a client can't know, and a
+ * server treats a weak one as "changed". A date is compared with each answer.
+ */
 function validatorOf(h: Headers): string | null {
   const etag = h.get('etag')
   if (etag && !/^w\//i.test(etag.trim())) return etag.trim()
-  return h.get('last-modified')?.trim() || null
+  const date = h.get('last-modified')?.trim()
+  return date ? `date:${date}` : null
 }
+
+/** A strong ETag is quoted; anything else is a date (older jobs saved it bare). */
+const isEtag = (v: string | null | undefined): boolean => !!v && v.startsWith('"')
+const dateOf = (v: string | null | undefined): string | null =>
+  !v || isEtag(v) ? null : v.startsWith('date:') ? v : `date:${v}`
 
 /** Asks for the first byte: a 206 means ranges work and tells the size. */
 export async function probe(url: string, fetchFn: FetchFn, signal?: AbortSignal): Promise<Probe> {
@@ -200,14 +212,14 @@ export async function run(o: RunOptions): Promise<number> {
           const res = await o.fetchFn(o.url, {
             headers: {
               Range: `bytes=${from}-${p.end}`,
-              ...(o.validator ? { 'If-Range': o.validator } : {}),
+              ...(o.validator && isEtag(o.validator) ? { 'If-Range': o.validator } : {}),
             },
             signal: o.signal,
             credentials: 'include',
           })
           // With If-Range, a 200 is the server saying the file is no longer the one
           // we started with.
-          if (res.status === 200 && o.validator) {
+          if (res.status === 200 && isEtag(o.validator)) {
             await res.body?.cancel().catch(() => {})
             throw new FileChanged()
           }
@@ -215,12 +227,21 @@ export async function run(o: RunOptions): Promise<number> {
           if (res.status !== 206 || !res.body) throw new Error(`The server answered ${res.status}.`)
           // The bytes must be the ones asked for, from a file of the size we know.
           const got = parseContentRange(res.headers.get('content-range'))
+          // A date pins the version by comparison: a different date is another file.
+          const date = res.headers.get('last-modified')?.trim()
+          const pinned = dateOf(o.validator)
+          const dateMoved = !!pinned && !!date && `date:${date}` !== pinned
+          if (dateMoved) {
+            await res.body.cancel().catch(() => {})
+            throw new FileChanged()
+          }
+          // An unknown total ("bytes a-b/*") is fine once an ETag pins the file.
           if (
             !got ||
             got.start !== from ||
             got.end < from ||
             (o.total != null && got.total !== null && got.total !== o.total) ||
-            (o.total != null && got.total === null)
+            (o.total != null && got.total === null && !isEtag(o.validator))
           ) {
             await res.body.cancel().catch(() => {})
             throw new FileChanged(
