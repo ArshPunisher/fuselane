@@ -294,7 +294,7 @@ impl Sends {
         self.publish().await;
         let me = self.clone();
         let id = temp.clone();
-        tokio::spawn(async move {
+        crate::rt::spawn(async move {
             let p2 = path.clone();
             let prog = progress.clone();
             let prepared = tokio::task::spawn_blocking(move || {
@@ -452,7 +452,7 @@ impl Sends {
         self.publish().await;
         let me = self.clone();
         let id2 = id.clone();
-        tokio::spawn(async move {
+        crate::rt::spawn(async move {
             let started = match me.engine().await {
                 Err(e) => Err(e.message),
                 Ok(engine) => share::receive(&engine, &link, &dir, peers, lookup)

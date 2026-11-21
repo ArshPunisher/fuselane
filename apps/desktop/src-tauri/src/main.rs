@@ -21,6 +21,7 @@ mod portal;
 mod power;
 mod remote;
 mod reports;
+mod rt;
 mod selftest;
 mod sends;
 mod service;

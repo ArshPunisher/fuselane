@@ -137,7 +137,7 @@ impl Nearby {
         self.save_syncs();
         self.publish();
         let me = self.clone();
-        tokio::spawn(async move { me.sync_round(true).await });
+        crate::rt::spawn(async move { me.sync_round(true).await });
         Ok(())
     }
 

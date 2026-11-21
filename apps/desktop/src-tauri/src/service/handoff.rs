@@ -492,7 +492,7 @@ impl Service {
         // Bytes that never start arriving don't hold the download up for ever.
         let (me, wait_for) = (Arc::downgrade(self), m.id.clone().unwrap_or_default());
         let wait = *lock(&self.pack_wait);
-        tokio::spawn(async move {
+        crate::rt::spawn(async move {
             tokio::time::sleep(wait).await;
             if let Some(s) = me.upgrade() {
                 s.pack_never_came(&wait_for);

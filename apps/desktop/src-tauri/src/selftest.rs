@@ -35,10 +35,10 @@ fn check(name: &'static str, r: Result<String, String>) -> Check {
 async fn serve(body: Arc<Vec<u8>>) -> std::io::Result<std::net::SocketAddr> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let addr = listener.local_addr()?;
-    tokio::spawn(async move {
+    crate::rt::spawn(async move {
         while let Ok((mut sock, _)) = listener.accept().await {
             let body = body.clone();
-            tokio::spawn(async move {
+            crate::rt::spawn(async move {
                 loop {
                     let mut buf = Vec::new();
                     let mut chunk = [0u8; 1024];

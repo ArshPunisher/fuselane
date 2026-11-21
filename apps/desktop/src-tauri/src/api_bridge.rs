@@ -89,7 +89,7 @@ impl Handler for ApiBridge {
     fn page_peek(&self, url: String) {
         // The answer is kept a few minutes, so "Get the video" finds it ready.
         let svc = self.svc.clone();
-        tokio::spawn(async move {
+        crate::rt::spawn(async move {
             let _ = svc.media_info(&url).await;
         });
     }
@@ -318,9 +318,9 @@ mod tests {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = l.local_addr().unwrap();
-        tokio::spawn(async move {
+        crate::rt::spawn(async move {
             while let Ok((mut s, _)) = l.accept().await {
-                tokio::spawn(async move {
+                crate::rt::spawn(async move {
                     let mut buf = [0u8; 2048];
                     let _ = s.read(&mut buf).await;
                     let body = "<html><body>Please sign in</body></html>";

@@ -539,7 +539,7 @@ impl Service {
                     if !fetching {
                         fetching = true;
                         let me = self.clone();
-                        tokio::spawn(async move {
+                        crate::rt::spawn(async move {
                             let got = me.helpers().install(Tool::Ffmpeg).await;
                             me.ffmpeg_gave_up
                                 .store(got.is_err(), std::sync::atomic::Ordering::SeqCst);

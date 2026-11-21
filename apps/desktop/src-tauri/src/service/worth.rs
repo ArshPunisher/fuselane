@@ -137,7 +137,7 @@ impl Service {
         last: Arc<std::sync::Mutex<Option<super::Live>>>,
     ) {
         let me = self.clone();
-        tokio::spawn(async move {
+        crate::rt::spawn(async move {
             let started = std::time::Instant::now();
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;

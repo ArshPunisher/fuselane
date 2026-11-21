@@ -41,10 +41,10 @@ impl StreamServer {
         let token: String = raw.iter().map(|b| format!("{b:02x}")).collect();
         let me = StreamServer { addr, token };
         let server = me.clone();
-        tokio::spawn(async move {
+        crate::rt::spawn(async move {
             while let Ok((sock, _)) = listener.accept().await {
                 let (server, open) = (server.clone(), open.clone());
-                tokio::spawn(async move {
+                crate::rt::spawn(async move {
                     let _ = server.serve(sock, open).await;
                 });
             }

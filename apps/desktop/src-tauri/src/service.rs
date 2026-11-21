@@ -2042,7 +2042,7 @@ impl Service {
         let seconds = self.countdown.load(std::sync::atomic::Ordering::SeqCst);
         self.send(UiEvent::WhenDone { action, seconds });
         let me = self.clone();
-        tokio::spawn(async move {
+        crate::rt::spawn(async move {
             let deadline = std::time::Instant::now() + Duration::from_secs(u64::from(seconds));
             while std::time::Instant::now() < deadline {
                 if cancel.is_cancelled() {
@@ -2931,7 +2931,7 @@ impl Service {
                 c.cancel();
             }
             let me = self.clone();
-            tokio::spawn(async move { me.run(job, cancel, limit).await });
+            crate::rt::spawn(async move { me.run(job, cancel, limit).await });
             started = true;
         }
         drop(running);
@@ -3425,6 +3425,28 @@ mod tests {
         }
     }
 
+    /// The app's 5-second ticker is a plain OS thread (main.rs): a start time that
+    /// comes due there must start the download, not panic with "no reactor
+    /// running" and leave the job stuck as running.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_start_time_reached_on_the_ticker_thread_starts_the_download() {
+        let content = Content::new(256 * KB, 97);
+        let server = RangeServer::start(content).await.unwrap();
+        let h = harness(3);
+        let at = 2_000_000_000;
+        let req = AddRequest {
+            start_at: Some(at),
+            ..AddRequest::default()
+        };
+        let id = h.svc.add_with(&link(&server), None, &req).unwrap();
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let svc = h.svc.clone();
+        let ticked = std::thread::spawn(move || svc.tick_starts(at)).join();
+        assert!(ticked.is_ok(), "the ticker thread must not panic");
+        h.wait("completion", |h| h.job(id).status == "completed")
+            .await;
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn a_download_with_a_start_time_waits_then_starts_by_itself() {
         let content = Content::new(256 * KB, 97);
@@ -3812,7 +3834,7 @@ mod tests {
     async fn silent_server() -> (std::net::SocketAddr, tokio::task::JoinHandle<()>) {
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = l.local_addr().unwrap();
-        let task = tokio::spawn(async move {
+        let task = crate::rt::spawn(async move {
             let mut held = Vec::new();
             while let Ok((c, _)) = l.accept().await {
                 held.push(c);
@@ -6632,9 +6654,9 @@ mod speedtest_tests {
     async fn speed_server() -> std::net::SocketAddr {
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = l.local_addr().unwrap();
-        tokio::spawn(async move {
+        crate::rt::spawn(async move {
             while let Ok((mut s, _)) = l.accept().await {
-                tokio::spawn(async move {
+                crate::rt::spawn(async move {
                     let mut buf = vec![0u8; 64 * 1024];
                     let mut pending: Vec<u8> = vec![];
                     loop {

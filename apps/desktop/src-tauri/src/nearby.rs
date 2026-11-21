@@ -495,7 +495,7 @@ impl Nearby {
                 let d = Arc::new(d);
                 *self.discovery.lock().await = Some(d.clone());
                 let me = Arc::downgrade(self);
-                *lock(&self.listener) = Some(tokio::spawn(async move {
+                *lock(&self.listener) = Some(crate::rt::spawn(async move {
                     while let Ok((from, a)) = d.recv().await {
                         let Some(me) = me.upgrade() else { break };
                         me.heard(from, a);
@@ -536,7 +536,7 @@ impl Nearby {
                 addr,
                 fingerprint: (!fp.is_empty()).then_some(fp),
             };
-            tokio::spawn(async move {
+            crate::rt::spawn(async move {
                 let _ = fuselane_nearby::client::register(&me, &t).await;
             });
         }
@@ -585,7 +585,7 @@ impl Nearby {
         self.publish();
         if !lock(&self.syncs).is_empty() {
             let me = self.clone();
-            tokio::spawn(async move { me.sync_round(false).await });
+            crate::rt::spawn(async move { me.sync_round(false).await });
         }
     }
 
@@ -919,13 +919,13 @@ impl Nearby {
             addr,
             fingerprint: (!fingerprint.is_empty()).then(|| fingerprint.to_string()),
         };
-        tokio::spawn(async move {
+        crate::rt::spawn(async move {
             let my = me.info();
             // Once bytes flow, it's "sending"; its progress is refreshed a few
             // times a second while it goes (not just at the 3-second tick).
             let watch = {
                 let (me, id, sent) = (me.clone(), id.clone(), sent.clone());
-                tokio::spawn(async move {
+                crate::rt::spawn(async move {
                     let mut last = 0;
                     loop {
                         tokio::time::sleep(Duration::from_millis(300)).await;
@@ -1745,7 +1745,7 @@ mod tests {
         let sending = {
             let b = b.n.clone();
             let fa = fa.clone();
-            tokio::spawn(async move { b.send_text(&fa, "ssh studio@192.168.1.9").await })
+            crate::rt::spawn(async move { b.send_text(&fa, "ssh studio@192.168.1.9").await })
         };
         until("the request", || a.n.view().request.is_some()).await;
         let req = a.n.view().request.unwrap();
@@ -1830,7 +1830,13 @@ mod tests {
                 .code,
             "sync-trust"
         );
-        b.n.add_sync(&notes.display().to_string(), &fa).unwrap();
+        // The Tauri command is sync, so it runs on the main thread with no Tokio
+        // runtime: adding a sync there must not panic (it used to).
+        let (n, folder, fp) = (b.n.clone(), notes.display().to_string(), fa.clone());
+        std::thread::spawn(move || n.add_sync(&folder, &fp))
+            .join()
+            .expect("adding a sync from a plain thread must not panic")
+            .unwrap();
         let got = a.inbox.path().join("Notes");
         until("the folder", || {
             got.join("2026/plan.md").exists() && got.join("todo.md").exists()

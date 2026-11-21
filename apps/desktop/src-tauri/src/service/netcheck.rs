@@ -239,7 +239,7 @@ impl Service {
             st.done_secs = 0.0;
         }
         let me = self.clone();
-        tokio::spawn(async move { me.run_netcheck(targets).await });
+        crate::rt::spawn(async move { me.run_netcheck(targets).await });
         Ok(self.netcheck_view())
     }
 
@@ -414,7 +414,7 @@ impl Service {
                 // Latency while busy, timed alongside.
                 let busy = Arc::new(AtomicBool::new(false));
                 let probe = latency_at.map(|at| {
-                    tokio::spawn(netcheck::connect_until(iface.clone(), at, busy.clone()))
+                    crate::rt::spawn(netcheck::connect_until(iface.clone(), at, busy.clone()))
                 });
                 let (per, _) = self
                     .speed_step(dir, step, Some(label.clone()), &one, plan)
