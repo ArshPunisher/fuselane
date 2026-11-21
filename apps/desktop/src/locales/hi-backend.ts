@@ -108,7 +108,24 @@ export const hiBackend: Readonly<Record<string, string>> = {
   'Paused. Progress is saved.': 'रुका हुआ। अब तक का डाउनलोड सेव है।',
   "This download can't be resumed ({why}). Start it again.":
     'यह डाउनलोड आगे नहीं बढ़ सकता ({why})। इसे दोबारा शुरू करें।',
-  "Couldn't save the file: {e}": 'फ़ाइल सेव नहीं हो सकी: {e}',
+  "The folder {dir} isn't there. Reconnect the drive, or choose another folder.":
+    'फ़ोल्डर {dir} नहीं मिला। ड्राइव दोबारा जोड़ें, या कोई दूसरा फ़ोल्डर चुनें।',
+  'Every file name like {name} is already taken in that folder. Choose another folder, or rename the download.':
+    '{name} जैसा हर फ़ाइल नाम उस फ़ोल्डर में पहले से लिया हुआ है। कोई दूसरा फ़ोल्डर चुनें, या डाउनलोड का नाम बदलें।',
+  "The file wasn't complete, so it wasn't saved under its name. Progress is kept: resume to fetch the rest.":
+    'फ़ाइल पूरी नहीं थी, इसलिए उसे उसके नाम से सेव नहीं किया गया। अब तक का डाउनलोड सेव है: बाकी लाने के लिए दोबारा शुरू करें।',
+  "Fuselane can't write to that folder. Check that you may save there, or choose another folder.":
+    'Fuselane उस फ़ोल्डर में नहीं लिख सकता। जांचें कि वहां सेव करने की अनुमति है, या कोई दूसरा फ़ोल्डर चुनें।',
+  'That disk is full. Free up space or choose another folder.':
+    'वह डिस्क भरी है। जगह खाली करें या कोई दूसरा फ़ोल्डर चुनें।',
+  "The folder or drive isn't there any more. Reconnect it, or choose another folder.":
+    'फ़ोल्डर या ड्राइव अब वहां नहीं है। उसे दोबारा जोड़ें, या कोई दूसरा फ़ोल्डर चुनें।',
+  'That folder is read-only. Choose another folder.':
+    'वह फ़ोल्डर सिर्फ़ पढ़ने के लिए है। कोई दूसरा फ़ोल्डर चुनें।',
+  "The file couldn't be saved to that folder. Check that the disk is connected and has room, or choose another folder.":
+    'फ़ाइल उस फ़ोल्डर में सेव नहीं हो सकी। जांचें कि डिस्क जुड़ी है और उसमें जगह है, या कोई दूसरा फ़ोल्डर चुनें।',
+  "Fuselane couldn't claim this download. Check that its data folder is writable, then try again.":
+    'Fuselane इस डाउनलोड को अपने नाम नहीं कर सका। जांचें कि उसके डेटा फ़ोल्डर में लिखा जा सकता है, फिर दोबारा कोशिश करें।',
   'no networks selected': 'कोई नेटवर्क नहीं चुना गया',
   'no network could reach the server': 'कोई भी नेटवर्क सर्वर तक नहीं पहुंच सका',
   'no network could reach the server: {why}': 'कोई भी नेटवर्क सर्वर तक नहीं पहुंच सका: {why}',
