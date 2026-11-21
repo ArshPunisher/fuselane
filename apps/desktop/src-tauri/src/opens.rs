@@ -52,25 +52,32 @@ fn percent_decode(s: &str) -> Option<String> {
     String::from_utf8(out).ok()
 }
 
+/// `s` without an ASCII `prefix` (any case), or `None`. Works on any text:
+/// slicing by byte count would cut a letter like "É" in half and panic.
+fn strip_prefix_ascii<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
+    let head = s.get(..prefix.len())?;
+    head.eq_ignore_ascii_case(prefix)
+        .then(|| &s[prefix.len()..])
+}
+
 /// One argument or URL from the OS, if it is something Fuselane opens.
 pub fn parse(raw: &str) -> Option<Target> {
     let s = raw.trim();
-    if s.len() >= 8 && s[..8].eq_ignore_ascii_case("magnet:?") {
+    if strip_prefix_ascii(s, "magnet:?").is_some() {
         let ok = s.len() <= MAX_MAGNET
             && s.to_ascii_lowercase().contains("xt=urn:btih:")
             && !s.chars().any(char::is_control);
         return ok.then(|| Target::Magnet(s.to_owned()));
     }
     let scheme = fuselane_send::link::SCHEME;
-    if s.len() >= scheme.len() && s[..scheme.len()].eq_ignore_ascii_case(scheme) {
+    if let Some(rest) = strip_prefix_ascii(s, scheme) {
         // Links are a few dozen characters; anything long or unparseable is dropped.
-        let link = format!("{scheme}{}", &s[scheme.len()..]);
+        let link = format!("{scheme}{rest}");
         let ok = s.len() <= 512 && fuselane_send::link::Link::parse(&link).is_ok();
         return ok.then_some(Target::Send(link));
     }
-    let path = if s.len() >= 7 && s[..7].eq_ignore_ascii_case("file://") {
+    let path = if let Some(rest) = strip_prefix_ascii(s, "file://") {
         // file:///Users/x/a.torrent (macOS, Linux); file://localhost/... too.
-        let rest = &s[7..];
         let rest = rest.strip_prefix("localhost").unwrap_or(rest);
         let decoded = percent_decode(rest)?;
         // file:///C:/x.torrent on Windows: drop the slash before the drive.
@@ -111,6 +118,23 @@ mod tests {
     use super::*;
 
     const MAGNET: &str = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&dn=x";
+
+    /// Paths and words from the OS can be any language: deciding what they are
+    /// must never cut a letter in half (it used to panic at launch).
+    #[test]
+    fn non_ascii_paths_and_links_never_panic() {
+        for raw in [
+            "/Users/Émile/a.torrent",
+            "/home/ü/x.torrent",
+            "नमस्ते",
+            "日本語のファイル.torrent",
+            "abcdefgé",
+            "é",
+        ] {
+            let got = std::panic::catch_unwind(|| parse(raw));
+            assert!(got.is_ok(), "parse panicked on {raw:?}");
+        }
+    }
 
     #[test]
     fn magnets_are_accepted_only_when_they_look_real() {
