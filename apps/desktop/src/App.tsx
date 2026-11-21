@@ -207,6 +207,9 @@ export function App() {
       if (document.querySelector('dialog[open]')) return
       const s = useApp.getState()
       if (s.view !== 'transfers') return
+      // Below 1024 px a download's page replaces the list: there the arrows and Space
+      // belong to reading and scrolling it, not to moving between downloads.
+      if (s.selected !== null && innerWidth < 1024 && e.key !== 'Escape') return
       const ids = s.jobs.map((j) => j.id)
       const at = s.selected === null ? -1 : ids.indexOf(s.selected)
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
