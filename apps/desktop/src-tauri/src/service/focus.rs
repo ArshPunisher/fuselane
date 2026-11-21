@@ -66,23 +66,26 @@ impl Service {
         // Read the schedule before taking `focus`, never while holding it: the
         // schedule takes `schedule_paused` then `running`, and the queue takes
         // `running` then `focus`, so waiting here would close a lock cycle.
-        let schedule_paused = lock(&self.schedule_paused).contains(&id);
+        // `schedule_paused` before `focus`, both held through the decision so the
+        // schedule and the job's status are read together. Nothing takes them the
+        // other way round (the schedule takes `schedule_paused` then `running`, the
+        // queue `running` then `focus`), so there is no lock cycle.
+        let paused = lock(&self.schedule_paused);
         let mut focus = lock(&self.focus);
         if *focus != Some(id) {
             return;
         }
-        // Still queued (a retry, a schedule pause), so it keeps going first. Read
-        // under `focus` (the store's lock is a leaf) so a focus request that just
-        // queued it again is seen, not a stale status from before it.
+        // Still queued (a retry), so it keeps going first. The store's lock is a leaf.
         if self
             .store
             .get(id)
-            .is_ok_and(|j| j.status == Status::Queued && !schedule_paused)
+            .is_ok_and(|j| j.status == Status::Queued && !paused.contains(&id))
         {
             return;
         }
         *focus = None;
         drop(focus);
+        drop(paused);
         self.release_held();
     }
 
