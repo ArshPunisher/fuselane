@@ -8,7 +8,9 @@ import {
   PuzzlePiece,
 } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
-import type { BrowserView, HandoffView } from '../lib/types'
+import type { BrowserView, HandoffView, UiError } from '../lib/types'
+import { toUiError } from '../lib/backend'
+import { LoadError } from './LoadError'
 import { ago } from '../lib/format'
 import { t } from '../lib/i18n'
 
@@ -105,13 +107,16 @@ export function BrowserList({ compact = false }: { compact?: boolean }) {
   const act = useApp((s) => s.act)
   const [list, setList] = useState<BrowserView[] | null>(null)
   const [waiting, setWaiting] = useState<string | null>(null)
+  const [error, setError] = useState<UiError | null>(null)
 
   const load = useCallback(async () => {
     if (!backend) return
     try {
       setList(await backend.extensionBrowsers())
-    } catch {
-      setList([])
+      setError(null)
+    } catch (e) {
+      // Keep a list already shown; with none, say it failed (not "no browser found").
+      setError(toUiError(e))
     }
   }, [backend])
 
@@ -133,6 +138,7 @@ export function BrowserList({ compact = false }: { compact?: boolean }) {
     }
   }, [waiting, load])
 
+  if (list === null && error) return <LoadError error={error} onRetry={() => void load()} />
   if (list === null)
     return (
       <ul className="ext-browsers" aria-busy="true" aria-label={t('Looking at your browsers')} />

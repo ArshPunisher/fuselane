@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChartBar } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { bytes, rateText, usedBytes } from '../lib/format'
 import { assignLanes, netTitle } from '../lib/lanes'
-import type { AllowanceView, UsageHistory } from '../lib/types'
+import type { AllowanceView, UiError, UsageHistory } from '../lib/types'
+import { toUiError } from '../lib/backend'
 import { intlLocale, t } from '../lib/i18n'
+import { LoadError } from './LoadError'
 import { NetIcon } from './NetIcon'
 import { useLiveRates } from './NetworksView'
 
@@ -113,32 +115,40 @@ export function DataUsed() {
   const [polled, setPolled] = useState(() => Date.now())
   const [now, setNow] = useState(() => Date.now())
   const [hover, setHover] = useState<number | null>(null)
-  useEffect(() => {
+  const [error, setError] = useState<UiError | null>(null)
+  const load = useCallback(() => {
     if (!backend) return
-    const load = () => {
-      void backend
-        .usageHistory()
-        .then((v) => {
-          setH(v)
-          setPolled(Date.now())
-        })
-        .catch(() => setH({ days: [], labels: {} }))
-      void backend
-        .allowances()
-        .then(setAllow)
-        .catch(() => setAllow([]))
-    }
+    // A failed read is an error to show (and retry), not "no usage yet".
+    const failed = (e: unknown) => setError(toUiError(e))
+    void backend
+      .usageHistory()
+      .then((v) => {
+        setH(v)
+        setPolled(Date.now())
+        setError(null)
+      })
+      .catch(failed)
+    void backend
+      .allowances()
+      .then((v) => {
+        setAllow(v)
+        setError(null)
+      })
+      .catch(failed)
+  }, [backend])
+  useEffect(() => {
     load()
     // The app adds up usage every few seconds; follow it closely.
     const timer = setInterval(load, 5000)
     return () => clearInterval(timer)
-  }, [backend])
+  }, [load])
   // Between polls, today's figure grows with what's moving now.
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 500)
     return () => clearInterval(timer)
   }, [])
 
+  if ((!h || !allow) && error) return <LoadError error={error} onRetry={load} />
   if (!h || !allow) {
     return <div className="use-loading" aria-busy="true" aria-label={t('Loading…')} />
   }

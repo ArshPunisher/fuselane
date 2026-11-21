@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { CheckCircle, FolderOpen, WarningCircle } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
 import { toUiError } from '../lib/backend'
 import type { UiError, WatchView } from '../lib/types'
 import { t, tb } from '../lib/i18n'
+import { LoadError } from './LoadError'
 
 /**
  * Watch folder (B10.9): .torrent files, Metalinks and lists of links put in
@@ -13,14 +14,23 @@ export function WatchSetting() {
   const backend = useApp((s) => s.backend)
   const [view, setView] = useState<WatchView | null>(null)
   const [error, setError] = useState<UiError | null>(null)
-  useEffect(() => {
+  const [loadError, setLoadError] = useState<UiError | null>(null)
+  const load = useCallback(() => {
     if (!backend) return
-    const load = () => void backend.watchState().then(setView)
+    backend
+      .watchState()
+      .then((v) => {
+        setView(v)
+        setLoadError(null)
+      })
+      .catch((e) => setLoadError(toUiError(e)))
+  }, [backend])
+  useEffect(() => {
     load()
     // The latest files handled change while the page is open.
     const timer = setInterval(load, 4000)
     return () => clearInterval(timer)
-  }, [backend])
+  }, [load])
 
   async function set(on: boolean, path: string) {
     if (!backend) return
@@ -63,6 +73,7 @@ export function WatchSetting() {
           }}
         />
       </div>
+      {view === null && loadError && <LoadError error={loadError} onRetry={load} />}
       {error && (
         <p className="field-error" role="alert">
           {error.message} {error.hint}

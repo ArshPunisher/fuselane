@@ -7614,3 +7614,25 @@ html[data-hidden] .orb b {
     background-position: -100% 0;
   }
 }
+
+/* A read that failed: the message and a way to try again (LoadError). */
+.load-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-panel);
+  background: var(--surface-1);
+}
+
+.load-error p {
+  flex: 1;
+  min-width: 0;
+  padding-top: 1px;
+}
+
+.load-error svg {
+  flex: none;
+  margin-top: 2px;
+}
