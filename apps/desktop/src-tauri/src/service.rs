@@ -377,6 +377,24 @@ struct SavedUsage {
     bytes: u64,
 }
 
+/// One network's bytes per day, from the per-day usage history.
+fn history_for(days: &[daily::DayUse], name: &str) -> Vec<(Date, u64)> {
+    days.iter()
+        .filter_map(|d| Some((parse_date(&d.day)?, *d.nets.get(name)?)))
+        .collect()
+}
+
+/// Keeps `u` on `period`: a new period (an allowance set, its reset day moved)
+/// is rebuilt from the per-day history, so bytes already used in it still
+/// count; otherwise it just rolls over when the period ends.
+fn follow_period(u: &mut Usage, period: Period, today: Date, days: &[daily::DayUse], name: &str) {
+    if u.period == period {
+        u.roll(today);
+    } else {
+        u.rebase(period, today, history_for(days, name));
+    }
+}
+
 fn date_text(d: Date) -> String {
     format!("{:04}-{:02}-{:02}", d.year, d.month, d.day)
 }
@@ -2452,6 +2470,7 @@ impl Service {
                 names.push(a.name.clone());
             }
         }
+        let days = lock(&self.daily).clone();
         let usage = lock(&self.usage);
         names
             .into_iter()
@@ -2459,12 +2478,13 @@ impl Service {
                 let a = saved.iter().find(|a| a.name == name);
                 let reset_day = a.map_or(1, |a| a.reset_day);
                 let period = Period::MonthFrom(reset_day);
-                let mut u = usage
-                    .get(&name)
-                    .copied()
-                    .unwrap_or_else(|| Usage::new(period, today));
-                u.period = period;
-                u.roll(today);
+                let mut u = usage.get(&name).copied().unwrap_or_else(|| {
+                    // No counter yet (nothing this run): the history still counts.
+                    let mut u = Usage::new(period, today);
+                    u.rebase(period, today, history_for(&days, &name));
+                    u
+                });
+                follow_period(&mut u, period, today, &days, &name);
                 AllowanceView {
                     reached: u.reached(a.map(|a| a.bytes)),
                     allowance: a.map(|a| a.bytes),
@@ -2534,19 +2554,34 @@ impl Service {
                 .find(|a| a.name == name)
                 .map_or(1, |a| a.reset_day)
         };
+        // Read before `usage`: the per-day history already holds this tick's bytes.
+        let days = lock(&self.daily).clone();
         let (blocked, snapshot) = {
             let mut usage = lock(&self.usage);
             for (name, bytes) in &drained {
                 let period = Period::MonthFrom(reset_of(name));
-                let u = usage
-                    .entry(name.clone())
-                    .or_insert_with(|| Usage::new(period, today));
-                u.period = period;
-                u.add(*bytes, today);
+                match usage.get_mut(name) {
+                    Some(u) if u.period == period => u.add(*bytes, today),
+                    // New, or a changed period: rebuilt from the history, which
+                    // already counts these bytes.
+                    _ => {
+                        let mut u = Usage::new(period, today);
+                        u.rebase(period, today, history_for(&days, name));
+                        usage.insert(name.clone(), u);
+                    }
+                }
+            }
+            // A network with an allowance but no counter yet still has history.
+            for a in &saved {
+                if !usage.contains_key(&a.name) {
+                    let period = Period::MonthFrom(a.reset_day);
+                    let mut u = Usage::new(period, today);
+                    u.rebase(period, today, history_for(&days, &a.name));
+                    usage.insert(a.name.clone(), u);
+                }
             }
             for (name, u) in usage.iter_mut() {
-                u.period = Period::MonthFrom(reset_of(name));
-                u.roll(today);
+                follow_period(u, Period::MonthFrom(reset_of(name)), today, &days, name);
             }
             let blocked: Vec<String> = saved
                 .iter()
@@ -3457,6 +3492,31 @@ mod tests {
             free,
             "focus_ended held `focus` while waiting for `schedule_paused`"
         );
+    }
+
+    /// Setting an allowance, or moving its reset day, rebuilds the bytes used
+    /// from the per-day history for the new period: it used to start again
+    /// from zero (L-35: never show less than was really used).
+    #[tokio::test]
+    async fn changing_an_allowance_period_keeps_the_bytes_already_used() {
+        let h = harness(3);
+        let d = |s: &str| parse_date(s).unwrap();
+        h.svc
+            .note_daily("2026-11-20", &[("en0".to_string(), 1_000)]);
+        h.svc.note_daily("2026-11-21", &[("en0".to_string(), 500)]);
+        let today = d("2026-11-21");
+        let req = |reset_day| AllowanceRequest {
+            name: "en0".into(),
+            bytes: 5_000_000_000,
+            reset_day,
+        };
+        let used = |v: Vec<AllowanceView>| v.into_iter().find(|a| a.name == "en0").unwrap().used;
+        // From the 1st: both days count.
+        assert_eq!(used(h.svc.set_allowance(req(1), today).unwrap()), 1_500);
+        // Reset day moved to the 21st: only today counts.
+        assert_eq!(used(h.svc.set_allowance(req(21), today).unwrap()), 500);
+        // And back: both again.
+        assert_eq!(used(h.svc.set_allowance(req(1), today).unwrap()), 1_500);
     }
 
     /// The app's 5-second ticker is a plain OS thread (main.rs): a start time that
