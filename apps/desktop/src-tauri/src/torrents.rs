@@ -941,7 +941,9 @@ impl Torrents {
         if let Some(t) = entry.torrent {
             let engine = self.engine().await?;
             let listing = t.listing().clone();
-            engine.release(t).await.map_err(ui)?;
+            // Keep every chosen file, not only the priority tier in progress.
+            let keep = entry.wanted.clone().unwrap_or_else(|| t.selected());
+            engine.release_keeping(t, &keep).await.map_err(ui)?;
             if delete_files {
                 to_trash(&engine, &listing)?;
             }
@@ -2019,6 +2021,39 @@ pub(crate) mod tests {
                 "{n}"
             );
         }
+    }
+
+    /// "Remove, keep files" keeps every file the person chose, not only the
+    /// priority tier being fetched right now: a Low file that had partly
+    /// arrived used to be deleted with the torrent.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn removing_and_keeping_files_keeps_lower_priority_files() {
+        logs();
+        let seed = tempfile::tempdir().unwrap();
+        let (_seeder, _addr, file) = seeder(seed.path()).await;
+        let s = setup();
+        // A peer that never answers: nothing downloads during the test.
+        let dead: SocketAddr = "127.0.0.1:9".parse().unwrap();
+        let id = add(&s, &file, dead, &["a.bin", "b.bin", "c.bin"]).await;
+        let listed = s.tor.files(&id).await.unwrap();
+        let index = |name: &str| listed.iter().find(|f| f.path == name).unwrap().index;
+        s.tor
+            .set_priority(&id, index("c.bin"), Priority::High)
+            .await
+            .unwrap();
+        s.tor
+            .set_priority(&id, index("a.bin"), Priority::Low)
+            .await
+            .unwrap();
+        // Part of a.bin had already arrived.
+        let a = s.downloads.join("T").join("a.bin");
+        std::fs::create_dir_all(a.parent().unwrap()).unwrap();
+        std::fs::write(&a, vec![7u8; 1000]).unwrap();
+        s.tor.remove(&id, false).await.unwrap();
+        assert!(
+            a.exists(),
+            "a wanted (Low) file was deleted by Remove, keep files"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

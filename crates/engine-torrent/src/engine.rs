@@ -674,6 +674,19 @@ impl TorrentEngine {
     /// created (empty, or holding edge-piece bytes) are deleted (L-69).
     pub async fn release(&self, t: Torrent) -> Result<Cleanup, TorrentError> {
         let keep = t.selected();
+        self.release_keeping(t, &keep).await
+    }
+
+    /// `release`, keeping the files in `keep` (every file the person chose)
+    /// rather than only those being fetched now: with priorities, the torrent
+    /// fetches one tier at a time, and a chosen lower-tier file that has partly
+    /// arrived must survive "remove, keep files".
+    pub async fn release_keeping(
+        &self,
+        t: Torrent,
+        keep: &HashSet<usize>,
+    ) -> Result<Cleanup, TorrentError> {
+        let keep = keep.clone();
         self.session
             .delete(t.handle.id().into(), false)
             .await
