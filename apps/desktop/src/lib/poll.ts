@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 /**
  * Calls `load` now and about every `ms` while the component is shown and the
@@ -28,4 +28,29 @@ export function usePoll<T>(load: () => Promise<T>, ms: number, deps: unknown[]):
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
   return value
+}
+
+/**
+ * Runs `fn` every `ms` while the window can be seen, and once at once when it is
+ * shown again. Fuselane lives in the tray with its window hidden, so a plain
+ * `setInterval` keeps asking the backend for things nobody looks at. With
+ * `immediate`, `fn` also runs when the component first appears.
+ */
+export function useVisibleInterval(fn: () => void, ms: number, immediate = true) {
+  const latest = useRef(fn)
+  latest.current = fn
+  useEffect(() => {
+    if (immediate && !document.hidden) latest.current()
+    const id = setInterval(() => {
+      if (!document.hidden) latest.current()
+    }, ms)
+    const shown = () => {
+      if (!document.hidden) latest.current()
+    }
+    document.addEventListener('visibilitychange', shown)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', shown)
+    }
+  }, [ms, immediate])
 }

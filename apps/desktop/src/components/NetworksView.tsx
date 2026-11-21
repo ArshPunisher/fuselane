@@ -15,6 +15,7 @@ import { NetIcon } from './NetIcon'
 import { Orb } from './Orb'
 import { AutoLimit, SavedTick, useAutoSave } from './AutoSave'
 import { DataUsed } from './DataUsed'
+import { useVisibleInterval } from '../lib/poll'
 import { ProxyRow } from './NetworkProxy'
 import { intlLocale, mark, t, tr } from '../lib/i18n'
 
@@ -560,21 +561,13 @@ function NetLimit({ net }: { net: NetView }) {
 function useAllowances(): [AllowanceView[], (v: AllowanceView[]) => void] {
   const backend = useApp((s) => s.backend)
   const [views, setViews] = useState<AllowanceView[]>([])
-  useEffect(() => {
+  useVisibleInterval(() => {
     if (!backend) return
-    let live = true
-    const load = () =>
-      backend
-        .allowances()
-        .then((v) => live && setViews(v))
-        .catch(() => {})
-    void load()
-    const timer = setInterval(load, 5000)
-    return () => {
-      live = false
-      clearInterval(timer)
-    }
-  }, [backend])
+    backend
+      .allowances()
+      .then(setViews)
+      .catch(() => {})
+  }, 5000)
   return [views, setViews]
 }
 
@@ -835,11 +828,7 @@ const NET_TABS: [NetTab, string][] = [
 export function NetworksView() {
   const networks = useApp((s) => s.networks)
   const refresh = useApp((s) => s.refreshNetworks)
-  useEffect(() => {
-    void refresh()
-    const timer = setInterval(() => void refresh(), 10000)
-    return () => clearInterval(timer)
-  }, [refresh])
+  useVisibleInterval(() => void refresh(), 10000)
   const other = networks.filter((n) => !n.usable)
   // Setup (networks, limits, when each helps, allowances) and usage.
   const [tab, setTab] = useState<NetTab>(() => {

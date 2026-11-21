@@ -4,6 +4,7 @@ import { useApp } from '../lib/store'
 import { toUiError } from '../lib/backend'
 import type { UiError, WatchView } from '../lib/types'
 import { t, tb } from '../lib/i18n'
+import { useVisibleInterval } from '../lib/poll'
 import { LoadError } from './LoadError'
 
 /**
@@ -25,12 +26,8 @@ export function WatchSetting() {
       })
       .catch((e) => setLoadError(toUiError(e)))
   }, [backend])
-  useEffect(() => {
-    load()
-    // The latest files handled change while the page is open.
-    const timer = setInterval(load, 4000)
-    return () => clearInterval(timer)
-  }, [load])
+  // The latest files handled change while the page is open and can be seen.
+  useVisibleInterval(load, 4000)
 
   async function set(on: boolean, path: string) {
     if (!backend) return

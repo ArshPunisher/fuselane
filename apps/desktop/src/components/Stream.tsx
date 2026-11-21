@@ -101,10 +101,18 @@ export function Stream({ history, lanes }: { history: History | undefined; lanes
     }
     const ro = new ResizeObserver(fit)
     ro.observe(canvas)
-    const timer = setInterval(draw, 200)
+    // Not while the window is hidden; one redraw when it is shown again.
+    const timer = setInterval(() => {
+      if (!document.hidden) draw()
+    }, 200)
+    const shown = () => {
+      if (!document.hidden) draw()
+    }
+    document.addEventListener('visibilitychange', shown)
     return () => {
       ro.disconnect()
       clearInterval(timer)
+      document.removeEventListener('visibilitychange', shown)
     }
   }, [])
 

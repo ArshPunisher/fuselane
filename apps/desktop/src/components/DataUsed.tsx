@@ -6,6 +6,7 @@ import { assignLanes, netTitle } from '../lib/lanes'
 import type { AllowanceView, UiError, UsageHistory } from '../lib/types'
 import { toUiError } from '../lib/backend'
 import { intlLocale, t } from '../lib/i18n'
+import { useVisibleInterval } from '../lib/poll'
 import { LoadError } from './LoadError'
 import { NetIcon } from './NetIcon'
 import { useLiveRates } from './NetworksView'
@@ -57,8 +58,8 @@ function useRateHistory(rates: Record<string, number>): Record<string, number[]>
   const latest = useRef(rates)
   latest.current = rates
   const [hist, setHist] = useState<Record<string, number[]>>({})
-  useEffect(() => {
-    const timer = setInterval(() => {
+  useVisibleInterval(
+    () =>
       setHist((h) => {
         const next: Record<string, number[]> = {}
         const names = new Set([...Object.keys(h), ...Object.keys(latest.current)])
@@ -67,10 +68,10 @@ function useRateHistory(rates: Record<string, number>): Record<string, number[]>
         for (const n of names)
           next[n] = [...(h[n] ?? quiet()), latest.current[n] ?? 0].slice(-HISTORY)
         return next
-      })
-    }, 1000)
-    return () => clearInterval(timer)
-  }, [])
+      }),
+    1000,
+    false,
+  )
   return hist
 }
 
@@ -136,17 +137,10 @@ export function DataUsed() {
       })
       .catch(failed)
   }, [backend])
-  useEffect(() => {
-    load()
-    // The app adds up usage every few seconds; follow it closely.
-    const timer = setInterval(load, 5000)
-    return () => clearInterval(timer)
-  }, [load])
+  // The app adds up usage every few seconds; follow it closely, while it can be seen.
+  useVisibleInterval(load, 5000)
   // Between polls, today's figure grows with what's moving now.
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 500)
-    return () => clearInterval(timer)
-  }, [])
+  useVisibleInterval(() => setNow(Date.now()), 500, false)
 
   if ((!h || !allow) && error) return <LoadError error={error} onRetry={load} />
   if (!h || !allow) {

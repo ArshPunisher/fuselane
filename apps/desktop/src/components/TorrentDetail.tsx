@@ -14,7 +14,8 @@ import {
 import { useApp } from '../lib/store'
 import { bytes, eta, percent, rate, rateText } from '../lib/format'
 import { assignLanes, kindLabel, netTitle } from '../lib/lanes'
-import { usePoll } from '../lib/poll'
+import { usePoll, useVisibleInterval } from '../lib/poll'
+import { appendRates } from '../lib/rates'
 import { LiveRate } from './LiveRate'
 import { FuseCore } from './FuseCore'
 import { Stream } from './Stream'
@@ -127,16 +128,15 @@ function useRateHistory(names: string[], rates: number[]): History {
   const latest = useRef({ names, rates })
   latest.current = { names, rates }
   const [h, setH] = useState<History>({ names, rates: [] })
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setH((prev) => {
-        const { names: n, rates: r } = latest.current
-        const same = prev.names.join() === n.join()
-        return { names: n, rates: [...(same ? prev.rates : []), r].slice(-300) }
-      })
-    }, 200)
-    return () => clearInterval(timer)
-  }, [])
+  // Nothing to add for a paused or finished torrent (the same object comes back, so
+  // React skips the render), and nothing at all while the window is hidden.
+  useVisibleInterval(
+    () => {
+      setH((prev) => appendRates(prev, latest.current.names, latest.current.rates))
+    },
+    200,
+    false,
+  )
   return h
 }
 

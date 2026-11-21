@@ -17,6 +17,7 @@ import {
   WarningCircle,
 } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
+import { useVisibleInterval } from '../lib/poll'
 import { toUiError } from '../lib/backend'
 import { bytes, eta, nextAt, percent, rate, rateText, readyBy, startsAt } from '../lib/format'
 import { assignLanes, kindLabel, netTitle } from '../lib/lanes'
@@ -82,8 +83,8 @@ function Center({ job, live }: { job: JobView; live: Live | undefined }) {
 /** Speeds read out politely, at most every few seconds (DESIGN-SYSTEM.md §11). */
 function useAnnounce(job: JobView, live: Live | undefined) {
   const [text, setText] = useState('')
-  useEffect(() => {
-    const timer = setInterval(() => {
+  useVisibleInterval(
+    () => {
       const s = useApp.getState()
       const l = s.live[job.id]
       if (job.status === 'running' && l) {
@@ -94,9 +95,10 @@ function useAnnounce(job: JobView, live: Live | undefined) {
             : t('{p} percent, {rate}', { p: Math.floor(p), rate: rateText(l.rate) }),
         )
       }
-    }, 5000)
-    return () => clearInterval(timer)
-  }, [job.id, job.status])
+    },
+    5000,
+    false,
+  )
   useEffect(() => {
     setText(`${job.name}: ${statusWord(job.status)}`)
   }, [job.name, job.status])

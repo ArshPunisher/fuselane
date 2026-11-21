@@ -16,6 +16,7 @@ import {
   X,
 } from '@phosphor-icons/react'
 import { useApp } from '../lib/store'
+import { useVisibleInterval } from '../lib/poll'
 import { bytes } from '../lib/format'
 import { intlLocale, mark, t, tb, tn, tr } from '../lib/i18n'
 import { groupTransfers, type ActivityRow } from '../lib/nearbyGroups'
@@ -70,11 +71,13 @@ function useSecondsLeft(seconds: number | null): number | null {
   useEffect(() => {
     until.current = seconds === null ? 0 : Date.now() + seconds * 1000
   }, [seconds])
-  useEffect(() => {
-    if (seconds === null) return
-    const timer = setInterval(() => tick((n) => n + 1), 1000)
-    return () => clearInterval(timer)
-  }, [seconds])
+  useVisibleInterval(
+    () => {
+      if (seconds !== null) tick((n) => n + 1)
+    },
+    1000,
+    false,
+  )
   if (seconds === null) return null
   return Math.max(0, Math.round((until.current - Date.now()) / 1000))
 }
