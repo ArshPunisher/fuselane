@@ -985,13 +985,12 @@ mod tests {
         std::fs::write(&file, payload(8_000_000)).unwrap();
         let temp = a.sends.send(file.to_str().unwrap()).await.unwrap();
         a.sends.stop(&temp).await.unwrap();
-        // Let preparing finish in the background.
-        for _ in 0..200 {
-            if !a.sends.busy.load(Ordering::Relaxed) {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
+        // Preparing must finish (a timeout fails the test): only then could a
+        // late completion bring the share back.
+        until("preparing to finish", async || {
+            (!a.sends.busy.load(Ordering::Relaxed)).then_some(())
+        })
+        .await;
         tokio::time::sleep(Duration::from_millis(300)).await;
         assert!(a.sends.views().await.0.is_empty(), "still listed");
         assert!(a.sends.saved().is_empty(), "saved for the next launch");
