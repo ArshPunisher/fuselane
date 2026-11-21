@@ -195,6 +195,9 @@ export const hi: Readonly<Record<string, string>> = {
   'Error details': 'गड़बड़ी की जानकारी',
   'Open the folder': 'फ़ोल्डर खोलें',
   'Copy details': 'जानकारी कॉपी करें',
+  Reload: 'फिर से लोड करें',
+  "Fuselane couldn't show this screen. Your downloads keep running in the background; reload the window to carry on.":
+    'Fuselane यह स्क्रीन नहीं दिखा सका। आपके डाउनलोड बैकग्राउंड में चलते रहते हैं; आगे बढ़ने के लिए विंडो को फिर से लोड करें।',
 
   // Banners (UpdateBanner, CrashBanner, WhenDoneBanner, SlowMode) and the store's toasts
   'Installing {version}.': '{version} इंस्टॉल हो रहा है।',
