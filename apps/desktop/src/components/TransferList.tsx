@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import {
   ArrowClockwise,
   FolderOpen,
@@ -87,7 +88,7 @@ function meta(job: JobView, live: Live | undefined): string {
   return head
 }
 
-function Row({ job }: { job: JobView }) {
+const Row = memo(function Row({ job }: { job: JobView }) {
   const live = useApp((s) => s.live[job.id])
   const selected = useApp((s) => s.selected === job.id)
   const select = useApp((s) => s.select)
@@ -188,7 +189,7 @@ function Row({ job }: { job: JobView }) {
       </span>
     </li>
   )
-}
+})
 
 function torrentMeta(tor: TorrentView): string {
   if (tor.status === 'completed') return bytes(tor.total)
@@ -257,7 +258,21 @@ function GroupTools({ id, name }: { id: number; name: string }) {
  */
 function GroupRow({ id, name, jobs }: { id: number; name: string; jobs: JobView[] }) {
   const selected = useApp((s) => s.selected)
-  const live = useApp((s) => s.live)
+  // Only the two sums this row shows, so a live event for another download does not
+  // re-render it (and its members).
+  const { liveWritten, rate } = useApp(
+    useShallow((s) => ({
+      liveWritten: jobs.reduce(
+        (a, j) =>
+          a +
+          (j.status === 'completed'
+            ? (j.total ?? j.written)
+            : (s.live[j.id]?.written ?? j.written)),
+        0,
+      ),
+      rate: jobs.reduce((a, j) => a + (j.status === 'running' ? (s.live[j.id]?.rate ?? 0) : 0), 0),
+    })),
+  )
   const act = useApp((s) => s.act)
   const holdsSelected = jobs.some((j) => j.id === selected)
   const [open, setOpen] = useState(holdsSelected)
@@ -266,14 +281,9 @@ function GroupRow({ id, name, jobs }: { id: number; name: string; jobs: JobView[
     if (holdsSelected) setOpen(true)
   }, [holdsSelected])
   const done = jobs.filter((j) => j.status === 'completed').length
-  const written = jobs.reduce(
-    (a, j) =>
-      a + (j.status === 'completed' ? (j.total ?? j.written) : (live[j.id]?.written ?? j.written)),
-    0,
-  )
+  const written = liveWritten
   const sized = jobs.every((j) => j.total !== null)
   const total = jobs.reduce((a, j) => a + (j.total ?? 0), 0)
-  const rate = jobs.reduce((a, j) => a + (j.status === 'running' ? (live[j.id]?.rate ?? 0) : 0), 0)
   const canPause = jobs.some((j) => j.status === 'running' || j.status === 'queued')
   const canResume = jobs.some((j) => j.resumable)
   const failed = jobs.some((j) => j.status === 'failed' || j.status === 'failed-final')
