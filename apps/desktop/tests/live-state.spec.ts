@@ -59,5 +59,7 @@ test('a finished job in the detail pane does not redraw the canvas every frame',
 test('a running job still animates', async ({ page }) => {
   await page.goto('/')
   await expect(page.locator('.speed')).toContainText('MB/s', { timeout: 5000 })
-  expect(await countFrames(page, 1000)).toBeGreaterThan(20)
+  // Moving at all is the point (an idle ring draws none); a slow CI browser
+  // manages about 15 frames a second, so don't ask for a smooth 60.
+  expect(await countFrames(page, 1000)).toBeGreaterThan(5)
 })

@@ -4331,6 +4331,9 @@ mod tests {
         let id = h.svc.add(&link(&server), None).unwrap();
         assert_eq!(h.job(id).report, None, "nothing to say before it finishes");
         h.wait("done", |h| h.job(id).status == "completed").await;
+        // The report is written just after the status, so wait for it too (a
+        // slow Windows runner once read the job in between).
+        h.wait("the report", |h| h.job(id).report.is_some()).await;
         let r = h.job(id).report.expect("a report");
         assert_eq!(r.nets.iter().map(|n| n.bytes).sum::<u64>(), 400 * KB);
         assert!(r.nets.iter().all(|n| !n.label.is_empty()));
