@@ -34,6 +34,18 @@ const PAGE: &str = include_str!("page.html");
 pub const MAX_BODY: usize = 1024 * 1024;
 /// aria2's own default port.
 pub const DEFAULT_PORT: u16 = 6800;
+/// Calls in one batch or `system.multicall`: more is refused before any runs. AriaNg
+/// and phone apps send a handful; `system.listMethods` needs no secret, so an
+/// unbounded batch would be a cheap way to make the app build huge replies.
+pub const MAX_CALLS: usize = 256;
+/// Open connections at once. A device on the network can open many without the
+/// secret; past this the endpoint closes the extra ones instead of holding them.
+pub const MAX_CONNECTIONS: usize = 32;
+/// A client that hasn't finished its request headers in this long is dropped.
+pub const HEADER_TIMEOUT_SECS: u64 = 10;
+/// A WebSocket that hasn't shown the secret in this long is closed (code 1008), so
+/// idle sockets can't hold the connection slots.
+pub const UNAUTHENTICATED_SOCKET_SECS: u64 = 30;
 
 /// A download as aria2 tools see it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -324,6 +336,11 @@ impl<H: Host> Rpc<H> {
             );
         };
         let (code, reply) = match req {
+            Value::Array(calls) if calls.len() > MAX_CALLS => (
+                StatusCode::BAD_REQUEST,
+                json!({"jsonrpc": "2.0", "id": null,
+                       "error": {"code": -32600, "message": "Too many calls in one request."}}),
+            ),
             Value::Array(calls) if !calls.is_empty() => {
                 let out: Vec<Value> = calls.iter().map(|c| self.one(c, &mut authed).1).collect();
                 (StatusCode::OK, Value::Array(out))
@@ -535,6 +552,9 @@ impl<H: Host> Rpc<H> {
         let Some(Value::Array(calls)) = params.into_iter().next() else {
             return Err(fault("system.multicall needs a list of calls."));
         };
+        if calls.len() > MAX_CALLS {
+            return Err(fault("Too many calls in one request."));
+        }
         let out = calls
             .into_iter()
             .map(|c| {
@@ -1035,6 +1055,7 @@ impl Server {
             // Connections live in here, so stopping ends them too: one kept
             // open can't go on using a secret that has since been replaced.
             let mut conns = tokio::task::JoinSet::new();
+            let slots = Arc::new(tokio::sync::Semaphore::new(MAX_CONNECTIONS));
             // An accept error (no descriptors left, a client that reset) must not
             // end the endpoint while the settings still say it is on (L-126).
             accept::accept_forever(
@@ -1042,13 +1063,22 @@ impl Server {
                 || listener.accept(),
                 |(tcp, _)| {
                     while conns.try_join_next().is_some() {}
+                    // No free slot: close it at once rather than hold it.
+                    let Ok(slot) = slots.clone().try_acquire_owned() else {
+                        return;
+                    };
                     let rpc = rpc.clone();
                     conns.spawn(async move {
+                        let _slot = slot; // freed when the connection ends
                         let svc = hyper::service::service_fn(move |req| {
                             let rpc = rpc.clone();
                             async move { Ok::<_, std::convert::Infallible>(serve(rpc, req).await) }
                         });
                         let _ = hyper::server::conn::http1::Builder::new()
+                            .timer(hyper_util::rt::TokioTimer::new())
+                            .header_read_timeout(std::time::Duration::from_secs(
+                                HEADER_TIMEOUT_SECS,
+                            ))
                             .serve_connection(hyper_util::rt::TokioIo::new(tcp), svc)
                             .with_upgrades()
                             .await;

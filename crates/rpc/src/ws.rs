@@ -10,7 +10,7 @@ use hyper::StatusCode;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::broadcast::error::RecvError;
 
-use crate::{Host, MAX_BODY, Rpc};
+use crate::{Host, MAX_BODY, Rpc, UNAUTHENTICATED_SOCKET_SECS};
 
 const GUID: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
@@ -95,6 +95,9 @@ pub async fn serve<H: Host, S: AsyncRead + AsyncWrite + Unpin>(rpc: Arc<Rpc<H>>,
     let mut listening = true;
     // Notifications go only to a socket that has shown the secret once.
     let mut authed = false;
+    // Until it shows the secret a socket only holds a connection slot: it has a time limit.
+    let deadline = tokio::time::sleep(std::time::Duration::from_secs(UNAUTHENTICATED_SOCKET_SECS));
+    tokio::pin!(deadline);
     loop {
         if *stopped.borrow() {
             let _ = write_frame(&mut io, 0x8, &1001u16.to_be_bytes()).await;
@@ -107,6 +110,11 @@ pub async fn serve<H: Host, S: AsyncRead + AsyncWrite + Unpin>(rpc: Arc<Rpc<H>>,
             // The server stopped (turned off, or a new secret): "going away".
             _ = stopped.changed() => {
                 let _ = write_frame(&mut io, 0x8, &1001u16.to_be_bytes()).await;
+                return;
+            }
+            () = &mut deadline, if !authed => {
+                // Policy violation: no secret shown in time.
+                let _ = write_frame(&mut io, 0x8, &1008u16.to_be_bytes()).await;
                 return;
             }
             notice = notices.recv(), if listening => {

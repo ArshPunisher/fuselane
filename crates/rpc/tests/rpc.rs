@@ -674,3 +674,87 @@ fn a_remote_caller_cannot_choose_where_files_are_saved() {
         json!([["https://a.example/g.iso"], {"dir": home}]),
     );
 }
+
+// ---- Limits: a device on the network can't tie the endpoint up without the secret ----
+
+#[test]
+fn a_batch_or_multicall_over_the_cap_is_refused_before_any_call_runs() {
+    use fuselane_rpc::MAX_CALLS;
+    let rpc = Rpc::new(Arc::new(Fake::default()), SECRET.into());
+    let list = |n: usize| {
+        Value::Array(
+            (0..n)
+                .map(|i| json!({"jsonrpc": "2.0", "id": i, "method": "system.listMethods"}))
+                .collect(),
+        )
+        .to_string()
+    };
+    assert_eq!(rpc.handle(list(MAX_CALLS).as_bytes()).0.as_u16(), 200);
+    let (code, v) = rpc.handle(list(MAX_CALLS + 1).as_bytes());
+    assert_eq!(code.as_u16(), 400, "{v}");
+    let multi = |n: usize| {
+        json!({"jsonrpc": "2.0", "id": 1, "method": "system.multicall",
+               "params": [(0..n).map(|_| json!({"methodName": "system.listMethods"})).collect::<Vec<_>>()]})
+        .to_string()
+    };
+    assert_eq!(rpc.handle(multi(MAX_CALLS).as_bytes()).0.as_u16(), 200);
+    assert_eq!(rpc.handle(multi(MAX_CALLS + 1).as_bytes()).0.as_u16(), 400);
+}
+
+#[tokio::test]
+async fn connections_beyond_the_cap_are_closed_and_a_freed_one_can_be_reused() {
+    use fuselane_rpc::MAX_CONNECTIONS;
+    let server = Server::start(
+        Arc::new(Fake::default()),
+        "127.0.0.1:0".parse().unwrap(),
+        SECRET.into(),
+    )
+    .await
+    .unwrap();
+    let mut held = Vec::new();
+    for _ in 0..MAX_CONNECTIONS {
+        held.push(tokio::net::TcpStream::connect(server.addr).await.unwrap());
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    // One more is accepted by the OS but closed by the endpoint at once.
+    let mut extra = tokio::net::TcpStream::connect(server.addr).await.unwrap();
+    let mut buf = [0u8; 16];
+    let n = tokio::time::timeout(std::time::Duration::from_secs(2), extra.read(&mut buf))
+        .await
+        .expect("closed promptly")
+        .unwrap_or(0);
+    assert_eq!(n, 0, "no answer, just closed");
+    // Letting one go makes room.
+    drop(held.pop());
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let mut again = tokio::net::TcpStream::connect(server.addr).await.unwrap();
+    again
+        .write_all(b"GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+        .await
+        .unwrap();
+    let mut out = String::new();
+    again.read_to_string(&mut out).await.unwrap();
+    assert!(out.starts_with("HTTP/1.1 200"), "{out}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_websocket_that_never_shows_the_secret_is_closed() {
+    use fuselane_rpc::UNAUTHENTICATED_SOCKET_SECS;
+    let server = Server::start(
+        Arc::new(Fake::default()),
+        "127.0.0.1:0".parse().unwrap(),
+        SECRET.into(),
+    )
+    .await
+    .unwrap();
+    let (mut s, head) = ws_open(server.addr).await;
+    assert!(head.starts_with("http/1.1 101"), "{head}");
+    tokio::time::advance(std::time::Duration::from_secs(
+        UNAUTHENTICATED_SOCKET_SECS + 1,
+    ))
+    .await;
+    let (op, data) = tokio::time::timeout(std::time::Duration::from_secs(5), ws_read(&mut s))
+        .await
+        .expect("closed by the endpoint");
+    assert_eq!((op, data), (0x8, 1008u16.to_be_bytes().to_vec()));
+}
