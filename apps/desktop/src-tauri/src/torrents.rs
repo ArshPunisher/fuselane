@@ -248,6 +248,8 @@ pub struct Torrents {
     waiting: Mutex<Vec<Saved>>,
     /// When `waiting` was last tried.
     waiting_tried: Mutex<Option<Instant>>,
+    /// One restore at a time (launch and the tick's retry never overlap).
+    restoring: tokio::sync::Mutex<()>,
     emit: Emit,
     /// Something is checking or downloading (keeps the computer awake, holds off
     /// "when done" actions). Updated every tick.
@@ -482,6 +484,7 @@ impl Torrents {
             pending: Mutex::new(Vec::new()),
             waiting: Mutex::new(Vec::new()),
             waiting_tried: Mutex::new(None),
+            restoring: tokio::sync::Mutex::new(()),
             emit,
             busy: std::sync::atomic::AtomicBool::new(false),
             peer_bytes: Mutex::new(HashMap::new()),
@@ -1260,8 +1263,13 @@ impl Torrents {
             }
             *tried = Some(Instant::now());
         }
-        let list = std::mem::take(&mut *self.waiting.lock().unwrap_or_else(|e| e.into_inner()));
-        if !list.is_empty() {
+        // Copied, not taken: they stay saved until they're really back.
+        let list = self
+            .waiting
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        if !list.is_empty() && self.restoring.try_lock().is_ok() {
             self.bring_back(list).await;
         }
     }
@@ -1269,12 +1277,20 @@ impl Torrents {
     /// Puts saved torrents back in the list. One that can't come back now waits
     /// (see `waiting`) instead of disappearing.
     async fn bring_back(&self, saved: Vec<Saved>) {
+        let _one = self.restoring.lock().await;
+        // Every record stays in `waiting` (so `save` keeps it) until it is back in
+        // the list: a save while this awaits can never drop one.
+        for s in &saved {
+            self.wait_for_later(s.clone());
+        }
         for s in saved {
             // Skip anything already added this launch (restore runs alongside new adds).
             if !valid_id(&s.id) || self.entries.lock().await.iter().any(|e| e.last.id == s.id) {
+                self.back(&s.id);
                 continue;
             }
             if let Some(done) = s.completed {
+                let id = s.id.clone();
                 self.entries.lock().await.push(Entry {
                     torrent: None,
                     starved: false,
@@ -1286,9 +1302,12 @@ impl Torrents {
                     wanted: None,
                     prio: HashMap::new(),
                 });
+                self.back(&id);
                 continue;
             }
+            // Its .torrent lives in the app's own folder: gone means gone for good.
             let Ok(bytes) = std::fs::read(self.state_dir.join(format!("{}.torrent", s.id))) else {
+                self.back(&s.id);
                 continue;
             };
             let Ok(engine) = self.engine().await else {
@@ -1319,6 +1338,7 @@ impl Torrents {
                             .then(|| s.selected.iter().copied().collect()),
                         prio: s.priorities.iter().copied().collect(),
                     });
+                    self.back(&s.id);
                 }
                 Err(e) => {
                     eprintln!("fuselane: couldn't bring back a torrent yet: {e}");
@@ -1328,6 +1348,14 @@ impl Torrents {
         }
         self.save().await;
         self.publish().await;
+    }
+
+    /// `id` is back in the list (or gone for good): it stops waiting.
+    fn back(&self, id: &str) {
+        self.waiting
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .retain(|w| w.id != id);
     }
 
     fn wait_for_later(&self, s: Saved) {
@@ -1672,6 +1700,80 @@ pub(crate) mod tests {
         let kept = s.store.setting("torrents").unwrap().unwrap_or_default();
         assert!(kept.contains(id), "dropped on retry: {kept}");
         assert_eq!(offline.waiting.lock().unwrap().len(), 1);
+    }
+
+    /// While a restore waits on the network, a save from anywhere else must
+    /// still see the record (it stays in `waiting` until it's back).
+    #[tokio::test]
+    async fn a_save_during_a_restore_keeps_the_torrent() {
+        let s = setup();
+        std::fs::create_dir_all(&s.state).unwrap();
+        let id = "abcdef0123456789abcdef0123456789abcdef01";
+        std::fs::write(
+            s.state.join(format!("{id}.torrent")),
+            b"d4:infod4:name1:xee",
+        )
+        .unwrap();
+        let saved = serde_json::json!([{
+            "id": id, "base": s.downloads, "selected": [0], "paused": false,
+            "addedAt": 1, "completed": null
+        }]);
+        s.store.set_setting("torrents", &saved.to_string()).unwrap();
+        let me: Arc<std::sync::OnceLock<std::sync::Weak<Torrents>>> = Arc::default();
+        let seen = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let (me2, seen2) = (me.clone(), seen.clone());
+        let tor = Torrents::new(
+            s.store.clone(),
+            s.state.clone(),
+            s.downloads.clone(),
+            // Asked for networks mid-restore: is the record still kept for saving?
+            Arc::new(move || {
+                if let Some(t) = me2.get().and_then(std::sync::Weak::upgrade) {
+                    let kept = t.waiting.lock().unwrap().iter().any(|w| w.id == id);
+                    seen2.store(kept, std::sync::atomic::Ordering::SeqCst);
+                }
+                Err("No usable networks.".to_string())
+            }),
+            false,
+            None,
+            Arc::new(|_| {}),
+        );
+        me.set(Arc::downgrade(&tor)).unwrap();
+        tor.restore().await;
+        assert!(
+            seen.load(std::sync::atomic::Ordering::SeqCst),
+            "not kept mid-restore"
+        );
+    }
+
+    /// A torrent that comes back leaves the waiting list.
+    #[tokio::test]
+    async fn a_restored_torrent_stops_waiting() {
+        let s = setup();
+        let id = "0123456789abcdef0123456789abcdef0123abcd";
+        let view = TorrentView {
+            id: id.into(),
+            name: "Done".into(),
+            folder: s.downloads.display().to_string(),
+            status: "completed".into(),
+            done: 1,
+            total: 1,
+            uploaded: 0,
+            rate: 0,
+            error: None,
+            file_count: 1,
+            selected_count: 1,
+            networks: vec![],
+            added_at: 1,
+        };
+        let saved = serde_json::json!([{
+            "id": id, "base": s.downloads, "selected": [], "paused": false,
+            "addedAt": 1, "completed": view
+        }]);
+        s.store.set_setting("torrents", &saved.to_string()).unwrap();
+        s.tor.restore().await;
+        assert_eq!(s.tor.list().await.len(), 1, "the finished torrent is back");
+        assert!(s.tor.waiting.lock().unwrap().is_empty());
     }
 
     async fn until(tor: &Torrents, id: &str, status: &str) -> TorrentView {
