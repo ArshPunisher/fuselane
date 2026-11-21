@@ -675,12 +675,31 @@ impl Store {
     }
 
     /// After a crash, jobs still marked running didn't stop cleanly: they come back
-    /// paused, never auto-started (L-53).
+    /// paused, never auto-started (L-53). A job another process holds the claim on
+    /// (the command line downloading while the app starts) is running, not
+    /// interrupted, and is left alone (L-111). Returns how many were repaired.
     pub fn recover_interrupted(&self) -> Result<usize, StoreError> {
-        Ok(self.lock().execute(
-            "UPDATE jobs SET status = 'paused', updated_at = ?1 WHERE status IN ('running', 'queued')",
-            params![now()],
-        )?)
+        let ids: Vec<i64> = {
+            let c = self.lock();
+            let mut st = c.prepare("SELECT id FROM jobs WHERE status IN ('running', 'queued')")?;
+            st.query_map([], |r| r.get(0))?.collect::<Result<_, _>>()?
+        };
+        let mut repaired = 0;
+        for id in ids {
+            // Held by someone: skip. The claim is only a probe, so let go at once. If
+            // the claim can't be tried at all (an unwritable locks folder), nobody
+            // can be told apart from a crash, so repair as before.
+            let probe = self.lock_job(id);
+            if matches!(probe, Ok(None)) {
+                continue;
+            }
+            repaired += self.lock().execute(
+                "UPDATE jobs SET status = 'paused', updated_at = ?2
+                 WHERE id = ?1 AND status IN ('running', 'queued')",
+                params![id, now()],
+            )?;
+        }
+        Ok(repaired)
     }
 }
 
@@ -1158,6 +1177,41 @@ mod tests {
         assert_eq!(s.recover_interrupted().unwrap(), 1);
         assert_eq!(s.get(a).unwrap().status, Status::Paused);
         assert_eq!(s.get(b).unwrap().status, Status::Completed);
+    }
+
+    /// The app starting while the command line downloads (L-111): a job another
+    /// process is running is not "interrupted", whatever the list says.
+    #[test]
+    fn recovery_leaves_a_download_another_process_is_running() {
+        let d = tempfile::tempdir().unwrap();
+        let path = d.path().join("jobs.db");
+        let cli = Store::open(&path).unwrap();
+        let id = cli.create("https://x/a", d.path()).unwrap();
+        cli.apply(id, Event::Start, None).unwrap();
+        let claim = cli.lock_job(id).unwrap().unwrap();
+        let app = Store::open(&path).unwrap();
+        assert_eq!(app.recover_interrupted().unwrap(), 0);
+        assert_eq!(
+            app.get(id).unwrap().status,
+            Status::Running,
+            "still running"
+        );
+        drop(claim); // the command line was killed
+        assert_eq!(app.recover_interrupted().unwrap(), 1);
+        assert_eq!(app.get(id).unwrap().status, Status::Paused);
+    }
+
+    #[test]
+    fn recovery_still_repairs_when_the_claim_cannot_be_tried() {
+        let d = tempfile::tempdir().unwrap();
+        let s = Store::open(&d.path().join("jobs.db")).unwrap();
+        let id = s.create("https://x/a", d.path()).unwrap();
+        s.apply(id, Event::Start, None).unwrap();
+        // A file where the locks folder should be: no claim can be made.
+        std::fs::write(d.path().join("locks"), b"").unwrap();
+        assert!(s.lock_job(id).is_err());
+        assert_eq!(s.recover_interrupted().unwrap(), 1);
+        assert_eq!(s.get(id).unwrap().status, Status::Paused);
     }
 
     #[test]

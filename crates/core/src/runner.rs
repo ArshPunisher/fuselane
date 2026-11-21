@@ -433,7 +433,19 @@ pub fn job_to_resume(store: &Store, id: &str) -> Result<Job, StartError> {
     };
     if job.status == Status::Running {
         // Left "running" by a process that crashed or was killed: it's interrupted.
-        let _ = store.apply(job.id, Event::Pause, None);
+        // Unless another process holds it: that one is running it, so leave it be.
+        match store.lock_job(job.id) {
+            Ok(Some(_probe)) => {
+                let _ = store.apply(job.id, Event::Pause, None);
+            }
+            Ok(None) => {
+                return Err(StartError::Setup(
+                    "This download is already running in Fuselane or in another terminal. Pause it there first."
+                        .into(),
+                ));
+            }
+            Err(_) => {} // can't tell: `run` reports it when it claims the job
+        }
     }
     let job = store.get(job.id).unwrap_or(job);
     if matches!(
@@ -1189,6 +1201,29 @@ mod tests {
         }
         assert_eq!(store.get(id).unwrap().status, Status::Queued, "untouched");
         drop(claim);
+    }
+
+    /// `fuselane resume` on a job the app is running must refuse, not flip the app's
+    /// running job to paused in the shared list first (L-111).
+    #[test]
+    fn resume_leaves_a_job_another_process_is_running_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("jobs.db")).unwrap();
+        let id = store.create("http://x/f", dir.path()).unwrap();
+        store.apply(id, Event::Start, None).unwrap();
+        let app = Store::open(&dir.path().join("jobs.db")).unwrap();
+        let claim = app.lock_job(id).unwrap().unwrap();
+        match job_to_resume(&store, &id.to_string()) {
+            Err(StartError::Setup(m)) => assert!(m.contains("already running"), "{m}"),
+            other => panic!("expected a refusal, got {other:?}"),
+        }
+        assert_eq!(store.get(id).unwrap().status, Status::Running, "untouched");
+        drop(claim);
+        // Once nobody holds it, it is a crash leftover and is repaired.
+        assert_eq!(
+            job_to_resume(&store, &id.to_string()).unwrap().status,
+            Status::Paused
+        );
     }
 
     #[test]
