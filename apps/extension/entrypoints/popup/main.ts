@@ -1,4 +1,5 @@
 import { formatSize, normalizeRules } from '@fuselane/capture'
+import { skipWhileRunning } from '../../lib/inflight.ts'
 import { appStatus, browserId, sendHandoff, type Status } from '../../lib/status.ts'
 import { findOnPage, mediaList, type MediaItem } from '../../lib/media.ts'
 import { feedList, findFeeds, type FoundFeed } from '../../lib/feeds.ts'
@@ -569,7 +570,9 @@ async function followApp() {
   await pollApp()
   setInterval(() => void pollApp(), 700)
 }
-async function pollApp() {
+// One poll at a time: with a slow app the next one is skipped, not queued behind it.
+const pollApp = skipWhileRunning(pollAppOnce)
+async function pollAppOnce() {
   const reply = (await request({ v: 1, type: 'jobs.list' })) as {
     jobs?: Row[]
     rate?: number

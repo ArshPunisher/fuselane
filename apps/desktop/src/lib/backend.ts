@@ -292,10 +292,13 @@ export function toUiError(e: unknown): UiError {
       hint: typeof o.hint === 'string' ? tb(o.hint) : null,
     }
   }
-  const text = typeof e === 'string' ? e : e instanceof Error ? e.message : ''
+  // Anything that isn't the core's own UiError (a script error, a framework error
+  // such as "command not found") is not for the person to read: say it plainly, and
+  // keep the original for the console.
+  console.warn('unexpected error:', e)
   return {
     code: 'unexpected',
-    message: text ? tb(text) : t('Something went wrong.'),
+    message: t('Something went wrong.'),
     hint: t('Try again. If it keeps happening, restart Fuselane.'),
   }
 }

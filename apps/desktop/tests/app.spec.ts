@@ -924,7 +924,8 @@ test('the when-done countdown can be cancelled', async ({ page }) => {
       seconds: 60,
     }),
   )
-  const banner = page.getByRole('alert').filter({ hasText: 'All downloads finished' })
+  // A plain banner, not an alert: it must not interrupt a screen reader every second.
+  const banner = page.locator('.when-done').filter({ hasText: 'All downloads finished' })
   await expect(banner).toContainText('Your computer shuts down in')
   await banner.getByRole('button', { name: 'Cancel' }).click()
   await expect(banner).toBeHidden()

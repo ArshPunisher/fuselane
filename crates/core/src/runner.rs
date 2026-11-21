@@ -272,7 +272,7 @@ fn proxy_trouble(
 /// The plain-language message for each failure (ERRORS.md §2).
 pub fn describe(e: &JobError) -> String {
     match e {
-        JobError::Unreachable(why) => format!("Couldn't reach the server on any selected network ({why}). Check your connection and the link."),
+        JobError::Unreachable(why) => format!("Couldn't reach the server on any selected network ({}). Check your connection and the link.", plain_cause(why)),
         JobError::ProbeStatus(404) => "The server says this file doesn't exist (404). Check the link.".into(),
         JobError::ProbeStatus(401 | 403) => "The server refused access to this file. The link may need you to be signed in.".into(),
         JobError::ProbeStatus(429) => "The server is limiting downloads right now (429 Too Many Requests). Wait a few minutes, then resume.".into(),
@@ -290,12 +290,58 @@ pub fn describe(e: &JobError) -> String {
             "Saving failed: {}. Check free space and that the folder is writable.",
             fuselane_engine_http::retry::Failure::Disk(*d).plain()
         ),
-        JobError::AllNetworksFailed(last) => format!("Every network failed. Last problem: {last}"),
+        JobError::AllNetworksFailed(last) => format!("Every network failed. Last problem: {}", plain_cause(last)),
         JobError::ChecksumMismatch { .. } => "The downloaded file doesn't match the SHA-256 you gave, so it wasn't saved under its name. The partial file is kept for inspection.".into(),
         JobError::Paused => "Paused. Progress is saved.".into(),
         JobError::NotResumable(why) => format!("This download can't be resumed ({why}). Start it again."),
-        JobError::Lane(why) => why.clone(),
-        JobError::Staging(e) => format!("Couldn't save the file: {e}"),
+        JobError::Lane(why) => plain_cause(why),
+        JobError::Staging(e) => describe_staging(e),
+    }
+}
+
+/// A cause from the network or disk layer without the operating system's numeric
+/// code ("Connection refused (os error 61)" becomes "Connection refused"): the
+/// code means nothing to the person and differs between systems.
+fn plain_cause(why: &str) -> String {
+    let mut out = String::with_capacity(why.len());
+    let mut rest = why;
+    while let Some(at) = rest.find(" (os error ") {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + " (os error ".len()..];
+        match after.find(')') {
+            Some(close) if after[..close].bytes().all(|b| b.is_ascii_digit()) => {
+                rest = &after[close + 1..];
+            }
+            _ => {
+                out.push_str(" (os error ");
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// What went wrong writing the file, and what to do about it.
+fn describe_staging(e: &fuselane_storage::staging::StagingError) -> String {
+    use fuselane_storage::staging::StagingError as S;
+    use std::io::ErrorKind as K;
+    match e {
+        S::MissingFolder(dir) => format!(
+            "The folder {} isn't there. Reconnect the drive, or choose another folder.",
+            dir.display()
+        ),
+        S::NamesExhausted(name) => format!(
+            "Every file name like {name} is already taken in that folder. Choose another folder, or rename the download."
+        ),
+        S::Incomplete { .. } => "The file wasn't complete, so it wasn't saved under its name. Progress is kept: resume to fetch the rest.".into(),
+        S::Io(io) => match io.kind() {
+            K::PermissionDenied => "Fuselane can't write to that folder. Check that you may save there, or choose another folder.".into(),
+            K::StorageFull | K::QuotaExceeded => "That disk is full. Free up space or choose another folder.".into(),
+            K::NotFound => "The folder or drive isn't there any more. Reconnect it, or choose another folder.".into(),
+            K::ReadOnlyFilesystem => "That folder is read-only. Choose another folder.".into(),
+            _ => "The file couldn't be saved to that folder. Check that the disk is connected and has room, or choose another folder.".into(),
+        },
     }
 }
 
@@ -398,12 +444,21 @@ pub fn action_for(e: &JobError) -> &'static str {
         JobError::VersionChanged
         | JobError::NotResumable(_)
         | JobError::ChecksumMismatch { .. } => "start-over",
-        JobError::Disk(_) | JobError::Staging(_) | JobError::NoSpace { .. } => "free-space",
+        JobError::Disk(_) | JobError::NoSpace { .. } => "free-space",
+        JobError::Staging(fuselane_storage::staging::StagingError::Io(io))
+            if matches!(
+                io.kind(),
+                std::io::ErrorKind::StorageFull | std::io::ErrorKind::QuotaExceeded
+            ) =>
+        {
+            "free-space"
+        }
         JobError::Unreachable(_)
         | JobError::Lane(_)
         | JobError::ProbeStatus(_)
         | JobError::Redirect { .. }
         | JobError::AllNetworksFailed(_)
+        | JobError::Staging(_)
         | JobError::Paused => "retry",
     }
 }
@@ -433,7 +488,19 @@ pub fn job_to_resume(store: &Store, id: &str) -> Result<Job, StartError> {
     };
     if job.status == Status::Running {
         // Left "running" by a process that crashed or was killed: it's interrupted.
-        let _ = store.apply(job.id, Event::Pause, None);
+        // Unless another process holds it: that one is running it, so leave it be.
+        match store.lock_job(job.id) {
+            Ok(Some(_probe)) => {
+                let _ = store.apply(job.id, Event::Pause, None);
+            }
+            Ok(None) => {
+                return Err(StartError::Setup(
+                    "This download is already running in Fuselane or in another terminal. Pause it there first."
+                        .into(),
+                ));
+            }
+            Err(_) => {} // can't tell: `run` reports it when it claims the job
+        }
     }
     let job = store.get(job.id).unwrap_or(job);
     if matches!(
@@ -1009,7 +1076,12 @@ pub async fn run(
     // One owner per download: the app and the command line share the list.
     let _claim = store
         .lock_job(id)
-        .map_err(|e| StartError::Setup(format!("couldn't claim the download: {e}")))?
+        .map_err(|_| {
+            StartError::Setup(
+                "Fuselane couldn't claim this download. Check that its data folder is writable, then try again."
+                    .into(),
+            )
+        })?
         .ok_or_else(|| {
             StartError::Setup(
                 "This download is already running in Fuselane or in another terminal. Pause it there first."
@@ -1119,6 +1191,53 @@ pub async fn run(
 mod tests {
     use super::*;
 
+    /// L-85 / rule 6: what a person reads says what happened and what to do, never
+    /// an OS error code or an internal sentence.
+    #[test]
+    fn disk_and_network_failures_read_as_plain_words() {
+        use fuselane_storage::staging::StagingError;
+        use std::io::{Error, ErrorKind};
+        let denied = JobError::Staging(StagingError::Io(Error::from(ErrorKind::PermissionDenied)));
+        let full = JobError::Staging(StagingError::Io(Error::from(ErrorKind::StorageFull)));
+        let gone = JobError::Staging(StagingError::Io(Error::from(ErrorKind::NotFound)));
+        let other = JobError::Staging(StagingError::Io(Error::other("the disk went away")));
+        let incomplete = JobError::Staging(StagingError::Incomplete {
+            written: 60,
+            expected: 100,
+        });
+        let taken = JobError::Staging(StagingError::NamesExhausted("movie.mkv".into()));
+        let missing = JobError::Staging(StagingError::MissingFolder("/Volumes/X".into()));
+        let refused = JobError::Unreachable("Connection refused (os error 61)".into());
+        let every = JobError::AllNetworksFailed("timed out (os error 60)".into());
+        for (e, must) in [
+            (&denied, "can't write"),
+            (&full, "full"),
+            (&gone, "isn't there"),
+            (&other, "couldn't be saved"),
+            (&incomplete, "wasn't complete"),
+            (&taken, "movie.mkv"),
+            (&missing, "/Volumes/X"),
+            (&refused, "refused"),
+            (&every, "timed out"),
+        ] {
+            let m = describe(e);
+            assert!(m.contains(must), "{e:?} -> {m}");
+            for raw in [
+                "os error",
+                "Os {",
+                "kind:",
+                "refusing to publish",
+                "from movie.mkv to",
+            ] {
+                assert!(!m.contains(raw), "{e:?} shows {raw:?}: {m}");
+            }
+        }
+        // A permission or a missing folder isn't cured by freeing space.
+        assert_eq!(action_for(&denied), "retry");
+        assert_eq!(action_for(&gone), "retry");
+        assert_eq!(action_for(&full), "free-space");
+    }
+
     #[test]
     fn only_http_and_https_links_are_accepted() {
         assert_eq!(
@@ -1189,6 +1308,29 @@ mod tests {
         }
         assert_eq!(store.get(id).unwrap().status, Status::Queued, "untouched");
         drop(claim);
+    }
+
+    /// `fuselane resume` on a job the app is running must refuse, not flip the app's
+    /// running job to paused in the shared list first (L-111).
+    #[test]
+    fn resume_leaves_a_job_another_process_is_running_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("jobs.db")).unwrap();
+        let id = store.create("http://x/f", dir.path()).unwrap();
+        store.apply(id, Event::Start, None).unwrap();
+        let app = Store::open(&dir.path().join("jobs.db")).unwrap();
+        let claim = app.lock_job(id).unwrap().unwrap();
+        match job_to_resume(&store, &id.to_string()) {
+            Err(StartError::Setup(m)) => assert!(m.contains("already running"), "{m}"),
+            other => panic!("expected a refusal, got {other:?}"),
+        }
+        assert_eq!(store.get(id).unwrap().status, Status::Running, "untouched");
+        drop(claim);
+        // Once nobody holds it, it is a crash leftover and is repaired.
+        assert_eq!(
+            job_to_resume(&store, &id.to_string()).unwrap().status,
+            Status::Paused
+        );
     }
 
     #[test]

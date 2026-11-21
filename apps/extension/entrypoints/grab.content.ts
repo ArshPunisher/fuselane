@@ -1,6 +1,8 @@
 // Clicks on file links go straight to Fuselane, so the browser never starts them
 // (REVIEW-2026-10-11 D, like IDM). Registered at run time, only once the person
 // allowed Fuselane on all sites. Hold Alt to let the browser have a link.
+import { clickCanGrab } from '../lib/grab.ts'
+
 export default defineContentScript({
   registration: 'runtime',
   matches: ['<all_urls>'],
@@ -54,8 +56,8 @@ export default defineContentScript({
     document.addEventListener(
       'click',
       (e) => {
-        if (!on || e.defaultPrevented || e.button !== 0) return
-        if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
+        // Only a person's own click: a page's a.click() is not a request to download.
+        if (!on || !clickCanGrab(e)) return
         const a = (e.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null
         if (!a || !isFile(a)) return
         let url: URL

@@ -4,7 +4,8 @@ import { getSession } from '../lib/session.ts'
 import { appStatus, browserId, mustPush, settle, type AppState } from '../lib/status.ts'
 import { cleanLimit, route } from '../lib/route.ts'
 import { nameFor } from '../lib/fetcher.ts'
-import { KEY, newJob, readJobs, tidy, type SelfJob } from '../lib/selfjobs.ts'
+import { ACTIVE, KEY, newJob, readJobs, tidy, type SelfJob } from '../lib/selfjobs.ts'
+import { createGrabCap } from '../lib/grab.ts'
 import { createRunner, type Runner, type RunnerEvent } from '../lib/runner.ts'
 
 // Who downloads what (REVIEW-2026-10-11 D): the app when it's installed (started
@@ -134,6 +135,7 @@ interface RunnerLike {
   pause(id: string): void
   cancel(id: string): void
   saved(id: string): void
+  sweep(keep: string[]): void
 }
 
 // Chrome runs the downloads in an offscreen page (its service worker can stop at
@@ -170,6 +172,7 @@ async function runner(): Promise<RunnerLike> {
     pause: (id) => send({ cmd: 'pause', id }),
     cancel: (id) => send({ cmd: 'cancel', id }),
     saved: (id) => send({ cmd: 'saved', id }),
+    sweep: (keep) => send({ cmd: 'sweep', keep }),
   }
 }
 
@@ -178,6 +181,16 @@ async function startSelf(url: string, pageUrl: string | null, name: string, size
   await update((jobs) => [job, ...jobs])
   ;(await runner()).start(job, await limit())
   void showStarted()
+}
+
+/**
+ * Deletes private files nobody can use any more (a failed save, a removed or
+ * dropped job). Runs at start-up and install.
+ */
+async function sweepParts() {
+  const jobs = readJobs((await browser.storage.local.get(KEY))[KEY])
+  const keep = jobs.filter((j) => ACTIVE.includes(j.status)).map((j) => j.id)
+  ;(await runner()).sweep(keep)
 }
 
 /** Browser download ids of the extension's finished files, while they save. */
@@ -196,6 +209,7 @@ async function onRunnerEvent(e: RunnerEvent) {
         parts: e.parts,
         total: e.total,
         finalUrl: e.finalUrl,
+        ...(e.validator !== undefined ? { validator: e.validator } : {}),
         ...(e.name ? { name: e.name } : {}),
       })
       break
@@ -231,8 +245,11 @@ async function onRunnerEvent(e: RunnerEvent) {
         saving.set(savedId, e.id)
         await patch(e.id, { savedId })
       } catch {
+        ;(await runner()).saved(e.id)
         await patch(e.id, {
           status: 'failed',
+          parts: null,
+          written: 0,
           error: "The file couldn't be saved to your Downloads folder.",
         })
       }
@@ -356,8 +373,14 @@ async function followAccess() {
 }
 
 /** A file link clicked in a page: straight to Fuselane, the browser never starts it. */
-async function grab(url: string, pageUrl: string | null, name: string | null) {
+const grabCap = createGrabCap()
+async function grab(url: string, pageUrl: string | null, name: string | null, tabId?: number) {
   if (takenRecently(url)) return
+  // A page that clicks many links at once is left to the browser's own checks.
+  if (tabId !== undefined && !grabCap.allow(tabId, Date.now())) {
+    await browserDownload(url)
+    return
+  }
   const r = route(
     { url, filename: name ?? undefined },
     {
@@ -408,6 +431,8 @@ async function selfAction(id: string, action: string) {
       await update((all) => all.filter((j) => j.id !== id))
       break
     case 'remove':
+      // Also drops the private file, which may still be there (a failed save).
+      r.cancel(id)
       await update((all) => all.filter((j) => j.id !== id))
       break
     case 'open':
@@ -421,6 +446,7 @@ async function selfAction(id: string, action: string) {
         await browser.downloads.removeFile(job.savedId).catch(() => {})
         await browser.downloads.erase({ id: job.savedId }).catch(() => {})
       }
+      r.cancel(id)
       await update((all) => all.filter((j) => j.id !== id))
       break
   }
@@ -451,6 +477,7 @@ async function afterRestart() {
 
 export default defineBackground(() => {
   browser.runtime.onStartup.addListener(() => {
+    void sweepParts().catch(() => {})
     void checkIn()
     void followSwitch()
     void followAccess()
@@ -458,6 +485,7 @@ export default defineBackground(() => {
   })
 
   browser.runtime.onInstalled.addListener(() => {
+    void sweepParts().catch(() => {})
     void checkIn()
     void followSwitch()
     void followAccess()
@@ -581,8 +609,13 @@ export default defineBackground(() => {
       ;(await runner()).saved(id)
     } else if (delta.state.current === 'interrupted') {
       saving.delete(delta.id)
+      // The private copy and its blob link are no use now: drop them, and start
+      // over from zero if the person tries again (the parts are gone with the file).
+      ;(await runner()).saved(id)
       await patch(id, {
         status: 'failed',
+        parts: null,
+        written: 0,
         error: "The file couldn't be saved to your Downloads folder.",
       })
     }
@@ -600,6 +633,7 @@ export default defineBackground(() => {
         msg.url,
         typeof msg.page === 'string' ? msg.page : null,
         typeof msg.name === 'string' ? msg.name : null,
+        sender.tab?.id,
       )
     } else if (
       type === 'self.action' &&

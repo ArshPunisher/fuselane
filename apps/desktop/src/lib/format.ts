@@ -21,19 +21,35 @@ export function num(n: number): string {
   return new Intl.NumberFormat(intlLocale()).format(n)
 }
 
-export function splitBytes(n: number): { value: string; unit: string } {
+export function splitBytes(
+  n: number,
+  round: 'nearest' | 'down' = 'nearest',
+): { value: string; unit: string } {
   let v = Math.max(0, n)
   let i = 0
   while (v >= 1024 && i < UNITS.length - 1) {
     v /= 1024
     i++
   }
-  const value = i === 0 || v >= 100 ? nf(0).format(v) : nf(1).format(v)
+  // What is shown has 0 digits from 100 up (and for bytes), else 1. Rounding down
+  // truncates to those digits, so 4.96 GB reads 4.9, never 5.0 (L-35).
+  const digits = i === 0 || v >= 100 ? 0 : 1
+  const shown = round === 'down' ? Math.floor(v * 10 ** digits) / 10 ** digits : v
+  const value = nf(digits).format(shown)
   return { value, unit: UNITS[i] ?? 'B' }
 }
 
 export function bytes(n: number): string {
   const s = splitBytes(n)
+  return `${s.value}${NBSP}${s.unit}`
+}
+
+/**
+ * Data used, for allowances and usage: rounds **down**, so a person on a capped
+ * plan is never told they have used more than they have (L-35).
+ */
+export function usedBytes(n: number): string {
+  const s = splitBytes(n, 'down')
   return `${s.value}${NBSP}${s.unit}`
 }
 

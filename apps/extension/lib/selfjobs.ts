@@ -14,6 +14,8 @@ export interface SelfJob {
   pageUrl: string | null
   name: string
   total: number | null
+  /** The version of the file the parts came from (`If-Range`); null when the server gave none. */
+  validator: string | null
   written: number
   /** Bytes per second right now (0 when not running). */
   rate: number
@@ -35,9 +37,20 @@ export function readJobs(stored: unknown): SelfJob[] {
     : []
 }
 
+/** Statuses of a job whose private file is still needed (to run, resume or save). */
+export const ACTIVE: SelfStatus[] = ['queued', 'running', 'paused', 'saving']
+
+/**
+ * The private files (`<id>.part`) in `names` whose job is not in `keep`: left behind
+ * by a failed save, a removed job or a list that dropped it. Other names are never ours.
+ */
+export function orphanedParts(names: string[], keep: Set<string>): string[] {
+  return names.filter((n) => /^x[a-z0-9]+\.part$/.test(n) && !keep.has(n.slice(0, -'.part'.length)))
+}
+
 /** Newest active first, then the latest finished ones, at most KEEP_DONE of those. */
 export function tidy(jobs: SelfJob[]): SelfJob[] {
-  const active = (j: SelfJob) => ['queued', 'running', 'paused', 'saving'].includes(j.status)
+  const active = (j: SelfJob) => ACTIVE.includes(j.status)
   const live = jobs.filter(active).sort((a, b) => b.createdAt - a.createdAt)
   const done = jobs
     .filter((j) => !active(j))
@@ -59,6 +72,7 @@ export function newJob(
     pageUrl,
     name,
     total,
+    validator: null,
     written: 0,
     rate: 0,
     status: 'queued',

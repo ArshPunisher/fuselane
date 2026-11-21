@@ -85,6 +85,7 @@ export function createFuseCore(canvas: HTMLCanvasElement, ticks: number) {
   let clock = 0
   let ignite = -1
   let wasComplete: boolean | null = null
+  let lastDone = -1
 
   function refreshColors() {
     colors = {
@@ -144,6 +145,7 @@ export function createFuseCore(canvas: HTMLCanvasElement, ticks: number) {
       if (data.fill[i]! >= 1 && before < 0.999) {
         shown[i] = 1
         doneAt[i] = clock
+        lastDone = clock
       }
     }
     const maxRate = Math.max(1, ...data.nets.map((n) => n.rate))
@@ -183,6 +185,24 @@ export function createFuseCore(canvas: HTMLCanvasElement, ticks: number) {
     const r1 = g.ring + g.tickLen * 0.7
     const r = g.orbit + (r1 - g.orbit) * Math.pow(t, 1.25)
     return { x: g.c.x + Math.cos(a) * r, y: g.c.y + Math.sin(a) * r }
+  }
+
+  /**
+   * Whether anything is still moving: a tick easing toward its target, comets in
+   * flight, a satellite spinning (a live network) or spreading, the finish sweep or
+   * a tick's flash. When false the picture is final and the frame loop can rest
+   * until `setData`, a resize or a theme change gives it something new to draw.
+   */
+  function busy(): boolean {
+    if (!data) return false
+    if (ignite >= 0 && ignite < 1.8) return true
+    if (comets.length > 0) return true
+    if (!reduced && lastDone >= 0 && clock - lastDone < 0.5) return true
+    for (let i = 0; i < ticks; i++) if (Math.abs(shown[i]! - data.fill[i]!) > 0.002) return true
+    return data.nets.some(
+      (n, i) =>
+        (!n.dead && !data!.complete) || Math.abs((spread[i] ?? 0) - (n.dead ? 1 : 0)) > 0.01,
+    )
   }
 
   function render() {
@@ -324,6 +344,7 @@ export function createFuseCore(canvas: HTMLCanvasElement, ticks: number) {
     setData,
     step,
     render,
+    busy,
     setReduced: (v: boolean) => {
       reduced = v
       if (v) comets = []

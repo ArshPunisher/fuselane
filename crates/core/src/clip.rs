@@ -30,7 +30,9 @@ pub fn download_link(text: &str) -> Option<String> {
     if t.is_empty() || t.len() > MAX_LEN || t.chars().any(char::is_whitespace) {
         return None;
     }
-    if t.len() >= 8 && t[..8].eq_ignore_ascii_case("magnet:?") {
+    if t.get(..8)
+        .is_some_and(|p| p.eq_ignore_ascii_case("magnet:?"))
+    {
         return t
             .to_ascii_lowercase()
             .contains("xt=urn:btih:")
@@ -53,6 +55,24 @@ pub fn download_link(text: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A copied word whose byte 8 falls inside a letter must be refused, never
+    /// panic (the clipboard watcher is a thread that would otherwise stop).
+    #[test]
+    fn non_ascii_words_are_not_links_and_never_panic() {
+        for word in [
+            "नमस्ते",
+            "日本語のテキスト",
+            "日本語",
+            "abcdefgé",
+            "abcdefé",
+            "é̀é̀é̀é̀é̀é̀",
+            "🙂🙂🙂",
+            "magnet:é",
+        ] {
+            assert_eq!(download_link(word), None, "{word:?}");
+        }
+    }
 
     #[test]
     fn file_links_and_magnets_count() {

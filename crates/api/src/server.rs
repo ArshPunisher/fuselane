@@ -462,14 +462,17 @@ mod unix {
     pub async fn run(listener: UnixListener, handler: Arc<dyn Handler>) {
         // SAFETY: getuid has no preconditions and cannot fail.
         let me = unsafe { libc::getuid() };
-        while let Ok((stream, _)) = listener.accept().await {
-            match stream.peer_cred() {
+        crate::accept::accept_forever(
+            "local API",
+            || listener.accept(),
+            |(stream, _)| match stream.peer_cred() {
                 Ok(c) if c.uid() == me => {
                     tokio::spawn(serve_conn(stream, handler.clone()));
                 }
                 _ => drop(stream),
-            }
-        }
+            },
+        )
+        .await;
     }
 }
 
@@ -494,18 +497,40 @@ pub async fn start(name: &Path, handler: Arc<dyn Handler>) -> std::io::Result<()
         .reject_remote_clients(true)
         .create(&name)?;
     tokio::spawn(async move {
+        // One failed connect or create must not end the API for good (L-126): wait,
+        // make a fresh pipe instance if needed, and go on.
+        let mut backoff = crate::accept::Backoff::default();
         loop {
-            if server.connect().await.is_err() {
-                return;
+            if let Err(e) = server.connect().await {
+                tokio::time::sleep(backoff.failed("local API", &e)).await;
+                if let Ok(fresh) = ServerOptions::new()
+                    .reject_remote_clients(true)
+                    .create(&name)
+                {
+                    server = fresh;
+                }
+                continue;
             }
-            let Ok(next) = ServerOptions::new()
+            match ServerOptions::new()
                 .reject_remote_clients(true)
                 .create(&name)
-            else {
-                return;
-            };
-            let conn = std::mem::replace(&mut server, next);
-            tokio::spawn(serve_conn(conn, handler.clone()));
+            {
+                Ok(next) => {
+                    backoff.ok();
+                    let conn = std::mem::replace(&mut server, next);
+                    tokio::spawn(serve_conn(conn, handler.clone()));
+                }
+                Err(e) => {
+                    // The connected client is dropped; try to make an instance again.
+                    tokio::time::sleep(backoff.failed("local API", &e)).await;
+                    if let Ok(fresh) = ServerOptions::new()
+                        .reject_remote_clients(true)
+                        .create(&name)
+                    {
+                        server = fresh;
+                    }
+                }
+            }
         }
     });
     Ok(())

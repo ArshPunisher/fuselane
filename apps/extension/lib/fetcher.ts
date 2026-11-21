@@ -14,6 +14,11 @@ export interface Probe {
   filename: string | null
   /** Where redirects ended (the parts are fetched from there). */
   finalUrl: string
+  /**
+   * What names this version of the file for `If-Range`: the strong ETag, else
+   * Last-Modified (a weak ETag can't be used there), else null.
+   */
+  validator: string | null
 }
 
 /** One part: bytes [start, end] inclusive, `done` of them saved from start. */
@@ -62,6 +67,28 @@ export function nameFor(url: string, server: string | null, browserGuess?: strin
   }
 }
 
+/** The part of a `Content-Range: bytes 10-99/1000` answer that is checked. */
+export function parseContentRange(
+  header: string | null,
+): { start: number; end: number; total: number | null } | null {
+  const m = /^\s*bytes\s+(\d+)-(\d+)\/(\d+|\*)\s*$/i.exec(header ?? '')
+  if (!m) return null
+  return { start: Number(m[1]), end: Number(m[2]), total: m[3] === '*' ? null : Number(m[3]) }
+}
+
+/** The file on the server isn't the one the earlier bytes came from (or the answer isn't the range asked for). */
+export class FileChanged extends Error {
+  constructor(message = 'The file on the server changed while it was downloading.') {
+    super(message)
+  }
+}
+
+function validatorOf(h: Headers): string | null {
+  const etag = h.get('etag')
+  if (etag && !/^w\//i.test(etag.trim())) return etag.trim()
+  return h.get('last-modified')?.trim() || null
+}
+
 /** Asks for the first byte: a 206 means ranges work and tells the size. */
 export async function probe(url: string, fetchFn: FetchFn, signal?: AbortSignal): Promise<Probe> {
   const res = await fetchFn(url, {
@@ -75,7 +102,13 @@ export async function probe(url: string, fetchFn: FetchFn, signal?: AbortSignal)
   // Don't download the body of a server that ignored the range.
   await res.body?.cancel().catch(() => {})
   if (res.status === 206 && range?.[1]) {
-    return { total: Number(range[1]), ranges: true, filename, finalUrl: res.url || url }
+    return {
+      total: Number(range[1]),
+      ranges: true,
+      filename,
+      finalUrl: res.url || url,
+      validator: validatorOf(res.headers),
+    }
   }
   const len = Number(res.headers.get('content-length'))
   return {
@@ -83,6 +116,7 @@ export async function probe(url: string, fetchFn: FetchFn, signal?: AbortSignal)
     ranges: false,
     filename,
     finalUrl: res.url || url,
+    validator: validatorOf(res.headers),
   }
 }
 
@@ -104,6 +138,10 @@ export interface RunOptions {
   url: string
   /** Null: one stream from the start (no ranges). */
   parts: Part[] | null
+  /** The size the probe found: every 206 must come from a file of this size. */
+  total?: number | null
+  /** The probe's version of the file, sent as `If-Range` with every part. */
+  validator?: string | null
   fetchFn: FetchFn
   /** Saves bytes at a position; awaited, so slow disks slow the network. */
   write: (position: number, data: Uint8Array) => Promise<void>
@@ -160,12 +198,35 @@ export async function run(o: RunOptions): Promise<number> {
         try {
           const from = p.start + p.done
           const res = await o.fetchFn(o.url, {
-            headers: { Range: `bytes=${from}-${p.end}` },
+            headers: {
+              Range: `bytes=${from}-${p.end}`,
+              ...(o.validator ? { 'If-Range': o.validator } : {}),
+            },
             signal: o.signal,
             credentials: 'include',
           })
+          // With If-Range, a 200 is the server saying the file is no longer the one
+          // we started with.
+          if (res.status === 200 && o.validator) {
+            await res.body?.cancel().catch(() => {})
+            throw new FileChanged()
+          }
           // 200 here would be the whole file from byte 0: refuse rather than corrupt.
           if (res.status !== 206 || !res.body) throw new Error(`The server answered ${res.status}.`)
+          // The bytes must be the ones asked for, from a file of the size we know.
+          const got = parseContentRange(res.headers.get('content-range'))
+          if (
+            !got ||
+            got.start !== from ||
+            got.end < from ||
+            (o.total != null && got.total !== null && got.total !== o.total) ||
+            (o.total != null && got.total === null)
+          ) {
+            await res.body.cancel().catch(() => {})
+            throw new FileChanged(
+              'The server sent a different part of the file than was asked for.',
+            )
+          }
           const reader = res.body.getReader()
           const before = p.done
           for (;;) {
@@ -188,6 +249,8 @@ export async function run(o: RunOptions): Promise<number> {
           attempt = 0
         } catch (e) {
           if (o.signal.aborted) throw o.signal.reason ?? e
+          // A different file is no use retrying: the caller starts again from zero.
+          if (e instanceof FileChanged) throw e
           if (attempt >= tries) throw e
           await sleep(500 * 2 ** (attempt - 1), o.signal)
         }

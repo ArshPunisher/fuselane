@@ -209,6 +209,29 @@ fn is_corrupt(e: &StoreError) -> bool {
     }
 }
 
+/// Brings the schema up to date in one transaction. The version is read again
+/// inside it, under the write lock: another process (the app and the browser's
+/// native host start together after an update) may have migrated since `seen`
+/// was read, and running its steps again fails on "duplicate column name".
+fn migrate(conn: &mut Connection) -> Result<(), StoreError> {
+    let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+    let version: i64 = tx.pragma_query_value(None, "user_version", |r| r.get(0))?;
+    let known = MIGRATIONS.len() as i64;
+    if version > known {
+        // Another (newer) copy migrated it meanwhile: leave it alone.
+        return Err(StoreError::TooNew {
+            found: version,
+            known,
+        });
+    }
+    for (i, sql) in MIGRATIONS.iter().enumerate().skip(version as usize) {
+        tx.execute_batch(sql)?;
+        tx.pragma_update(None, "user_version", i as i64 + 1)?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
 fn encode(secured: &[u64]) -> Vec<u8> {
     secured.iter().flat_map(|v| v.to_le_bytes()).collect()
 }
@@ -300,12 +323,7 @@ impl Store {
         if ok != "ok" {
             return Err(StoreError::Sql(rusqlite::Error::InvalidQuery));
         }
-        let tx = conn.transaction()?;
-        for (i, sql) in MIGRATIONS.iter().enumerate().skip(version as usize) {
-            tx.execute_batch(sql)?;
-            tx.pragma_update(None, "user_version", i as i64 + 1)?;
-        }
-        tx.commit()?;
+        migrate(&mut conn)?;
         Ok(conn)
     }
 
@@ -368,6 +386,17 @@ impl Store {
             .ok_or(StoreError::NotFound(id))
     }
 
+    /// Whether a download of exactly this link is in the list: one indexed-free
+    /// lookup that reads no progress blobs (adding many links at once asks it
+    /// per link; `list` would read every row each time).
+    pub fn has_url(&self, url: &str) -> Result<bool, StoreError> {
+        Ok(self.lock().query_row(
+            "SELECT EXISTS(SELECT 1 FROM jobs WHERE url = ?1)",
+            params![url],
+            |r| r.get::<_, bool>(0),
+        )?)
+    }
+
     /// Newest first.
     pub fn list(&self) -> Result<Vec<Job>, StoreError> {
         let c = self.lock();
@@ -403,14 +432,34 @@ impl Store {
     }
 
     /// Applies an event through the state machine; invalid transitions are refused.
+    ///
+    /// Reading the status and writing the next one is a single step (L-29): the
+    /// write only lands if the row still holds the status the transition was
+    /// decided from, so two events arriving together (two threads, or the app and
+    /// the command line) can't both succeed and overwrite each other. If another
+    /// process changed the row in between, the transition is decided again.
     pub fn apply(&self, id: i64, event: Event, error: Option<&str>) -> Result<Status, StoreError> {
-        let current = self.get(id)?.status;
-        let next = current.apply(event)?;
-        self.lock().execute(
-            "UPDATE jobs SET status = ?2, error = ?3, error_code = NULL, updated_at = ?4 WHERE id = ?1",
-            params![id, next.as_str(), error, now()],
-        )?;
-        Ok(next)
+        let c = self.lock();
+        for _ in 0..5 {
+            let word: String = c
+                .query_row("SELECT status FROM jobs WHERE id = ?1", params![id], |r| {
+                    r.get(0)
+                })
+                .optional()?
+                .ok_or(StoreError::NotFound(id))?;
+            let current = Status::parse(&word).unwrap_or(Status::Failed { resumable: false });
+            let next = current.apply(event)?;
+            let n = c.execute(
+                "UPDATE jobs SET status = ?2, error = ?3, error_code = NULL, updated_at = ?4
+                 WHERE id = ?1 AND status = ?5",
+                params![id, next.as_str(), error, now(), word],
+            )?;
+            if n == 1 {
+                return Ok(next);
+            }
+        }
+        // Five changes under our feet in a row: give up rather than loop.
+        Err(StoreError::Sql(rusqlite::Error::StatementChangedRows(0)))
     }
 
     /// Records where the finished file is and its size (a fast download may finish
@@ -637,12 +686,31 @@ impl Store {
     }
 
     /// After a crash, jobs still marked running didn't stop cleanly: they come back
-    /// paused, never auto-started (L-53).
+    /// paused, never auto-started (L-53). A job another process holds the claim on
+    /// (the command line downloading while the app starts) is running, not
+    /// interrupted, and is left alone (L-111). Returns how many were repaired.
     pub fn recover_interrupted(&self) -> Result<usize, StoreError> {
-        Ok(self.lock().execute(
-            "UPDATE jobs SET status = 'paused', updated_at = ?1 WHERE status IN ('running', 'queued')",
-            params![now()],
-        )?)
+        let ids: Vec<i64> = {
+            let c = self.lock();
+            let mut st = c.prepare("SELECT id FROM jobs WHERE status IN ('running', 'queued')")?;
+            st.query_map([], |r| r.get(0))?.collect::<Result<_, _>>()?
+        };
+        let mut repaired = 0;
+        for id in ids {
+            // Held by someone: skip. The claim is only a probe, so let go at once. If
+            // the claim can't be tried at all (an unwritable locks folder), nobody
+            // can be told apart from a crash, so repair as before.
+            let probe = self.lock_job(id);
+            if matches!(probe, Ok(None)) {
+                continue;
+            }
+            repaired += self.lock().execute(
+                "UPDATE jobs SET status = 'paused', updated_at = ?2
+                 WHERE id = ?1 AND status IN ('running', 'queued')",
+                params![id, now()],
+            )?;
+        }
+        Ok(repaired)
     }
 }
 
@@ -707,6 +775,92 @@ mod tests {
             raw_etag: Some("\"v1\"".into()),
             last_modified: None,
         }
+    }
+
+    /// Two processes that start together on an old list (the app and the browser's
+    /// native host after an update) both read the old version; the second must find
+    /// the first one's work already done, not fail on "duplicate column name".
+    #[test]
+    fn a_second_opener_that_read_the_old_version_finds_the_list_already_migrated() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("jobs.db");
+        // A v10 list, as the last release left it.
+        {
+            let c = Connection::open(&path).unwrap();
+            for (i, sql) in MIGRATIONS.iter().enumerate().take(10) {
+                c.execute_batch(sql).unwrap();
+                c.pragma_update(None, "user_version", i as i64 + 1).unwrap();
+            }
+            c.execute(
+                "INSERT INTO jobs (url, dir, status, created_at, updated_at) VALUES ('https://e/x', '/d', 'paused', 1, 1)",
+                [],
+            )
+            .unwrap();
+        }
+        let mut first = Connection::open(&path).unwrap();
+        let mut second = Connection::open(&path).unwrap();
+        let (seen_a, seen_b): (i64, i64) = (
+            first
+                .pragma_query_value(None, "user_version", |r| r.get(0))
+                .unwrap(),
+            second
+                .pragma_query_value(None, "user_version", |r| r.get(0))
+                .unwrap(),
+        );
+        assert_eq!((seen_a, seen_b), (10, 10));
+        migrate(&mut first).unwrap();
+        migrate(&mut second).expect("the second opener must not fail");
+        let v: i64 = second
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, MIGRATIONS.len() as i64);
+        let n: i64 = second
+            .query_row("SELECT COUNT(*) FROM jobs", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 1, "the job survived both");
+    }
+
+    /// Pause and Complete land on a running job at the same moment (from two
+    /// threads, or two processes on one list): the transition table allows only
+    /// one of them, so exactly one may succeed and the row must hold its result.
+    #[test]
+    fn racing_events_on_one_job_cannot_both_win() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("jobs.db");
+        let a = std::sync::Arc::new(Store::open(&path).unwrap());
+        let b = std::sync::Arc::new(Store::open(&path).unwrap());
+        for round in 0..400 {
+            let id = a.create("https://example.com/r", dir.path()).unwrap();
+            a.apply(id, Event::Start, None).unwrap();
+            let gate = std::sync::Arc::new(std::sync::Barrier::new(2));
+            let (g1, g2) = (gate.clone(), gate);
+            let (s1, s2) = (a.clone(), b.clone());
+            let t1 = std::thread::spawn(move || {
+                g1.wait();
+                s1.apply(id, Event::Pause, None)
+            });
+            let t2 = std::thread::spawn(move || {
+                g2.wait();
+                s2.apply(id, Event::Complete, None)
+            });
+            let (r1, r2) = (t1.join().unwrap(), t2.join().unwrap());
+            let stored = a.get(id).unwrap().status;
+            match (r1, r2) {
+                (Ok(p), Err(_)) => assert_eq!(stored, p, "round {round}"),
+                (Err(_), Ok(c)) => assert_eq!(stored, c, "round {round}"),
+                (r1, r2) => panic!("round {round}: both or neither won: {r1:?} {r2:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn a_link_in_the_list_is_found_without_reading_every_job() {
+        let d = tempfile::tempdir().unwrap();
+        let s = Store::open(&d.path().join("jobs.db")).unwrap();
+        assert!(!s.has_url("https://x/a").unwrap());
+        s.create("https://x/a", d.path()).unwrap();
+        assert!(s.has_url("https://x/a").unwrap());
+        assert!(!s.has_url("https://x/a?x=1").unwrap(), "exact links only");
     }
 
     #[test]
@@ -1044,6 +1198,41 @@ mod tests {
         assert_eq!(s.recover_interrupted().unwrap(), 1);
         assert_eq!(s.get(a).unwrap().status, Status::Paused);
         assert_eq!(s.get(b).unwrap().status, Status::Completed);
+    }
+
+    /// The app starting while the command line downloads (L-111): a job another
+    /// process is running is not "interrupted", whatever the list says.
+    #[test]
+    fn recovery_leaves_a_download_another_process_is_running() {
+        let d = tempfile::tempdir().unwrap();
+        let path = d.path().join("jobs.db");
+        let cli = Store::open(&path).unwrap();
+        let id = cli.create("https://x/a", d.path()).unwrap();
+        cli.apply(id, Event::Start, None).unwrap();
+        let claim = cli.lock_job(id).unwrap().unwrap();
+        let app = Store::open(&path).unwrap();
+        assert_eq!(app.recover_interrupted().unwrap(), 0);
+        assert_eq!(
+            app.get(id).unwrap().status,
+            Status::Running,
+            "still running"
+        );
+        drop(claim); // the command line was killed
+        assert_eq!(app.recover_interrupted().unwrap(), 1);
+        assert_eq!(app.get(id).unwrap().status, Status::Paused);
+    }
+
+    #[test]
+    fn recovery_still_repairs_when_the_claim_cannot_be_tried() {
+        let d = tempfile::tempdir().unwrap();
+        let s = Store::open(&d.path().join("jobs.db")).unwrap();
+        let id = s.create("https://x/a", d.path()).unwrap();
+        s.apply(id, Event::Start, None).unwrap();
+        // A file where the locks folder should be: no claim can be made.
+        std::fs::write(d.path().join("locks"), b"").unwrap();
+        assert!(s.lock_job(id).is_err());
+        assert_eq!(s.recover_interrupted().unwrap(), 1);
+        assert_eq!(s.get(id).unwrap().status, Status::Paused);
     }
 
     #[test]

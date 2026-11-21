@@ -144,6 +144,54 @@ export function applyTheme(t: Theme) {
   else document.documentElement.dataset.theme = t
 }
 
+const sameValue = (a: unknown, b: unknown): boolean =>
+  Object.is(a, b) ||
+  (typeof a === 'object' && typeof b === 'object' && JSON.stringify(a) === JSON.stringify(b))
+
+/**
+ * The new list, reusing the previous object for every row whose data is the same.
+ * An IPC event delivers fresh objects for all rows, which would re-render every row
+ * of a long list for one change; with the objects kept, memoised rows skip it. The
+ * previous array itself is returned when nothing changed at all.
+ */
+export function shareUnchanged<T extends { id: number }>(prev: T[], next: T[]): T[] {
+  const before = new Map(prev.map((p) => [p.id, p]))
+  const out = next.map((n) => {
+    const p = before.get(n.id)
+    if (!p) return n
+    const keys = new Set([...Object.keys(p), ...Object.keys(n)])
+    for (const k of keys) {
+      if (!sameValue((p as Record<string, unknown>)[k], (n as Record<string, unknown>)[k])) return n
+    }
+    return p
+  })
+  return out.length === prev.length && out.every((o, i) => o === prev[i]) ? prev : out
+}
+
+/**
+ * The live snapshots and rate history of downloads that are no longer in the list.
+ * They are never needed again, and left alone they grow for as long as the window
+ * lives (days, in the tray). Maps with nothing to drop keep their identity, so
+ * nothing re-renders for them.
+ */
+export function forgetGone(
+  s: Pick<State, 'live' | 'history'>,
+  jobs: readonly { id: number }[],
+): Pick<State, 'live' | 'history'> {
+  const ids = new Set(jobs.map((j) => j.id))
+  const keep = <T>(m: Record<number, T>): Record<number, T> => {
+    const out: Record<number, T> = {}
+    let dropped = false
+    for (const k of Object.keys(m)) {
+      const id = Number(k)
+      if (ids.has(id)) out[id] = m[id] as T
+      else dropped = true
+    }
+    return dropped ? out : m
+  }
+  return { live: keep(s.live), history: keep(s.history) }
+}
+
 export const useApp = create<State>((set, get) => ({
   backend: null,
   ready: false,
@@ -478,9 +526,10 @@ async function startOnce(): Promise<void> {
       if (e.type === 'jobs') {
         const ids = new Set(e.jobs.map((j) => j.id))
         set((s) => ({
-          jobs: e.jobs,
+          jobs: shareUnchanged(s.jobs, e.jobs),
           ready: true,
           selected: s.selected !== null && !ids.has(s.selected) ? null : s.selected,
+          ...forgetGone(s, e.jobs),
         }))
         return
       }
