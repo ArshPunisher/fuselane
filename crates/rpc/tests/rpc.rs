@@ -8,6 +8,17 @@ use fuselane_rpc::{Add, Event, Host, Job, Rpc, Server, Status, gid};
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+/// The folder the fake app saves into, and a folder beside it that it doesn't.
+fn root() -> &'static std::path::Path {
+    static ROOT: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+    ROOT.get_or_init(|| {
+        let r = std::env::temp_dir().join(format!("fuselane-rpc-test-{}", std::process::id()));
+        std::fs::create_dir_all(r.join("Downloads/sub")).unwrap();
+        std::fs::create_dir_all(r.join("elsewhere")).unwrap();
+        std::fs::canonicalize(r).unwrap()
+    })
+}
+
 #[derive(Default)]
 struct Fake {
     jobs: Mutex<Vec<Job>>,
@@ -47,7 +58,9 @@ impl Host for Fake {
             id,
             url: add.uris[0].clone(),
             mirrors: add.uris[1..].to_vec(),
-            dir: add.dir.unwrap_or_else(|| "/Users/me/Downloads".into()),
+            dir: add
+                .dir
+                .unwrap_or_else(|| root().join("Downloads").display().to_string()),
             name: add.out.unwrap_or_else(|| "file.iso".into()),
             status: if add.paused {
                 Status::Paused
@@ -91,7 +104,7 @@ impl Host for Fake {
         Ok(())
     }
     fn default_dir(&self) -> String {
-        "/Users/me/Downloads".into()
+        root().join("Downloads").display().to_string()
     }
     fn max_running(&self) -> usize {
         *self.max.lock().unwrap()
@@ -164,16 +177,17 @@ fn a_wrong_or_missing_secret_is_refused() {
 fn add_watch_pause_and_remove_like_ariang_does() {
     let host = Arc::new(Fake::default());
     let rpc = Rpc::new(host.clone(), SECRET.into());
+    let sub = root().join("Downloads/sub").display().to_string();
     let g = ok(
         &rpc,
         "aria2.addUri",
-        json!([["https://a.example/f.iso", "https://b.example/f.iso"], {"dir": "/tmp/x", "out": "f.iso"}]),
+        json!([["https://a.example/f.iso", "https://b.example/f.iso"], {"dir": sub, "out": "f.iso"}]),
     );
     assert_eq!(g, gid(10));
     let j = host.job(10);
     assert_eq!(
         (j.dir.as_str(), j.name.as_str(), j.mirrors.len()),
-        ("/tmp/x", "f.iso", 1)
+        (sub.as_str(), "f.iso", 1)
     );
 
     let s = ok(&rpc, "aria2.tellStatus", json!([g]));
@@ -181,7 +195,7 @@ fn add_watch_pause_and_remove_like_ariang_does() {
     assert_eq!(s["totalLength"], "1000");
     assert_eq!(s["completedLength"], "250");
     assert_eq!(s["downloadSpeed"], "4096");
-    assert_eq!(s["files"][0]["path"], "/tmp/x/f.iso");
+    assert_eq!(s["files"][0]["path"], format!("{sub}/f.iso"));
     assert_eq!(s["files"][0]["uris"][1]["uri"], "https://b.example/f.iso");
     // Only the keys asked for.
     let s = ok(&rpc, "aria2.tellStatus", json!([g, ["gid", "status"]]));
@@ -611,4 +625,52 @@ async fn websockets_that_showed_the_secret_get_notifications() {
     // After stopping, the notifier goes quiet without failing.
     server.stop().await;
     notifier.notify(15, Event::Start);
+}
+
+/// L-98 / T15: a remote caller saves into the download folder or below it, never
+/// into a folder of its own choosing (an autostart folder, a user's `.ssh`).
+#[test]
+fn a_remote_caller_cannot_choose_where_files_are_saved() {
+    let host = Arc::new(Fake::default());
+    let rpc = Rpc::new(host.clone(), SECRET.into());
+    let outside = root().join("elsewhere").display().to_string();
+    let escaping = format!("{}/Downloads/../elsewhere", root().display());
+    let missing = root().join("Downloads/nope").display().to_string();
+    for dir in [
+        outside.as_str(),
+        escaping.as_str(),
+        missing.as_str(),
+        "/",
+        "relative/dir",
+    ] {
+        let (code, v) = call(
+            &rpc,
+            "aria2.addUri",
+            json!([["https://a.example/f.iso"], {"dir": dir}]),
+        );
+        assert_eq!(code, 400, "{dir}: {v}");
+        assert!(
+            v["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("isn't a folder Fuselane"),
+            "{dir}: {v}"
+        );
+    }
+    assert!(host.jobs.lock().unwrap().is_empty(), "nothing was added");
+    // The same rule for a Metalink.
+    let (code, _) = call(
+        &rpc,
+        "aria2.addMetalink",
+        json!(["PHJzcy8+", {"dir": outside}]),
+    );
+    assert_eq!(code, 400);
+    // Leaving dir out, or naming the download folder itself, still works.
+    ok(&rpc, "aria2.addUri", json!([["https://a.example/f.iso"]]));
+    let home = root().join("Downloads").display().to_string();
+    ok(
+        &rpc,
+        "aria2.addUri",
+        json!([["https://a.example/g.iso"], {"dir": home}]),
+    );
 }

@@ -176,6 +176,12 @@ pub trait Host: Send + Sync + 'static {
     /// Takes it out of the list (the file stays where it is).
     fn remove(&self, id: i64) -> Result<(), String>;
     fn default_dir(&self) -> String;
+    /// Folders a remote caller may save into, each with everything below it. A
+    /// remote caller never picks a folder of its own (L-98, T15): the default is
+    /// the download folder. The app may add folders the person chose.
+    fn allowed_dirs(&self) -> Vec<String> {
+        vec![self.default_dir()]
+    }
     fn max_running(&self) -> usize;
     fn set_max_running(&self, n: usize) -> Result<(), String>;
 }
@@ -573,7 +579,7 @@ impl<H: Host> Rpc<H> {
         };
         let add = Add {
             uris,
-            dir: opt("dir"),
+            dir: self.checked_dir(opt("dir"))?,
             out: opt("out"),
             paused: opt("pause").as_deref() == Some("true"),
         };
@@ -601,11 +607,37 @@ impl<H: Host> Rpc<H> {
         };
         let ids = self
             .host
-            .add_metalink(&xml, opt("dir"), opt("pause").as_deref() == Some("true"))
+            .add_metalink(
+                &xml,
+                self.checked_dir(opt("dir"))?,
+                opt("pause").as_deref() == Some("true"),
+            )
             .map_err(fault)?;
         Ok(Value::Array(
             ids.into_iter().map(|id| json!(gid(id))).collect(),
         ))
+    }
+
+    /// `dir` as given, if it is one of the folders a remote caller may save into
+    /// (or inside one); anything else, including a `..` way out or a link that
+    /// leads out, is refused. Symbolic links and `..` are resolved first.
+    fn checked_dir(&self, dir: Option<String>) -> Result<Option<String>, Fault> {
+        let Some(dir) = dir else { return Ok(None) };
+        let wanted = std::fs::canonicalize(&dir).ok();
+        let allowed = wanted.as_ref().is_some_and(|w| {
+            self.host
+                .allowed_dirs()
+                .iter()
+                .filter_map(|root| std::fs::canonicalize(root).ok())
+                .any(|root| w.starts_with(root))
+        });
+        if allowed {
+            Ok(Some(dir))
+        } else {
+            Err(fault(
+                "That isn't a folder Fuselane saves into. Leave dir out, or choose the folder in Fuselane first.",
+            ))
+        }
     }
 
     fn find(&self, id: i64) -> Result<Job, Fault> {
