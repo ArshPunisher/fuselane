@@ -1761,6 +1761,13 @@ fn hand_over(context: tauri::Context<tauri::Wry>) {
     }
     let result = tauri::Builder::default()
         .plugin(single_instance.build())
+        // Plugins start before this: reaching it means no running Fuselane
+        // answered yet (it holds the lock but is still starting). Never linger
+        // as an invisible second app: say so and leave.
+        .setup(|_| {
+            eprintln!("fuselane: Fuselane is still starting; try again in a moment.");
+            std::process::exit(0)
+        })
         .run(context);
     // The plugin exits once it has handed over; reaching here means it couldn't.
     if let Err(e) = result {
