@@ -939,6 +939,8 @@ impl Torrents {
 
     /// Removes a torrent from the list; with `delete_files`, its files too.
     pub async fn remove(&self, id: &str, delete_files: bool) -> Result<(), UiError> {
+        // Not waiting to come back either: a removed torrent stays removed.
+        self.back(id);
         let entry = {
             let mut entries = self.entries.lock().await;
             let i = entries
@@ -1275,14 +1277,19 @@ impl Torrents {
             }
             *tried = Some(Instant::now());
         }
+        // Restoration is ours before the list is read, so a removal or a launch
+        // restore in between can't leave this retry with a stale copy.
+        let Ok(_one) = self.restoring.try_lock() else {
+            return;
+        };
         // Copied, not taken: they stay saved until they're really back.
         let list = self
             .waiting
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone();
-        if !list.is_empty() && self.restoring.try_lock().is_ok() {
-            self.bring_back(list).await;
+        if !list.is_empty() {
+            self.bring_back_locked(list).await;
         }
     }
 
@@ -1290,6 +1297,11 @@ impl Torrents {
     /// (see `waiting`) instead of disappearing.
     async fn bring_back(&self, saved: Vec<Saved>) {
         let _one = self.restoring.lock().await;
+        self.bring_back_locked(saved).await;
+    }
+
+    /// `bring_back` for a caller that already holds `restoring`.
+    async fn bring_back_locked(&self, saved: Vec<Saved>) {
         // Every record stays in `waiting` (so `save` keeps it) until it is back in
         // the list: a save while this awaits can never drop one.
         for s in &saved {
