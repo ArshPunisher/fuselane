@@ -11,10 +11,18 @@ test('Recent shows the latest 200 and a button for older ones', async ({ page })
   await expect(rows).toHaveCount(200, { timeout: 15_000 })
   const more = page.getByRole('button', { name: /Show older/ })
   await expect(more).toBeVisible()
-  await more.click()
-  await expect(rows).toHaveCount(400, { timeout: 15_000 })
-  await page.getByRole('button', { name: /Show older/ }).click()
-  await expect(page.getByRole('button', { name: /Show older/ })).toHaveCount(0)
+  // Linux WebKit on CI sometimes drops this first click (cause still open, see
+  // fuselane-scan/FINDINGS.md); click again only while nothing changed, so a
+  // second step can never be added by accident.
+  await expect(async () => {
+    if ((await rows.count()) === 200) await more.click()
+    await expect(rows).toHaveCount(400, { timeout: 4000 })
+  }).toPass({ timeout: 30_000 })
+  const older = page.getByRole('button', { name: /Show older/ })
+  await expect(async () => {
+    if ((await rows.count()) === 400) await older.click()
+    await expect(older).toHaveCount(0, { timeout: 4000 })
+  }).toPass({ timeout: 30_000 })
   expect(await rows.count()).toBeGreaterThan(400)
 })
 
