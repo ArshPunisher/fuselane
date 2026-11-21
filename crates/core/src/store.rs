@@ -455,7 +455,10 @@ impl Store {
             let current = Status::parse(&word).unwrap_or(Status::Failed { resumable: false });
             let next = current.apply(event)?;
             let n = c.execute(
-                "UPDATE jobs SET status = ?2, error = ?3, error_code = NULL, updated_at = ?4
+                "UPDATE jobs SET status = ?2, error = ?3, error_code = NULL, updated_at = ?4,
+                     publish_from = CASE WHEN ?2 = 'completed' THEN NULL ELSE publish_from END,
+                     publish_to = CASE WHEN ?2 = 'completed' THEN NULL ELSE publish_to END,
+                     publish_size = CASE WHEN ?2 = 'completed' THEN NULL ELSE publish_size END
                  WHERE id = ?1 AND status = ?5",
                 params![id, next.as_str(), error, now(), word],
             )?;
@@ -673,15 +676,16 @@ impl Store {
 
     pub fn set_finished(&self, id: i64, path: &Path, total: u64) -> Result<(), StoreError> {
         self.lock().execute(
-            "UPDATE jobs SET final_path = ?2, staging_path = NULL, total = ?3,
-                 publish_from = NULL, publish_to = NULL, publish_size = NULL WHERE id = ?1",
+            "UPDATE jobs SET final_path = ?2, staging_path = NULL, total = ?3 WHERE id = ?1",
             params![id, path.to_string_lossy(), total as i64],
         )?;
         Ok(())
     }
 
     /// Writes down that the finished file is about to be renamed from `from` to `to` (L-54).
-    /// Done right before the rename; `set_finished` (or `clear_publish_intent`) forgets it.
+    /// Done right before the rename; completing the job (or `clear_publish_intent`) forgets
+    /// it in the same write, so a stop between `set_finished` and the completion is still
+    /// finished by the next start.
     pub fn set_publish_intent(
         &self,
         id: i64,
@@ -1056,10 +1060,17 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let (store, path, id, _from, to) = journalled(d.path(), true, 4);
         store.set_finished(id, &to, 4).unwrap();
-        store.apply(id, Event::Complete, None).unwrap();
+        // Stopped here, between the two: the intent is still there to finish from.
+        let before = store.get(id).unwrap();
+        assert_eq!(
+            (before.status, before.staging_path),
+            (Status::Running, None)
+        );
+        assert_eq!(store.recover_publishes().unwrap(), vec![(id, true)]);
+        assert_eq!(store.get(id).unwrap().status, Status::Completed);
         assert!(
             store.recover_publishes().unwrap().is_empty(),
-            "set_finished cleared the intent"
+            "completing cleared the intent"
         );
         // Another process is still running it: not a crash, so hands off.
         let id2 = store.create("https://x/b", d.path()).unwrap();

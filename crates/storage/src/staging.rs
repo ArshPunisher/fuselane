@@ -195,18 +195,21 @@ pub fn finish_publish(from: &Path, to: &Path, size: u64) -> io::Result<Finished>
             .filter(|m| m.is_file())
             .map(|m| m.len())
     };
+    let dir = to.parent().unwrap_or_else(|| Path::new("."));
     if len(to) == Some(size) && len(from).is_none() {
+        // The rename happened; its directory entry may not have reached the disk yet.
+        sync_dir(dir);
         return Ok(Finished::AlreadyThere(to.to_path_buf()));
     }
     if len(from) != Some(size) {
         // No staging file to rename: a final file of the right size still counts.
         return Ok(if len(to) == Some(size) {
+            sync_dir(dir);
             Finished::AlreadyThere(to.to_path_buf())
         } else {
             Finished::Missing
         });
     }
-    let dir = to.parent().unwrap_or_else(|| Path::new("."));
     let name = to
         .file_name()
         .and_then(|n| n.to_str())
