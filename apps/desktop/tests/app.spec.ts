@@ -233,7 +233,10 @@ test('reduced motion still shows progress', async ({ page }) => {
 test('200 downloads with awkward names stay usable and never scroll sideways', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 })
   await page.goto('/?many=200')
-  // 200 + the 5 sample downloads + the sample torrent.
+  // 200 + the 5 sample downloads + the sample torrent; the finished ones show 200 at a
+  // time, so a few of the oldest wait behind "Show older".
+  await expect(page.locator('.row')).toHaveCount(202)
+  await page.getByRole('button', { name: /Show older/ }).click()
   await expect(page.locator('.row')).toHaveCount(206)
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
   expect(overflow).toBeLessThanOrEqual(0)

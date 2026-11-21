@@ -428,6 +428,9 @@ function TorrentRow({ t: tor }: { t: TorrentView }) {
   )
 }
 
+/** Finished downloads drawn at a time; a long history is shown in steps of this many. */
+const RECENT_STEP = 200
+
 type Filter = 'all' | 'active' | 'done' | 'failed'
 const FILTERS: { id: Filter; label: string }[] = [
   { id: 'all', label: mark('All') },
@@ -454,6 +457,9 @@ export function TransferList() {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
   const [type, setType] = useState<FileType | 'all'>('all')
+  // How many of the finished downloads are drawn: the latest few, then older on request.
+  const [recentLimit, setRecentLimit] = useState(RECENT_STEP)
+  useEffect(() => setRecentLimit(RECENT_STEP), [query, filter, type])
   const ready = useApp((s) => s.ready)
   const setAdding = useApp((s) => s.setAdding)
   const [feedsOpen, setFeedsOpen] = useState(false)
@@ -662,10 +668,19 @@ export function TransferList() {
             {t('Recent')} <span className="num">{rest.length}</span>
           </h2>
           <ul className="list">
-            {rest.map((j) => (
+            {rest.slice(0, recentLimit).map((j) => (
               <Row key={j.id} job={j} />
             ))}
           </ul>
+          {rest.length > recentLimit && (
+            <button
+              type="button"
+              className="btn btn-sm show-older"
+              onClick={() => setRecentLimit((n) => n + RECENT_STEP)}
+            >
+              {t('Show older ({n} more)', { n: rest.length - recentLimit })}
+            </button>
+          )}
         </section>
       )}
     </div>

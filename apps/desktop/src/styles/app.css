@@ -7636,3 +7636,7 @@ html[data-hidden] .orb b {
   flex: none;
   margin-top: 2px;
 }
+
+.show-older {
+  margin: 8px 12px 4px;
+}
