@@ -1868,6 +1868,7 @@ dependencies = [
  "futures-lite",
  "getrandom 0.3.4",
  "keyring",
+ "libc",
  "librqbit",
  "minisign-verify 0.2.5",
  "qrcode",

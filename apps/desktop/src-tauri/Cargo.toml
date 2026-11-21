@@ -60,6 +60,10 @@ keyring = { version = "3", features = ["apple-native", "windows-native", "sync-s
 
 # XDG portals in a Flatpak (src/portal.rs): both are already in the build through
 # the single-instance plugin, so this adds no crates.
+[target.'cfg(unix)'.dependencies]
+# getrlimit/setrlimit: raise the open-files limit at start-up (fd_limit.rs).
+libc = "0.2"
+
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus = "5"
 futures-lite = "2"

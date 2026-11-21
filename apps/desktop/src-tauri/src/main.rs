@@ -9,6 +9,7 @@ mod api_bridge;
 mod automation;
 mod battery;
 mod browser_open;
+mod fd_limit;
 mod feeds;
 mod flatpak;
 mod helpers;
@@ -1923,6 +1924,10 @@ fn main() {
     if std::env::args().any(|a| a == "--version") {
         println!("fuselane-desktop {}", env!("CARGO_PKG_VERSION"));
         return;
+    }
+    // Room for every connection (a Finder-started Mac app gets only 256 files).
+    if !fd_limit::raise() {
+        eprintln!("fuselane: couldn't raise the open-files limit; carrying on");
     }
     // Made once: the macro embeds the bundle's Info.plist, which can't be done twice.
     let context = tauri::generate_context!();
