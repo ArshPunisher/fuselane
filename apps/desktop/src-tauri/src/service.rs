@@ -1018,6 +1018,9 @@ impl Service {
         default_dir: PathBuf,
         secrets: Arc<dyn secrets::Secrets>,
     ) -> Result<Arc<Service>, UiError> {
+        // A publish a crash cut short is finished first, so that file isn't left paused as
+        // if it were half-done (L-54).
+        store.recover_publishes().map_err(store_error)?;
         store.recover_interrupted().map_err(store_error)?;
         // Saved limits come back on launch; a damaged value is ignored, not fatal.
         let limiter = Arc::new(Limiter::default());

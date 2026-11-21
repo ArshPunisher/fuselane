@@ -86,6 +86,11 @@ const MIGRATIONS: &[&str] = &[
     "CREATE TABLE groups (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
         created_at INTEGER NOT NULL);
      ALTER TABLE jobs ADD COLUMN group_id INTEGER;",
+    // v14: the finished file's rename is written down before it happens (L-54), so a
+    // crash between the rename and the row's own update can be finished on the next start.
+    "ALTER TABLE jobs ADD COLUMN publish_from TEXT;
+     ALTER TABLE jobs ADD COLUMN publish_to TEXT;
+     ALTER TABLE jobs ADD COLUMN publish_size INTEGER;",
 ];
 
 /// What a person can set when adding a download, beyond the link and folder.
@@ -668,10 +673,103 @@ impl Store {
 
     pub fn set_finished(&self, id: i64, path: &Path, total: u64) -> Result<(), StoreError> {
         self.lock().execute(
-            "UPDATE jobs SET final_path = ?2, staging_path = NULL, total = ?3 WHERE id = ?1",
+            "UPDATE jobs SET final_path = ?2, staging_path = NULL, total = ?3,
+                 publish_from = NULL, publish_to = NULL, publish_size = NULL WHERE id = ?1",
             params![id, path.to_string_lossy(), total as i64],
         )?;
         Ok(())
+    }
+
+    /// Writes down that the finished file is about to be renamed from `from` to `to` (L-54).
+    /// Done right before the rename; `set_finished` (or `clear_publish_intent`) forgets it.
+    pub fn set_publish_intent(
+        &self,
+        id: i64,
+        from: &Path,
+        to: &Path,
+        size: u64,
+    ) -> Result<(), StoreError> {
+        self.lock().execute(
+            "UPDATE jobs SET publish_from = ?2, publish_to = ?3, publish_size = ?4 WHERE id = ?1",
+            params![
+                id,
+                from.to_string_lossy(),
+                to.to_string_lossy(),
+                size as i64
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Forgets a publish intent: the publish didn't happen (it failed or was paused).
+    pub fn clear_publish_intent(&self, id: i64) -> Result<(), StoreError> {
+        self.lock().execute(
+            "UPDATE jobs SET publish_from = NULL, publish_to = NULL, publish_size = NULL
+             WHERE id = ?1",
+            params![id],
+        )?;
+        Ok(())
+    }
+
+    /// Finishes or undoes every publish a crash cut short (L-54). Run before
+    /// `recover_interrupted`, at start-up. For each job still marked as running with a
+    /// written-down intent: a final file of the right size is taken as the result, else a
+    /// staging file of the right size is renamed into place, else the job fails with a
+    /// plain message. A job another process holds the claim on is running, not crashed,
+    /// and is left alone. Returns each repaired job's id and whether it now has its file.
+    pub fn recover_publishes(&self) -> Result<Vec<(i64, bool)>, StoreError> {
+        use fuselane_storage::staging::{Finished, finish_publish};
+        type Intent = (i64, String, String, i64);
+        let intents: Vec<Intent> = {
+            let c = self.lock();
+            let mut st = c.prepare(
+                "SELECT id, publish_from, publish_to, publish_size FROM jobs
+                 WHERE publish_from IS NOT NULL AND publish_to IS NOT NULL
+                   AND publish_size IS NOT NULL
+                   AND status IN ('running', 'queued', 'paused')",
+            )?;
+            st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
+                .collect::<Result<_, _>>()?
+        };
+        let mut repaired = Vec::new();
+        for (id, from, to, size) in intents {
+            // Held by someone: skip (an unwritable locks folder can't tell anyone apart,
+            // so repair as `recover_interrupted` does). The claim lasts through the repair.
+            let claim = self.lock_job(id);
+            if matches!(claim, Ok(None)) {
+                continue;
+            }
+            let size = u64::try_from(size).unwrap_or(0);
+            let done = match finish_publish(Path::new(&from), Path::new(&to), size) {
+                Ok(Finished::AlreadyThere(p) | Finished::Renamed(p)) => Some(p),
+                Ok(Finished::Missing) => None,
+                // The disk said no (permissions, a missing drive): leave the intent for
+                // the next start rather than guess.
+                Err(_) => continue,
+            };
+            // A paused job runs again only in order to be completed or failed.
+            let _ = self.apply(id, Event::Start, None);
+            match &done {
+                Some(path) => {
+                    self.set_finished(id, path, size)?;
+                    self.apply(id, Event::Complete, None)?;
+                }
+                None => {
+                    self.apply(
+                        id,
+                        Event::Fail { resumable: false },
+                        Some(
+                            "Fuselane stopped while saving this download, and the finished \
+                             file isn't there. Start the download again.",
+                        ),
+                    )?;
+                    self.set_error_code(id, "start-over")?;
+                    self.clear_publish_intent(id)?;
+                }
+            }
+            repaired.push((id, done.is_some()));
+        }
+        Ok(repaired)
     }
 
     pub fn delete(&self, id: i64) -> Result<(), StoreError> {
@@ -861,6 +959,118 @@ mod tests {
         s.create("https://x/a", d.path()).unwrap();
         assert!(s.has_url("https://x/a").unwrap());
         assert!(!s.has_url("https://x/a?x=1").unwrap(), "exact links only");
+    }
+
+    /// L-54: a crash between the finished file's rename and the store's own update.
+    fn journalled(
+        dir: &Path,
+        rename_happened: bool,
+        size_on_disk: u64,
+    ) -> (Store, PathBuf, i64, PathBuf, PathBuf) {
+        let path = dir.join("jobs.db");
+        let store = Store::open(&path).unwrap();
+        let id = store.create("https://x/movie.mkv", dir).unwrap();
+        store.apply(id, Event::Start, None).unwrap();
+        let (from, to) = (dir.join("movie.mkv.fuselane"), dir.join("movie.mkv"));
+        store.set_publish_intent(id, &from, &to, 4).unwrap();
+        let data = vec![7u8; size_on_disk as usize];
+        if rename_happened {
+            std::fs::write(&to, &data).unwrap();
+        } else {
+            std::fs::write(&from, &data).unwrap();
+        }
+        (store, path, id, from, to)
+    }
+
+    #[test]
+    fn a_publish_cut_short_after_the_rename_is_completed_on_the_next_start() {
+        let d = tempfile::tempdir().unwrap();
+        let (store, path, id, _from, to) = journalled(d.path(), true, 4);
+        assert_eq!(
+            store.get(id).unwrap().status,
+            Status::Running,
+            "the crash left it running"
+        );
+        drop(store); // the process died here
+        let store = Store::open(&path).unwrap();
+        assert_eq!(store.recover_publishes().unwrap(), vec![(id, true)]);
+        let job = store.get(id).unwrap();
+        assert_eq!(job.status, Status::Completed);
+        assert_eq!(
+            (
+                job.final_path.as_deref(),
+                job.total,
+                job.staging_path.as_deref()
+            ),
+            (Some(to.as_path()), Some(4), None)
+        );
+        assert_eq!(job.error, None);
+        // Nothing left to do the next time, and recovery of the plain crash leaves it completed.
+        assert!(store.recover_publishes().unwrap().is_empty());
+        assert_eq!(store.recover_interrupted().unwrap(), 0);
+        assert_eq!(store.get(id).unwrap().status, Status::Completed);
+    }
+
+    #[test]
+    fn a_publish_cut_short_before_the_rename_is_renamed_and_completed() {
+        let d = tempfile::tempdir().unwrap();
+        let (store, _path, id, from, to) = journalled(d.path(), false, 4);
+        assert_eq!(store.recover_publishes().unwrap(), vec![(id, true)]);
+        assert!(
+            !from.exists() && to.exists(),
+            "the staging file is the finished one now"
+        );
+        let job = store.get(id).unwrap();
+        assert_eq!(
+            (job.status, job.final_path.as_deref()),
+            (Status::Completed, Some(to.as_path()))
+        );
+    }
+
+    #[test]
+    fn a_publish_with_nothing_left_fails_in_plain_words() {
+        let d = tempfile::tempdir().unwrap();
+        // Neither file, and a staging file of the wrong size, are both nothing to finish.
+        for wrong in [None, Some(3u64)] {
+            let (store, _path, id, _from, _to) = journalled(d.path(), false, wrong.unwrap_or(4));
+            if wrong.is_none() {
+                std::fs::remove_file(d.path().join("movie.mkv.fuselane")).unwrap();
+            }
+            assert_eq!(store.recover_publishes().unwrap(), vec![(id, false)]);
+            let job = store.get(id).unwrap();
+            assert_eq!(job.status, Status::Failed { resumable: false });
+            let msg = job.error.unwrap();
+            assert!(
+                msg.contains("stopped while saving") && msg.contains("Start the download again"),
+                "{msg}"
+            );
+            assert_eq!(job.error_code.as_deref(), Some("start-over"));
+            std::fs::remove_file(d.path().join("movie.mkv.fuselane")).ok();
+            drop(store);
+            std::fs::remove_file(d.path().join("jobs.db")).unwrap();
+        }
+    }
+
+    #[test]
+    fn a_finished_job_forgets_its_intent_and_a_held_one_is_left_alone() {
+        let d = tempfile::tempdir().unwrap();
+        let (store, path, id, _from, to) = journalled(d.path(), true, 4);
+        store.set_finished(id, &to, 4).unwrap();
+        store.apply(id, Event::Complete, None).unwrap();
+        assert!(
+            store.recover_publishes().unwrap().is_empty(),
+            "set_finished cleared the intent"
+        );
+        // Another process is still running it: not a crash, so hands off.
+        let id2 = store.create("https://x/b", d.path()).unwrap();
+        store.apply(id2, Event::Start, None).unwrap();
+        store
+            .set_publish_intent(id2, &d.path().join("b.fuselane"), &d.path().join("b"), 1)
+            .unwrap();
+        let held = Store::open(&path).unwrap().lock_job(id2).unwrap().unwrap();
+        assert!(store.recover_publishes().unwrap().is_empty());
+        assert_eq!(store.get(id2).unwrap().status, Status::Running);
+        drop(held);
     }
 
     #[test]

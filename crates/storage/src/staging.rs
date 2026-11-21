@@ -130,6 +130,17 @@ impl Staging {
     /// Checks completeness, fsyncs, and renames to the final name without replacing
     /// anything; returns the published path (L-43, L-45).
     pub fn publish(self, written: u64) -> Result<PathBuf, StagingError> {
+        self.publish_with(written, |_, _| {})
+    }
+
+    /// [`Staging::publish`], telling `before` the staging path and the final path it has
+    /// chosen right before the rename (L-54): the caller writes down the intent, so a crash
+    /// between the rename and its own bookkeeping can be finished on the next start.
+    pub fn publish_with(
+        self,
+        written: u64,
+        mut before: impl FnMut(&Path, &Path),
+    ) -> Result<PathBuf, StagingError> {
         let expected = self.size.unwrap_or(written);
         let on_disk = self.file.metadata()?.len();
         if written != expected || (self.size.is_some() && on_disk != expected) {
@@ -147,6 +158,7 @@ impl Staging {
             if target.symlink_metadata().is_ok() {
                 continue; // something appeared under our name meanwhile: never overwrite
             }
+            before(&self.staging_path, &target);
             rename_with_retry(&self.staging_path, &target)?;
             sync_dir(&self.dir);
             return Ok(target);
@@ -159,6 +171,60 @@ impl Staging {
         drop(self.file);
         std::fs::remove_file(&self.staging_path)
     }
+}
+
+/// What is left of a publish that was written down but not finished.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Finished {
+    /// The final file is there with the right size: the rename had happened.
+    AlreadyThere(PathBuf),
+    /// The staging file was renamed now (to the final name, or the next free one).
+    Renamed(PathBuf),
+    /// Neither a finished file nor a complete staging file: nothing can be recovered.
+    Missing,
+}
+
+/// Finishes a publish after a crash (L-54): `from` is the staging file, `to` the final name
+/// and `size` the finished size, as written down before the rename. A final file of that size
+/// is taken as the result; else a staging file of that size is renamed, never over something
+/// else (the next free name then); else there is nothing to finish.
+pub fn finish_publish(from: &Path, to: &Path, size: u64) -> io::Result<Finished> {
+    let len = |p: &Path| {
+        std::fs::symlink_metadata(p)
+            .ok()
+            .filter(|m| m.is_file())
+            .map(|m| m.len())
+    };
+    if len(to) == Some(size) && len(from).is_none() {
+        return Ok(Finished::AlreadyThere(to.to_path_buf()));
+    }
+    if len(from) != Some(size) {
+        // No staging file to rename: a final file of the right size still counts.
+        return Ok(if len(to) == Some(size) {
+            Finished::AlreadyThere(to.to_path_buf())
+        } else {
+            Finished::Missing
+        });
+    }
+    let dir = to.parent().unwrap_or_else(|| Path::new("."));
+    let name = to
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("download");
+    for n in 0..=MAX_COLLISIONS {
+        let target = if n == 0 {
+            to.to_path_buf()
+        } else {
+            dir.join(numbered(name, n))
+        };
+        if target.symlink_metadata().is_ok() {
+            continue;
+        }
+        rename_with_retry(from, &target)?;
+        sync_dir(dir);
+        return Ok(Finished::Renamed(target));
+    }
+    Ok(Finished::Missing)
 }
 
 #[cfg(unix)]
@@ -326,6 +392,63 @@ mod tests {
         let p2 = s2.path().to_path_buf();
         s2.discard().unwrap();
         assert!(!p2.exists());
+    }
+
+    /// L-54: what is about to be renamed is told before it happens, so a crash right after
+    /// the rename can still be recognised and finished on the next start.
+    #[test]
+    fn the_intent_is_told_before_the_rename() {
+        let d = tmp();
+        let s = Staging::create(d.path(), "movie.mkv", Some(4)).unwrap();
+        Staging::write_at(&s.handle().unwrap(), 0, b"data").unwrap();
+        let mut told = None;
+        let out = s
+            .publish_with(4, |from, to| {
+                assert!(from.exists(), "the staging file is still there");
+                assert!(!to.exists(), "and the final name isn't taken yet");
+                told = Some((from.to_path_buf(), to.to_path_buf()));
+            })
+            .unwrap();
+        let (from, to) = told.expect("told before the rename");
+        assert_eq!(from.file_name().unwrap(), "movie.mkv.fuselane");
+        assert_eq!(to, out);
+        assert!(!from.exists() && to.exists());
+    }
+
+    #[test]
+    fn a_publish_left_halfway_is_finished_or_recognised() {
+        let d = tmp();
+        let (from, to) = (d.path().join("a.bin.fuselane"), d.path().join("a.bin"));
+        // The rename happened, the record of it didn't: the file is where it should be.
+        std::fs::write(&to, b"abcd").unwrap();
+        assert_eq!(
+            finish_publish(&from, &to, 4).unwrap(),
+            Finished::AlreadyThere(to.clone())
+        );
+        // The crash came before the rename: the staging file is renamed now.
+        std::fs::remove_file(&to).unwrap();
+        std::fs::write(&from, b"abcd").unwrap();
+        assert_eq!(
+            finish_publish(&from, &to, 4).unwrap(),
+            Finished::Renamed(to.clone())
+        );
+        assert_eq!(std::fs::read(&to).unwrap(), b"abcd");
+        assert!(!from.exists());
+        // Someone else's file took the name meanwhile: never overwritten, the next free name.
+        std::fs::write(&from, b"abcd").unwrap();
+        std::fs::write(&to, b"someone else's").unwrap();
+        let Finished::Renamed(moved) = finish_publish(&from, &to, 4).unwrap() else {
+            panic!("renamed")
+        };
+        assert_eq!(moved.file_name().unwrap(), "a (1).bin");
+        assert_eq!(std::fs::read(&to).unwrap(), b"someone else's");
+        // Neither there (or the final one is the wrong size): nothing to finish.
+        std::fs::remove_file(&moved).unwrap();
+        assert_eq!(finish_publish(&from, &to, 4).unwrap(), Finished::Missing);
+        // A staging file of the wrong size is not trusted as the finished one.
+        std::fs::write(&from, b"abc").unwrap();
+        std::fs::remove_file(&to).unwrap();
+        assert_eq!(finish_publish(&from, &to, 4).unwrap(), Finished::Missing);
     }
 
     #[cfg(unix)]

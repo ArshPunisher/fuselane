@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use fuselane_engine_http::download::{
     BoxIo, Cancel, CheckpointFn, Connect, Headers, JobError, LaneEventFn, LaneTrouble, Network,
-    ProgressFn, Report, Resume, SnapshotFn, Source, Tuning, download_with,
+    ProgressFn, PublishFn, Report, Resume, SnapshotFn, Source, Tuning, download_with,
 };
 use fuselane_netif::Interface;
 
@@ -1142,6 +1142,14 @@ pub async fn run(
             let _ = store.save_checkpoint(id, cp);
         }))
     };
+    // The finished file's rename is written down first (L-54): a crash right after it can
+    // be finished on the next start (Store::recover_publishes).
+    let intent = {
+        let store = store.clone();
+        PublishFn(Arc::new(move |from, to, size| {
+            let _ = store.set_publish_intent(id, from, to, size);
+        }))
+    };
     let defaults = Tuning::default();
     let tuning = Tuning {
         auto_streams: opts.streams.is_none(),
@@ -1149,6 +1157,7 @@ pub async fn run(
         progress: opts.progress,
         snapshot: opts.snapshot,
         checkpoint: Some(sink),
+        publishing: Some(intent),
         checkpoint_every: opts.checkpoint_every.unwrap_or(defaults.checkpoint_every),
         cancel: opts.cancel,
         expected_sha256: opts.sha256,
@@ -1173,10 +1182,13 @@ pub async fn run(
                 }
             }
             Err(JobError::Paused) => {
+                let _ = store.clear_publish_intent(id);
                 let _ = store.apply(id, Event::Pause, None);
                 Outcome::Paused
             }
             Err(error) => {
+                // A failed publish left nothing for the next start to finish.
+                let _ = store.clear_publish_intent(id);
                 let resumable = is_resumable(&error);
                 // The plain-language message, so every front end shows the same words.
                 let _ = store.apply(id, Event::Fail { resumable }, Some(&describe(&error)));
@@ -1622,6 +1634,75 @@ mod tests {
         assert!(
             mirror.requests().iter().all(|r| r.cookie.is_none()),
             "the cookie followed a redirect to another site"
+        );
+    }
+
+    /// L-54: the runner writes the publish down before the rename, and a crash between the
+    /// rename and the store's own update is finished on the next start.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_crash_between_the_rename_and_the_store_update_is_finished_on_the_next_start() {
+        use fuselane_testkit::{Content, RangeServer};
+        let content = Content::new(300_000, 31);
+        let server = RangeServer::start(content).await.unwrap();
+        let link = format!("http://{}{}", server.addr(), server.path());
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("jobs.db");
+        let store = Arc::new(Store::open(&db).unwrap());
+        // What the runner writes down before the rename is kept by a trigger, since the
+        // row forgets it once the job is finished.
+        let side = rusqlite::Connection::open(&db).unwrap();
+        side.execute_batch(
+            "CREATE TABLE told (f TEXT, t TEXT, s INTEGER);
+             CREATE TRIGGER told_it AFTER UPDATE OF publish_from ON jobs
+             WHEN NEW.publish_from IS NOT NULL
+             BEGIN INSERT INTO told VALUES (NEW.publish_from, NEW.publish_to, NEW.publish_size); END;",
+        )
+        .unwrap();
+        let id = store.create(&link, dir.path()).unwrap();
+        let out = run(
+            store.clone(),
+            id,
+            &link,
+            dir.path().to_path_buf(),
+            None,
+            RunOptions::default(),
+        )
+        .await
+        .unwrap();
+        let Outcome::Completed { report, .. } = out else {
+            panic!("{out:?}");
+        };
+        let (from, to, size): (String, String, i64) = side
+            .query_row("SELECT f, t, s FROM told", [], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            })
+            .unwrap();
+        assert!(from.ends_with(".fuselane"), "{from}");
+        assert_eq!(PathBuf::from(&to), report.path);
+        assert_eq!(size, 300_000);
+        let (told_after,): (Option<String>,) = side
+            .query_row("SELECT publish_from FROM jobs WHERE id = ?1", [id], |r| {
+                Ok((r.get(0)?,))
+            })
+            .unwrap();
+        assert_eq!(told_after, None, "a finished job forgets its intent");
+        // The process died right after the rename: the row never got its update.
+        side.execute(
+            "UPDATE jobs SET status = 'running', final_path = NULL, staging_path = ?2,
+             publish_from = ?2, publish_to = ?3, publish_size = ?4 WHERE id = ?1",
+            rusqlite::params![id, from, to, size],
+        )
+        .unwrap();
+        drop((store, side));
+        let store = Store::open(&db).unwrap();
+        assert_eq!(store.recover_publishes().unwrap(), vec![(id, true)]);
+        let job = store.get(id).unwrap();
+        assert_eq!(job.status, crate::job::Status::Completed);
+        assert_eq!(job.final_path.as_deref(), Some(report.path.as_path()));
+        assert_eq!(
+            fuselane_testkit::sha256_file(&report.path).unwrap(),
+            content.sha256(),
+            "and the file is the whole one"
         );
     }
 

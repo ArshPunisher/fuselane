@@ -244,6 +244,20 @@ impl std::fmt::Debug for CheckpointFn {
     }
 }
 
+/// Told the staging path, the final path and the size right before the finished file is
+/// renamed into place (L-54), so the core can write the intent down first.
+#[derive(Clone)]
+pub struct PublishFn(pub Arc<PublishCallback>);
+
+/// What a [`PublishFn`] calls: the staging path, the final path and the size.
+pub type PublishCallback = dyn Fn(&Path, &Path, u64) + Send + Sync;
+
+impl std::fmt::Debug for PublishFn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("PublishFn")
+    }
+}
+
 /// A saved download to continue. Treated as untrusted input (L-53).
 #[derive(Debug, Clone)]
 pub struct Resume {
@@ -440,6 +454,8 @@ pub struct Tuning {
     /// How often the stream-count controller runs.
     pub controller_tick: Duration,
     pub checkpoint: Option<CheckpointFn>,
+    /// Told what is about to be published, before the rename (L-54).
+    pub publishing: Option<PublishFn>,
     /// fsync + checkpoint at most this often while running (and always on stop).
     pub checkpoint_every: Duration,
     pub cancel: Option<Cancel>,
@@ -481,6 +497,7 @@ impl Default for Tuning {
             auto_streams: true,
             controller_tick: Duration::from_millis(500),
             checkpoint: None,
+            publishing: None,
             checkpoint_every: Duration::from_secs(15),
             cancel: None,
             expected_sha256: None,
@@ -2134,6 +2151,13 @@ pub async fn download(
     download_with(src, networks, dir, tuning, None).await
 }
 
+/// Tells the publish hook, if there is one.
+fn announce(tuning: &Tuning, from: &Path, to: &Path, size: u64) {
+    if let Some(PublishFn(f)) = &tuning.publishing {
+        f(from, to, size);
+    }
+}
+
 /// Like [`download`], continuing from a saved [`Resume`] when given.
 pub async fn download_with(
     src: Source,
@@ -2238,7 +2262,7 @@ pub async fn download_with(
     let file = staging.handle().map_err(StagingError::from)?;
 
     if probe.total == Some(0) {
-        let path = staging.publish(0)?;
+        let path = staging.publish_with(0, |from, to| announce(&tuning, from, to, 0))?;
         return Ok(Report {
             path,
             total: 0,
@@ -2532,7 +2556,7 @@ pub async fn download_with(
             return Err(JobError::ChecksumMismatch { expected, actual }); // staging kept for inspection
         }
     }
-    let path = staging.publish(total)?;
+    let path = staging.publish_with(total, |from, to| announce(&tuning, from, to, total))?;
     Ok(Report {
         path,
         total,

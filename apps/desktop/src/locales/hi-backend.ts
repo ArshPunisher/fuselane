@@ -124,6 +124,8 @@ export const hiBackend: Readonly<Record<string, string>> = {
     'वह फ़ोल्डर सिर्फ़ पढ़ने के लिए है। कोई दूसरा फ़ोल्डर चुनें।',
   "The file couldn't be saved to that folder. Check that the disk is connected and has room, or choose another folder.":
     'फ़ाइल उस फ़ोल्डर में सेव नहीं हो सकी। जांचें कि डिस्क जुड़ी है और उसमें जगह है, या कोई दूसरा फ़ोल्डर चुनें।',
+  "Fuselane stopped while saving this download, and the finished file isn't there. Start the download again.":
+    'Fuselane इस डाउनलोड को सेव करते समय रुक गया, और पूरी हुई फ़ाइल वहाँ नहीं है। डाउनलोड फिर से शुरू करें।',
   "Fuselane couldn't claim this download. Check that its data folder is writable, then try again.":
     'Fuselane इस डाउनलोड को अपने नाम नहीं कर सका। जांचें कि उसके डेटा फ़ोल्डर में लिखा जा सकता है, फिर दोबारा कोशिश करें।',
   'no networks selected': 'कोई नेटवर्क नहीं चुना गया',

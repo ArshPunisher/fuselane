@@ -8,7 +8,9 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use fuselane_engine_http::download::{BoxIo, Connect, JobError, Network, Source, Tuning, download};
+use fuselane_engine_http::download::{
+    BoxIo, Connect, JobError, Network, PublishFn, Source, Tuning, download,
+};
 use fuselane_testkit::{Content, Fault, RangeServer, Rule, sha256_file};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
@@ -208,6 +210,39 @@ async fn bonded_download_is_byte_exact_and_uses_every_network() {
         "staging file renamed away"
     );
     assert_eq!(report.path.file_name().unwrap(), "file.bin");
+}
+
+/// L-54: the finished file's intent (staging path, final path, size) is told before the rename,
+/// once, so the core can write it down and finish a publish a crash cut short.
+#[tokio::test]
+async fn the_publish_is_announced_once_before_the_rename() {
+    let content = Content::new(300 * KB + 5, 8);
+    let server = RangeServer::start(content).await.unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let told = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let seen = told.clone();
+    let tuning = Tuning {
+        publishing: Some(PublishFn(Arc::new(move |from, to, size| {
+            // Right now the staging file is there and the final name is free.
+            seen.lock().unwrap().push((
+                from.to_path_buf(),
+                to.to_path_buf(),
+                size,
+                from.exists(),
+                to.exists(),
+            ));
+        }))),
+        ..tuning()
+    };
+    let report = download(source(&server), vec![plain(1)], dir.path(), tuning)
+        .await
+        .unwrap();
+    let told = told.lock().unwrap();
+    assert_eq!(told.len(), 1, "once");
+    let (from, to, size, from_there, to_taken) = &told[0];
+    assert_eq!(from.file_name().unwrap(), "file.bin.fuselane");
+    assert_eq!((to, *size), (&report.path, content.size));
+    assert!(*from_there && !*to_taken);
 }
 
 #[tokio::test]
