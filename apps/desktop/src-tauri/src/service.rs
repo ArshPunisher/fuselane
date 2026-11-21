@@ -1626,6 +1626,20 @@ impl Service {
         dir: Option<&str>,
         req: &AddRequest,
     ) -> Result<i64, UiError> {
+        let id = self.add_one(url, dir, req)?;
+        self.publish_jobs();
+        self.pump();
+        Ok(id)
+    }
+
+    /// Adds one download without telling the window or starting the queue, so a
+    /// batch can do both once at the end.
+    fn add_one(
+        self: &Arc<Self>,
+        url: &str,
+        dir: Option<&str>,
+        req: &AddRequest,
+    ) -> Result<i64, UiError> {
         let url = url.trim();
         if url.is_empty() {
             return Err(UiError::new(
@@ -1720,7 +1734,9 @@ impl Service {
                     None,
                 )
             })?;
+        // An indexed lookup first; the whole list is read only to name a duplicate.
         if !req.allow_duplicate
+            && self.store.has_url(url).map_err(store_error)?
             && let Some(existing) = self
                 .store
                 .list()
@@ -1760,8 +1776,6 @@ impl Service {
         if !session.is_empty() {
             lock(&self.sessions).insert(id, session);
         }
-        self.publish_jobs();
-        self.pump();
         Ok(id)
     }
 
@@ -1833,7 +1847,7 @@ impl Service {
                 later,
                 ..AddRequest::default()
             };
-            match self.add_with(&link, dir, &req) {
+            match self.add_one(&link, dir, &req) {
                 Ok(id) => {
                     result.added.push(id);
                     added_links.push(link);
@@ -1844,7 +1858,12 @@ impl Service {
                 }),
             }
         }
-        result.group = self.group_added(group, &added_links, &result.added)?;
+        let grouped = self.group_added(group, &added_links, &result.added);
+        if !result.added.is_empty() {
+            self.publish_jobs();
+            self.pump();
+        }
+        result.group = grouped?;
         Ok(result)
     }
 
@@ -3492,6 +3511,27 @@ mod tests {
             free,
             "focus_ended held `focus` while waiting for `schedule_paused`"
         );
+    }
+
+    /// A pasted batch of links refreshes the window's list once, not once per
+    /// link (each refresh re-reads and sends every download).
+    #[tokio::test]
+    async fn a_batch_of_links_publishes_the_list_once() {
+        let h = harness(3);
+        let text: String = (0..40)
+            .map(|i| format!("http://127.0.0.1:9/part{i}.bin\n"))
+            .collect();
+        let before = lock(&h.events)
+            .iter()
+            .filter(|e| matches!(e, UiEvent::Jobs { .. }))
+            .count();
+        let got = h.svc.add_batch(&text, None, true, None).unwrap();
+        assert_eq!(got.added.len(), 40);
+        let after = lock(&h.events)
+            .iter()
+            .filter(|e| matches!(e, UiEvent::Jobs { .. }))
+            .count();
+        assert!(after - before <= 2, "published {} times", after - before);
     }
 
     /// Setting an allowance, or moving its reset day, rebuilds the bytes used
