@@ -23,6 +23,14 @@ use crate::service::{Emit, UiError, UiEvent};
 pub const EVERYONE_FOR: Duration = Duration::from_secs(10 * 60);
 /// Devices not heard from for this long leave the list.
 const FORGET_AFTER: Duration = Duration::from_secs(10 * 60);
+/// Most devices listed at once. Announcements are unauthenticated LAN packets,
+/// so a flood of made-up devices must not grow the list (and every publish)
+/// without end; the stalest untrusted entry gives way.
+const MAX_DEVICES: usize = 256;
+/// A trusted device heard this recently keeps its address: a packet from
+/// elsewhere claiming its fingerprint is ignored (a real move shows up once
+/// this has passed).
+const KEEP_TRUSTED_ADDRESS: Duration = Duration::from_secs(60);
 
 /// A device on the network, as the window shows it.
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -521,14 +529,42 @@ impl Nearby {
         }
         let addr = SocketAddr::new(from.ip(), a.info.port);
         let fp = a.info.fingerprint.clone();
-        lock(&self.devices).insert(
-            fp.clone(),
-            Seen {
-                info: a.info.clone(),
-                addr,
-                at: Instant::now(),
-            },
-        );
+        let trusted: Vec<String> = lock(&self.trusted)
+            .iter()
+            .map(|t| t.fingerprint.to_ascii_uppercase())
+            .collect();
+        let is_trusted = |f: &str| trusted.iter().any(|t| t.eq_ignore_ascii_case(f));
+        {
+            let mut devices = lock(&self.devices);
+            if let Some(old) = devices.get(&fp)
+                && old.addr.ip() != addr.ip()
+                && old.at.elapsed() < KEEP_TRUSTED_ADDRESS
+                && is_trusted(&fp)
+            {
+                return;
+            }
+            if !devices.contains_key(&fp) && devices.len() >= MAX_DEVICES {
+                let stalest = devices
+                    .iter()
+                    .filter(|(k, _)| !is_trusted(k))
+                    .min_by_key(|(_, s)| s.at)
+                    .map(|(k, _)| k.clone());
+                match stalest {
+                    Some(k) => {
+                        devices.remove(&k);
+                    }
+                    None => return, // only trusted devices: keep them
+                }
+            }
+            devices.insert(
+                fp.clone(),
+                Seen {
+                    info: a.info.clone(),
+                    addr,
+                    at: Instant::now(),
+                },
+            );
+        }
         self.publish();
         if a.announce && (self.everyone().is_some() || self.is_trusted(&fp)) {
             let me = self.info();
@@ -1807,6 +1843,52 @@ mod tests {
         })
         .await;
         to.n.set_everyone(false).await;
+    }
+
+    fn announcement(fp: &str, alias: &str) -> fuselane_nearby::proto::Announcement {
+        fuselane_nearby::proto::Announcement {
+            info: fuselane_nearby::proto::DeviceInfo {
+                alias: alias.into(),
+                version: "2.0".into(),
+                device_model: None,
+                device_type: None,
+                fingerprint: fp.into(),
+                port: 53317,
+                protocol: "https".into(),
+                download: false,
+            },
+            announce: false,
+        }
+    }
+
+    /// Announcements are unauthenticated LAN packets: a flood of new devices
+    /// must not grow the list without end, and a trusted device that was just
+    /// heard can't be moved to another address by someone else's packet.
+    #[tokio::test]
+    async fn announcements_cant_flood_the_list_or_move_a_trusted_device() {
+        let me = side("Desk").await;
+        for i in 0..1000 {
+            let from: SocketAddr = format!("10.0.{}.{}:53317", i / 250, i % 250 + 1)
+                .parse()
+                .unwrap();
+            me.n.heard(from, announcement(&format!("FP{i:04}"), "Spam"));
+        }
+        assert!(
+            lock(&me.n.devices).len() <= MAX_DEVICES,
+            "the list grew without a cap"
+        );
+
+        me.n.trust("TRUSTED01", "Laptop");
+        let home: SocketAddr = "192.168.1.20:53317".parse().unwrap();
+        me.n.heard(home, announcement("TRUSTED01", "Laptop"));
+        let other: SocketAddr = "192.168.1.66:53317".parse().unwrap();
+        me.n.heard(other, announcement("TRUSTED01", "Laptop"));
+        let addr = lock(&me.n.devices).get("TRUSTED01").map(|s| s.addr.ip());
+        assert_eq!(
+            addr,
+            Some(home.ip()),
+            "a trusted device was moved by another packet"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
