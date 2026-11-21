@@ -437,3 +437,43 @@ fn rm_refuses_a_download_another_process_is_running() {
     );
     assert!(store.get(id).is_err(), "removed once nobody runs it");
 }
+
+/// L-54: a save a crash cut short (the file renamed into place, the list not told) is
+/// finished the next time the list is opened, with a line saying so.
+#[test]
+fn a_save_a_crash_cut_short_is_finished_when_the_list_is_opened() {
+    use fuselane_core::{Event, Store};
+    let home = tempfile::tempdir().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let (from, to) = (
+        dir.path().join("movie.mkv.fuselane"),
+        dir.path().join("movie.mkv"),
+    );
+    {
+        let store = Store::open(&home.path().join("jobs.db")).unwrap();
+        let id = store
+            .create("http://example.invalid/movie.mkv", dir.path())
+            .unwrap();
+        store.apply(id, Event::Start, None).unwrap();
+        store.set_publish_intent(id, &from, &to, 4).unwrap();
+        std::fs::write(&to, b"data").unwrap(); // the rename happened; the list never heard
+    }
+    let ls = fuselane_in(home.path(), &["ls"]);
+    let (out, err) = (
+        String::from_utf8_lossy(&ls.stdout),
+        String::from_utf8_lossy(&ls.stderr),
+    );
+    assert!(out.contains("done"), "{out} / {err}");
+    assert!(err.contains("finished saving download 1"), "{err}");
+    let json: serde_json::Value =
+        serde_json::from_slice(&fuselane_in(home.path(), &["ls", "--json"]).stdout).unwrap();
+    assert_eq!(json[0]["status"], "completed", "{json}");
+    assert!(
+        json[0]["path"]
+            .as_str()
+            .is_some_and(|p| p.ends_with("movie.mkv"))
+    );
+    // Said once: the next time there is nothing left to finish.
+    let again = fuselane_in(home.path(), &["ls"]);
+    assert!(!String::from_utf8_lossy(&again.stderr).contains("finished saving"));
+}

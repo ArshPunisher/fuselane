@@ -159,6 +159,24 @@ fn open_store() -> Result<Store, String> {
             aside.display()
         );
     }
+    // A save a crash cut short (the file was renamed, the list wasn't told) is finished
+    // here; the app does the same when it starts (L-54).
+    match store.recover_publishes() {
+        Ok(done) => {
+            for (id, saved) in done {
+                if saved {
+                    eprintln!(
+                        "fuselane: finished saving download {id}, which a crash had interrupted."
+                    );
+                } else {
+                    eprintln!(
+                        "fuselane: download {id} stopped while saving and its file isn't there. Start it again."
+                    );
+                }
+            }
+        }
+        Err(e) => eprintln!("fuselane: couldn't check for a save a crash interrupted: {e}"),
+    }
     Ok(store)
 }
 
