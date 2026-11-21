@@ -5,6 +5,7 @@ import { appStatus, browserId, mustPush, settle, type AppState } from '../lib/st
 import { cleanLimit, route } from '../lib/route.ts'
 import { nameFor } from '../lib/fetcher.ts'
 import { KEY, newJob, readJobs, tidy, type SelfJob } from '../lib/selfjobs.ts'
+import { createGrabCap } from '../lib/grab.ts'
 import { createRunner, type Runner, type RunnerEvent } from '../lib/runner.ts'
 
 // Who downloads what (REVIEW-2026-10-11 D): the app when it's installed (started
@@ -357,8 +358,14 @@ async function followAccess() {
 }
 
 /** A file link clicked in a page: straight to Fuselane, the browser never starts it. */
-async function grab(url: string, pageUrl: string | null, name: string | null) {
+const grabCap = createGrabCap()
+async function grab(url: string, pageUrl: string | null, name: string | null, tabId?: number) {
   if (takenRecently(url)) return
+  // A page that clicks many links at once is left to the browser's own checks.
+  if (tabId !== undefined && !grabCap.allow(tabId, Date.now())) {
+    await browserDownload(url)
+    return
+  }
   const r = route(
     { url, filename: name ?? undefined },
     {
@@ -601,6 +608,7 @@ export default defineBackground(() => {
         msg.url,
         typeof msg.page === 'string' ? msg.page : null,
         typeof msg.name === 'string' ? msg.name : null,
+        sender.tab?.id,
       )
     } else if (
       type === 'self.action' &&
