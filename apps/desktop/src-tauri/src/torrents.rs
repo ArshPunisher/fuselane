@@ -242,6 +242,12 @@ pub struct Torrents {
     engine: OnceCell<Arc<TorrentEngine>>,
     entries: tokio::sync::Mutex<Vec<Entry>>,
     pending: Mutex<Vec<Listing>>,
+    /// Saved torrents that couldn't come back yet (no usable network at launch,
+    /// a drive not mounted). Kept in the saved list and tried again from `tick`,
+    /// never dropped.
+    waiting: Mutex<Vec<Saved>>,
+    /// When `waiting` was last tried.
+    waiting_tried: Mutex<Option<Instant>>,
     emit: Emit,
     /// Something is checking or downloading (keeps the computer awake, holds off
     /// "when done" actions). Updated every tick.
@@ -474,6 +480,8 @@ impl Torrents {
             engine: OnceCell::new(),
             entries: tokio::sync::Mutex::new(Vec::new()),
             pending: Mutex::new(Vec::new()),
+            waiting: Mutex::new(Vec::new()),
+            waiting_tried: Mutex::new(None),
             emit,
             busy: std::sync::atomic::AtomicBool::new(false),
             peer_bytes: Mutex::new(HashMap::new()),
@@ -1166,6 +1174,7 @@ impl Torrents {
     /// Called every second: refreshes, releases finished torrents, and tells the
     /// window when something moved.
     pub async fn tick(&self) {
+        self.retry_waiting().await;
         let Some(engine) = self.engine.get().cloned() else {
             return;
         };
@@ -1206,6 +1215,18 @@ impl Torrents {
             })
             .collect();
         drop(entries);
+        // Ones still waiting to come back stay saved exactly as they were.
+        let mut saved = saved;
+        for w in self
+            .waiting
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+        {
+            if !saved.iter().any(|s| s.id == w.id) {
+                saved.push(w.clone());
+            }
+        }
         if let Ok(json) = serde_json::to_string(&saved) {
             let _ = self.store.set_setting("torrents", &json);
         }
@@ -1224,6 +1245,30 @@ impl Torrents {
         if saved.is_empty() {
             return;
         }
+        self.bring_back(saved).await;
+    }
+
+    /// How often torrents waiting to come back are tried again.
+    const RETRY_WAITING: std::time::Duration = std::time::Duration::from_secs(10);
+
+    /// Tries the waiting torrents again (a network may have come back).
+    async fn retry_waiting(&self) {
+        {
+            let mut tried = self.waiting_tried.lock().unwrap_or_else(|e| e.into_inner());
+            if tried.is_some_and(|t| t.elapsed() < Self::RETRY_WAITING) {
+                return;
+            }
+            *tried = Some(Instant::now());
+        }
+        let list = std::mem::take(&mut *self.waiting.lock().unwrap_or_else(|e| e.into_inner()));
+        if !list.is_empty() {
+            self.bring_back(list).await;
+        }
+    }
+
+    /// Puts saved torrents back in the list. One that can't come back now waits
+    /// (see `waiting`) instead of disappearing.
+    async fn bring_back(&self, saved: Vec<Saved>) {
         for s in saved {
             // Skip anything already added this launch (restore runs alongside new adds).
             if !valid_id(&s.id) || self.entries.lock().await.iter().any(|e| e.last.id == s.id) {
@@ -1247,7 +1292,8 @@ impl Torrents {
                 continue;
             };
             let Ok(engine) = self.engine().await else {
-                return;
+                self.wait_for_later(s);
+                continue;
             };
             let opts = AddOptions {
                 only: (!s.selected.is_empty()).then(|| s.selected.iter().copied().collect()),
@@ -1274,11 +1320,21 @@ impl Torrents {
                         prio: s.priorities.iter().copied().collect(),
                     });
                 }
-                Err(e) => eprintln!("fuselane: couldn't bring back a torrent: {e}"),
+                Err(e) => {
+                    eprintln!("fuselane: couldn't bring back a torrent yet: {e}");
+                    self.wait_for_later(s);
+                }
             }
         }
         self.save().await;
         self.publish().await;
+    }
+
+    fn wait_for_later(&self, s: Saved) {
+        let mut waiting = self.waiting.lock().unwrap_or_else(|e| e.into_inner());
+        if !waiting.iter().any(|w| w.id == s.id) {
+            waiting.push(s);
+        }
     }
 }
 
@@ -1572,6 +1628,43 @@ pub(crate) mod tests {
             downloads,
             _dir: dir,
         }
+    }
+
+    /// A launch with no usable network (Wi-Fi off, cable out) can't start the
+    /// torrent engine. Unfinished torrents saved earlier must still be listed
+    /// for the next launch: the next save used to drop them for good.
+    #[tokio::test]
+    async fn saved_torrents_survive_a_launch_with_no_network() {
+        let s = setup();
+        std::fs::create_dir_all(&s.state).unwrap();
+        let id = "0123456789abcdef0123456789abcdef01234567";
+        std::fs::write(
+            s.state.join(format!("{id}.torrent")),
+            b"d4:infod4:name1:xee",
+        )
+        .unwrap();
+        let saved = serde_json::json!([{
+            "id": id, "base": s.downloads, "selected": [0], "paused": false,
+            "addedAt": 1, "completed": null
+        }]);
+        s.store.set_setting("torrents", &saved.to_string()).unwrap();
+        let offline = Torrents::new(
+            s.store.clone(),
+            s.state.clone(),
+            s.downloads.clone(),
+            Arc::new(|| Err("No usable networks.".to_string())),
+            false,
+            None,
+            Arc::new(|_| {}),
+        );
+        offline.restore().await;
+        // Any later change (adding a link, a setting) saves the list.
+        offline.save().await;
+        let kept = s.store.setting("torrents").unwrap().unwrap_or_default();
+        assert!(
+            kept.contains(id),
+            "an unfinished torrent was dropped: {kept}"
+        );
     }
 
     async fn until(tor: &Torrents, id: &str, status: &str) -> TorrentView {
