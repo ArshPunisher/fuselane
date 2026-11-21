@@ -832,6 +832,15 @@ impl Torrents {
     pub async fn select(&self, id: &str, files: Vec<usize>) -> Result<(), UiError> {
         let (engine, t) = self.live(id).await?;
         let files: HashSet<usize> = files.into_iter().collect();
+        // Refused before anything changes: an empty choice stored here would
+        // later make "Remove, keep files" keep nothing.
+        if files.is_empty() {
+            return Err(UiError {
+                code: "nothing-selected",
+                message: "At least one file has to be downloaded.".into(),
+                hint: Some("Pick another file first, or remove the torrent.".into()),
+            });
+        }
         let tiers = {
             let mut entries = self.entries.lock().await;
             let e = entries
@@ -2053,6 +2062,34 @@ pub(crate) mod tests {
         assert!(
             a.exists(),
             "a wanted (Low) file was deleted by Remove, keep files"
+        );
+    }
+
+    /// Choosing no files is refused without touching what was chosen, so a
+    /// later "Remove, keep files" still keeps them.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn an_empty_selection_is_refused_and_changes_nothing() {
+        logs();
+        let seed = tempfile::tempdir().unwrap();
+        let (_seeder, _addr, file) = seeder(seed.path()).await;
+        let s = setup();
+        let dead: SocketAddr = "127.0.0.1:9".parse().unwrap();
+        let id = add(&s, &file, dead, &["a.bin", "b.bin", "c.bin"]).await;
+        let listed = s.tor.files(&id).await.unwrap();
+        let index = |name: &str| listed.iter().find(|f| f.path == name).unwrap().index;
+        s.tor
+            .set_priority(&id, index("c.bin"), Priority::High)
+            .await
+            .unwrap();
+        let err = s.tor.select(&id, vec![]).await.unwrap_err();
+        assert_eq!(err.code, "nothing-selected");
+        let a = s.downloads.join("T").join("a.bin");
+        std::fs::create_dir_all(a.parent().unwrap()).unwrap();
+        std::fs::write(&a, vec![7u8; 1000]).unwrap();
+        s.tor.remove(&id, false).await.unwrap();
+        assert!(
+            a.exists(),
+            "a refused empty selection made Remove, keep files delete a file"
         );
     }
 
