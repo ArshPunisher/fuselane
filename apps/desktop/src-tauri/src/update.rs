@@ -37,6 +37,28 @@ pub fn signed_version(trusted_comment: &str) -> Option<&str> {
         .find_map(|field| field.strip_prefix("version:"))
 }
 
+/// Refuses an update that isn't newer than the running app (semver, build metadata ignored).
+/// The feed's own say-so is not enough: a replayed old feed or an old signed package must
+/// never roll the app back or reinstall what it already is (SECURITY.md T1). A version that
+/// can't be read on either side counts as not newer.
+pub fn ensure_newer(current: &str, announced: &str) -> Result<(), String> {
+    let parse = |v: &str| {
+        semver::Version::parse(v.trim().trim_start_matches('v')).map(|mut v| {
+            v.build = semver::BuildMetadata::EMPTY;
+            v
+        })
+    };
+    match (parse(current), parse(announced)) {
+        (Ok(cur), Ok(new)) if new > cur => Ok(()),
+        (Ok(_), Ok(_)) => Err(format!(
+            "version {announced} isn't newer than the {current} that is running"
+        )),
+        _ => Err(format!(
+            "version {announced} can't be compared with the {current} that is running"
+        )),
+    }
+}
+
 fn same_version(signed: &str, announced: &str) -> bool {
     match (
         semver::Version::parse(signed.trim_start_matches('v')),
@@ -149,6 +171,43 @@ mod tests {
         // Garbage in either field is an error, not a panic.
         assert!(verify(PAYLOAD, "not base64!", KEY, "1").is_err());
         assert!(verify(PAYLOAD, SIG, "bm90IGEga2V5", "1").is_err());
+    }
+
+    /// T1: a feed (or anyone in front of it) must not be able to roll the app back, or
+    /// reinstall what it already is, whatever the feed says.
+    #[test]
+    fn only_a_newer_version_than_the_running_one_is_accepted() {
+        let ok = |cur: &str, new: &str| ensure_newer(cur, new).is_ok();
+        assert!(ok("1.0.1", "1.0.2"));
+        assert!(ok("1.0.1", "1.1.0"));
+        assert!(ok("1.0.1", "v2.0.0"), "a leading v is the feed's habit");
+        assert!(
+            ok("1.0.0-rc.14", "1.0.0"),
+            "a release is newer than its release candidate"
+        );
+        assert!(
+            ok("0.1.0-beta.9", "0.1.0-beta.10"),
+            "numbers, not text, order pre-releases"
+        );
+        assert!(!ok("1.0.1", "1.0.1"), "the same version");
+        assert!(!ok("1.0.1", "1.0.0"), "older");
+        assert!(!ok("1.0.1", "0.9.9"));
+        assert!(
+            !ok("1.0.0", "1.0.0-rc.14"),
+            "a candidate is older than its release"
+        );
+        assert!(!ok("1.0.1", "v1.0.1"));
+        // Build metadata doesn't make a version newer.
+        assert!(!ok("1.0.1", "1.0.1+build.7"));
+        // Not versions at all: nothing to compare, so no install.
+        assert!(!ok("1.0.1", "latest"));
+        assert!(!ok("1.0.1", ""));
+        assert!(
+            !ok("weird", "1.0.2"),
+            "a running version that can't be read isn't guessed at"
+        );
+        let why = ensure_newer("1.0.1", "1.0.0").unwrap_err();
+        assert!(why.contains("1.0.0") && why.contains("1.0.1"), "{why}");
     }
 
     #[test]

@@ -629,6 +629,8 @@ export const hiBackend: Readonly<Record<string, string>> = {
   "you're offline": 'आप ऑफ़लाइन हैं',
   "The update couldn't be installed: {e}": 'अपडेट इंस्टॉल नहीं हो सका: {e}',
   "There's no update to install.": 'इंस्टॉल करने के लिए कोई अपडेट नहीं है।',
+  "There's no newer version to install ({why}).":
+    'इंस्टॉल करने के लिए कोई नया संस्करण नहीं है ({why})।',
   "Couldn't download the update: {why}.": 'अपडेट डाउनलोड नहीं हो सका: {why}।',
   'every network dropped at {size}': 'हर नेटवर्क {size} पर टूट गया',
   'Try again. It continues from where it stopped, and your downloads are safe.':

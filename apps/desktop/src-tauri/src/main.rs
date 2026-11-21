@@ -703,6 +703,8 @@ async fn check_update(app: tauri::AppHandle) -> Result<Option<UpdateInfo>, UiErr
         .updater()
         .map_err(|e| ui_error("update-check", format!("Couldn't check for updates: {e}")))?;
     match updater.check().await {
+        // Never offer what isn't newer than this app, whatever the feed says.
+        Ok(Some(u)) if update::ensure_newer(&u.current_version, &u.version).is_err() => Ok(None),
         Ok(Some(u)) => {
             // A quick look at the package for its size; the banner works without it.
             let size = tokio::time::timeout(
@@ -872,6 +874,13 @@ where
         .await
         .map_err(|e| fail(&e))?
         .ok_or_else(|| ui_error("no-update", "There's no update to install.".into()))?;
+    // The same rule as the check: an older or equal version is never installed.
+    update::ensure_newer(&update.current_version, &update.version).map_err(|why| {
+        ui_error(
+            "no-update",
+            format!("There's no newer version to install ({why})."),
+        )
+    })?;
     before_download().await;
     let bytes = download_update(app, &send, &update).await?;
     send(update::UpdateProgress {
