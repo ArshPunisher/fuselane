@@ -1088,6 +1088,10 @@ pub async fn run(
                     .into(),
             )
         })?;
+    // Any publish record found now is left over from an earlier run: this run writes its own
+    // when it gets there. Kept, it could later pass a half-overwritten partial file (the
+    // staging file is preallocated to its full size) off as a finished one.
+    let _ = store.clear_publish_intent(id);
     // Finding where the file really is (redirects, each network's address,
     // mirrors) asks servers first; a pause meanwhile lands at once.
     let given_headers = opts.headers;
@@ -1147,7 +1151,9 @@ pub async fn run(
     let intent = {
         let store = store.clone();
         PublishFn(Arc::new(move |from, to, size| {
-            let _ = store.set_publish_intent(id, from, to, size);
+            store
+                .set_publish_intent(id, from, to, size)
+                .map_err(std::io::Error::other)
         }))
     };
     let defaults = Tuning::default();
@@ -1174,8 +1180,10 @@ pub async fn run(
     Ok(
         match download_with(source, networks, &out, tuning, resume).await {
             Ok(report) => {
-                let _ = store.set_finished(id, &report.path, report.total);
-                let _ = store.apply(id, Event::Complete, None);
+                // One write: the job, its file and the end of the publish record together.
+                // If it fails the file is in place and the publish record stays, so the next
+                // start finishes the job from it.
+                let _ = store.complete_job(id, &report.path, report.total);
                 Outcome::Completed {
                     report,
                     networks: names,
@@ -1704,6 +1712,37 @@ mod tests {
             content.sha256(),
             "and the file is the whole one"
         );
+    }
+
+    /// A record left by an earlier run must not outlive the start of the next one.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_stale_publish_record_is_dropped_when_a_run_starts() {
+        use fuselane_testkit::{Content, RangeServer};
+        let server = RangeServer::start(Content::new(10_000, 32)).await.unwrap();
+        let link = format!("http://{}{}", server.addr(), server.path());
+        let dir = tempfile::tempdir().unwrap();
+        let store = Arc::new(Store::open(&dir.path().join("jobs.db")).unwrap());
+        let id = store.create(&link, dir.path()).unwrap();
+        store
+            .set_publish_intent(id, &dir.path().join("x.fuselane"), &dir.path().join("x"), 7)
+            .unwrap();
+        let cancel = Cancel::new();
+        cancel.cancel(); // paused before it gets anywhere
+        let out = run(
+            store.clone(),
+            id,
+            &link,
+            dir.path().to_path_buf(),
+            None,
+            RunOptions {
+                cancel: Some(cancel),
+                ..RunOptions::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert!(matches!(out, Outcome::Paused), "{out:?}");
+        assert_eq!(store.publish_intent(id).unwrap(), None);
     }
 
     #[tokio::test(flavor = "multi_thread")]

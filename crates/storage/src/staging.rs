@@ -130,16 +130,17 @@ impl Staging {
     /// Checks completeness, fsyncs, and renames to the final name without replacing
     /// anything; returns the published path (L-43, L-45).
     pub fn publish(self, written: u64) -> Result<PathBuf, StagingError> {
-        self.publish_with(written, |_, _| {})
+        self.publish_with(written, |_, _| Ok(()))
     }
 
     /// [`Staging::publish`], telling `before` the staging path and the final path it has
     /// chosen right before the rename (L-54): the caller writes down the intent, so a crash
-    /// between the rename and its own bookkeeping can be finished on the next start.
+    /// between the rename and its own bookkeeping can be finished on the next start. An error
+    /// from `before` stops the publish with the staging file untouched.
     pub fn publish_with(
         self,
         written: u64,
-        mut before: impl FnMut(&Path, &Path),
+        mut before: impl FnMut(&Path, &Path) -> io::Result<()>,
     ) -> Result<PathBuf, StagingError> {
         let expected = self.size.unwrap_or(written);
         let on_disk = self.file.metadata()?.len();
@@ -158,7 +159,9 @@ impl Staging {
             if target.symlink_metadata().is_ok() {
                 continue; // something appeared under our name meanwhile: never overwrite
             }
-            before(&self.staging_path, &target);
+            // If the intent can't be written down the file stays where it is: publishing
+            // without it would reopen the very window it closes.
+            before(&self.staging_path, &target)?;
             rename_with_retry(&self.staging_path, &target)?;
             sync_dir(&self.dir);
             return Ok(target);
@@ -428,6 +431,7 @@ mod tests {
                 assert!(from.exists(), "the staging file is still there");
                 assert!(!to.exists(), "and the final name isn't taken yet");
                 told = Some((from.to_path_buf(), to.to_path_buf()));
+                Ok(())
             })
             .unwrap();
         let (from, to) = told.expect("told before the rename");

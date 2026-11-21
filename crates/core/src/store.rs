@@ -456,9 +456,9 @@ impl Store {
             let next = current.apply(event)?;
             let n = c.execute(
                 "UPDATE jobs SET status = ?2, error = ?3, error_code = NULL, updated_at = ?4,
-                     publish_from = CASE WHEN ?2 = 'completed' THEN NULL ELSE publish_from END,
-                     publish_to = CASE WHEN ?2 = 'completed' THEN NULL ELSE publish_to END,
-                     publish_size = CASE WHEN ?2 = 'completed' THEN NULL ELSE publish_size END
+                     publish_from = CASE WHEN ?2 IN ('running', 'queued', 'paused') THEN publish_from END,
+                     publish_to = CASE WHEN ?2 IN ('running', 'queued', 'paused') THEN publish_to END,
+                     publish_size = CASE WHEN ?2 IN ('running', 'queued', 'paused') THEN publish_size END
                  WHERE id = ?1 AND status = ?5",
                 params![id, next.as_str(), error, now(), word],
             )?;
@@ -682,6 +682,52 @@ impl Store {
         Ok(())
     }
 
+    /// Marks a running job completed with its finished file, in one write: the status, the
+    /// file, its size and the end of the publish record change together, so a stop can't
+    /// leave a completed job without its file, or a running one without its record.
+    pub fn complete_job(&self, id: i64, path: &Path, total: u64) -> Result<(), StoreError> {
+        let c = self.lock();
+        let n = c.execute(
+            "UPDATE jobs SET status = 'completed', final_path = ?2, total = ?3,
+                 staging_path = NULL, error = NULL, error_code = NULL, updated_at = ?4,
+                 publish_from = NULL, publish_to = NULL, publish_size = NULL
+             WHERE id = ?1 AND status = 'running'",
+            params![id, path.to_string_lossy(), total as i64, now()],
+        )?;
+        if n == 1 {
+            return Ok(());
+        }
+        let word: Option<String> = c
+            .query_row("SELECT status FROM jobs WHERE id = ?1", params![id], |r| {
+                r.get(0)
+            })
+            .optional()?;
+        match word {
+            None => Err(StoreError::NotFound(id)),
+            Some(w) => Err(StoreError::Transition(InvalidTransition {
+                from: Status::parse(&w).unwrap_or(Status::Failed { resumable: false }),
+                event: Event::Complete,
+            })),
+        }
+    }
+
+    /// The written-down publish record, if there is one: staging path, final path, size.
+    pub fn publish_intent(&self, id: i64) -> Result<Option<(PathBuf, PathBuf, i64)>, StoreError> {
+        let row: Option<(Option<String>, Option<String>, Option<i64>)> = self
+            .lock()
+            .query_row(
+                "SELECT publish_from, publish_to, publish_size FROM jobs WHERE id = ?1",
+                params![id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .optional()?;
+        match row {
+            None => Err(StoreError::NotFound(id)),
+            Some((Some(f), Some(t), Some(n))) => Ok(Some((f.into(), t.into(), n))),
+            Some(_) => Ok(None),
+        }
+    }
+
     /// Writes down that the finished file is about to be renamed from `from` to `to` (L-54).
     /// Done right before the rename; completing the job (or `clear_publish_intent`) forgets
     /// it in the same write, so a stop between `set_finished` and the completion is still
@@ -716,62 +762,78 @@ impl Store {
     }
 
     /// Finishes or undoes every publish a crash cut short (L-54). Run before
-    /// `recover_interrupted`, at start-up. For each job still marked as running with a
-    /// written-down intent: a final file of the right size is taken as the result, else a
-    /// staging file of the right size is renamed into place, else the job fails with a
-    /// plain message. A job another process holds the claim on is running, not crashed,
-    /// and is left alone. Returns each repaired job's id and whether it now has its file.
+    /// `recover_interrupted`, at start-up and when the command line opens the list.
+    /// For each job still marked as running with a written-down record: a final file of the
+    /// right size is taken as the result, else a staging file of the right size is renamed
+    /// into place, else the job fails with a plain message. Nothing in the record is trusted
+    /// (L-53): a damaged one fails the job without touching a file. A job another process
+    /// holds is running, not crashed, and is left alone; so is one whose folder can't be
+    /// reached now (an unplugged drive), keeping its record for the next start. One job's
+    /// trouble never stops the others. Returns each repaired job's id and whether it now
+    /// has its file.
     pub fn recover_publishes(&self) -> Result<Vec<(i64, bool)>, StoreError> {
-        use fuselane_storage::staging::{Finished, finish_publish};
-        type Intent = (i64, String, String, i64);
-        let intents: Vec<Intent> = {
+        use fuselane_storage::staging::{Finished, STAGING_SUFFIX, finish_publish};
+        let ids: Vec<i64> = {
             let c = self.lock();
             let mut st = c.prepare(
-                "SELECT id, publish_from, publish_to, publish_size FROM jobs
-                 WHERE publish_from IS NOT NULL AND publish_to IS NOT NULL
-                   AND publish_size IS NOT NULL
+                "SELECT id FROM jobs WHERE publish_from IS NOT NULL
                    AND status IN ('running', 'queued', 'paused')",
             )?;
-            st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
-                .collect::<Result<_, _>>()?
+            st.query_map([], |r| r.get(0))?.collect::<Result<_, _>>()?
         };
         let mut repaired = Vec::new();
-        for (id, from, to, size) in intents {
-            // Held by someone: skip (an unwritable locks folder can't tell anyone apart,
-            // so repair as `recover_interrupted` does). The claim lasts through the repair.
-            let claim = self.lock_job(id);
-            if matches!(claim, Ok(None)) {
+        for id in ids {
+            // Only with the claim: without it the job might be finishing in another
+            // process right now. The claim lasts through the repair.
+            let Ok(Some(_claim)) = self.lock_job(id) else {
+                continue;
+            };
+            // The row as it is now, under the claim: it may have changed since the list.
+            let Ok(Some((from, to, size))) = self.publish_intent(id) else {
+                continue;
+            };
+            if !matches!(
+                self.get(id).map(|j| j.status),
+                Ok(Status::Running | Status::Queued | Status::Paused)
+            ) {
                 continue;
             }
-            let size = u64::try_from(size).unwrap_or(0);
-            let done = match finish_publish(Path::new(&from), Path::new(&to), size) {
-                Ok(Finished::AlreadyThere(p) | Finished::Renamed(p)) => Some(p),
-                Ok(Finished::Missing) => None,
-                // The disk said no (permissions, a missing drive): leave the intent for
-                // the next start rather than guess.
-                Err(_) => continue,
+            let usable = u64::try_from(size).ok().filter(|_| {
+                from.is_absolute()
+                    && from.parent() == to.parent()
+                    && from
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .is_some_and(|n| n.ends_with(STAGING_SUFFIX))
+                    && to.file_name().is_some()
+            });
+            let done = match usable {
+                None => None,
+                Some(size) => match finish_publish(&from, &to, size) {
+                    Ok(Finished::AlreadyThere(p) | Finished::Renamed(p)) => Some((p, size)),
+                    Ok(Finished::Missing) => None,
+                    // The folder can't be reached or the disk said no: keep the record.
+                    Err(_) => continue,
+                },
             };
             // A paused job runs again only in order to be completed or failed.
             let _ = self.apply(id, Event::Start, None);
-            match &done {
-                Some(path) => {
-                    self.set_finished(id, path, size)?;
-                    self.apply(id, Event::Complete, None)?;
-                }
+            let saved = match &done {
+                Some((path, size)) => self.complete_job(id, path, *size).is_ok(),
                 None => {
-                    self.apply(
-                        id,
-                        Event::Fail { resumable: false },
-                        Some(
-                            "Fuselane stopped while saving this download, and the finished \
-                             file isn't there. Start the download again.",
-                        ),
-                    )?;
-                    self.set_error_code(id, "start-over")?;
-                    self.clear_publish_intent(id)?;
+                    let message = "Fuselane stopped while saving this download, and the \
+                                   finished file isn't there. Start the download again.";
+                    if self
+                        .apply(id, Event::Fail { resumable: false }, Some(message))
+                        .is_err()
+                    {
+                        continue;
+                    }
+                    let _ = self.set_error_code(id, "start-over");
+                    false
                 }
-            }
-            repaired.push((id, done.is_some()));
+            };
+            repaired.push((id, saved));
         }
         Ok(repaired)
     }
@@ -1013,6 +1075,121 @@ mod tests {
         assert!(store.recover_publishes().unwrap().is_empty());
         assert_eq!(store.recover_interrupted().unwrap(), 0);
         assert_eq!(store.get(id).unwrap().status, Status::Completed);
+    }
+
+    #[test]
+    fn completing_a_job_is_one_write() {
+        let d = tempfile::tempdir().unwrap();
+        let (store, _path, id, _from, to) = journalled(d.path(), true, 4);
+        store.complete_job(id, &to, 4).unwrap();
+        let job = store.get(id).unwrap();
+        assert_eq!(job.status, Status::Completed);
+        assert_eq!(
+            (job.final_path.as_deref(), job.total),
+            (Some(to.as_path()), Some(4))
+        );
+        assert_eq!((job.staging_path, job.error), (None, None));
+        assert_eq!(
+            store.publish_intent(id).unwrap(),
+            None,
+            "the intent went with it"
+        );
+        // A job that isn't running can't be completed again, and nothing changes.
+        let other = Path::new("/elsewhere/x");
+        assert!(matches!(
+            store.complete_job(id, other, 9),
+            Err(StoreError::Transition(_))
+        ));
+        assert_eq!(
+            store.get(id).unwrap().final_path.as_deref(),
+            Some(to.as_path())
+        );
+        assert!(matches!(
+            store.complete_job(999, &to, 4),
+            Err(StoreError::NotFound(999))
+        ));
+    }
+
+    #[test]
+    fn a_stale_intent_does_not_outlive_a_failed_or_cancelled_job() {
+        let d = tempfile::tempdir().unwrap();
+        for event in [Event::Fail { resumable: false }, Event::Cancel] {
+            let (store, _path, id, _from, _to) = journalled(d.path(), false, 4);
+            assert!(store.publish_intent(id).unwrap().is_some());
+            store.apply(id, event, Some("x")).unwrap();
+            assert_eq!(store.publish_intent(id).unwrap(), None, "{event:?}");
+            drop(store);
+            std::fs::remove_file(d.path().join("jobs.db")).unwrap();
+            std::fs::remove_file(d.path().join("movie.mkv.fuselane")).unwrap();
+        }
+    }
+
+    /// Recovery trusts nothing in the row (L-53): a corrupt one fails the job, never renames.
+    #[test]
+    fn a_corrupt_publish_record_is_failed_not_acted_on() {
+        let d = tempfile::tempdir().unwrap();
+        let (a, b) = (d.path().join("a.fuselane"), d.path().join("a"));
+        let other = tempfile::tempdir().unwrap();
+        let cases: Vec<(&str, PathBuf, PathBuf, i64)> = vec![
+            ("negative size", a.clone(), b.clone(), -1),
+            ("not a staging name", d.path().join("a.txt"), b.clone(), 4),
+            (
+                "a relative name",
+                PathBuf::from("a.fuselane"),
+                PathBuf::from("a"),
+                4,
+            ),
+            ("another folder", a.clone(), other.path().join("a"), 4),
+        ];
+        for (why, from, to, size) in cases {
+            std::fs::write(d.path().join("a.fuselane"), b"abcd").unwrap();
+            let store = Store::open(&d.path().join("jobs.db")).unwrap();
+            let id = store.create("https://x/a", d.path()).unwrap();
+            store.apply(id, Event::Start, None).unwrap();
+            store.lock().execute(
+                "UPDATE jobs SET publish_from = ?2, publish_to = ?3, publish_size = ?4 WHERE id = ?1",
+                params![id, from.to_string_lossy(), to.to_string_lossy(), size],
+            ).unwrap();
+            assert_eq!(
+                store.recover_publishes().unwrap(),
+                vec![(id, false)],
+                "{why}"
+            );
+            let job = store.get(id).unwrap();
+            assert_eq!(job.status, Status::Failed { resumable: false }, "{why}");
+            assert_eq!(store.publish_intent(id).unwrap(), None, "{why}");
+            assert!(
+                d.path().join("a.fuselane").exists(),
+                "{why}: no file was touched"
+            );
+            assert!(!b.exists() && !other.path().join("a").exists(), "{why}");
+            drop(store);
+            std::fs::remove_file(d.path().join("jobs.db")).unwrap();
+        }
+    }
+
+    /// An unplugged drive: nothing is failed and the record stays for the next start.
+    #[test]
+    fn a_folder_that_is_not_there_keeps_the_record_for_later() {
+        let d = tempfile::tempdir().unwrap();
+        let gone = d.path().join("USB");
+        let store = Store::open(&d.path().join("jobs.db")).unwrap();
+        let id = store.create("https://x/a", &gone).unwrap();
+        store.apply(id, Event::Start, None).unwrap();
+        store
+            .set_publish_intent(id, &gone.join("a.fuselane"), &gone.join("a"), 4)
+            .unwrap();
+        assert!(store.recover_publishes().unwrap().is_empty());
+        assert!(store.publish_intent(id).unwrap().is_some(), "kept");
+        assert_eq!(
+            store.get(id).unwrap().status,
+            Status::Running,
+            "and not failed"
+        );
+        // The drive comes back, with the finished file renamed already.
+        std::fs::create_dir(&gone).unwrap();
+        std::fs::write(gone.join("a"), b"abcd").unwrap();
+        assert_eq!(store.recover_publishes().unwrap(), vec![(id, true)]);
     }
 
     #[test]

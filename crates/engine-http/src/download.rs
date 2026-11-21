@@ -245,12 +245,13 @@ impl std::fmt::Debug for CheckpointFn {
 }
 
 /// Told the staging path, the final path and the size right before the finished file is
-/// renamed into place (L-54), so the core can write the intent down first.
+/// renamed into place (L-54), so the core can write the intent down first. If it fails the
+/// file is not renamed: the staging file is kept and the job can be resumed.
 #[derive(Clone)]
 pub struct PublishFn(pub Arc<PublishCallback>);
 
 /// What a [`PublishFn`] calls: the staging path, the final path and the size.
-pub type PublishCallback = dyn Fn(&Path, &Path, u64) + Send + Sync;
+pub type PublishCallback = dyn Fn(&Path, &Path, u64) -> std::io::Result<()> + Send + Sync;
 
 impl std::fmt::Debug for PublishFn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -2151,10 +2152,11 @@ pub async fn download(
     download_with(src, networks, dir, tuning, None).await
 }
 
-/// Tells the publish hook, if there is one.
-fn announce(tuning: &Tuning, from: &Path, to: &Path, size: u64) {
-    if let Some(PublishFn(f)) = &tuning.publishing {
-        f(from, to, size);
+/// Tells the publish hook, if there is one. Its error stops the publish.
+fn announce(tuning: &Tuning, from: &Path, to: &Path, size: u64) -> std::io::Result<()> {
+    match &tuning.publishing {
+        Some(PublishFn(f)) => f(from, to, size),
+        None => Ok(()),
     }
 }
 

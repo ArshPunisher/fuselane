@@ -231,6 +231,7 @@ async fn the_publish_is_announced_once_before_the_rename() {
                 from.exists(),
                 to.exists(),
             ));
+            Ok(())
         }))),
         ..tuning()
     };
@@ -243,6 +244,30 @@ async fn the_publish_is_announced_once_before_the_rename() {
     assert_eq!(from.file_name().unwrap(), "file.bin.fuselane");
     assert_eq!((to, *size), (&report.path, content.size));
     assert!(*from_there && !*to_taken);
+}
+
+/// If the intent can't be written down the finished file is not renamed: the staging file
+/// stays, the job fails (resumable) and nothing is published without its record.
+#[tokio::test]
+async fn a_publish_whose_intent_cannot_be_written_down_does_not_rename() {
+    let content = Content::new(200 * KB, 9);
+    let server = RangeServer::start(content).await.unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let tuning = Tuning {
+        publishing: Some(PublishFn(Arc::new(|_, _, _| {
+            Err(std::io::Error::other("the list is busy"))
+        }))),
+        ..tuning()
+    };
+    let err = download(source(&server), vec![plain(1)], dir.path(), tuning)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, JobError::Staging(_)), "{err:?}");
+    assert!(
+        dir.path().join("file.bin.fuselane").exists(),
+        "the file is kept"
+    );
+    assert!(!dir.path().join("file.bin").exists(), "and not published");
 }
 
 #[tokio::test]
