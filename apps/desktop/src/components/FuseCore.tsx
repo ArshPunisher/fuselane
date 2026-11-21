@@ -79,6 +79,7 @@ export function FuseCore({
   const canvas = useRef<HTMLCanvasElement>(null)
   const box = useRef<HTMLDivElement>(null)
   const core = useRef<ReturnType<typeof createFuseCore> | null>(null)
+  const wakeRef = useRef<() => void>(() => {})
   const [size, setSize] = useState({ w: 0, h: 0, room: 0 })
   const reduced = useReducedMotion()
   const data = useMemo(() => toCore(job, live), [job, live])
@@ -88,8 +89,25 @@ export function FuseCore({
     if (!canvas.current) return
     const c = createFuseCore(canvas.current, TICKS)
     core.current = c
+    // The loop runs only while something moves; anything new to draw wakes it.
+    let raf = 0
+    let last = performance.now()
+    const frame = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000)
+      last = now
+      c.step(dt)
+      c.render()
+      raf = c.busy() && !document.hidden ? requestAnimationFrame(frame) : 0
+    }
+    const wake = () => {
+      if (raf) return
+      last = performance.now()
+      raf = requestAnimationFrame(frame)
+    }
+    wakeRef.current = wake
     const ro = new ResizeObserver(() => {
       c.resize()
+      wake()
       const r = canvas.current?.getBoundingClientRect()
       // Room beside the ring for satellite labels (they sit outside its box).
       const room =
@@ -100,23 +118,23 @@ export function FuseCore({
     const parent = box.current?.parentElement
     if (parent) ro.observe(parent)
     // Colours follow the theme.
-    const mo = new MutationObserver(() => c.refreshColors())
+    const mo = new MutationObserver(() => {
+      c.refreshColors()
+      wake()
+    })
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
     const scheme = matchMedia('(prefers-color-scheme: dark)')
-    const onScheme = () => c.refreshColors()
-    scheme.addEventListener('change', onScheme)
-    let raf = 0
-    let last = performance.now()
-    const frame = (now: number) => {
-      const dt = Math.min(0.05, (now - last) / 1000)
-      last = now
-      c.step(dt)
-      c.render()
-      raf = requestAnimationFrame(frame)
+    const onScheme = () => {
+      c.refreshColors()
+      wake()
     }
-    raf = requestAnimationFrame(frame)
+    document.addEventListener('visibilitychange', wake)
+    scheme.addEventListener('change', onScheme)
+    wake()
     return () => {
       cancelAnimationFrame(raf)
+      document.removeEventListener('visibilitychange', wake)
+      wakeRef.current = () => {}
       ro.disconnect()
       mo.disconnect()
       scheme.removeEventListener('change', onScheme)
@@ -124,8 +142,14 @@ export function FuseCore({
     }
   }, [])
 
-  useEffect(() => core.current?.setReduced(reduced), [reduced])
-  useEffect(() => core.current?.setData(data), [data])
+  useEffect(() => {
+    core.current?.setReduced(reduced)
+    wakeRef.current()
+  }, [reduced])
+  useEffect(() => {
+    core.current?.setData(data)
+    wakeRef.current()
+  }, [data])
 
   const nets = live?.networks ?? []
   const g = geometry(size.w, size.h, nets.length)
