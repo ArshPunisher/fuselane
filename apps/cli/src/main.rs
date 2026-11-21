@@ -318,6 +318,18 @@ fn rm(id: i64) -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    // Nobody may be running it: the app (or another terminal) would lose its partial
+    // file and its row under a live download (L-111). The claim is only a probe.
+    match store.lock_job(job.id) {
+        Ok(Some(_probe)) => {}
+        Ok(None) => {
+            eprintln!(
+                "fuselane: download {id} is already running in Fuselane or in another terminal. Pause it there first."
+            );
+            return ExitCode::FAILURE;
+        }
+        Err(_) => {} // can't tell; removing is what the person asked for
+    }
     match runner::remove(&store, job.id) {
         Ok(()) => {
             println!("Removed download {id}.");

@@ -410,3 +410,30 @@ async fn rm_removes_the_partial_file_and_resume_refuses_finished_jobs() {
             .contains("No downloads yet")
     );
 }
+
+/// `fuselane rm` on a download the app (or another terminal) is running must refuse:
+/// it would delete the partial file under the writer and the row under its run.
+#[test]
+fn rm_refuses_a_download_another_process_is_running() {
+    let home = tempfile::tempdir().unwrap();
+    let store = fuselane_core::Store::open(&home.path().join("jobs.db")).unwrap();
+    let id = store.create("http://127.0.0.1:9/f", home.path()).unwrap();
+    let claim = store.lock_job(id).unwrap().expect("the app's claim");
+    let out = fuselane_in(home.path(), &["rm", &id.to_string()]);
+    assert_eq!(
+        out.status.code(),
+        Some(1),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("already running"), "{err}");
+    assert!(store.get(id).is_ok(), "still in the list");
+    drop(claim);
+    assert!(
+        fuselane_in(home.path(), &["rm", &id.to_string()])
+            .status
+            .success()
+    );
+    assert!(store.get(id).is_err(), "removed once nobody runs it");
+}
