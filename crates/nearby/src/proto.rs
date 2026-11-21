@@ -121,12 +121,24 @@ pub enum Invalid {
     FileId,
     #[error("a file name can't be used")]
     FileName,
+    #[error("the device fingerprint is missing or not usable")]
+    Fingerprint,
 }
 
 fn check_info(i: &DeviceInfo) -> Result<(), Invalid> {
     let n = i.alias.trim().chars().count();
     if n == 0 || n > 64 || i.alias.chars().any(char::is_control) {
         return Err(Invalid::Alias);
+    }
+    Ok(())
+}
+
+/// Discovery keys devices by fingerprint (and pins certificates to it), so an
+/// announcement or register needs a real one: 1 to 128 visible ASCII characters
+/// (LocalSend sends a hex hash or a random token).
+fn check_fingerprint(fp: &str) -> Result<(), Invalid> {
+    if fp.is_empty() || fp.len() > 128 || !fp.bytes().all(|b| b.is_ascii_graphic()) {
+        return Err(Invalid::Fingerprint);
     }
     Ok(())
 }
@@ -196,6 +208,7 @@ pub fn parse_info(body: &[u8]) -> Result<DeviceInfo, Invalid> {
     }
     let i: DeviceInfo = serde_json::from_slice(body).map_err(|_| Invalid::Json)?;
     check_info(&i)?;
+    check_fingerprint(&i.fingerprint)?;
     Ok(i)
 }
 
@@ -205,6 +218,7 @@ pub fn parse_announcement(body: &[u8]) -> Result<Announcement, Invalid> {
     }
     let a: Announcement = serde_json::from_slice(body).map_err(|_| Invalid::Json)?;
     check_info(&a.info)?;
+    check_fingerprint(&a.info.fingerprint)?;
     Ok(a)
 }
 
@@ -222,6 +236,28 @@ mod tests {
         "f2": {"id": "f2", "fileName": "../../etc/evil.sh", "size": 1, "fileType": "text/plain"}
       }
     }"#;
+
+    /// Discovery keys devices by fingerprint: an empty, huge or odd one from an
+    /// unauthenticated LAN packet must be refused (it bloated the device list and
+    /// an empty one turned off certificate pinning for sends).
+    #[test]
+    fn announcements_need_a_sane_fingerprint() {
+        let with = |fp: &str| {
+            format!(r#"{{"alias":"Desk","version":"2.0","fingerprint":"{fp}","announce":true}}"#)
+        };
+        assert!(parse_announcement(with("abc123").as_bytes()).is_ok());
+        assert!(parse_announcement(with("").as_bytes()).is_err(), "empty");
+        assert!(
+            parse_announcement(with(&"a".repeat(129)).as_bytes()).is_err(),
+            "too long"
+        );
+        assert!(
+            parse_announcement(with("a b").as_bytes()).is_err(),
+            "spaces"
+        );
+        let none = r#"{"alias":"Desk","version":"2.0","announce":true}"#;
+        assert!(parse_announcement(none.as_bytes()).is_err(), "missing");
+    }
 
     #[test]
     fn a_localsend_request_parses_and_names_are_cleaned() {
