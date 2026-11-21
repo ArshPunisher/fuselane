@@ -113,7 +113,9 @@ export function DataUsed() {
   const hist = useRateHistory(rates)
   const [h, setH] = useState<UsageHistory | null>(null)
   const [allow, setAllow] = useState<AllowanceView[] | null>(null)
+  // When each snapshot was read: each one grows with live rates only from its own time.
   const [polled, setPolled] = useState(() => Date.now())
+  const [allowPolled, setAllowPolled] = useState(() => Date.now())
   const [now, setNow] = useState(() => Date.now())
   const [hover, setHover] = useState<number | null>(null)
   // One error per read: one read succeeding must not hide the other's failure.
@@ -135,6 +137,7 @@ export function DataUsed() {
       .allowances()
       .then((v) => {
         setAllow(v)
+        setAllowPolled(Date.now())
         setAllowError(null)
       })
       .catch((e) => setAllowError(toUiError(e)))
@@ -167,7 +170,8 @@ export function DataUsed() {
   const laneOf = (name: string) => `var(--lane-${lanes[names.indexOf(name)] ?? 'steel'})`
 
   const day = today()
-  const extra = (name: string) => ((rates[name] ?? 0) * Math.max(0, now - polled)) / 1000
+  const since = (name: string, at: number) => ((rates[name] ?? 0) * Math.max(0, now - at)) / 1000
+  const extra = (name: string) => since(name, polled)
   const todayOf = (name: string) =>
     (h.days.find((d) => d.day === day)?.nets[name] ?? 0) + extra(name)
   // This month: the allowance meter's count (kept even before day-by-day
@@ -178,7 +182,7 @@ export function DataUsed() {
       .filter((d) => d.day.startsWith(month))
       .reduce((a, d) => a + (d.nets[name] ?? 0), 0)
     const metered = allow.find((a) => a.name === name)?.used ?? 0
-    return Math.max(fromDays, metered) + extra(name)
+    return Math.max(fromDays + since(name, polled), metered + since(name, allowPolled))
   }
   const totals = names.map((n) => ({ name: n, month: monthOf(n), today: todayOf(n) }))
   const monthTotal = totals.reduce((a, x) => a + x.month, 0)
