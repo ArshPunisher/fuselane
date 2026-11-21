@@ -13,6 +13,7 @@
 //! shown the secret also get aria2's `aria2.onDownload*` notifications, which
 //! the app sends through [`Server::notify`].
 
+mod accept;
 mod ws;
 
 use std::net::SocketAddr;
@@ -1002,20 +1003,27 @@ impl Server {
             // Connections live in here, so stopping ends them too: one kept
             // open can't go on using a secret that has since been replaced.
             let mut conns = tokio::task::JoinSet::new();
-            while let Ok((tcp, _)) = listener.accept().await {
-                while conns.try_join_next().is_some() {}
-                let rpc = rpc.clone();
-                conns.spawn(async move {
-                    let svc = hyper::service::service_fn(move |req| {
-                        let rpc = rpc.clone();
-                        async move { Ok::<_, std::convert::Infallible>(serve(rpc, req).await) }
+            // An accept error (no descriptors left, a client that reset) must not
+            // end the endpoint while the settings still say it is on (L-126).
+            accept::accept_forever(
+                "remote control",
+                || listener.accept(),
+                |(tcp, _)| {
+                    while conns.try_join_next().is_some() {}
+                    let rpc = rpc.clone();
+                    conns.spawn(async move {
+                        let svc = hyper::service::service_fn(move |req| {
+                            let rpc = rpc.clone();
+                            async move { Ok::<_, std::convert::Infallible>(serve(rpc, req).await) }
+                        });
+                        let _ = hyper::server::conn::http1::Builder::new()
+                            .serve_connection(hyper_util::rt::TokioIo::new(tcp), svc)
+                            .with_upgrades()
+                            .await;
                     });
-                    let _ = hyper::server::conn::http1::Builder::new()
-                        .serve_connection(hyper_util::rt::TokioIo::new(tcp), svc)
-                        .with_upgrades()
-                        .await;
-                });
-            }
+                },
+            )
+            .await;
         });
         Ok(Server {
             addr,
