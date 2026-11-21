@@ -386,6 +386,17 @@ impl Store {
             .ok_or(StoreError::NotFound(id))
     }
 
+    /// Whether a download of exactly this link is in the list: one indexed-free
+    /// lookup that reads no progress blobs (adding many links at once asks it
+    /// per link; `list` would read every row each time).
+    pub fn has_url(&self, url: &str) -> Result<bool, StoreError> {
+        Ok(self.lock().query_row(
+            "SELECT EXISTS(SELECT 1 FROM jobs WHERE url = ?1)",
+            params![url],
+            |r| r.get::<_, bool>(0),
+        )?)
+    }
+
     /// Newest first.
     pub fn list(&self) -> Result<Vec<Job>, StoreError> {
         let c = self.lock();
@@ -840,6 +851,16 @@ mod tests {
                 (r1, r2) => panic!("round {round}: both or neither won: {r1:?} {r2:?}"),
             }
         }
+    }
+
+    #[test]
+    fn a_link_in_the_list_is_found_without_reading_every_job() {
+        let d = tempfile::tempdir().unwrap();
+        let s = Store::open(&d.path().join("jobs.db")).unwrap();
+        assert!(!s.has_url("https://x/a").unwrap());
+        s.create("https://x/a", d.path()).unwrap();
+        assert!(s.has_url("https://x/a").unwrap());
+        assert!(!s.has_url("https://x/a?x=1").unwrap(), "exact links only");
     }
 
     #[test]
