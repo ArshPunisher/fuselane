@@ -421,14 +421,34 @@ impl Store {
     }
 
     /// Applies an event through the state machine; invalid transitions are refused.
+    ///
+    /// Reading the status and writing the next one is a single step (L-29): the
+    /// write only lands if the row still holds the status the transition was
+    /// decided from, so two events arriving together (two threads, or the app and
+    /// the command line) can't both succeed and overwrite each other. If another
+    /// process changed the row in between, the transition is decided again.
     pub fn apply(&self, id: i64, event: Event, error: Option<&str>) -> Result<Status, StoreError> {
-        let current = self.get(id)?.status;
-        let next = current.apply(event)?;
-        self.lock().execute(
-            "UPDATE jobs SET status = ?2, error = ?3, error_code = NULL, updated_at = ?4 WHERE id = ?1",
-            params![id, next.as_str(), error, now()],
-        )?;
-        Ok(next)
+        let c = self.lock();
+        for _ in 0..5 {
+            let word: String = c
+                .query_row("SELECT status FROM jobs WHERE id = ?1", params![id], |r| {
+                    r.get(0)
+                })
+                .optional()?
+                .ok_or(StoreError::NotFound(id))?;
+            let current = Status::parse(&word).unwrap_or(Status::Failed { resumable: false });
+            let next = current.apply(event)?;
+            let n = c.execute(
+                "UPDATE jobs SET status = ?2, error = ?3, error_code = NULL, updated_at = ?4
+                 WHERE id = ?1 AND status = ?5",
+                params![id, next.as_str(), error, now(), word],
+            )?;
+            if n == 1 {
+                return Ok(next);
+            }
+        }
+        // Five changes under our feet in a row: give up rather than loop.
+        Err(StoreError::Sql(rusqlite::Error::StatementChangedRows(0)))
     }
 
     /// Records where the finished file is and its size (a fast download may finish
@@ -768,6 +788,39 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM jobs", [], |r| r.get(0))
             .unwrap();
         assert_eq!(n, 1, "the job survived both");
+    }
+
+    /// Pause and Complete land on a running job at the same moment (from two
+    /// threads, or two processes on one list): the transition table allows only
+    /// one of them, so exactly one may succeed and the row must hold its result.
+    #[test]
+    fn racing_events_on_one_job_cannot_both_win() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("jobs.db");
+        let a = std::sync::Arc::new(Store::open(&path).unwrap());
+        let b = std::sync::Arc::new(Store::open(&path).unwrap());
+        for round in 0..400 {
+            let id = a.create("https://example.com/r", dir.path()).unwrap();
+            a.apply(id, Event::Start, None).unwrap();
+            let gate = std::sync::Arc::new(std::sync::Barrier::new(2));
+            let (g1, g2) = (gate.clone(), gate);
+            let (s1, s2) = (a.clone(), b.clone());
+            let t1 = std::thread::spawn(move || {
+                g1.wait();
+                s1.apply(id, Event::Pause, None)
+            });
+            let t2 = std::thread::spawn(move || {
+                g2.wait();
+                s2.apply(id, Event::Complete, None)
+            });
+            let (r1, r2) = (t1.join().unwrap(), t2.join().unwrap());
+            let stored = a.get(id).unwrap().status;
+            match (r1, r2) {
+                (Ok(p), Err(_)) => assert_eq!(stored, p, "round {round}"),
+                (Err(_), Ok(c)) => assert_eq!(stored, c, "round {round}"),
+                (r1, r2) => panic!("round {round}: both or neither won: {r1:?} {r2:?}"),
+            }
+        }
     }
 
     #[test]
