@@ -7,7 +7,8 @@ import type { History } from './store'
  * paused or finished download five times a second for a flat line.
  */
 export function appendRates(prev: History, names: string[], rates: number[], keep = 300): History {
-  const same = prev.names.join() === names.join()
+  // Name by name: joining would make ["a,b"] and ["a", "b"] look the same.
+  const same = prev.names.length === names.length && prev.names.every((n, i) => n === names[i])
   const last = prev.rates[prev.rates.length - 1]
   if (same && last && last.every((r) => r === 0) && rates.every((r) => r === 0)) return prev
   return { names, rates: [...(same ? prev.rates : []), rates].slice(-keep) }

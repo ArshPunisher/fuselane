@@ -55,7 +55,10 @@ test('a rate history that has nothing to add is not replaced (no re-render)', as
       ['en0'],
       [2],
     )
+    // ["a,b"] then ["a", "b"]: a different set of networks, so the history restarts.
+    const commaName = m.appendRates({ names: ['a,b'], rates: [[12]] }, ['a', 'b'], [5, 7])
     return {
+      commaReset: commaName.rates.length,
       same: same === quiet,
       grew: grew.rates.length,
       renamed: renamed.names[0] + ':' + renamed.rates.length,
@@ -63,5 +66,12 @@ test('a rate history that has nothing to add is not replaced (no re-render)', as
       last: capped.rates[299],
     }
   })
-  expect(out).toEqual({ same: true, grew: 3, renamed: 'en7:1', capped: 300, last: [2] })
+  expect(out).toEqual({
+    commaReset: 1,
+    same: true,
+    grew: 3,
+    renamed: 'en7:1',
+    capped: 300,
+    last: [2],
+  })
 })
