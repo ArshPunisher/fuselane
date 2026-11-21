@@ -336,7 +336,8 @@ impl<H: Host> Rpc<H> {
             );
         };
         let (code, reply) = match req {
-            Value::Array(calls) if calls.len() > MAX_CALLS => (
+            // Counted with every call a multicall carries, before any call runs.
+            _ if calls_in(&req) > MAX_CALLS => (
                 StatusCode::BAD_REQUEST,
                 json!({"jsonrpc": "2.0", "id": null,
                        "error": {"code": -32600, "message": "Too many calls in one request."}}),
@@ -1093,5 +1094,24 @@ impl Server {
             stop,
             notifier,
         })
+    }
+}
+
+/// How many calls `req` runs: one per call, plus every call inside a
+/// `system.multicall` (whose own nesting is refused when it runs).
+fn calls_in(req: &Value) -> usize {
+    let one = |c: &Value| -> usize {
+        if c.get("method").and_then(Value::as_str) == Some("system.multicall") {
+            match c.get("params").and_then(|p| p.get(0)) {
+                Some(Value::Array(inner)) => inner.len().max(1),
+                _ => 1,
+            }
+        } else {
+            1
+        }
+    };
+    match req {
+        Value::Array(calls) => calls.iter().map(one).fold(0usize, usize::saturating_add),
+        other => one(other),
     }
 }

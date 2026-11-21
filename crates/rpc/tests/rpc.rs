@@ -699,6 +699,17 @@ fn a_batch_or_multicall_over_the_cap_is_refused_before_any_call_runs() {
     };
     assert_eq!(rpc.handle(multi(MAX_CALLS).as_bytes()).0.as_u16(), 200);
     assert_eq!(rpc.handle(multi(MAX_CALLS + 1).as_bytes()).0.as_u16(), 400);
+    // Multicalls inside a batch count every call they carry: 2 x 200 is over.
+    let inner = |n: usize| {
+        json!({"jsonrpc": "2.0", "id": 1, "method": "system.multicall",
+               "params": [(0..n).map(|_| json!({"methodName": "system.listMethods"})).collect::<Vec<_>>()]})
+    };
+    let batch = |each: usize, count: usize| {
+        Value::Array((0..count).map(|_| inner(each)).collect()).to_string()
+    };
+    assert_eq!(rpc.handle(batch(128, 2).as_bytes()).0.as_u16(), 200);
+    let (code, v) = rpc.handle(batch(200, 2).as_bytes());
+    assert_eq!(code.as_u16(), 400, "{v}");
 }
 
 #[tokio::test]
