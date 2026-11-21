@@ -209,6 +209,29 @@ fn is_corrupt(e: &StoreError) -> bool {
     }
 }
 
+/// Brings the schema up to date in one transaction. The version is read again
+/// inside it, under the write lock: another process (the app and the browser's
+/// native host start together after an update) may have migrated since `seen`
+/// was read, and running its steps again fails on "duplicate column name".
+fn migrate(conn: &mut Connection) -> Result<(), StoreError> {
+    let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+    let version: i64 = tx.pragma_query_value(None, "user_version", |r| r.get(0))?;
+    let known = MIGRATIONS.len() as i64;
+    if version > known {
+        // Another (newer) copy migrated it meanwhile: leave it alone.
+        return Err(StoreError::TooNew {
+            found: version,
+            known,
+        });
+    }
+    for (i, sql) in MIGRATIONS.iter().enumerate().skip(version as usize) {
+        tx.execute_batch(sql)?;
+        tx.pragma_update(None, "user_version", i as i64 + 1)?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
 fn encode(secured: &[u64]) -> Vec<u8> {
     secured.iter().flat_map(|v| v.to_le_bytes()).collect()
 }
@@ -300,12 +323,7 @@ impl Store {
         if ok != "ok" {
             return Err(StoreError::Sql(rusqlite::Error::InvalidQuery));
         }
-        let tx = conn.transaction()?;
-        for (i, sql) in MIGRATIONS.iter().enumerate().skip(version as usize) {
-            tx.execute_batch(sql)?;
-            tx.pragma_update(None, "user_version", i as i64 + 1)?;
-        }
-        tx.commit()?;
+        migrate(&mut conn)?;
         Ok(conn)
     }
 
@@ -707,6 +725,49 @@ mod tests {
             raw_etag: Some("\"v1\"".into()),
             last_modified: None,
         }
+    }
+
+    /// Two processes that start together on an old list (the app and the browser's
+    /// native host after an update) both read the old version; the second must find
+    /// the first one's work already done, not fail on "duplicate column name".
+    #[test]
+    fn a_second_opener_that_read_the_old_version_finds_the_list_already_migrated() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("jobs.db");
+        // A v10 list, as the last release left it.
+        {
+            let c = Connection::open(&path).unwrap();
+            for (i, sql) in MIGRATIONS.iter().enumerate().take(10) {
+                c.execute_batch(sql).unwrap();
+                c.pragma_update(None, "user_version", i as i64 + 1).unwrap();
+            }
+            c.execute(
+                "INSERT INTO jobs (url, dir, status, created_at, updated_at) VALUES ('https://e/x', '/d', 'paused', 1, 1)",
+                [],
+            )
+            .unwrap();
+        }
+        let mut first = Connection::open(&path).unwrap();
+        let mut second = Connection::open(&path).unwrap();
+        let (seen_a, seen_b): (i64, i64) = (
+            first
+                .pragma_query_value(None, "user_version", |r| r.get(0))
+                .unwrap(),
+            second
+                .pragma_query_value(None, "user_version", |r| r.get(0))
+                .unwrap(),
+        );
+        assert_eq!((seen_a, seen_b), (10, 10));
+        migrate(&mut first).unwrap();
+        migrate(&mut second).expect("the second opener must not fail");
+        let v: i64 = second
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, MIGRATIONS.len() as i64);
+        let n: i64 = second
+            .query_row("SELECT COUNT(*) FROM jobs", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 1, "the job survived both");
     }
 
     #[test]
