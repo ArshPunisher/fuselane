@@ -116,26 +116,28 @@ export function DataUsed() {
   const [polled, setPolled] = useState(() => Date.now())
   const [now, setNow] = useState(() => Date.now())
   const [hover, setHover] = useState<number | null>(null)
-  const [error, setError] = useState<UiError | null>(null)
+  // One error per read: one read succeeding must not hide the other's failure.
+  const [historyError, setHistoryError] = useState<UiError | null>(null)
+  const [allowError, setAllowError] = useState<UiError | null>(null)
+  const error = historyError ?? allowError
   const load = useCallback(() => {
     if (!backend) return
     // A failed read is an error to show (and retry), not "no usage yet".
-    const failed = (e: unknown) => setError(toUiError(e))
     void backend
       .usageHistory()
       .then((v) => {
         setH(v)
         setPolled(Date.now())
-        setError(null)
+        setHistoryError(null)
       })
-      .catch(failed)
+      .catch((e) => setHistoryError(toUiError(e)))
     void backend
       .allowances()
       .then((v) => {
         setAllow(v)
-        setError(null)
+        setAllowError(null)
       })
-      .catch(failed)
+      .catch((e) => setAllowError(toUiError(e)))
   }, [backend])
   // The app adds up usage every few seconds; follow it closely, while it can be seen.
   useVisibleInterval(load, 5000)

@@ -543,6 +543,10 @@ export function TransferList() {
       a.status === b.status ? a.position - b.position : a.status === 'running' ? -1 : 1,
     )
   const rest = single.filter((j) => !(j.status === 'running' || j.status === 'queued'))
+  // Only finished downloads are held back; a paused or failed one keeps its Resume or
+  // Retry in view however long the history is.
+  const finishedCount = rest.filter((j) => j.status === 'completed').length
+  let finishedSeen = 0
   const nothing = !jobs.length && !torrents.length
   return (
     <div className="list-wrap">
@@ -668,17 +672,19 @@ export function TransferList() {
             {t('Recent')} <span className="num">{rest.length}</span>
           </h2>
           <ul className="list">
-            {rest.slice(0, recentLimit).map((j) => (
-              <Row key={j.id} job={j} />
-            ))}
+            {rest
+              .filter((j) => j.status !== 'completed' || (finishedSeen += 1) <= recentLimit)
+              .map((j) => (
+                <Row key={j.id} job={j} />
+              ))}
           </ul>
-          {rest.length > recentLimit && (
+          {finishedCount > recentLimit && (
             <button
               type="button"
               className="btn btn-sm show-older"
               onClick={() => setRecentLimit((n) => n + RECENT_STEP)}
             >
-              {t('Show older ({n} more)', { n: rest.length - recentLimit })}
+              {t('Show older ({n} more)', { n: finishedCount - recentLimit })}
             </button>
           )}
         </section>
