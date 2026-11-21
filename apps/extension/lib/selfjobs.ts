@@ -14,6 +14,8 @@ export interface SelfJob {
   pageUrl: string | null
   name: string
   total: number | null
+  /** The version of the file the parts came from (`If-Range`); null when the server gave none. */
+  validator: string | null
   written: number
   /** Bytes per second right now (0 when not running). */
   rate: number
@@ -59,6 +61,7 @@ export function newJob(
     pageUrl,
     name,
     total,
+    validator: null,
     written: 0,
     rate: 0,
     status: 'queued',

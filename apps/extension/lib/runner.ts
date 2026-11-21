@@ -3,7 +3,7 @@
 // (the origin-private file system), then hands a blob link to the background,
 // which saves it through the browser's downloads. It reports events only; the
 // background keeps the records (offscreen pages have no storage API).
-import { TooBig, probe, run, split, type Part } from './fetcher.ts'
+import { FileChanged, TooBig, probe, run, split, type Part } from './fetcher.ts'
 import type { SelfJob } from './selfjobs.ts'
 
 export type RunnerEvent =
@@ -15,6 +15,8 @@ export type RunnerEvent =
       parts: Part[] | null
       total: number | null
       finalUrl: string
+      /** The probe's version of the file, kept so a resume can send `If-Range`. */
+      validator?: string | null
       name?: string
     }
   | { type: 'self.ready'; id: string; blobUrl: string }
@@ -24,7 +26,7 @@ export type RunnerEvent =
 
 interface Active {
   stop: AbortController
-  why: 'pause' | 'cancel' | null
+  why: 'pause' | 'cancel' | 'restart' | null
 }
 
 const PARTS = 6
@@ -46,7 +48,7 @@ export function createRunner(emit: (e: RunnerEvent) => void) {
     await root.removeEntry(`${id}.part`).catch(() => {})
   }
 
-  async function start(job: SelfJob, limit: number) {
+  async function start(job: SelfJob, limit: number, restarted = false) {
     if (active.has(job.id)) return
     const me: Active = { stop: new AbortController(), why: null }
     active.set(job.id, me)
@@ -54,6 +56,7 @@ export function createRunner(emit: (e: RunnerEvent) => void) {
     let parts = job.parts
     let total = job.total
     let finalUrl = job.finalUrl
+    let validator = job.validator ?? null
     let written = parts ? parts.reduce((n, p) => n + p.done, 0) : 0
     try {
       // First run (or a server without ranges, which starts over): look first.
@@ -61,6 +64,7 @@ export function createRunner(emit: (e: RunnerEvent) => void) {
         const p = await probe(job.url, get, me.stop.signal)
         total = p.total
         finalUrl = p.finalUrl
+        validator = p.validator
         if (total !== null && total > limit) {
           emit({ type: 'self.too-big', id: job.id, size: total })
           return
@@ -75,6 +79,7 @@ export function createRunner(emit: (e: RunnerEvent) => void) {
           parts,
           total,
           finalUrl,
+          validator,
           name: p.filename ?? undefined,
         })
       }
@@ -87,6 +92,8 @@ export function createRunner(emit: (e: RunnerEvent) => void) {
       written = await run({
         url: finalUrl,
         parts,
+        total,
+        validator,
         fetchFn: get,
         signal: me.stop.signal,
         limit: parts ? undefined : limit,
@@ -118,6 +125,29 @@ export function createRunner(emit: (e: RunnerEvent) => void) {
       })
       emit({ type: 'self.ready', id: job.id, blobUrl })
     } catch (e) {
+      if (e instanceof FileChanged && me.why === null && !restarted) {
+        // The file on the server isn't the one the saved bytes came from (or the
+        // answer wasn't the range asked for): stop every part, drop the bytes and
+        // start again from zero, once.
+        me.why = 'restart'
+        me.stop.abort(e)
+        await writable?.abort().catch(() => {})
+        await removeFile(job.id)
+        active.delete(job.id)
+        // A pause or cancel that arrived while the old bytes were being dropped wins.
+        const asked = me.why as Active['why']
+        if (asked === 'cancel') return
+        if (asked === 'pause') {
+          emit({ type: 'self.paused', id: job.id, written: 0, parts: null })
+          return
+        }
+        // Awaited, so the finally below can not drop the new run's entry.
+        return await start(
+          { ...job, parts: null, total: null, written: 0, validator: null },
+          limit,
+          true,
+        )
+      }
       // Keep what's written for a pause; anything else throws it away.
       if (me.why === 'pause') {
         await writable?.close().catch(() => {})

@@ -196,6 +196,7 @@ async function onRunnerEvent(e: RunnerEvent) {
         parts: e.parts,
         total: e.total,
         finalUrl: e.finalUrl,
+        ...(e.validator !== undefined ? { validator: e.validator } : {}),
         ...(e.name ? { name: e.name } : {}),
       })
       break
