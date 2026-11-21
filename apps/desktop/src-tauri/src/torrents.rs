@@ -1665,6 +1665,13 @@ pub(crate) mod tests {
             kept.contains(id),
             "an unfinished torrent was dropped: {kept}"
         );
+        // Still offline: the retry from the tick keeps it waiting, not gone.
+        *offline.waiting_tried.lock().unwrap() = None;
+        offline.tick().await;
+        offline.save().await;
+        let kept = s.store.setting("torrents").unwrap().unwrap_or_default();
+        assert!(kept.contains(id), "dropped on retry: {kept}");
+        assert_eq!(offline.waiting.lock().unwrap().len(), 1);
     }
 
     async fn until(tor: &Torrents, id: &str, status: &str) -> TorrentView {
